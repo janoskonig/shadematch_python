@@ -3,6 +3,7 @@
 import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 
 console.log("✅ main.js loaded");
+let sessionLogs = [];
 
 function updateBox(id, rgb) {
   console.log(`updateBox(${id}, [${rgb}])`);
@@ -21,16 +22,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const targetColors = [
     [255, 102, 30],    // Orange
-    [113, 1, 105],    // Purple
-    [78, 150, 100],      // Green
-    [255, 179, 188],  // Pink
-    [128, 128, 0],    // Olive
-    [98, 135, 96],   
-    [255, 229, 180],  // Peach
-    [255, 128, 80],   // Coral
-    [64, 224, 208],   // Turquoise
-    [128, 255, 0],    // Chartreuse
-    [0, 128, 128]     // Teal
+    [113, 1, 105],     // Purple
+    [78, 150, 100],    // Green
+    [255, 179, 188],   // Pink
+    [128, 128, 0],     // Olive
+    [98, 135, 96],     // Custom
+    [255, 229, 180],   // Peach
+    [255, 128, 80],    // Coral
+    [64, 224, 208],    // Turquoise
+    [128, 255, 0],     // Chartreuse
+    [0, 128, 128]      // Teal
   ];
 
   let dropCounts = {
@@ -84,26 +85,34 @@ document.addEventListener("DOMContentLoaded", () => {
         mixed: mixedRGB
       })
     })
-      .then(res => res.json())
-      .then(data => {
-        if (data.error) return console.error("Server error:", data.error);
-        document.getElementById("deltaE").textContent = data.delta_e.toFixed(2);
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) return console.error("Server error:", data.error);
+      document.getElementById("deltaE").textContent = data.delta_e.toFixed(2);
 
-        if (data.delta_e < 5) {
-          setTimeout(() => {
-            alert(`✅ Matched with ΔE=${data.delta_e.toFixed(2)}!`);
-            currentTargetIndex++;
-            if (currentTargetIndex < targetColors.length) {
-              targetColor = targetColors[currentTargetIndex];
-              updateBox("targetColor", targetColor);
-              resetMix();
-              startTimer();
-            } else {
-              alert("🎉 All colors completed!");
-            }
-          }, 300);
-        }
-      });
+      if (data.delta_e < 5) {
+        sessionLogs.push({
+          target: targetColor,
+          drops: { ...dropCounts },
+          deltaE: data.delta_e,
+          time: parseFloat(document.getElementById("timer").textContent),
+          timestamp: new Date().toISOString()
+        });
+
+        setTimeout(() => {
+          alert(`✅ Matched with ΔE=${data.delta_e.toFixed(2)}!`);
+          currentTargetIndex++;
+          if (currentTargetIndex < targetColors.length) {
+            targetColor = targetColors[currentTargetIndex];
+            updateBox("targetColor", targetColor);
+            resetMix();
+            startTimer();
+          } else {
+            alert("🎉 All colors completed!");
+          }
+        }, 300);
+      }
+    });
   }
 
   // Button logic
@@ -122,6 +131,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("stopBtn").addEventListener("click", () => {
     stopTimer();
+    sessionLogs.push({
+      target: targetColor,
+      drops: { ...dropCounts },
+      deltaE: parseFloat(document.getElementById("deltaE").textContent),
+      time: parseFloat(document.getElementById("timer").textContent),
+      timestamp: new Date().toISOString()
+    });
     document.getElementById("skipBtn").disabled = false;
     document.getElementById("stopBtn").disabled = true;
   });
@@ -177,5 +193,40 @@ document.addEventListener("DOMContentLoaded", () => {
         updateCurrentMix();
       }
     });
+  });
+
+  document.getElementById("exportBtn").addEventListener("click", () => {
+    const csvRows = [];
+    csvRows.push([
+      "target_r", "target_g", "target_b",
+      "drop_white", "drop_black", "drop_red", "drop_yellow", "drop_blue",
+      "delta_e", "time_sec", "timestamp"
+    ].join(","));
+
+    sessionLogs.forEach(entry => {
+      const [r, g, b] = entry.target;
+      const d = entry.drops;
+      const line = [
+        r, g, b,
+        d.white || 0,
+        d.black || 0,
+        d.red || 0,
+        d.yellow || 0,
+        d.blue || 0,
+        entry.deltaE !== null ? entry.deltaE.toFixed(2) : "",
+        entry.time.toFixed(1),
+        entry.timestamp
+      ];
+      csvRows.push(line.join(","));
+    });
+
+    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", "color_matching_log.csv");
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   });
 });
