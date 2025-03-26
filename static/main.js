@@ -43,12 +43,25 @@ document.addEventListener("DOMContentLoaded", () => {
   let targetColor = targetColors[currentTargetIndex];
   updateBox("targetColor", targetColor);
 
-  document.querySelectorAll(".color-circle").forEach(circle => {
+    // Handle add (click on color circle)
+    document.querySelectorAll(".color-circle").forEach(circle => {
     circle.addEventListener("click", () => {
       const color = circle.dataset.color;
       dropCounts[color]++;
       circle.textContent = dropCounts[color];
       updateCurrentMix();
+    });
+  });
+  
+  // Handle subtract (click on minus button)
+  document.querySelectorAll(".minus-button").forEach(button => {
+    button.addEventListener("click", () => {
+      const color = button.dataset.color;
+      if (dropCounts[color] > 0) {
+        dropCounts[color]--;
+        document.querySelector(`.color-circle[data-color='${color}']`).textContent = dropCounts[color];
+        updateCurrentMix();
+      }
     });
   });
 

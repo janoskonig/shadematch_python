@@ -35,6 +35,20 @@
     #stats {
       margin-top: 20px;
     }
+    .color-control {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    }
+    .minus-button {
+    margin-top: 4px;
+    font-size: 16px;
+    padding: 0 6px;
+    border: none;
+    background: #ccc;
+    border-radius: 50%;
+    cursor: pointer;
+    }
   </style>
 
   <!-- ✅ Load Mixbox for perceptual mixing -->
@@ -59,11 +73,27 @@
   </div>
 
   <div id="palette">
-    <div class="color-circle" data-color="white" style="background: white; color: black;">0</div>
-    <div class="color-circle" data-color="black" style="background: black;">0</div>
-    <div class="color-circle" data-color="red" style="background: red;">0</div>
-    <div class="color-circle" data-color="yellow" style="background: yellow; color: black;">0</div>
-    <div class="color-circle" data-color="blue" style="background: blue;">0</div>
+    <div class="color-control">
+        <div class="color-circle" data-color="white" style="background: white; color: black;">0</div>
+        <button class="minus-button" data-color="white">−</button>
+      </div>
+    <div class="color-control">
+        <div class="color-circle" data-color="black" style="background: black;">0</div>
+        <button class="minus-button" data-color="black">−</button>
+      </div>
+    <div class="color-control">
+        <div class="color-circle" data-color="red" style="background: red;">0</div>
+        <button class="minus-button" data-color="red">−</button>
+      </div>
+    <div class="color-control">
+        <div class="color-circle" data-color="yellow" style="background: yellow; color: black;">0</div>
+        <button class="minus-button" data-color="yellow">−</button>
+      </div>
+    <div class="color-control">
+        <div class="color-circle" data-color="blue" style="background: blue;">0</div>
+        <button class="minus-button" data-color="blue">−</button>
+      </div>
+        
   </div>
 
   <div id="stats">
