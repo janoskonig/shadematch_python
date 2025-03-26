@@ -18,12 +18,12 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const targetColors = [
-    [255, 128, 0],    // Orange
-    [128, 0, 128],    // Purple
-    [0, 128, 0],      // Green
-    [255, 192, 203],  // Pink
+    [255, 102, 30],    // Orange
+    [113, 1, 105],    // Purple
+    [78, 150, 100],      // Green
+    [255, 179, 188],  // Pink
     [128, 128, 0],    // Olive
-    [128, 0, 0],      // Maroon
+    [98, 135, 96],      // Maroon
     [255, 229, 180],  // Peach
     [255, 128, 80],   // Coral
     [64, 224, 208],   // Turquoise
