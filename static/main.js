@@ -1,5 +1,7 @@
 // main.js (Mixbox JS + Flask colormath backend)
 
+import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
+
 console.log("✅ main.js loaded");
 
 function updateBox(id, rgb) {
@@ -23,7 +25,7 @@ document.addEventListener("DOMContentLoaded", () => {
     [78, 150, 100],      // Green
     [255, 179, 188],  // Pink
     [128, 128, 0],    // Olive
-    [98, 135, 96],      // Maroon
+    [98, 135, 96],   
     [255, 229, 180],  // Peach
     [255, 128, 80],   // Coral
     [64, 224, 208],   // Turquoise
@@ -41,29 +43,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let currentTargetIndex = 0;
   let targetColor = targetColors[currentTargetIndex];
-  updateBox("targetColor", targetColor);
-
-    // Handle add (click on color circle)
-    document.querySelectorAll(".color-circle").forEach(circle => {
-    circle.addEventListener("click", () => {
-      const color = circle.dataset.color;
-      dropCounts[color]++;
-      circle.textContent = dropCounts[color];
-      updateCurrentMix();
-    });
-  });
-  
-  // Handle subtract (click on minus button)
-  document.querySelectorAll(".minus-button").forEach(button => {
-    button.addEventListener("click", () => {
-      const color = button.dataset.color;
-      if (dropCounts[color] > 0) {
-        dropCounts[color]--;
-        document.querySelector(`.color-circle[data-color='${color}']`).textContent = dropCounts[color];
-        updateCurrentMix();
-      }
-    });
-  });
 
   function resetMix() {
     for (let key in dropCounts) dropCounts[key] = 0;
@@ -80,7 +59,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // 🧪 Mix with Mixbox in JS
     let zMix = new Array(mixbox.LATENT_SIZE).fill(0);
 
     for (let color in dropCounts) {
@@ -98,7 +76,6 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("🎨 Mixed RGB:", mixedRGB);
     updateBox("currentMix", mixedRGB);
 
-    // 🧪 Send to backend for ΔE calculation
     fetch("/calculate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -120,6 +97,7 @@ document.addEventListener("DOMContentLoaded", () => {
               targetColor = targetColors[currentTargetIndex];
               updateBox("targetColor", targetColor);
               resetMix();
+              startTimer();
             } else {
               alert("🎉 All colors completed!");
             }
@@ -127,4 +105,77 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       });
   }
+
+  // Button logic
+  document.getElementById("startBtn").addEventListener("click", () => {
+    currentTargetIndex = 0;
+    targetColor = targetColors[currentTargetIndex];
+    updateBox("targetColor", targetColor);
+    resetMix();
+    startTimer();
+
+    document.getElementById("stopBtn").disabled = false;
+    document.getElementById("startBtn").disabled = true;
+    document.getElementById("restartBtn").disabled = false;
+    document.getElementById("retryBtn").disabled = false;
+  });
+
+  document.getElementById("stopBtn").addEventListener("click", () => {
+    stopTimer();
+    document.getElementById("skipBtn").disabled = false;
+    document.getElementById("stopBtn").disabled = true;
+  });
+
+  document.getElementById("skipBtn").addEventListener("click", () => {
+    currentTargetIndex++;
+    if (currentTargetIndex < targetColors.length) {
+      targetColor = targetColors[currentTargetIndex];
+      updateBox("targetColor", targetColor);
+      resetMix();
+      startTimer();
+      document.getElementById("skipBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = false;
+    } else {
+      alert("✅ All colors completed!");
+    }
+  });
+
+  document.getElementById("restartBtn").addEventListener("click", () => {
+    currentTargetIndex = 0;
+    targetColor = targetColors[currentTargetIndex];
+    updateBox("targetColor", targetColor);
+    resetMix();
+    resetTimerDisplay();
+    startTimer();
+    document.getElementById("stopBtn").disabled = false;
+    document.getElementById("skipBtn").disabled = true;
+  });
+
+  document.getElementById("retryBtn").addEventListener("click", () => {
+    resetMix();
+    resetTimerDisplay();
+    startTimer();
+    document.getElementById("stopBtn").disabled = false;
+    document.getElementById("skipBtn").disabled = true;
+  });
+
+  document.querySelectorAll(".color-circle").forEach(circle => {
+    circle.addEventListener("click", () => {
+      const color = circle.dataset.color;
+      dropCounts[color]++;
+      circle.textContent = dropCounts[color];
+      updateCurrentMix();
+    });
+  });
+
+  document.querySelectorAll(".minus-button").forEach(button => {
+    button.addEventListener("click", () => {
+      const color = button.dataset.color;
+      if (dropCounts[color] > 0) {
+        dropCounts[color]--;
+        document.querySelector(`.color-circle[data-color='${color}']`).textContent = dropCounts[color];
+        updateCurrentMix();
+      }
+    });
+  });
 });

@@ -55,7 +55,7 @@
   <script src="{{ url_for('static', filename='mixbox.js') }}"></script>
 
   <!-- ✅ Load your app's logic -->
-  <script src="{{ url_for('static', filename='main.js') }}" defer></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}"></script>
 </head>
 <body>
 
@@ -99,6 +99,13 @@
   <div id="stats">
     <p>ΔE (CIEDE2000): <span id="deltaE">-</span></p>
   </div>
-
+  <div id="controls" style="margin-top: 20px;">
+    <button id="startBtn">Start</button>
+    <button id="stopBtn" disabled>Stop</button>
+    <button id="skipBtn" disabled>Skip</button>
+    <button id="restartBtn" disabled>Restart</button>
+    <button id="retryBtn" disabled>Retry</button>
+    </div>
+    <p>⏱️ Time: <span id="timer">0.0</span> sec</p>
 </body>
 </html>
