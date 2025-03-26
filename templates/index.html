@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Color Mixing App</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .color-box {
+      width: 200px;
+      height: 200px;
+      margin: 10px;
+      border: 2px solid #333;
+    }
+    #palette {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .color-circle {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      cursor: pointer;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      font-weight: bold;
+    }
+    #stats {
+      margin-top: 20px;
+    }
+  </style>
+
+  <!-- ✅ Load Mixbox for perceptual mixing -->
+  <script src="{{ url_for('static', filename='mixbox.js') }}"></script>
+
+  <!-- ✅ Load your app's logic -->
+  <script src="{{ url_for('static', filename='main.js') }}" defer></script>
+</head>
+<body>
+
+  <h1>Color Mixing App</h1>
+
+  <div style="display: flex; justify-content: center; gap: 50px;">
+    <div>
+      <h3>Target Color</h3>
+      <div id="targetColor" class="color-box"></div>
+    </div>
+    <div>
+      <h3>Current Mix</h3>
+      <div id="currentMix" class="color-box"></div>
+    </div>
+  </div>
+
+  <div id="palette">
+    <div class="color-circle" data-color="white" style="background: white; color: black;">0</div>
+    <div class="color-circle" data-color="black" style="background: black;">0</div>
+    <div class="color-circle" data-color="red" style="background: red;">0</div>
+    <div class="color-circle" data-color="yellow" style="background: yellow; color: black;">0</div>
+    <div class="color-circle" data-color="blue" style="background: blue;">0</div>
+  </div>
+
+  <div id="stats">
+    <p>ΔE (CIEDE2000): <span id="deltaE">-</span></p>
+  </div>
+
+</body>
+</html>
