@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Spectral Color Mixer</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: rgb(46, 46, 46);
+            color: white;
+            padding: 20px;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        .spectrum-display {
+            width: 100%;
+            height: 200px;
+            margin: 20px 0;
+            background: #333;
+            border-radius: 8px;
+            position: relative;
+        }
+
+        .color-controls {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .color-slider {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: #333;
+            padding: 15px;
+            border-radius: 8px;
+            min-width: 150px;
+        }
+
+        .slider-label {
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .wavelength-slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .intensity-slider {
+            width: 100%;
+            margin: 10px 0;
+        }
+
+        .color-preview {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            margin: 10px 0;
+            border: 2px solid #666;
+        }
+
+        .mix-controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        button {
+            background: #666;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        button:hover {
+            background: #777;
+        }
+
+        .result-display {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+        }
+
+        .spectrum-box {
+            width: 300px;
+            height: 200px;
+            background: #333;
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .spectrum-title {
+            text-align: center;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        .back-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background: #666;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .back-button:hover {
+            background: #777;
+        }
+    </style>
+</head>
+<body>
+    <a href="/" class="back-button">← Back to Main</a>
+    
+    <div class="container">
+        <h1>Spectral Color Mixer</h1>
+        
+        <div class="spectrum-display" id="spectrumDisplay">
+            <!-- Spectrum visualization will be rendered here -->
+        </div>
+
+        <div class="color-controls">
+            <div class="color-slider">
+                <div class="slider-label">Red</div>
+                <input type="range" class="wavelength-slider" min="600" max="700" value="650" id="redWavelength">
+                <input type="range" class="intensity-slider" min="0" max="100" value="100" id="redIntensity">
+                <div class="color-preview" id="redPreview"></div>
+            </div>
+
+            <div class="color-slider">
+                <div class="slider-label">Green</div>
+                <input type="range" class="wavelength-slider" min="500" max="600" value="550" id="greenWavelength">
+                <input type="range" class="intensity-slider" min="0" max="100" value="100" id="greenIntensity">
+                <div class="color-preview" id="greenPreview"></div>
+            </div>
+
+            <div class="color-slider">
+                <div class="slider-label">Blue</div>
+                <input type="range" class="wavelength-slider" min="400" max="500" value="450" id="blueWavelength">
+                <input type="range" class="intensity-slider" min="0" max="100" value="100" id="blueIntensity">
+                <div class="color-preview" id="bluePreview"></div>
+            </div>
+        </div>
+
+        <div class="mix-controls">
+            <button id="mixButton">Mix Colors</button>
+            <button id="resetButton">Reset</button>
+        </div>
+
+        <div class="result-display">
+            <div class="spectrum-box">
+                <div class="spectrum-title">Mixed Spectrum</div>
+                <canvas id="mixedSpectrum"></canvas>
+            </div>
+            <div class="spectrum-box">
+                <div class="spectrum-title">Resulting Color</div>
+                <div id="resultColor" style="width: 100%; height: 150px; border-radius: 4px;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="{{ url_for('static', filename='spectral_mixer.js') }}"></script>
+</body>
+</html> 

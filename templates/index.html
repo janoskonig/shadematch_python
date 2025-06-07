@@ -129,6 +129,23 @@
       font-size: 1.2em;
       font-weight: bold;
     }
+    .spectral-mixer-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #666;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1.1em;
+      text-decoration: none;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .spectral-mixer-btn:hover {
+      background: #777;
+    }
   </style>
 
   <!-- ✅ Load Mixbox for perceptual mixing -->
@@ -224,6 +241,8 @@
     <button id="switchUserBtn">Switch User</button>
     </div>
     <p>⏱️ Time: <span id="timer">0.0</span> sec</p>
+
+  <a href="/spectral" class="spectral-mixer-btn">Spectral Mixer →</a>
 
   <script>
   function generateId() {
