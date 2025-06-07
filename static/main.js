@@ -7,11 +7,15 @@ let sessionLogs = [];
 
 // Store user ID globally for this session
 window.currentUserId = localStorage.getItem('userId');
+window.currentUserBirthdate = localStorage.getItem('userBirthdate');
+window.currentUserGender = localStorage.getItem('userGender');
 
 // Listen for user ID changes
 window.addEventListener('storage', (e) => {
   if (e.key === 'userId') {
     window.currentUserId = e.newValue;
+    window.currentUserBirthdate = localStorage.getItem('userBirthdate');
+    window.currentUserGender = localStorage.getItem('userGender');
     // Reset the session when user changes
     resetMix();
     resetTimerDisplay();
@@ -30,20 +34,91 @@ function updateBox(id, rgb) {
 }
 
 function saveSessionToServer(session) {
+  if (!window.currentUserId) {
+    console.error('No user ID found');
+    return;
+  }
+
+  console.log('Current user ID:', window.currentUserId);
+  console.log('Session data:', session);
+
+  const sessionData = {
+    user_id: window.currentUserId,
+    target_r: session.target[0],
+    target_g: session.target[1],
+    target_b: session.target[2],
+    drop_white: session.drops.white,
+    drop_black: session.drops.black,
+    drop_red: session.drops.red,
+    drop_yellow: session.drops.yellow,
+    drop_blue: session.drops.blue,
+    delta_e: session.deltaE,
+    time_sec: session.time,
+    timestamp: session.timestamp
+  };
+
+  console.log('Sending session data to server:', sessionData);
+
   fetch('/save_session', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(session)
+    body: JSON.stringify(sessionData)
   })
   .then(res => res.json())
   .then(data => {
+    console.log('Server response:', data);
     if (data.status !== 'success') {
-      alert('Failed to save session!');
+      console.error('Failed to save session:', data.error);
     }
+  })
+  .catch(error => {
+    console.error('Error saving session:', error);
   });
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Add registration form handler
+  document.getElementById('registerForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const birthdate = document.getElementById('userBirthdate').value;
+    const gender = document.getElementById('userGender').value;
+    if (!birthdate || !gender) return;
+
+    // Send registration data to server
+    fetch('/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        birthdate: birthdate,
+        gender: gender
+      })
+    })
+    .then(response => response.json())
+    .then(data => {
+      if (data.status === 'success') {
+        // Set both localStorage and global variables
+        window.currentUserId = data.userId;
+        window.currentUserBirthdate = birthdate;
+        window.currentUserGender = gender;
+        
+        localStorage.setItem('userId', data.userId);
+        localStorage.setItem('userBirthdate', birthdate);
+        localStorage.setItem('userGender', gender);
+        
+        document.getElementById('generatedId').textContent = data.userId;
+        showSection('idDisplay');
+      } else {
+        alert('Registration failed. Please try again.');
+      }
+    })
+    .catch(error => {
+      console.error('Error:', error);
+      alert('Registration failed. Please try again.');
+    });
+  });
+
   const baseColors = {
     white: [255, 255, 255],
     black: [0, 0, 0],
@@ -124,7 +199,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (data.delta_e < 5) {
         const session = {
-          userId: window.currentUserId,
+          user_id: window.currentUserId,
           target: targetColor,
           drops: { ...dropCounts },
           deltaE: data.delta_e,
@@ -162,12 +237,13 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("startBtn").disabled = true;
     document.getElementById("restartBtn").disabled = false;
     document.getElementById("retryBtn").disabled = false;
+    document.getElementById("skipBtn").disabled = false;
   });
 
   document.getElementById("stopBtn").addEventListener("click", () => {
     stopTimer();
     const session = {
-      userId: window.currentUserId,
+      user_id: window.currentUserId,
       target: targetColor,
       drops: { ...dropCounts },
       deltaE: parseFloat(document.getElementById("deltaE").textContent),
@@ -187,10 +263,11 @@ document.addEventListener("DOMContentLoaded", () => {
       updateBox("targetColor", targetColor);
       resetMix();
       startTimer();
-      document.getElementById("skipBtn").disabled = true;
+      document.getElementById("skipBtn").disabled = false;
       document.getElementById("stopBtn").disabled = false;
     } else {
       alert("✅ All colors completed!");
+      document.getElementById("skipBtn").disabled = true;
     }
   });
 
@@ -202,6 +279,7 @@ document.addEventListener("DOMContentLoaded", () => {
     resetTimerDisplay();
     startTimer();
     document.getElementById("stopBtn").disabled = false;
+    document.getElementById("skipBtn").disabled = false;
     document.getElementById("skipBtn").disabled = true;
   });
 
@@ -210,6 +288,7 @@ document.addEventListener("DOMContentLoaded", () => {
     resetTimerDisplay();
     startTimer();
     document.getElementById("stopBtn").disabled = false;
+    document.getElementById("skipBtn").disabled = false;
     document.getElementById("skipBtn").disabled = true;
   });
 
@@ -270,4 +349,91 @@ document.addEventListener("DOMContentLoaded", () => {
   //   link.click();
   //   document.body.removeChild(link);
   // });
+});
+
+// Function to save session data
+async function saveSessionData() {
+  if (!window.currentUserId) return;
+
+  const sessionData = {
+    userId: window.currentUserId,
+    target: targetColor,
+    drops: dropCounts,
+    deltaE: parseFloat(document.getElementById('deltaE').textContent),
+    time: parseFloat(document.getElementById('timer').textContent),
+    timestamp: new Date().toISOString()
+  };
+
+  try {
+    const response = await fetch('/save_session', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(sessionData)
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to save session');
+    }
+
+    const result = await response.json();
+    if (result.status === 'success') {
+      console.log('Session saved successfully');
+    }
+  } catch (error) {
+    console.error('Error saving session:', error);
+  }
+}
+
+// Handle login form submission
+document.getElementById('loginForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    const userId = document.getElementById('loginId').value.toUpperCase();
+    
+    try {
+        const response = await fetch('/login', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ userId })
+        });
+        
+        if (!response.ok) {
+            throw new Error('Login failed');
+        }
+        
+        const data = await response.json();
+        if (data.status === 'success') {
+            localStorage.setItem('userId', userId);
+            localStorage.setItem('userBirthdate', data.birthdate);
+            localStorage.setItem('userGender', data.gender);
+            document.getElementById('userModal').style.display = 'none';
+            resetMix();
+            resetTimerDisplay();
+        }
+    } catch (error) {
+        console.error('Login error:', error);
+        alert('Invalid user ID. Please try again.');
+    }
+});
+
+// Handle continue button click
+document.getElementById('continueBtn').addEventListener('click', function() {
+    document.getElementById('userModal').style.display = 'none';
+    resetMix();
+    resetTimerDisplay();
+});
+
+// Handle show login button click
+document.getElementById('showLoginBtn').addEventListener('click', function() {
+    document.getElementById('registerSection').style.display = 'none';
+    document.getElementById('loginSection').style.display = 'block';
+});
+
+// Handle show register button click
+document.getElementById('showRegisterBtn').addEventListener('click', function() {
+    document.getElementById('loginSection').style.display = 'none';
+    document.getElementById('registerSection').style.display = 'block';
 });

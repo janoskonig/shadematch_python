@@ -4,25 +4,41 @@
   <meta charset="UTF-8">
   <title>Color Mixing App</title>
   <style>
+    :root {
+      --bg-color: rgb(46, 46, 46);  /* 18% grey */
+      --surface-color: rgb(66, 66, 66);
+      --accent-color: rgb(86, 86, 86);
+      --text-color: white;
+      --border-color: rgb(86, 86, 86);
+      --shadow-color: rgba(0, 0, 0, 0.2);
+    }
+
     body {
       font-family: sans-serif;
       display: flex;
       flex-direction: column;
       align-items: center;
-      background-color: rgb(46, 46, 46);
-      color: white;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
     }
+
     .color-box {
       width: 200px;
       height: 200px;
       margin: 10px;
-      border: 2px solid #666;
+      border: 2px solid var(--border-color);
+      background-color: var(--surface-color);
     }
+
     #palette {
       display: flex;
       gap: 15px;
       margin-top: 30px;
     }
+
     .color-circle {
       width: 60px;
       height: 60px;
@@ -31,120 +47,209 @@
       display: flex;
       justify-content: center;
       align-items: center;
-      color: white;
+      color: var(--text-color);
       font-weight: bold;
       font-size: 1.2em;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      box-shadow: 0 2px 8px var(--shadow-color);
     }
+
     #stats {
       margin-top: 20px;
+      background-color: var(--surface-color);
+      padding: 15px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px var(--shadow-color);
     }
+
     .color-control {
       display: flex;
       flex-direction: column;
       align-items: center;
     }
+
     .minus-button {
       margin-top: 6px;
       font-size: 18px;
       padding: 0 8px;
       border: none;
-      background: #666;
-      color: white;
+      background: var(--accent-color);
+      color: var(--text-color);
       border-radius: 50%;
       cursor: pointer;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      box-shadow: 0 2px 4px var(--shadow-color);
     }
+
     .minus-button:hover {
-      background: #777;
+      background: var(--surface-color);
     }
+
     .color-comparison-container {
       display: flex;
       align-items: center;
       justify-content: center;
       margin-bottom: 20px;
     }
+
     .color-window {
       display: flex;
       flex-direction: column;
       align-items: center;
     }
+
     .color-label {
       font-weight: bold;
       margin-bottom: 12px;
       font-size: 1.2em;
     }
+
     .color-divider {
       width: 40px;
       display: flex;
       align-items: center;
       justify-content: center;
     }
+
     .match-percentage {
-      background: #333;
-      color: white;
+      background: var(--surface-color);
+      color: var(--text-color);
       padding: 0.8em 1.5em;
       border-radius: 1em;
       font-weight: bold;
-      border: 1px solid #444;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      border: 1px solid var(--border-color);
+      box-shadow: 0 2px 8px var(--shadow-color);
       font-size: 1.1em;
     }
+
     .color-pair {
       display: flex;
       width: 600px;
       height: 300px;
-      border: 2px solid #666;
+      border: 2px solid var(--border-color);
       border-radius: 8px;
       overflow: hidden;
       margin-bottom: 16px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      box-shadow: 0 4px 12px var(--shadow-color);
     }
+
     .color-half {
       flex: 1;
       height: 100%;
     }
+
     #controls {
       margin-top: 20px;
     }
+
     #controls button {
-      background: #666;
-      color: white;
+      background: var(--accent-color);
+      color: var(--text-color);
       border: none;
       padding: 8px 16px;
       margin: 0 4px;
       border-radius: 4px;
       cursor: pointer;
       font-size: 1em;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+      box-shadow: 0 2px 4px var(--shadow-color);
     }
+
     #controls button:hover {
-      background: #777;
+      background: var(--surface-color);
     }
+
     #controls button:disabled {
-      background: #444;
+      background: var(--bg-color);
       cursor: not-allowed;
     }
+
     #timer {
       font-size: 1.2em;
       font-weight: bold;
     }
+
     .spectral-mixer-btn {
       position: fixed;
       bottom: 20px;
       right: 20px;
-      background: #666;
-      color: white;
+      background: var(--accent-color);
+      color: var(--text-color);
       border: none;
       padding: 12px 24px;
       border-radius: 4px;
       cursor: pointer;
       font-size: 1.1em;
       text-decoration: none;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      box-shadow: 0 2px 8px var(--shadow-color);
     }
+
     .spectral-mixer-btn:hover {
-      background: #777;
+      background: var(--surface-color);
+    }
+
+    /* Modal styles */
+    #userModal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+    }
+
+    .modal-content {
+      background: var(--surface-color);
+      padding: 2em;
+      border-radius: 10px;
+      max-width: 90vw;
+      min-width: 300px;
+      color: var(--text-color);
+      box-shadow: 0 4px 12px var(--shadow-color);
+    }
+
+    .modal-content h2 {
+      margin-top: 0;
+      color: var(--text-color);
+    }
+
+    .modal-content input,
+    .modal-content select {
+      background: var(--bg-color);
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      padding: 8px;
+      border-radius: 4px;
+      width: 100%;
+      margin-top: 5px;
+    }
+
+    .modal-content button {
+      background: var(--accent-color);
+      color: var(--text-color);
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-top: 10px;
+    }
+
+    .modal-content button:hover {
+      background: var(--surface-color);
+    }
+
+    .modal-content hr {
+      border: none;
+      border-top: 1px solid var(--border-color);
+      margin: 20px 0;
+    }
+
+    #generatedId {
+      font-family: monospace;
+      letter-spacing: 2px;
+      text-align: center;
+      color: var(--text-color);
     }
   </style>
 
@@ -155,14 +260,13 @@
   <script type="module" src="{{ url_for('static', filename='main.js') }}"></script>
 </head>
 <body>
-
-  <div id="userModal" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000;">
-    <div style="background:white;padding:2em;border-radius:10px;max-width:90vw;min-width:300px;">
+  <div id="userModal">
+    <div class="modal-content">
       <div id="registerSection">
         <h2>Welcome!</h2>
-        <p>Please enter your age and gender to get started.</p>
+        <p>Please enter your birthdate and gender to get started.</p>
         <form id="registerForm">
-          <label>Age: <input type="number" id="userAge" min="1" max="120" required></label><br><br>
+          <label>Birthdate: <input type="date" id="userBirthdate" required></label><br><br>
           <label>Gender:
             <select id="userGender" required>
               <option value="">Select…</option>
@@ -280,19 +384,6 @@
       showUserModal();
     };
 
-    document.getElementById('registerForm').onsubmit = function(e) {
-      e.preventDefault();
-      const age = document.getElementById('userAge').value;
-      const gender = document.getElementById('userGender').value;
-      if (!age || !gender) return;
-      const id = generateId();
-      localStorage.setItem('userId', id);
-      localStorage.setItem('userAge', age);
-      localStorage.setItem('userGender', gender);
-      document.getElementById('generatedId').textContent = id;
-      showSection('idDisplay');
-    };
-
     document.getElementById('continueBtn').onclick = function() {
       document.getElementById('userModal').style.display = 'none';
     };
@@ -317,7 +408,7 @@
   // Optional: Add a "Log out" button somewhere in your app to clear the ID
   function logoutUser() {
     localStorage.removeItem('userId');
-    localStorage.removeItem('userAge');
+    localStorage.removeItem('userBirthdate');
     localStorage.removeItem('userGender');
     location.reload();
   }

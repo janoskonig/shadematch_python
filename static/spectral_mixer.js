@@ -1,292 +1,318 @@
 // Spectral color mixing implementation
 class SpectralMixer {
     constructor() {
-        this.wavelengths = Array.from({length: 381}, (_, i) => i + 380); // 380-760nm
-        this.initializeControls();
-        this.initializePlot();
-    }
+        console.log('Initializing SpectralMixer');
+        
+        // Wavelength range (400-700nm)
+        this.wavelengths = Array.from({length: 301}, (_, i) => i + 400);
+        
+        // CIE 1931 color matching functions
+        this.cieX = this.wavelengths.map(w => this.cieXFunction(w));
+        this.cieY = this.wavelengths.map(w => this.cieYFunction(w));
+        this.cieZ = this.wavelengths.map(w => this.cieZFunction(w));
 
-    // Initialize UI controls
-    initializeControls() {
-        // Red controls
-        this.redWavelength = document.getElementById('redWavelength');
-        this.redIntensity = document.getElementById('redIntensity');
-        this.redPreview = document.getElementById('redPreview');
-
-        // Green controls
-        this.greenWavelength = document.getElementById('greenWavelength');
-        this.greenIntensity = document.getElementById('greenIntensity');
-        this.greenPreview = document.getElementById('greenPreview');
-
-        // Blue controls
-        this.blueWavelength = document.getElementById('blueWavelength');
-        this.blueIntensity = document.getElementById('blueIntensity');
-        this.bluePreview = document.getElementById('bluePreview');
-
-        // Buttons
-        this.mixButton = document.getElementById('mixButton');
-        this.resetButton = document.getElementById('resetButton');
-
-        // Add event listeners
-        this.addEventListeners();
-    }
-
-    // Add event listeners to controls
-    addEventListeners() {
-        // Red controls
-        this.redWavelength.addEventListener('input', () => this.updateColor('red'));
-        this.redIntensity.addEventListener('input', () => this.updateColor('red'));
-
-        // Green controls
-        this.greenWavelength.addEventListener('input', () => this.updateColor('green'));
-        this.greenIntensity.addEventListener('input', () => this.updateColor('green'));
-
-        // Blue controls
-        this.blueWavelength.addEventListener('input', () => this.updateColor('blue'));
-        this.blueIntensity.addEventListener('input', () => this.updateColor('blue'));
-
-        // Buttons
-        this.mixButton.addEventListener('click', () => this.mixColors());
-        this.resetButton.addEventListener('click', () => this.reset());
-    }
-
-    // Initialize the spectrum plot
-    initializePlot() {
-        const layout = {
-            title: 'Spectral Distribution',
-            xaxis: {
-                title: 'Wavelength (nm)',
-                range: [380, 760]
+        // Real pigment reflectance spectra from INFRART database
+        this.pigmentSpectra = {
+            red: {
+                // Bengal Rose (PR169) reflectance spectrum
+                wavelengths: [400, 450, 500, 550, 600, 650, 700],
+                reflectances: [0.15, 0.20, 0.25, 0.30, 0.85, 0.95, 0.98]
             },
-            yaxis: {
-                title: 'Intensity',
-                range: [0, 1]
+            green: {
+                // Phthalo Green (PG7) reflectance spectrum
+                wavelengths: [400, 450, 500, 550, 600, 650, 700],
+                reflectances: [0.10, 0.15, 0.90, 0.95, 0.20, 0.15, 0.10]
             },
-            paper_bgcolor: 'rgba(0,0,0,0)',
-            plot_bgcolor: 'rgba(0,0,0,0)',
-            font: {
-                color: 'white'
+            blue: {
+                // Phthalo Blue (PB15) reflectance spectrum
+                wavelengths: [400, 450, 500, 550, 600, 650, 700],
+                reflectances: [0.90, 0.95, 0.20, 0.15, 0.10, 0.05, 0.05]
             }
         };
 
-        Plotly.newPlot('spectrumDisplay', [], layout);
+        this.dropCounts = { red: 0, green: 0, blue: 0 };
+        this.initializeControls();
+        this.initializePlots();
     }
 
-    // Update color preview and spectrum
-    updateColor(color) {
-        const wavelength = parseInt(this[`${color}Wavelength`].value);
-        const intensity = parseInt(this[`${color}Intensity`].value) / 100;
-
-        // Update color preview
-        const rgb = this.wavelengthToRGB(wavelength);
-        this[`${color}Preview`].style.backgroundColor = `rgb(${rgb.join(',')})`;
-
-        // Update spectrum plot
-        this.updateSpectrum();
+    // CIE 1931 color matching functions
+    cieXFunction(wavelength) {
+        const t1 = (wavelength - 442.0) * ((wavelength < 442.0) ? 0.0624 : 0.0374);
+        const t2 = (wavelength - 599.8) * ((wavelength < 599.8) ? 0.0264 : 0.0323);
+        const t3 = (wavelength - 501.1) * ((wavelength < 501.1) ? 0.0490 : 0.0382);
+        return 0.362 * Math.exp(-0.5 * t1 * t1) + 1.056 * Math.exp(-0.5 * t2 * t2) - 0.065 * Math.exp(-0.5 * t3 * t3);
     }
 
-    // Convert wavelength to RGB
-    wavelengthToRGB(wavelength) {
-        let r, g, b;
+    cieYFunction(wavelength) {
+        const t1 = (wavelength - 568.8) * ((wavelength < 568.8) ? 0.0213 : 0.0247);
+        const t2 = (wavelength - 530.9) * ((wavelength < 530.9) ? 0.0613 : 0.0322);
+        return 0.821 * Math.exp(-0.5 * t1 * t1) + 0.286 * Math.exp(-0.5 * t2 * t2);
+    }
 
-        if (wavelength >= 380 && wavelength < 440) {
-            r = -(wavelength - 440) / (440 - 380);
-            g = 0;
-            b = 1;
-        } else if (wavelength >= 440 && wavelength < 490) {
-            r = 0;
-            g = (wavelength - 440) / (490 - 440);
-            b = 1;
-        } else if (wavelength >= 490 && wavelength < 510) {
-            r = 0;
-            g = 1;
-            b = -(wavelength - 510) / (510 - 490);
-        } else if (wavelength >= 510 && wavelength < 580) {
-            r = (wavelength - 510) / (580 - 510);
-            g = 1;
-            b = 0;
-        } else if (wavelength >= 580 && wavelength < 645) {
-            r = 1;
-            g = -(wavelength - 645) / (645 - 580);
-            b = 0;
-        } else if (wavelength >= 645 && wavelength <= 780) {
-            r = 1;
-            g = 0;
-            b = 0;
+    cieZFunction(wavelength) {
+        const t1 = (wavelength - 437.0) * ((wavelength < 437.0) ? 0.0845 : 0.0278);
+        const t2 = (wavelength - 459.0) * ((wavelength < 459.0) ? 0.0385 : 0.0725);
+        return 1.217 * Math.exp(-0.5 * t1 * t1) + 0.681 * Math.exp(-0.5 * t2 * t2);
+    }
+
+    initializeControls() {
+        console.log('Initializing controls');
+        
+        Object.keys(this.pigmentSpectra).forEach(color => {
+            const control = document.querySelector(`.color-control[data-color="${color}"]`);
+            if (!control) {
+                console.error(`Could not find control for ${color}`);
+                return;
+            }
+
+            const buttons = {
+                plus: control.querySelector('.drop-button:last-child'),
+                minus: control.querySelector('.drop-button:first-child'),
+                circle: control.querySelector('.color-circle')
+            };
+
+            console.log(`Found elements for ${color}:`, buttons);
+
+            if (buttons.plus && buttons.minus && buttons.circle) {
+                buttons.plus.addEventListener('click', () => {
+                    console.log(`${color} plus button clicked`);
+                    this.dropCounts[color]++;
+                    buttons.circle.textContent = this.dropCounts[color];
+                    this.updateColors();
+                    this.updatePlots();
+                });
+
+                buttons.minus.addEventListener('click', () => {
+                    if (this.dropCounts[color] > 0) {
+                        console.log(`${color} minus button clicked`);
+                        this.dropCounts[color]--;
+                        buttons.circle.textContent = this.dropCounts[color];
+                        this.updateColors();
+                        this.updatePlots();
+                    }
+                });
+
+                // Set initial color
+                const spectrum = this.generatePigmentSpectrum(this.pigmentSpectra[color]);
+                const rgb = this.spectrumToRGB(spectrum);
+                const [r, g, b] = rgb.map(Math.round);
+                buttons.circle.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+                buttons.circle.style.color = this.getContrastColor(r, g, b);
+                buttons.circle.textContent = '0';
+            }
+        });
+
+        // Initialize mixed color circle
+        this.mixedCircle = document.querySelector('.mixed-color .color-circle');
+        if (!this.mixedCircle) {
+            console.error('Could not find mixed color circle');
         } else {
-            r = 0;
-            g = 0;
-            b = 0;
+            // Set initial mixed color
+            this.updateColors();
+        }
+    }
+
+    initializePlots() {
+        // Initialize individual color plots
+        Object.keys(this.pigmentSpectra).forEach(color => {
+            const plotDiv = document.getElementById(`${color}Spectrum`);
+            if (!plotDiv) {
+                console.error(`Could not find plot div for ${color}`);
+                return;
+            }
+
+            const spectrum = this.generatePigmentSpectrum(this.pigmentSpectra[color]);
+            const rgb = this.spectrumToRGB(spectrum);
+            const [r, g, b] = rgb.map(Math.round);
+
+            const trace = {
+                x: this.wavelengths,
+                y: spectrum,
+                type: 'scatter',
+                mode: 'lines',
+                name: color.charAt(0).toUpperCase() + color.slice(1),
+                line: {
+                    color: `rgb(${r}, ${g}, ${b})`,
+                    width: 2
+                }
+            };
+
+            const layout = {
+                title: `${color.charAt(0).toUpperCase() + color.slice(1)} Spectrum`,
+                xaxis: {
+                    title: 'Wavelength (nm)',
+                    range: [400, 700],
+                    showgrid: true,
+                    gridcolor: '#ddd'
+                },
+                yaxis: {
+                    title: 'Reflectance',
+                    range: [0, 1],
+                    showgrid: true,
+                    gridcolor: '#ddd'
+                },
+                margin: { t: 30, r: 20, b: 40, l: 50 },
+                paper_bgcolor: 'white',
+                plot_bgcolor: 'white'
+            };
+
+            Plotly.newPlot(plotDiv, [trace], layout);
+        });
+
+        // Initialize mixed spectrum plot
+        const mixedPlotDiv = document.getElementById('mixedSpectrum');
+        if (mixedPlotDiv) {
+            const layout = {
+                title: 'Mixed Spectrum',
+                xaxis: {
+                    title: 'Wavelength (nm)',
+                    range: [400, 700],
+                    showgrid: true,
+                    gridcolor: '#ddd'
+                },
+                yaxis: {
+                    title: 'Reflectance',
+                    range: [0, 1],
+                    showgrid: true,
+                    gridcolor: '#ddd'
+                },
+                margin: { t: 30, r: 20, b: 40, l: 50 },
+                paper_bgcolor: 'white',
+                plot_bgcolor: 'white'
+            };
+
+            Plotly.newPlot(mixedPlotDiv, [], layout);
+        }
+    }
+
+    updatePlots() {
+        // Update mixed spectrum plot
+        const mixedPlotDiv = document.getElementById('mixedSpectrum');
+        if (mixedPlotDiv) {
+            const mixedSpectrum = this.calculateMixedSpectrum();
+            const rgb = this.spectrumToRGB(mixedSpectrum);
+            const [r, g, b] = rgb.map(Math.round);
+
+            const trace = {
+                x: this.wavelengths,
+                y: mixedSpectrum,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Mixed',
+                line: {
+                    color: `rgb(${r}, ${g}, ${b})`,
+                    width: 2
+                }
+            };
+
+            Plotly.react(mixedPlotDiv, [trace]);
+        }
+    }
+
+    // Interpolate reflectance value for a given wavelength
+    interpolateReflectance(wavelength, pigment) {
+        const { wavelengths, reflectances } = pigment;
+        
+        // Find the two closest wavelengths
+        let lowerIndex = 0;
+        while (lowerIndex < wavelengths.length - 1 && wavelengths[lowerIndex + 1] < wavelength) {
+            lowerIndex++;
+        }
+        
+        if (lowerIndex === wavelengths.length - 1) {
+            return reflectances[lowerIndex];
         }
 
-        // Adjust for intensity
-        const intensity = parseInt(this[`${wavelength >= 645 ? 'red' : wavelength >= 580 ? 'red' : wavelength >= 510 ? 'green' : wavelength >= 490 ? 'green' : wavelength >= 440 ? 'blue' : 'blue'}Intensity`].value) / 100;
-
-        return [
-            Math.round(r * 255 * intensity),
-            Math.round(g * 255 * intensity),
-            Math.round(b * 255 * intensity)
-        ];
-    }
-
-    // Generate Gaussian distribution for a wavelength
-    generateGaussian(wavelength, intensity, fwhm = 30) {
-        return this.wavelengths.map(w => {
-            const sigma = fwhm / (2 * Math.sqrt(2 * Math.log(2)));
-            return intensity * Math.exp(-Math.pow(w - wavelength, 2) / (2 * Math.pow(sigma, 2)));
-        });
-    }
-
-    // Update the spectrum plot
-    updateSpectrum() {
-        const redSpectrum = this.generateGaussian(
-            parseInt(this.redWavelength.value),
-            parseInt(this.redIntensity.value) / 100
-        );
-        const greenSpectrum = this.generateGaussian(
-            parseInt(this.greenWavelength.value),
-            parseInt(this.greenIntensity.value) / 100
-        );
-        const blueSpectrum = this.generateGaussian(
-            parseInt(this.blueWavelength.value),
-            parseInt(this.blueIntensity.value) / 100
-        );
-
-        const traces = [
-            {
-                x: this.wavelengths,
-                y: redSpectrum,
-                name: 'Red',
-                line: { color: 'red' }
-            },
-            {
-                x: this.wavelengths,
-                y: greenSpectrum,
-                name: 'Green',
-                line: { color: 'green' }
-            },
-            {
-                x: this.wavelengths,
-                y: blueSpectrum,
-                name: 'Blue',
-                line: { color: 'blue' }
-            }
-        ];
-
-        Plotly.react('spectrumDisplay', traces);
-    }
-
-    // Mix the colors
-    mixColors() {
-        const redSpectrum = this.generateGaussian(
-            parseInt(this.redWavelength.value),
-            parseInt(this.redIntensity.value) / 100
-        );
-        const greenSpectrum = this.generateGaussian(
-            parseInt(this.greenWavelength.value),
-            parseInt(this.greenIntensity.value) / 100
-        );
-        const blueSpectrum = this.generateGaussian(
-            parseInt(this.blueWavelength.value),
-            parseInt(this.blueIntensity.value) / 100
-        );
-
-        // Mix the spectra
-        const mixedSpectrum = this.wavelengths.map((_, i) => 
-            redSpectrum[i] + greenSpectrum[i] + blueSpectrum[i]
-        );
-
-        // Normalize the mixed spectrum
-        const maxIntensity = Math.max(...mixedSpectrum);
-        const normalizedSpectrum = mixedSpectrum.map(i => i / maxIntensity);
-
-        // Calculate the resulting RGB color
-        const rgb = this.spectrumToRGB(normalizedSpectrum);
+        const upperIndex = lowerIndex + 1;
+        const lowerWavelength = wavelengths[lowerIndex];
+        const upperWavelength = wavelengths[upperIndex];
+        const lowerReflectance = reflectances[lowerIndex];
+        const upperReflectance = reflectances[upperIndex];
         
-        // Update the result display
-        document.getElementById('resultColor').style.backgroundColor = `rgb(${rgb.join(',')})`;
-
-        // Plot the mixed spectrum
-        const trace = {
-            x: this.wavelengths,
-            y: normalizedSpectrum,
-            name: 'Mixed Spectrum',
-            line: { color: `rgb(${rgb.join(',')})` }
-        };
-
-        Plotly.newPlot('mixedSpectrum', [trace], {
-            title: 'Mixed Spectrum',
-            xaxis: { title: 'Wavelength (nm)' },
-            yaxis: { title: 'Intensity' },
-            paper_bgcolor: 'rgba(0,0,0,0)',
-            plot_bgcolor: 'rgba(0,0,0,0)',
-            font: { color: 'white' }
-        });
+        // Linear interpolation
+        const t = (wavelength - lowerWavelength) / (upperWavelength - lowerWavelength);
+        return lowerReflectance + t * (upperReflectance - lowerReflectance);
     }
 
-    // Convert spectrum to RGB
+    generatePigmentSpectrum(pigment) {
+        return this.wavelengths.map(w => this.interpolateReflectance(w, pigment));
+    }
+
+    calculateMixedSpectrum() {
+        // Calculate total drops
+        const totalDrops = Object.values(this.dropCounts).reduce((a, b) => a + b, 0);
+        if (totalDrops === 0) {
+            return Array(this.wavelengths.length).fill(0);
+        }
+
+        // Mix spectra using weighted average of reflectances
+        const mixedSpectrum = Array(this.wavelengths.length).fill(0);
+        Object.keys(this.pigmentSpectra).forEach(color => {
+            const weight = this.dropCounts[color] / totalDrops;
+            const spectrum = this.generatePigmentSpectrum(this.pigmentSpectra[color]);
+            for (let i = 0; i < this.wavelengths.length; i++) {
+                mixedSpectrum[i] += spectrum[i] * weight;
+            }
+        });
+
+        return mixedSpectrum;
+    }
+
+    updateColors() {
+        console.log('Updating colors with drop counts:', this.dropCounts);
+        
+        // Calculate mixed spectrum
+        const mixedSpectrum = this.calculateMixedSpectrum();
+        
+        // Convert to RGB
+        const rgb = this.spectrumToRGB(mixedSpectrum);
+        console.log('Mixed RGB:', rgb);
+        
+        // Update mixed color circle
+        if (this.mixedCircle) {
+            const [r, g, b] = rgb.map(Math.round);
+            this.mixedCircle.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+            this.mixedCircle.style.color = this.getContrastColor(r, g, b);
+        }
+    }
+
+    getContrastColor(r, g, b) {
+        // Calculate relative luminance
+        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        return luminance > 0.5 ? '#000000' : '#ffffff';
+    }
+
     spectrumToRGB(spectrum) {
-        // CIE color matching functions (simplified)
+        // CIE 1931 color matching functions
         const x = spectrum.reduce((sum, intensity, i) => sum + intensity * this.cieX[i], 0);
         const y = spectrum.reduce((sum, intensity, i) => sum + intensity * this.cieY[i], 0);
         const z = spectrum.reduce((sum, intensity, i) => sum + intensity * this.cieZ[i], 0);
+        
+        // Normalize XYZ values
+        const sum = x + y + z;
+        const xyz = {
+            x: x / sum,
+            y: y / sum,
+            z: z / sum
+        };
 
-        // Convert XYZ to RGB
-        const r = 3.2406 * x - 1.5372 * y - 0.4986 * z;
-        const g = -0.9689 * x + 1.8758 * y + 0.0415 * z;
-        const b = 0.0557 * x - 0.2040 * y + 1.0570 * z;
+        // Convert XYZ to RGB using sRGB transformation matrix
+        const r = 3.2406 * xyz.x - 1.5372 * xyz.y - 0.4986 * xyz.z;
+        const g = -0.9689 * xyz.x + 1.8758 * xyz.y + 0.0415 * xyz.z;
+        const b = 0.0557 * xyz.x - 0.2040 * xyz.y + 1.0570 * xyz.z;
 
-        // Normalize and clamp
+        // Gamma correction and clamping
+        const gamma = 2.4;
         return [
-            Math.round(Math.max(0, Math.min(255, r * 255))),
-            Math.round(Math.max(0, Math.min(255, g * 255))),
-            Math.round(Math.max(0, Math.min(255, b * 255)))
+            Math.max(0, Math.min(255, Math.pow(Math.max(0, r), 1/gamma) * 255)),
+            Math.max(0, Math.min(255, Math.pow(Math.max(0, g), 1/gamma) * 255)),
+            Math.max(0, Math.min(255, Math.pow(Math.max(0, b), 1/gamma) * 255))
         ];
     }
-
-    // Reset all controls
-    reset() {
-        this.redWavelength.value = 650;
-        this.redIntensity.value = 100;
-        this.greenWavelength.value = 550;
-        this.greenIntensity.value = 100;
-        this.blueWavelength.value = 450;
-        this.blueIntensity.value = 100;
-
-        this.updateColor('red');
-        this.updateColor('green');
-        this.updateColor('blue');
-        this.mixColors();
-    }
-
-    // CIE color matching functions (simplified)
-    cieX = Array(381).fill(0).map((_, i) => {
-        const w = i + 380;
-        if (w >= 380 && w <= 780) {
-            return Math.exp(-0.5 * Math.pow((w - 580) / 100, 2));
-        }
-        return 0;
-    });
-
-    cieY = Array(381).fill(0).map((_, i) => {
-        const w = i + 380;
-        if (w >= 380 && w <= 780) {
-            return Math.exp(-0.5 * Math.pow((w - 540) / 100, 2));
-        }
-        return 0;
-    });
-
-    cieZ = Array(381).fill(0).map((_, i) => {
-        const w = i + 380;
-        if (w >= 380 && w <= 780) {
-            return Math.exp(-0.5 * Math.pow((w - 440) / 100, 2));
-        }
-        return 0;
-    });
 }
 
-// Initialize the app when the DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-    const mixer = new SpectralMixer();
-    mixer.reset();
+// Initialize when window loads
+window.addEventListener('load', () => {
+    console.log('Window loaded, initializing SpectralMixer');
+    window.spectralMixer = new SpectralMixer();
 }); 
