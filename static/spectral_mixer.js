@@ -18,10 +18,10 @@ class SpectralMixer {
                 wavelengths: [400, 450, 500, 550, 600, 650, 700],
                 reflectances: [0.15, 0.20, 0.25, 0.30, 0.85, 0.95, 0.98]
             },
-            green: {
-                // Phthalo Green (PG7) reflectance spectrum
+            yellow: {
+                // Cadmium Yellow (PY35) reflectance spectrum
                 wavelengths: [400, 450, 500, 550, 600, 650, 700],
-                reflectances: [0.10, 0.15, 0.90, 0.95, 0.20, 0.15, 0.10]
+                reflectances: [0.10, 0.15, 0.95, 0.98, 0.95, 0.90, 0.85]
             },
             blue: {
                 // Phthalo Blue (PB15) reflectance spectrum
@@ -30,7 +30,7 @@ class SpectralMixer {
             }
         };
 
-        this.dropCounts = { red: 0, green: 0, blue: 0 };
+        this.dropCounts = { red: 0, yellow: 0, blue: 0 };
         this.initializeControls();
         this.initializePlots();
     }
