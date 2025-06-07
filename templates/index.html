@@ -9,21 +9,23 @@
       display: flex;
       flex-direction: column;
       align-items: center;
+      background-color: rgb(46, 46, 46);
+      color: white;
     }
     .color-box {
       width: 200px;
       height: 200px;
       margin: 10px;
-      border: 2px solid #333;
+      border: 2px solid #666;
     }
     #palette {
       display: flex;
-      gap: 10px;
-      margin-top: 20px;
+      gap: 15px;
+      margin-top: 30px;
     }
     .color-circle {
-      width: 50px;
-      height: 50px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
       cursor: pointer;
       display: flex;
@@ -31,23 +33,101 @@
       align-items: center;
       color: white;
       font-weight: bold;
+      font-size: 1.2em;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
     }
     #stats {
       margin-top: 20px;
     }
     .color-control {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     .minus-button {
-    margin-top: 4px;
-    font-size: 16px;
-    padding: 0 6px;
-    border: none;
-    background: #ccc;
-    border-radius: 50%;
-    cursor: pointer;
+      margin-top: 6px;
+      font-size: 18px;
+      padding: 0 8px;
+      border: none;
+      background: #666;
+      color: white;
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    .minus-button:hover {
+      background: #777;
+    }
+    .color-comparison-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .color-window {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .color-label {
+      font-weight: bold;
+      margin-bottom: 12px;
+      font-size: 1.2em;
+    }
+    .color-divider {
+      width: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .match-percentage {
+      background: #333;
+      color: white;
+      padding: 0.8em 1.5em;
+      border-radius: 1em;
+      font-weight: bold;
+      border: 1px solid #444;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      font-size: 1.1em;
+    }
+    .color-pair {
+      display: flex;
+      width: 600px;
+      height: 300px;
+      border: 2px solid #666;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .color-half {
+      flex: 1;
+      height: 100%;
+    }
+    #controls {
+      margin-top: 20px;
+    }
+    #controls button {
+      background: #666;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      margin: 0 4px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1em;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    #controls button:hover {
+      background: #777;
+    }
+    #controls button:disabled {
+      background: #444;
+      cursor: not-allowed;
+    }
+    #timer {
+      font-size: 1.2em;
+      font-weight: bold;
     }
   </style>
 
@@ -59,17 +139,53 @@
 </head>
 <body>
 
+  <div id="userModal" style="position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;z-index:1000;">
+    <div style="background:white;padding:2em;border-radius:10px;max-width:90vw;min-width:300px;">
+      <div id="registerSection">
+        <h2>Welcome!</h2>
+        <p>Please enter your age and gender to get started.</p>
+        <form id="registerForm">
+          <label>Age: <input type="number" id="userAge" min="1" max="120" required></label><br><br>
+          <label>Gender:
+            <select id="userGender" required>
+              <option value="">Select…</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+              <option value="other">Other</option>
+              <option value="prefer_not_to_say">Prefer not to say</option>
+            </select>
+          </label><br><br>
+          <button type="submit">Get My ID</button>
+        </form>
+        <hr>
+        <p>Already have an ID? <button id="showLoginBtn" type="button">Log in</button></p>
+      </div>
+      <div id="loginSection" style="display:none;">
+        <h2>Log in</h2>
+        <form id="loginForm">
+          <label>Your 6-character ID: <input type="text" id="loginId" maxlength="6" minlength="6" required style="text-transform:uppercase"></label><br><br>
+          <button type="submit">Log in</button>
+        </form>
+        <hr>
+        <p>New user? <button id="showRegisterBtn" type="button">Register</button></p>
+      </div>
+      <div id="idDisplaySection" style="display:none;">
+        <h2>Your ID</h2>
+        <p style="font-size:2em;font-weight:bold;" id="generatedId"></p>
+        <p>Please memorize this ID. You will need it to log in next time.</p>
+        <button id="continueBtn">Continue</button>
+      </div>
+    </div>
+  </div>
+
   <h1>Color Mixing App</h1>
 
-  <div style="display: flex; justify-content: center; gap: 50px;">
-    <div>
-      <h3>Target Color</h3>
-      <div id="targetColor" class="color-box"></div>
-    </div>
-    <div>
-      <h3>Current Mix</h3>
-      <div id="currentMix" class="color-box"></div>
-    </div>
+  <div class="color-pair">
+    <div id="targetColor" class="color-half"></div>
+    <div id="currentMix" class="color-half"></div>
+  </div>
+  <div style="margin-top: 8px; font-weight: bold;">
+    ΔE (CIEDE2000): <span id="deltaE">-</span>
   </div>
 
   <div id="palette">
@@ -105,9 +221,88 @@
     <button id="skipBtn" disabled>Skip</button>
     <button id="restartBtn" disabled>Restart</button>
     <button id="retryBtn" disabled>Retry</button>
+    <button id="switchUserBtn">Switch User</button>
     </div>
     <p>⏱️ Time: <span id="timer">0.0</span> sec</p>
-    <button id="exportBtn">Download CSV</button>
+
+  <script>
+  function generateId() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let id = '';
+    for (let i = 0; i < 6; i++) {
+      id += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return id;
+  }
+
+  function showSection(section) {
+    document.getElementById('registerSection').style.display = section === 'register' ? '' : 'none';
+    document.getElementById('loginSection').style.display = section === 'login' ? '' : 'none';
+    document.getElementById('idDisplaySection').style.display = section === 'idDisplay' ? '' : 'none';
+  }
+
+  function showUserModal() {
+    const modal = document.getElementById('userModal');
+    modal.style.display = 'flex';
+    showSection('login');
+  }
+
+  window.addEventListener('DOMContentLoaded', () => {
+    const modal = document.getElementById('userModal');
+    const storedId = localStorage.getItem('userId');
+    if (storedId) {
+      modal.style.display = 'none';
+    } else {
+      modal.style.display = 'flex';
+      showSection('register');
+    }
+
+    document.getElementById('switchUserBtn').onclick = function() {
+      showUserModal();
+    };
+
+    document.getElementById('registerForm').onsubmit = function(e) {
+      e.preventDefault();
+      const age = document.getElementById('userAge').value;
+      const gender = document.getElementById('userGender').value;
+      if (!age || !gender) return;
+      const id = generateId();
+      localStorage.setItem('userId', id);
+      localStorage.setItem('userAge', age);
+      localStorage.setItem('userGender', gender);
+      document.getElementById('generatedId').textContent = id;
+      showSection('idDisplay');
+    };
+
+    document.getElementById('continueBtn').onclick = function() {
+      document.getElementById('userModal').style.display = 'none';
+    };
+
+    document.getElementById('showLoginBtn').onclick = function() {
+      showSection('login');
+    };
+    document.getElementById('showRegisterBtn').onclick = function() {
+      showSection('register');
+    };
+
+    document.getElementById('loginForm').onsubmit = function(e) {
+      e.preventDefault();
+      const id = document.getElementById('loginId').value.toUpperCase();
+      if (id.length === 6) {
+        localStorage.setItem('userId', id);
+        document.getElementById('userModal').style.display = 'none';
+      }
+    };
+  });
+
+  // Optional: Add a "Log out" button somewhere in your app to clear the ID
+  function logoutUser() {
+    localStorage.removeItem('userId');
+    localStorage.removeItem('userAge');
+    localStorage.removeItem('userGender');
+    location.reload();
+  }
+  </script>
 
 </body>
 </html>
