@@ -242,16 +242,21 @@ class SpectralMixer {
         // Calculate total drops
         const totalDrops = Object.values(this.dropCounts).reduce((a, b) => a + b, 0);
         if (totalDrops === 0) {
-            return Array(this.wavelengths.length).fill(0);
+            return Array(this.wavelengths.length).fill(1); // White when no pigments
         }
 
-        // Mix spectra using weighted average of reflectances
-        const mixedSpectrum = Array(this.wavelengths.length).fill(0);
+        // For subtractive mixing, we multiply the reflectances
+        // This simulates how pigments absorb light
+        let mixedSpectrum = Array(this.wavelengths.length).fill(1);
+        
         Object.keys(this.pigmentSpectra).forEach(color => {
-            const weight = this.dropCounts[color] / totalDrops;
-            const spectrum = this.generatePigmentSpectrum(this.pigmentSpectra[color]);
-            for (let i = 0; i < this.wavelengths.length; i++) {
-                mixedSpectrum[i] += spectrum[i] * weight;
+            const drops = this.dropCounts[color];
+            if (drops > 0) {
+                const spectrum = this.generatePigmentSpectrum(this.pigmentSpectra[color]);
+                // Each drop reduces the reflectance by multiplying with the pigment's spectrum
+                for (let i = 0; i < this.wavelengths.length; i++) {
+                    mixedSpectrum[i] *= Math.pow(spectrum[i], drops);
+                }
             }
         });
 
