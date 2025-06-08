@@ -241,7 +241,7 @@
     
     <script>
         // Make spectrum_plots available to JavaScript
-        const spectrum_plots = {{ spectrum_plots|tojson|safe }};
+        const spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
     </script>
     <script src="{{ url_for('static', filename='spectral_mixer.js') }}"></script>
 </body>

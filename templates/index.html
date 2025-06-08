@@ -313,50 +313,110 @@
 
   <h1>Color Mixing App</h1>
 
-  <div class="color-pair">
-    <div id="targetColor" class="color-half"></div>
-    <div id="currentMix" class="color-half"></div>
-  </div>
-  <div style="margin-top: 8px; font-weight: bold;">
-    ΔE (CIEDE2000): <span id="deltaE">-</span>
-  </div>
-
-  <div id="palette">
-    <div class="color-control">
-        <div class="color-circle" data-color="white" style="background: white; color: black;">0</div>
-        <button class="minus-button" data-color="white">−</button>
-      </div>
-    <div class="color-control">
-        <div class="color-circle" data-color="black" style="background: black;">0</div>
-        <button class="minus-button" data-color="black">−</button>
-      </div>
-    <div class="color-control">
-        <div class="color-circle" data-color="red" style="background: red;">0</div>
-        <button class="minus-button" data-color="red">−</button>
-      </div>
-    <div class="color-control">
-        <div class="color-circle" data-color="yellow" style="background: yellow; color: black;">0</div>
-        <button class="minus-button" data-color="yellow">−</button>
-      </div>
-    <div class="color-control">
-        <div class="color-circle" data-color="blue" style="background: blue;">0</div>
-        <button class="minus-button" data-color="blue">−</button>
-      </div>
-        
+  <div style="max-width: 800px; margin: 20px auto; padding: 20px; background-color: var(--surface-color); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow-color);">
+    <h2 style="margin-top: 0;">Kedves Kollégák!</h2>
+    <p style="line-height: 1.6;">
+      Szeretném, ha egy kicsit nyomkodnátok, használnátok a színkeverős webalkalmazásunkat. A célunk az vele, hogy megismerjük a "laikusok" színkeverő teljesítményét a bőrszínek színterében. Ha bármi hibaüzenetet tapasztaltok, kérlek jelezzétek nekem e-mailben "SHADEMATCH" tárggyal. Köszönjük!
+    </p>
+    <p style="margin-bottom: 0;">
+      König János<br>
+      Labancz Laura
+    </p>
   </div>
 
-  <div id="stats">
-    <p>ΔE (CIEDE2000): <span id="deltaE">-</span></p>
-  </div>
-  <div id="controls" style="margin-top: 20px;">
-    <button id="startBtn">Start</button>
-    <button id="stopBtn" disabled>Stop</button>
-    <button id="skipBtn" disabled>Skip</button>
-    <button id="restartBtn" disabled>Restart</button>
-    <button id="retryBtn" disabled>Retry</button>
-    <button id="switchUserBtn">Switch User</button>
+  <div style="display: flex; gap: 20px; max-width: 1200px; margin: 20px auto; padding: 0 20px;">
+    <!-- Main Content -->
+    <div style="flex: 1;">
+      <div class="color-pair">
+        <div id="targetColor" class="color-half"></div>
+        <div id="currentMix" class="color-half"></div>
+      </div>
+      <div style="margin-top: 8px; font-weight: bold;">
+        ΔE (CIEDE2000): <span id="deltaE">-</span>
+      </div>
+
+      <div id="palette">
+        <div class="color-control">
+            <div class="color-circle" data-color="white" style="background: white; color: black;">0</div>
+            <button class="minus-button" data-color="white">−</button>
+          </div>
+        <div class="color-control">
+            <div class="color-circle" data-color="black" style="background: black;">0</div>
+            <button class="minus-button" data-color="black">−</button>
+          </div>
+        <div class="color-control">
+            <div class="color-circle" data-color="red" style="background: red;">0</div>
+            <button class="minus-button" data-color="red">−</button>
+          </div>
+        <div class="color-control">
+            <div class="color-circle" data-color="yellow" style="background: yellow; color: black;">0</div>
+            <button class="minus-button" data-color="yellow">−</button>
+          </div>
+        <div class="color-control">
+            <div class="color-circle" data-color="blue" style="background: blue;">0</div>
+            <button class="minus-button" data-color="blue">−</button>
+          </div>
+          
+      </div>
+
+      <div id="stats">
+        <p>ΔE (CIEDE2000): <span id="deltaE">-</span></p>
+      </div>
+      <div id="controls" style="margin-top: 20px;">
+        <button id="startBtn">Start</button>
+        <button id="stopBtn" disabled>Stop</button>
+        <button id="skipBtn" disabled>Skip</button>
+        <button id="restartBtn" disabled>Restart</button>
+        <button id="retryBtn" disabled>Retry</button>
+        <button id="switchUserBtn">Switch User</button>
+        </div>
+        <p>⏱️ Time: <span id="timer">0.0</span> sec</p>
     </div>
-    <p>⏱️ Time: <span id="timer">0.0</span> sec</p>
+
+    <!-- Color Relationships Sidebar -->
+    <div style="width: 400px; flex-shrink: 0;">
+      <div style="background-color: var(--surface-color); padding: 20px; border-radius: 8px; box-shadow: 0 2px 8px var(--shadow-color);">
+        <h2 style="margin-top: 0; text-align: center;">Color Relationships</h2>
+        <div style="position: relative; width: 300px; height: 320px; margin: 0 auto;">
+          <!-- Complementary Lines -->
+          <svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none;">
+            <!-- Red-Green -->
+            <line x1="150" y1="38" x2="150" y2="238" stroke="white" stroke-width="2" stroke-dasharray="6,6" />
+            <!-- Orange-Blue -->
+            <line x1="53" y1="73" x2="247" y2="173" stroke="white" stroke-width="2" stroke-dasharray="6,6" />
+            <!-- Yellow-Purple -->
+            <line x1="53" y1="173" x2="247" y2="73" stroke="white" stroke-width="2" stroke-dasharray="6,6" />
+          </svg>
+          <!-- Hexagon Corners (Primary and Secondary Colors) -->
+          <!-- Top: Red (150,38) -->
+          <div style="position: absolute; left: 50%; top: 20px; transform: translateX(-50%); width: 36px; height: 36px; border-radius: 50%; background: red; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>
+          <!-- Top right: Purple (247,73) -->
+          <div style="position: absolute; left: 225px; top: 55px; width: 36px; height: 36px; border-radius: 50%; background: purple; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>
+          <!-- Bottom right: Blue (247,173) -->
+          <div style="position: absolute; left: 225px; top: 155px; width: 36px; height: 36px; border-radius: 50%; background: blue; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>
+          <!-- Bottom: Green (150,238) -->
+          <div style="position: absolute; left: 50%; top: 220px; transform: translateX(-50%); width: 36px; height: 36px; border-radius: 50%; background: green; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>
+          <!-- Bottom left: Yellow (53,173) -->
+          <div style="position: absolute; left: 35px; top: 155px; width: 36px; height: 36px; border-radius: 50%; background: yellow; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>
+          <!-- Top left: Orange (53,73) -->
+          <div style="position: absolute; left: 35px; top: 55px; width: 36px; height: 36px; border-radius: 50%; background: orange; border: 3px solid white; box-shadow: 0 0 10px rgba(0,0,0,0.3);"></div>
+          
+          <!-- Labels -->
+          <div style="position: absolute; top: -18px; left: 50%; transform: translateX(-50%); color: white; font-weight: bold;">Red</div>
+          <div style="position: absolute; top: 35px; left: 0px; color: white; font-weight: bold;">Orange</div>
+          <div style="position: absolute; top: 35px; right: 0px; color: white; font-weight: bold;">Purple</div>
+          <div style="position: absolute; top: 185px; left: 0px; color: white; font-weight: bold;">Yellow</div>
+          <div style="position: absolute; top: 185px; right: 0px; color: white; font-weight: bold;">Blue</div>
+          <div style="position: absolute; top: 260px; left: 50%; transform: translateX(-50%); color: white; font-weight: bold;">Green</div>
+        </div>
+        <div style="margin-top: 20px; color: var(--text-color); text-align: center;">
+          <p>Primary Colors: Red, Yellow, Blue</p>
+          <p>Secondary Colors: Orange (R+Y), Green (Y+B), Purple (R+B)</p>
+          <p><em>Mixing complementary colors would result in grey (saturation is lowered).</em></p>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <a href="/spectral" class="spectral-mixer-btn">Spectral Mixer →</a>
 
