@@ -131,6 +131,10 @@ def save_session():
     print('Received session data:', data)
     
     try:
+        # Debug database connection
+        print('Database URI:', db.engine.url)
+        print('Database connected:', db.engine.pool.checkedin())
+        
         session = MixingSession(
             user_id=data['user_id'],
             target_r=data['target_r'],
@@ -145,12 +149,15 @@ def save_session():
             time_sec=data['time_sec'],
             timestamp=datetime.fromisoformat(data['timestamp'])
         )
+        print('Created session object:', session)
         db.session.add(session)
+        print('Added session to db.session')
         db.session.commit()
         print('Session saved successfully')
         return jsonify({'status': 'success'})
     except Exception as e:
         print('Error saving session:', str(e))
+        print('Error type:', type(e).__name__)
         db.session.rollback()
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
