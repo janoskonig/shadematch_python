@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Color Vision Test</title>
+  <style>
+    :root {
+      --bg-color: rgb(46, 46, 46);
+      --surface-color: rgb(66, 66, 66);
+      --accent-color: rgb(86, 86, 86);
+      --text-color: white;
+      --border-color: rgb(86, 86, 86);
+      --shadow-color: rgba(0, 0, 0, 0.2);
+    }
+
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      min-height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+
+    .test-container {
+      max-width: 800px;
+      width: 100%;
+      text-align: center;
+    }
+
+    .plate-container {
+      margin: 40px auto;
+      position: relative;
+    }
+
+    .ishihara-plate {
+      width: 400px;
+      height: 400px;
+      margin: 0 auto;
+      border-radius: 50%;
+      background-size: contain;
+      background-position: center;
+      background-repeat: no-repeat;
+      box-shadow: 0 4px 12px var(--shadow-color);
+    }
+
+    .answer-input {
+      margin: 20px 0;
+    }
+
+    .answer-input input {
+      background: var(--surface-color);
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 1.2em;
+      width: 100px;
+      text-align: center;
+    }
+
+    .answer-input button {
+      background: var(--accent-color);
+      color: var(--text-color);
+      border: none;
+      padding: 8px 24px;
+      margin-left: 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1.1em;
+    }
+
+    .answer-input button:hover {
+      background: var(--surface-color);
+    }
+
+    .progress {
+      margin: 20px 0;
+      font-size: 1.2em;
+    }
+
+    .feedback {
+      margin: 20px 0;
+      font-size: 1.2em;
+      min-height: 30px;
+    }
+
+    .success {
+      color: #4CAF50;
+    }
+
+    .error {
+      color: #f44336;
+    }
+
+    #results {
+      display: none;
+      margin-top: 40px;
+      padding: 20px;
+      background: var(--surface-color);
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    #userId {
+      font-size: 2em;
+      font-weight: bold;
+      letter-spacing: 2px;
+      margin: 20px 0;
+    }
+
+    .continue-btn {
+      background: var(--accent-color);
+      color: var(--text-color);
+      border: none;
+      padding: 12px 24px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 1.1em;
+      text-decoration: none;
+      display: inline-block;
+      margin-top: 20px;
+    }
+
+    .continue-btn:hover {
+      background: var(--surface-color);
+    }
+  </style>
+</head>
+<body>
+  <div class="test-container">
+    <h1>Color Vision Test</h1>
+    <p>Please identify the number you see in the circle below.</p>
+    
+    <div class="plate-container">
+      <div id="ishiharaPlate" class="ishihara-plate"></div>
+    </div>
+
+    <div class="answer-input">
+      <input type="number" id="testAnswer" min="1" max="99" placeholder="Enter number" required>
+      <button id="submitAnswer">Submit</button>
+    </div>
+
+    <div id="feedback" class="feedback"></div>
+
+    <div id="results">
+      <h2>Test Complete!</h2>
+      <p>Your results have been recorded.</p>
+      <p>Your unique ID is:</p>
+      <div id="userId"></div>
+      <a href="/" class="continue-btn">Continue to App</a>
+    </div>
+  </div>
+
+  <script>
+    const plate = {
+      image: '/static/plates/Ishihara_1.svg',
+      answer: 12
+    };
+
+    function showPlate() {
+      const plateElement = document.getElementById('ishiharaPlate');
+      plateElement.style.backgroundImage = `url('${plate.image}')`;
+      document.getElementById('testAnswer').value = '';
+      document.getElementById('feedback').textContent = '';
+      document.getElementById('testAnswer').focus();
+    }
+
+    function generateId() {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let id = '';
+      for (let i = 0; i < 6; i++) {
+        id += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      return id;
+    }
+
+    function showResults() {
+      document.querySelector('.plate-container').style.display = 'none';
+      document.querySelector('.answer-input').style.display = 'none';
+      document.getElementById('results').style.display = 'block';
+      
+      const id = generateId();
+      document.getElementById('userId').textContent = id;
+      localStorage.setItem('userId', id);
+    }
+
+    document.getElementById('submitAnswer').addEventListener('click', function() {
+      const answer = parseInt(document.getElementById('testAnswer').value);
+      const feedback = document.getElementById('feedback');
+
+      if (answer === plate.answer) {
+        feedback.textContent = 'Correct!';
+        feedback.className = 'feedback success';
+        setTimeout(showResults, 1000); // Add a small delay before showing results
+      } else {
+        feedback.textContent = 'Incorrect. Please try again.';
+        feedback.className = 'feedback error';
+      }
+    });
+
+    // Start the test
+    showPlate();
+  </script>
+</body>
+</html> 

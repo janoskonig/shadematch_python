@@ -313,3 +313,7 @@ def mix_colors():
             'reflectances': mixed_spectrum.tolist()
         }
     })
+
+@main.route('/color-test')
+def color_test():
+    return render_template('color_test.html')

@@ -276,11 +276,23 @@
               <option value="prefer_not_to_say">Prefer not to say</option>
             </select>
           </label><br><br>
-          <button type="submit">Get My ID</button>
+          <button type="submit">Continue to Color Vision Test</button>
         </form>
         <hr>
         <p>Already have an ID? <button id="showLoginBtn" type="button">Log in</button></p>
       </div>
+
+      <div id="colorTestSection" style="display:none;">
+        <h2>Color Vision Test</h2>
+        <p>Please identify the number you see in the circle below:</p>
+        <div id="ishiharaPlate" style="width: 300px; height: 300px; margin: 20px auto; border-radius: 50%; background: radial-gradient(circle, #ff0000 0%, #ff0000 50%, #00ff00 50%, #00ff00 100%);"></div>
+        <div style="text-align: center;">
+          <input type="number" id="testAnswer" min="1" max="99" placeholder="Enter the number you see" required>
+          <button id="submitTest">Submit Answer</button>
+        </div>
+        <p id="testResult" style="text-align: center; margin-top: 10px;"></p>
+      </div>
+
       <div id="loginSection" style="display:none;">
         <h2>Log in</h2>
         <form id="loginForm">
@@ -362,6 +374,7 @@
     document.getElementById('registerSection').style.display = section === 'register' ? '' : 'none';
     document.getElementById('loginSection').style.display = section === 'login' ? '' : 'none';
     document.getElementById('idDisplaySection').style.display = section === 'idDisplay' ? '' : 'none';
+    document.getElementById('colorTestSection').style.display = section === 'colorTest' ? '' : 'none';
   }
 
   function showUserModal() {
@@ -373,6 +386,15 @@
   window.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('userModal');
     const storedId = localStorage.getItem('userId');
+    const storedBirthdate = localStorage.getItem('userBirthdate');
+    const storedGender = localStorage.getItem('userGender');
+    
+    // Clear any incomplete registration data
+    if (storedBirthdate && storedGender && !storedId) {
+      localStorage.removeItem('userBirthdate');
+      localStorage.removeItem('userGender');
+    }
+    
     if (storedId) {
       modal.style.display = 'none';
     } else {
@@ -393,6 +415,35 @@
     };
     document.getElementById('showRegisterBtn').onclick = function() {
       showSection('register');
+    };
+
+    document.getElementById('registerForm').onsubmit = function(e) {
+      e.preventDefault();
+      const birthdate = document.getElementById('userBirthdate').value;
+      const gender = document.getElementById('userGender').value;
+      localStorage.setItem('userBirthdate', birthdate);
+      localStorage.setItem('userGender', gender);
+      // Redirect to the color test page
+      window.location.href = '/color-test';
+    };
+
+    document.getElementById('submitTest').onclick = function() {
+      const answer = document.getElementById('testAnswer').value;
+      const testResult = document.getElementById('testResult');
+      
+      // For demonstration, we'll use a simple test with the number 7
+      if (answer === '7') {
+        testResult.style.color = 'green';
+        testResult.textContent = 'Correct! You have passed the color vision test.';
+        const id = generateId();
+        localStorage.setItem('userId', id);
+        document.getElementById('generatedId').textContent = id;
+        showSection('idDisplay');
+      } else {
+        testResult.style.color = 'red';
+        testResult.textContent = 'Incorrect. Please try again.';
+        document.getElementById('testAnswer').value = ''; // Clear the input
+      }
     };
 
     document.getElementById('loginForm').onsubmit = function(e) {
