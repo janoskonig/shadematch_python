@@ -23,7 +23,7 @@
         }
 
         .container {
-            max-width: 1200px;
+            max-width: 1800px;
             margin: 0 auto;
             padding: 20px;
         }
@@ -36,10 +36,13 @@
 
         .color-controls {
             display: flex;
-            justify-content: space-around;
+            flex-direction: row;
+            justify-content: center;
+            gap: 15px;
             margin-bottom: 40px;
-            flex-wrap: wrap;
-            gap: 20px;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            padding: 10px;
         }
 
         .color-control {
@@ -47,33 +50,42 @@
             flex-direction: column;
             align-items: center;
             background: var(--surface-color);
-            padding: 20px;
+            padding: 15px;
             border-radius: 10px;
             box-shadow: 0 2px 4px var(--shadow-color);
-            min-width: 200px;
+            min-width: 150px;
+            flex: 0 0 auto;
+        }
+
+        .color-control h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.2em;
+            text-align: center;
         }
 
         .color-circle {
-            width: 100px;
-            height: 100px;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
+            font-size: 18px;
             font-weight: bold;
             margin: 10px 0;
             border: 2px solid var(--border-color);
+            background-color: #f0f0f0;
         }
 
         .drop-buttons {
             display: flex;
             gap: 10px;
+            margin: 10px 0;
         }
 
         .drop-button {
-            padding: 8px 16px;
-            font-size: 18px;
+            padding: 6px 12px;
+            font-size: 16px;
             border: none;
             border-radius: 5px;
             background: var(--surface-color);
@@ -105,8 +117,8 @@
 
         .spectrum-plot {
             width: 100%;
-            height: 200px;
-            margin-top: 20px;
+            height: 120px;
+            margin-top: 10px;
             background: var(--surface-color);
             border-radius: 10px;
             box-shadow: 0 2px 4px var(--shadow-color);
@@ -115,20 +127,42 @@
         .mixed-spectrum {
             width: 100%;
             height: 300px;
-            margin-top: 40px;
+            margin-top: 20px;
             background: var(--surface-color);
             border-radius: 10px;
             box-shadow: 0 2px 4px var(--shadow-color);
+        }
+
+        .nav-links {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            margin: 0 10px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
         }
     </style>
 </head>
 <body>
     <div class="container">
+        <div class="nav-links">
+            <a href="/spectral">Spectral Mixer</a>
+            <a href="/color_inspector">Color Inspector</a>
+        </div>
         <h1>Spectral Mixer</h1>
         
         <div class="color-controls">
             <div class="color-control" data-color="red">
-                <h2>Red (Bengal Rose)</h2>
+                <h2>Red</h2>
                 <div class="color-circle" id="redCircle">0</div>
                 <div class="drop-buttons">
                     <button class="drop-button" id="redMinus">-</button>
@@ -138,7 +172,7 @@
             </div>
             
             <div class="color-control" data-color="yellow">
-                <h2>Yellow (Cadmium Yellow)</h2>
+                <h2>Yellow</h2>
                 <div class="color-circle" id="yellowCircle">0</div>
                 <div class="drop-buttons">
                     <button class="drop-button" id="yellowMinus">-</button>
@@ -148,13 +182,53 @@
             </div>
             
             <div class="color-control" data-color="blue">
-                <h2>Blue (Phthalo Blue)</h2>
+                <h2>Blue</h2>
                 <div class="color-circle" id="blueCircle">0</div>
                 <div class="drop-buttons">
                     <button class="drop-button" id="blueMinus">-</button>
                     <button class="drop-button" id="bluePlus">+</button>
                 </div>
                 <div class="spectrum-plot" id="blueSpectrum"></div>
+            </div>
+
+            <div class="color-control" data-color="orange">
+                <h2>Orange</h2>
+                <div class="color-circle" id="orangeCircle">0</div>
+                <div class="drop-buttons">
+                    <button class="drop-button" id="orangeMinus">-</button>
+                    <button class="drop-button" id="orangePlus">+</button>
+                </div>
+                <div class="spectrum-plot" id="orangeSpectrum"></div>
+            </div>
+
+            <div class="color-control" data-color="brown">
+                <h2>Brown</h2>
+                <div class="color-circle" id="brownCircle">0</div>
+                <div class="drop-buttons">
+                    <button class="drop-button" id="brownMinus">-</button>
+                    <button class="drop-button" id="brownPlus">+</button>
+                </div>
+                <div class="spectrum-plot" id="brownSpectrum"></div>
+            </div>
+
+            <div class="color-control" data-color="green">
+                <h2>Green</h2>
+                <div class="color-circle" id="greenCircle">0</div>
+                <div class="drop-buttons">
+                    <button class="drop-button" id="greenMinus">-</button>
+                    <button class="drop-button" id="greenPlus">+</button>
+                </div>
+                <div class="spectrum-plot" id="greenSpectrum"></div>
+            </div>
+
+            <div class="color-control" data-color="purple">
+                <h2>Purple</h2>
+                <div class="color-circle" id="purpleCircle">0</div>
+                <div class="drop-buttons">
+                    <button class="drop-button" id="purpleMinus">-</button>
+                    <button class="drop-button" id="purplePlus">+</button>
+                </div>
+                <div class="spectrum-plot" id="purpleSpectrum"></div>
             </div>
         </div>
         
@@ -165,6 +239,10 @@
         </div>
     </div>
     
+    <script>
+        // Make spectrum_plots available to JavaScript
+        const spectrum_plots = {{ spectrum_plots|tojson|safe }};
+    </script>
     <script src="{{ url_for('static', filename='spectral_mixer.js') }}"></script>
 </body>
 </html> 

@@ -4,6 +4,8 @@ import json
 import matplotlib.pyplot as plt
 import io
 import base64
+import pandas as pd
+import os
 
 app = Flask(__name__)
 
@@ -115,8 +117,8 @@ def calculate_mixed_color(drop_counts, pigments, wavelengths, x_bar, y_bar, z_ba
     
     return rgb, mixed_plot
 
-@app.route('/')
-def index():
+@app.route('/spectral_mixer')
+def spectral_mixer():
     # Load data
     wavelengths, x_bar, y_bar, z_bar = load_cie_data()
     pigments = load_pigment_data()
@@ -154,6 +156,44 @@ def mix_colors():
         'rgb': rgb,
         'mixedSpectrum': mixed_plot
     })
+
+@app.route('/color_inspector')
+def color_inspector():
+    # Load CIE data
+    wavelengths, x_bar, y_bar, z_bar = load_cie_data()
+    
+    # Read the Excel file
+    excel_path = 'salata_csonkanyag_reflektancia.xlsx'
+    if not os.path.exists(excel_path):
+        return "Excel file not found", 404
+    
+    # Read the Excel file
+    df = pd.read_excel(excel_path)
+    
+    # Get wavelengths and reflectance data
+    wavelengths = df.columns[1:].astype(float).tolist()  # Assuming first column is sample name
+    samples = []
+    
+    for _, row in df.iterrows():
+        sample_name = row[0]
+        reflectances = row[1:].tolist()
+        
+        # Calculate RGB color from spectrum
+        rgb = spectrum_to_rgb(reflectances, wavelengths, x_bar, y_bar, z_bar)
+        
+        samples.append({
+            'name': sample_name,
+            'wavelengths': wavelengths,
+            'reflectances': reflectances,
+            'rgb': rgb
+        })
+    
+    return render_template('color_inspector.html', samples=samples)
+
+# Add a root route that redirects to spectral_mixer
+@app.route('/')
+def index():
+    return render_template('spectral_mixer.html')
 
 if __name__ == '__main__':
     app.run(debug=True) 

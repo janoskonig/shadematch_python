@@ -320,4 +320,190 @@ class SpectralMixer {
 window.addEventListener('load', () => {
     console.log('Window loaded, initializing SpectralMixer');
     window.spectralMixer = new SpectralMixer();
-}); 
+});
+
+// Initialize the spectral mixer when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+    console.log('Initializing spectral mixer...');
+    console.log('Spectrum plots:', spectrum_plots);
+    
+    // Initialize plots for each color
+    const colors = ['red', 'yellow', 'blue', 'orange', 'brown', 'green', 'purple'];
+    
+    colors.forEach(color => {
+        console.log(`Initializing ${color}...`);
+        const plotDiv = document.getElementById(`${color}Spectrum`);
+        if (!plotDiv) {
+            console.error(`Could not find plot div for ${color}`);
+            return;
+        }
+
+        const plotData = spectrum_plots[color];
+        if (!plotData) {
+            console.error(`No data found for ${color}`);
+            return;
+        }
+
+        const [r, g, b] = plotData.rgb;
+        console.log(`${color} RGB:`, r, g, b);
+
+        const trace = {
+            x: plotData.wavelengths,
+            y: plotData.reflectances,
+            type: 'scatter',
+            mode: 'lines',
+            name: color.charAt(0).toUpperCase() + color.slice(1),
+            line: {
+                color: `rgb(${r}, ${g}, ${b})`,
+                width: 2
+            }
+        };
+
+        const layout = {
+            title: `${color.charAt(0).toUpperCase() + color.slice(1)} Spectrum`,
+            xaxis: {
+                title: 'Wavelength (nm)',
+                range: [400, 700],
+                showgrid: true,
+                gridcolor: '#ddd'
+            },
+            yaxis: {
+                title: 'Reflectance',
+                range: [0, 1],
+                showgrid: true,
+                gridcolor: '#ddd'
+            },
+            margin: { t: 30, r: 20, b: 40, l: 50 },
+            paper_bgcolor: 'white',
+            plot_bgcolor: 'white'
+        };
+
+        Plotly.newPlot(plotDiv, [trace], layout);
+
+        // Set initial color of the circle
+        const circle = document.getElementById(`${color}Circle`);
+        if (circle) {
+            circle.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+            circle.style.color = getContrastColor(r, g, b);
+        }
+    });
+
+    // Initialize mixed spectrum plot
+    const mixedPlotDiv = document.getElementById('mixedSpectrum');
+    if (mixedPlotDiv) {
+        const layout = {
+            title: 'Mixed Spectrum',
+            xaxis: {
+                title: 'Wavelength (nm)',
+                range: [400, 700],
+                showgrid: true,
+                gridcolor: '#ddd'
+            },
+            yaxis: {
+                title: 'Reflectance',
+                range: [0, 1],
+                showgrid: true,
+                gridcolor: '#ddd'
+            },
+            margin: { t: 30, r: 20, b: 40, l: 50 },
+            paper_bgcolor: 'white',
+            plot_bgcolor: 'white'
+        };
+
+        Plotly.newPlot(mixedPlotDiv, [], layout);
+    }
+
+    // Initialize drop counts
+    const dropCounts = {};
+    colors.forEach(color => {
+        dropCounts[color] = 0;
+    });
+
+    // Add event listeners for plus/minus buttons
+    colors.forEach(color => {
+        const plusBtn = document.getElementById(`${color}Plus`);
+        const minusBtn = document.getElementById(`${color}Minus`);
+        const circle = document.getElementById(`${color}Circle`);
+
+        if (plusBtn && minusBtn && circle) {
+            plusBtn.addEventListener('click', () => {
+                console.log(`${color} plus button clicked`);
+                dropCounts[color]++;
+                circle.textContent = dropCounts[color];
+                updateMixedColor();
+            });
+
+            minusBtn.addEventListener('click', () => {
+                if (dropCounts[color] > 0) {
+                    dropCounts[color]--;
+                    circle.textContent = dropCounts[color];
+                    updateMixedColor();
+                }
+            });
+        }
+    });
+
+    // Initial update of mixed color
+    updateMixedColor();
+});
+
+function updateMixedColor() {
+    console.log('Updating mixed color...');
+    // Get current drop counts
+    const colors = ['red', 'yellow', 'blue', 'orange', 'brown', 'green', 'purple'];
+    const dropCounts = {};
+    colors.forEach(color => {
+        const circle = document.getElementById(`${color}Circle`);
+        if (circle) {
+            dropCounts[color] = parseInt(circle.textContent) || 0;
+        }
+    });
+
+    console.log('Drop counts:', dropCounts);
+
+    // Send request to server
+    fetch('/mix_colors', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ dropCounts })
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Received data:', data);
+        const [r, g, b] = data.rgb;
+        
+        // Update mixed color circle
+        const mixedCircle = document.getElementById('mixedCircle');
+        if (mixedCircle) {
+            mixedCircle.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+            mixedCircle.style.color = getContrastColor(r, g, b);
+        }
+
+        // Update mixed spectrum plot
+        const mixedPlotDiv = document.getElementById('mixedSpectrum');
+        if (mixedPlotDiv) {
+            const trace = {
+                x: data.spectrum.wavelengths,
+                y: data.spectrum.reflectances,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Mixed',
+                line: {
+                    color: `rgb(${r}, ${g}, ${b})`,
+                    width: 2
+                }
+            };
+
+            Plotly.react(mixedPlotDiv, [trace]);
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+function getContrastColor(r, g, b) {
+    // Calculate relative luminance
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+} 
