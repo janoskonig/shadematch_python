@@ -1,10 +1,29 @@
+# Web Framework and Database
 Flask==2.1.2
 Flask-SQLAlchemy==2.5.1
-python-dotenv==1.0.0
 gunicorn==20.1.0
+python-dotenv==1.0.0
+
+# Color Science and Math
 colormath==3.0.0
 numpy==1.24.3
-matplotlib
+
+# Data Processing and Visualization
 pandas
+matplotlib
 openpyxl
 plotly
+
+# Database
+mysql-connector-python
+
+# Image Processing
+Pillow
+
+# Scientific Computing
+scipy
+statsmodels
+scikit-learn
+
+# Development and Testing
+pytest
