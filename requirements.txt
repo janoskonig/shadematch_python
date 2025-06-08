@@ -18,6 +18,7 @@ plotly
 
 # Database
 mysql-connector-python
+psycopg2-binary==2.9.9
 
 # Image Processing
 Pillow
