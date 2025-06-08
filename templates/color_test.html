@@ -183,9 +183,34 @@
       document.querySelector('.answer-input').style.display = 'none';
       document.getElementById('results').style.display = 'block';
       
-      const id = generateId();
-      document.getElementById('userId').textContent = id;
-      localStorage.setItem('userId', id);
+      // Get stored birthdate and gender
+      const birthdate = localStorage.getItem('userBirthdate');
+      const gender = localStorage.getItem('userGender');
+      
+      // Register user with server
+      fetch('/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          birthdate: birthdate,
+          gender: gender
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'success') {
+          document.getElementById('userId').textContent = data.userId;
+          localStorage.setItem('userId', data.userId);
+        } else {
+          alert('Failed to register user. Please try again.');
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to register user. Please try again.');
+      });
     }
 
     document.getElementById('submitAnswer').addEventListener('click', function() {

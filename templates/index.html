@@ -495,10 +495,36 @@
       if (answer === '7') {
         testResult.style.color = 'green';
         testResult.textContent = 'Correct! You have passed the color vision test.';
-        const id = generateId();
-        localStorage.setItem('userId', id);
-        document.getElementById('generatedId').textContent = id;
-        showSection('idDisplay');
+        
+        // Get stored birthdate and gender
+        const birthdate = localStorage.getItem('userBirthdate');
+        const gender = localStorage.getItem('userGender');
+        
+        // Register user with server
+        fetch('/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            birthdate: birthdate,
+            gender: gender
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'success') {
+            document.getElementById('generatedId').textContent = data.userId;
+            localStorage.setItem('userId', data.userId);
+            showSection('idDisplay');
+          } else {
+            alert('Registration failed. Please try again.');
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('Registration failed. Please try again.');
+        });
       } else {
         testResult.style.color = 'red';
         testResult.textContent = 'Incorrect. Please try again.';
