@@ -183,34 +183,8 @@
       document.querySelector('.answer-input').style.display = 'none';
       document.getElementById('results').style.display = 'block';
       
-      // Get stored birthdate and gender
-      const birthdate = localStorage.getItem('userBirthdate');
-      const gender = localStorage.getItem('userGender');
-      
-      // Register user with server
-      fetch('/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          birthdate: birthdate,
-          gender: gender
-        })
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.status === 'success') {
-          document.getElementById('userId').textContent = data.userId;
-          localStorage.setItem('userId', data.userId);
-        } else {
-          alert('Failed to register user. Please try again.');
-        }
-      })
-      .catch(error => {
-        console.error('Error:', error);
-        alert('Failed to register user. Please try again.');
-      });
+      // Redirect back to main page
+      window.location.href = '/';
     }
 
     document.getElementById('submitAnswer').addEventListener('click', function() {
@@ -220,7 +194,36 @@
       if (answer === plate.answer) {
         feedback.textContent = 'Correct!';
         feedback.className = 'feedback success';
-        setTimeout(showResults, 1000); // Add a small delay before showing results
+        
+        // Get stored birthdate and gender
+        const birthdate = localStorage.getItem('userBirthdate');
+        const gender = localStorage.getItem('userGender');
+        
+        // Register user with server
+        fetch('/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            birthdate: birthdate,
+            gender: gender
+          })
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === 'success') {
+            document.getElementById('userId').textContent = data.userId;
+            localStorage.setItem('userId', data.userId);
+            setTimeout(showResults, 1000); // Add a small delay before showing results
+          } else {
+            alert('Registration failed. Please try again.');
+          }
+        })
+        .catch(error => {
+          console.error('Error:', error);
+          alert('Registration failed. Please try again.');
+        });
       } else {
         feedback.textContent = 'Incorrect. Please try again.';
         feedback.className = 'feedback error';

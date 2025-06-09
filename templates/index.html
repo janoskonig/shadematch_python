@@ -166,6 +166,46 @@
       font-weight: bold;
     }
 
+    .button-tooltip {
+      position: relative;
+      display: inline-block;
+    }
+
+    .button-tooltip .tooltip-text {
+      visibility: hidden;
+      width: 200px;
+      background-color: var(--surface-color);
+      color: var(--text-color);
+      text-align: center;
+      border-radius: 6px;
+      padding: 10px;
+      position: absolute;
+      z-index: 1;
+      bottom: 125%;
+      left: 50%;
+      transform: translateX(-50%);
+      opacity: 0;
+      transition: opacity 0.3s;
+      box-shadow: 0 2px 8px var(--shadow-color);
+      pointer-events: none;
+    }
+
+    .button-tooltip .tooltip-text::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      margin-left: -5px;
+      border-width: 5px;
+      border-style: solid;
+      border-color: var(--surface-color) transparent transparent transparent;
+    }
+
+    .button-tooltip:hover .tooltip-text {
+      visibility: visible;
+      opacity: 1;
+    }
+
     .spectral-mixer-btn {
       position: fixed;
       bottom: 20px;
@@ -251,6 +291,14 @@
       text-align: center;
       color: var(--text-color);
     }
+
+    .rgb-values {
+      margin-top: 10px;
+      font-family: monospace;
+      font-size: 0.9em;
+      color: var(--text-color);
+      text-align: center;
+    }
   </style>
 
   <!-- ✅ Load Mixbox for perceptual mixing -->
@@ -285,7 +333,10 @@
       <div id="colorTestSection" style="display:none;">
         <h2>Color Vision Test</h2>
         <p>Please identify the number you see in the circle below:</p>
-        <div id="ishiharaPlate" style="width: 300px; height: 300px; margin: 20px auto; border-radius: 50%; background: radial-gradient(circle, #ff0000 0%, #ff0000 50%, #00ff00 50%, #00ff00 100%);"></div>
+        <div id="ishiharaPlate" style="width: 300px; height: 300px; margin: 20px auto; border-radius: 50%; background: #f0f0f0; position: relative; overflow: hidden;">
+          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 120px; font-weight: bold; color: #ff0000;">7</div>
+          <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: repeating-radial-gradient(circle at 50% 50%, #00ff00 0%, #00ff00 2%, transparent 2%, transparent 4%);"></div>
+        </div>
         <div style="text-align: center;">
           <input type="number" id="testAnswer" min="1" max="99" placeholder="Enter the number you see" required>
           <button id="submitTest">Submit Answer</button>
@@ -316,7 +367,10 @@
   <div style="max-width: 800px; margin: 20px auto; padding: 20px; background-color: var(--surface-color); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow-color);">
     <h2 style="margin-top: 0;">Kedves Kollégák!</h2>
     <p style="line-height: 1.6;">
-      Szeretném, ha egy kicsit nyomkodnátok, használnátok a színkeverős webalkalmazásunkat. A célunk az vele, hogy megismerjük a "laikusok" színkeverő teljesítményét a bőrszínek színterében. Ha bármi hibaüzenetet tapasztaltok, kérlek jelezzétek nekem e-mailben "SHADEMATCH" tárggyal. Köszönjük!
+      Szeretném, ha egy kicsit nyomkodnátok, használnátok a színkeverős webalkalmazásunkat. 
+      A célunk az vele, hogy megismerjük a "laikusok" színkeverő teljesítményét a bőrszínek színterében. 
+      Ha bármi hibaüzenetet tapasztaltok, 
+      kérlek jelezzétek nekem <a href="mailto:konig.janos@semmelweis.hu">e-mailben</a> "SHADEMATCH" tárggyal. Köszönjük!
     </p>
     <p style="margin-bottom: 0;">
       König János<br>
@@ -333,6 +387,9 @@
       </div>
       <div style="margin-top: 8px; font-weight: bold;">
         ΔE (CIEDE2000): <span id="deltaE">-</span>
+      </div>
+      <div style="margin-top: 4px; font-family: monospace; font-size: 0.9em; text-align: right; padding-right: 150px;">
+        <span id="mixedRgbValues">RGB: [255, 255, 255]</span>
       </div>
 
       <div id="palette">
@@ -356,21 +413,25 @@
             <div class="color-circle" data-color="blue" style="background: blue;">0</div>
             <button class="minus-button" data-color="blue">−</button>
           </div>
-          
       </div>
 
       <div id="stats">
-        <p>ΔE (CIEDE2000): <span id="deltaE">-</span></p>
       </div>
       <div id="controls" style="margin-top: 20px;">
-        <button id="startBtn">Start</button>
+        <div class="button-tooltip">
+          <button id="startBtn">Start</button>
+          <span class="tooltip-text">Push this to start the game</span>
+        </div>
         <button id="stopBtn" disabled>Stop</button>
-        <button id="skipBtn" disabled>Skip</button>
+        <div class="button-tooltip">
+          <button id="skipBtn" disabled>Skip</button>
+          <span class="tooltip-text">Push the button to proceed to the next color</span>
+        </div>
         <button id="restartBtn" disabled>Restart</button>
         <button id="retryBtn" disabled>Retry</button>
         <button id="switchUserBtn">Switch User</button>
-        </div>
-        <p>⏱️ Time: <span id="timer">0.0</span> sec</p>
+      </div>
+      <p>⏱️ Time: <span id="timer">0.0</span> sec</p>
     </div>
 
     <!-- Color Relationships Sidebar -->
@@ -418,7 +479,7 @@
     </div>
   </div>
 
-  <a href="/spectral" class="spectral-mixer-btn">Spectral Mixer →</a>
+  <a href="/spectral" class="spectral-mixer-btn">A 2.0 verzióhoz (Spectral Mixer) →</a>
 
   <script>
   function generateId() {
@@ -434,7 +495,7 @@
     document.getElementById('registerSection').style.display = section === 'register' ? '' : 'none';
     document.getElementById('loginSection').style.display = section === 'login' ? '' : 'none';
     document.getElementById('idDisplaySection').style.display = section === 'idDisplay' ? '' : 'none';
-    document.getElementById('colorTestSection').style.display = section === 'colorTest' ? '' : 'none';
+    document.getElementById('colorTestSection').style.display = section === 'colorTest' ? 'none' : 'none';
   }
 
   function showUserModal() {
@@ -462,6 +523,13 @@
       showSection('register');
     }
 
+    // Add click event listener to close modal when clicking outside
+    modal.addEventListener('click', function(e) {
+      if (e.target === modal) {
+        modal.style.display = 'none';
+      }
+    });
+
     document.getElementById('switchUserBtn').onclick = function() {
       showUserModal();
     };
@@ -487,51 +555,6 @@
       window.location.href = '/color-test';
     };
 
-    document.getElementById('submitTest').onclick = function() {
-      const answer = document.getElementById('testAnswer').value;
-      const testResult = document.getElementById('testResult');
-      
-      // For demonstration, we'll use a simple test with the number 7
-      if (answer === '7') {
-        testResult.style.color = 'green';
-        testResult.textContent = 'Correct! You have passed the color vision test.';
-        
-        // Get stored birthdate and gender
-        const birthdate = localStorage.getItem('userBirthdate');
-        const gender = localStorage.getItem('userGender');
-        
-        // Register user with server
-        fetch('/register', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            birthdate: birthdate,
-            gender: gender
-          })
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.status === 'success') {
-            document.getElementById('generatedId').textContent = data.userId;
-            localStorage.setItem('userId', data.userId);
-            showSection('idDisplay');
-          } else {
-            alert('Registration failed. Please try again.');
-          }
-        })
-        .catch(error => {
-          console.error('Error:', error);
-          alert('Registration failed. Please try again.');
-        });
-      } else {
-        testResult.style.color = 'red';
-        testResult.textContent = 'Incorrect. Please try again.';
-        document.getElementById('testAnswer').value = ''; // Clear the input
-      }
-    };
-
     document.getElementById('loginForm').onsubmit = function(e) {
       e.preventDefault();
       const id = document.getElementById('loginId').value.toUpperCase();
@@ -540,6 +563,9 @@
         document.getElementById('userModal').style.display = 'none';
       }
     };
+
+    // Initialize the mixed color display
+    calculateMixedColor();
   });
 
   // Optional: Add a "Log out" button somewhere in your app to clear the ID
@@ -548,6 +574,43 @@
     localStorage.removeItem('userBirthdate');
     localStorage.removeItem('userGender');
     location.reload();
+  }
+
+  // Function to calculate mixed color
+  function calculateMixedColor() {
+    const colors = {
+      white: [255, 255, 255],
+      black: [0, 0, 0],
+      red: [255, 0, 0],
+      yellow: [255, 255, 0],
+      blue: [0, 0, 255]
+    };
+    
+    let totalDrops = 0;
+    let mixedColor = [0, 0, 0];
+    
+    // Calculate total drops and weighted color
+    Object.keys(colors).forEach(color => {
+      const drops = parseInt(document.querySelector(`[data-color="${color}"]`).textContent);
+      totalDrops += drops;
+      mixedColor = mixedColor.map((val, i) => val + (colors[color][i] * drops));
+    });
+    
+    // Normalize the color if there are any drops
+    if (totalDrops > 0) {
+      mixedColor = mixedColor.map(val => Math.round(val / totalDrops));
+    } else {
+      mixedColor = [255, 255, 255]; // Default to white if no drops
+    }
+    
+    // Update the mixed color display
+    const currentMix = document.getElementById('currentMix');
+    currentMix.style.backgroundColor = `rgb(${mixedColor.join(',')})`;
+    
+    // Update RGB values display
+    document.getElementById('mixedRgbValues').textContent = `RGB: [${mixedColor.join(', ')}]`;
+    
+    return mixedColor;
   }
   </script>
 

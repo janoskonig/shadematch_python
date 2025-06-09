@@ -77,48 +77,6 @@ function saveSessionToServer(session) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  // Add registration form handler
-  document.getElementById('registerForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    const birthdate = document.getElementById('userBirthdate').value;
-    const gender = document.getElementById('userGender').value;
-    if (!birthdate || !gender) return;
-
-    // Send registration data to server
-    fetch('/register', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        birthdate: birthdate,
-        gender: gender
-      })
-    })
-    .then(response => response.json())
-    .then(data => {
-      if (data.status === 'success') {
-        // Set both localStorage and global variables
-        window.currentUserId = data.userId;
-        window.currentUserBirthdate = birthdate;
-        window.currentUserGender = gender;
-        
-        localStorage.setItem('userId', data.userId);
-        localStorage.setItem('userBirthdate', birthdate);
-        localStorage.setItem('userGender', gender);
-        
-        document.getElementById('generatedId').textContent = data.userId;
-        showSection('idDisplay');
-      } else {
-        alert('Registration failed. Please try again.');
-      }
-    })
-    .catch(error => {
-      console.error('Error:', error);
-      alert('Registration failed. Please try again.');
-    });
-  });
-
   const baseColors = {
     white: [255, 255, 255],
     black: [0, 0, 0],
@@ -183,6 +141,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const mixedRGB = mixbox.latentToRgb(zMix).map(Math.round);
     console.log("🎨 Mixed RGB:", mixedRGB);
     updateBox("currentMix", mixedRGB);
+    
+    // Update RGB values display
+    document.getElementById("mixedRgbValues").textContent = `RGB: [${mixedRGB.join(', ')}]`;
 
     fetch("/calculate", {
       method: "POST",
@@ -197,7 +158,8 @@ document.addEventListener("DOMContentLoaded", () => {
       if (data.error) return console.error("Server error:", data.error);
       document.getElementById("deltaE").textContent = data.delta_e.toFixed(2);
 
-      if (data.delta_e < 5) {
+      if (data.delta_e === 0.00) {
+        stopTimer();
         const session = {
           user_id: window.currentUserId,
           target: targetColor,
@@ -209,18 +171,9 @@ document.addEventListener("DOMContentLoaded", () => {
         sessionLogs.push(session);
         saveSessionToServer(session);
 
-        setTimeout(() => {
-          alert(`✅ Matched with ΔE=${data.delta_e.toFixed(2)}!`);
-          currentTargetIndex++;
-          if (currentTargetIndex < targetColors.length) {
-            targetColor = targetColors[currentTargetIndex];
-            updateBox("targetColor", targetColor);
-            resetMix();
-            startTimer();
-          } else {
-            alert("🎉 All colors completed!");
-          }
-        }, 300);
+        const skipBtn = document.getElementById("skipBtn");
+        skipBtn.disabled = false;
+        skipBtn.textContent = "Next color";
       }
     });
   }
@@ -265,6 +218,7 @@ document.addEventListener("DOMContentLoaded", () => {
       startTimer();
       document.getElementById("skipBtn").disabled = false;
       document.getElementById("stopBtn").disabled = false;
+      document.getElementById("skipBtn").textContent = "Skip";
     } else {
       alert("✅ All colors completed!");
       document.getElementById("skipBtn").disabled = true;
@@ -293,7 +247,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.querySelectorAll(".color-circle").forEach(circle => {
-    circle.addEventListener("click", () => {
+    circle.addEventListener("click", (e) => {
+      e.preventDefault();
       const color = circle.dataset.color;
       dropCounts[color]++;
       circle.textContent = dropCounts[color];
@@ -302,7 +257,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.querySelectorAll(".minus-button").forEach(button => {
-    button.addEventListener("click", () => {
+    button.addEventListener("click", (e) => {
+      e.preventDefault();
       const color = button.dataset.color;
       if (dropCounts[color] > 0) {
         dropCounts[color]--;
