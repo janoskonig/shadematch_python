@@ -8,6 +8,7 @@ from .utils import calculate_delta_e
 import pandas as pd
 import os
 import numpy as np
+import json
 
 main = Blueprint('main', __name__)
 
@@ -24,51 +25,44 @@ def spectral():
     # Load CIE data
     wavelengths, x_bar, y_bar, z_bar = load_cie_data()
     
-    # Define pigment spectra for all colors
-    pigments = {
-        'red': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.1 if w < 600 else 0.9 for w in wavelengths]  # High reflectance in red region
-        },
-        'yellow': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.1 if w < 500 else 0.9 for w in wavelengths]  # High reflectance in yellow region
-        },
-        'blue': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.9 if w < 500 else 0.1 for w in wavelengths]  # High reflectance in blue region
-        },
-        'orange': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.1 if w < 550 else 0.9 for w in wavelengths]  # High reflectance in orange region
-        },
-        'brown': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.3 if w < 500 else 0.7 for w in wavelengths]  # Moderate reflectance across spectrum
-        },
-        'green': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.1 if w < 500 or w > 600 else 0.9 for w in wavelengths]  # High reflectance in green region
-        },
-        'purple': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.9 if w < 450 or w > 650 else 0.1 for w in wavelengths]  # High reflectance in purple region
-        }
-    }
-    
-    # Generate individual spectrum plots and calculate RGB values
+    # Read pigment data from CSV files
+    pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
     spectrum_plots = {}
-    for color, data in pigments.items():
-        # Convert spectrum to XYZ
-        X, Y, Z = spectrum_to_xyz(data['reflectances'], wavelengths, x_bar, y_bar, z_bar)
-        # Convert XYZ to RGB
-        r, g, b = xyz_to_rgb(X, Y, Z)
-        
-        spectrum_plots[color] = {
-            'wavelengths': data['wavelengths'].tolist(),
-            'reflectances': data['reflectances'],
-            'rgb': [int(r), int(g), int(b)]
-        }
+    
+    for filename in os.listdir(pigments_dir):
+        if filename.endswith('.csv'):
+            # Read the CSV file
+            df = pd.read_csv(os.path.join(pigments_dir, filename))
+            
+            # Get wavelengths and reflectance data
+            pigment_wavelengths = df['Wavelength'].tolist()
+            
+            # Calculate average reflectance across all measurements
+            reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
+            
+            # Convert spectrum to XYZ
+            X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
+            
+            # Convert XYZ to RGB
+            rgb = xyz_to_rgb(X, Y, Z)
+            
+            # Get pigment name from filename
+            pigment_name = os.path.splitext(filename)[0].replace('_', ' ').title()
+            
+            # Map filename to color key
+            color_key = filename.lower().replace('.csv', '')
+            if 'phtalo_blue' in color_key:
+                color_key = 'blue'
+            elif 'cadmium_red' in color_key:
+                color_key = 'red'
+            elif 'isoindol_yellow' in color_key:
+                color_key = 'yellow'
+            
+            spectrum_plots[color_key] = {
+                'wavelengths': pigment_wavelengths,
+                'reflectances': reflectances,
+                'rgb': rgb.tolist()
+            }
     
     return render_template('spectral_mixer.html', spectrum_plots=spectrum_plots)
 
@@ -220,36 +214,36 @@ def color_inspector():
     # Load CIE data
     wavelengths, x_bar, y_bar, z_bar = load_cie_data()
     
-    # Read the Excel file
-    excel_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'salata_csonkanyag_reflektancia.xlsx')
-    if not os.path.exists(excel_path):
-        return "Excel file not found", 404
-    
-    # Read the Excel file
-    df = pd.read_excel(excel_path)
-    
-    # Get wavelengths and reflectance data
-    # Strip 'nm' suffix and convert to float
-    wavelengths = [float(col.replace('nm', '')) for col in df.columns[1:]]
+    # Read pigment data from CSV files
+    pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
     samples = []
     
-    for _, row in df.iterrows():
-        sample_name = row[0]
-        # Convert percentage reflectances to 0-1 range
-        reflectances = [r/100.0 for r in row[1:].tolist()]
-        
-        # Convert spectrum to XYZ
-        X, Y, Z = spectrum_to_xyz(reflectances, wavelengths, x_bar, y_bar, z_bar)
-        
-        # Convert XYZ to RGB
-        rgb = xyz_to_rgb(X, Y, Z)
-        
-        samples.append({
-            'name': sample_name,
-            'wavelengths': wavelengths,
-            'reflectances': reflectances,
-            'rgb': rgb.tolist()
-        })
+    for filename in os.listdir(pigments_dir):
+        if filename.endswith('.csv'):
+            # Read the CSV file
+            df = pd.read_csv(os.path.join(pigments_dir, filename))
+            
+            # Get wavelengths and reflectance data
+            pigment_wavelengths = df['Wavelength'].tolist()
+            
+            # Calculate average reflectance across all measurements
+            reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
+            
+            # Convert spectrum to XYZ
+            X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
+            
+            # Convert XYZ to RGB
+            rgb = xyz_to_rgb(X, Y, Z)
+            
+            # Get pigment name from filename
+            pigment_name = os.path.splitext(filename)[0].replace('_', ' ').title()
+            
+            samples.append({
+                'name': pigment_name,
+                'wavelengths': pigment_wavelengths,
+                'reflectances': reflectances,
+                'rgb': rgb.tolist()
+            })
     
     return render_template('color_inspector.html', samples=samples)
 

@@ -104,9 +104,9 @@
         <h1>Color Inspector</h1>
         <div class="samples-grid">
             {% for sample in samples %}
-            <div class="sample-card">
+            <div class="sample-card" data-sample='{{ sample | tojson | safe }}'>
                 <div class="sample-name">{{ sample.name }}</div>
-                <div class="color-display" style="background-color: rgb({{ sample.rgb[0] }}, {{ sample.rgb[1] }}, {{ sample.rgb[2] }})"></div>
+                <div class="color-display" data-rgb="{{ sample.rgb[0] }},{{ sample.rgb[1] }},{{ sample.rgb[2] }}"></div>
                 <div class="rgb-values">RGB: {{ sample.rgb[0] }}, {{ sample.rgb[1] }}, {{ sample.rgb[2] }}</div>
                 <div class="spectrum-plot" id="spectrum-{{ loop.index }}"></div>
             </div>
@@ -115,41 +115,51 @@
     </div>
 
     <script>
-        // Initialize spectrum plots
-        {% for sample in samples %}
-        const trace{{ loop.index }} = {
-            x: {{ sample.wavelengths | tojson }},
-            y: {{ sample.reflectances | tojson }},
-            type: 'scatter',
-            mode: 'lines',
-            name: '{{ sample.name }}',
-            line: {
-                color: `rgb(${ {{ sample.rgb[0] }}, {{ sample.rgb[1] }}, {{ sample.rgb[2] }} })`,
-                width: 2
-            }
-        };
+        document.addEventListener('DOMContentLoaded', function() {
+            const sampleCards = document.querySelectorAll('.sample-card');
+            
+            sampleCards.forEach((card, index) => {
+                const sample = JSON.parse(card.dataset.sample);
+                const plotDiv = card.querySelector('.spectrum-plot');
+                const colorDisplay = card.querySelector('.color-display');
+                
+                // Set background color from data attribute
+                colorDisplay.style.backgroundColor = `rgb(${colorDisplay.dataset.rgb})`;
+                
+                const trace = {
+                    x: sample.wavelengths,
+                    y: sample.reflectances,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: sample.name,
+                    line: {
+                        color: `rgb(${sample.rgb[0]}, ${sample.rgb[1]}, ${sample.rgb[2]})`,
+                        width: 2
+                    }
+                };
 
-        const layout{{ loop.index }} = {
-            title: 'Reflectance Spectrum',
-            xaxis: {
-                title: 'Wavelength (nm)',
-                range: [400, 700],
-                showgrid: true,
-                gridcolor: '#ddd'
-            },
-            yaxis: {
-                title: 'Reflectance',
-                range: [0, 1],
-                showgrid: true,
-                gridcolor: '#ddd'
-            },
-            margin: { t: 30, r: 20, b: 40, l: 50 },
-            paper_bgcolor: 'white',
-            plot_bgcolor: 'white'
-        };
+                const layout = {
+                    title: 'Reflectance Spectrum',
+                    xaxis: {
+                        title: 'Wavelength (nm)',
+                        range: [400, 700],
+                        showgrid: true,
+                        gridcolor: '#ddd'
+                    },
+                    yaxis: {
+                        title: 'Reflectance',
+                        range: [0, 1],
+                        showgrid: true,
+                        gridcolor: '#ddd'
+                    },
+                    margin: { t: 30, r: 20, b: 40, l: 50 },
+                    paper_bgcolor: 'white',
+                    plot_bgcolor: 'white'
+                };
 
-        Plotly.newPlot('spectrum-{{ loop.index }}', [trace{{ loop.index }}], layout{{ loop.index }});
-        {% endfor %}
+                Plotly.newPlot(plotDiv, [trace], layout);
+            });
+        });
     </script>
 </body>
 </html> 
