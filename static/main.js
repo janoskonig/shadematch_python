@@ -10,6 +10,37 @@ window.currentUserId = localStorage.getItem('userId');
 window.currentUserBirthdate = localStorage.getItem('userBirthdate');
 window.currentUserGender = localStorage.getItem('userGender');
 
+// Define dropCounts globally
+let dropCounts = {
+  white: 0,
+  black: 0,
+  red: 0,
+  yellow: 0,
+  blue: 0
+};
+
+// Define resetMix function
+function resetMix() {
+  // Reset all drop counts to 0
+  document.querySelectorAll('.color-circle').forEach(circle => {
+    circle.textContent = '0';
+  });
+  
+  // Reset the mixed color display to white
+  document.getElementById('currentMix').style.backgroundColor = 'rgb(255, 255, 255)';
+  document.getElementById('mixedRgbValues').textContent = 'RGB: [255, 255, 255]';
+  document.getElementById('deltaE').textContent = '-';
+  
+  // Reset drop counts object
+  dropCounts = {
+    white: 0,
+    black: 0,
+    red: 0,
+    yellow: 0,
+    blue: 0
+  };
+}
+
 // Listen for user ID changes
 window.addEventListener('storage', (e) => {
   if (e.key === 'userId') {
@@ -99,23 +130,8 @@ document.addEventListener("DOMContentLoaded", () => {
     [79, 123, 122]      // Teal
   ];
 
-  let dropCounts = {
-    white: 0,
-    black: 0,
-    red: 0,
-    yellow: 0,
-    blue: 0
-  };
-
   let currentTargetIndex = 0;
   let targetColor = targetColors[currentTargetIndex];
-
-  function resetMix() {
-    for (let key in dropCounts) dropCounts[key] = 0;
-    document.querySelectorAll(".color-circle").forEach(c => c.textContent = "0");
-    updateBox("currentMix", [255, 255, 255]);
-    document.getElementById("deltaE").textContent = "-";
-  }
 
   function updateCurrentMix() {
     const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
@@ -346,6 +362,7 @@ async function saveSessionData() {
 document.getElementById('loginForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     const userId = document.getElementById('loginId').value.toUpperCase();
+    console.log('Attempting login with ID:', userId);
     
     try {
         const response = await fetch('/login', {
@@ -356,18 +373,22 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
             body: JSON.stringify({ userId })
         });
         
-        if (!response.ok) {
-            throw new Error('Login failed');
-        }
-        
+        console.log('Login response status:', response.status);
         const data = await response.json();
+        console.log('Login response data:', JSON.stringify(data, null, 2));
+        
         if (data.status === 'success') {
+            console.log('Login successful, storing user data');
             localStorage.setItem('userId', userId);
             localStorage.setItem('userBirthdate', data.birthdate);
             localStorage.setItem('userGender', data.gender);
             document.getElementById('userModal').style.display = 'none';
             resetMix();
             resetTimerDisplay();
+            console.log('User data stored, modal closed');
+        } else {
+            console.log('Login failed:', data.message);
+            alert('Invalid user ID. Please try again.');
         }
     } catch (error) {
         console.error('Login error:', error);

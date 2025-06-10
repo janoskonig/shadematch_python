@@ -215,7 +215,10 @@
           if (data.status === 'success') {
             document.getElementById('userId').textContent = data.userId;
             localStorage.setItem('userId', data.userId);
-            setTimeout(showResults, 1000); // Add a small delay before showing results
+            // Show the results section with the user ID
+            document.querySelector('.plate-container').style.display = 'none';
+            document.querySelector('.answer-input').style.display = 'none';
+            document.getElementById('results').style.display = 'block';
           } else {
             alert('Registration failed. Please try again.');
           }

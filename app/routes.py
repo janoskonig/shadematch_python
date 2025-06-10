@@ -96,19 +96,53 @@ def register():
 def login():
     data = request.get_json()
     user_id = data['userId']
+    print(f"Login attempt for user ID: {user_id}")
     
-    user = User.query.get(user_id)
-    if user:
-        return jsonify({
-            'status': 'success',
-            'birthdate': user.birthdate.isoformat(),
-            'gender': user.gender
-        })
-    else:
-        return jsonify({
+    try:
+        # First try to find user in the users table
+        user = User.query.get(user_id)
+        print(f"Database query result from users table: {user}")
+        
+        if user:
+            print(f"User found in users table: {user.id}, birthdate: {user.birthdate}, gender: {user.gender}")
+            response_data = {
+                'status': 'success',
+                'birthdate': user.birthdate.isoformat(),
+                'gender': user.gender
+            }
+            print(f"Sending response: {response_data}")
+            return jsonify(response_data)
+        
+        # If not found in users table, check mixing_sessions table
+        session = MixingSession.query.filter_by(user_id=user_id).first()
+        print(f"Database query result from mixing_sessions table: {session}")
+        
+        if session:
+            print(f"User found in mixing_sessions table: {session.user_id}")
+            # Return success but with default values since we don't have birthdate/gender
+            response_data = {
+                'status': 'success',
+                'birthdate': '2000-01-01',  # Default value
+                'gender': 'prefer_not_to_say'  # Default value
+            }
+            print(f"Sending response: {response_data}")
+            return jsonify(response_data)
+        
+        print(f"No user found with ID: {user_id}")
+        response_data = {
             'status': 'error',
             'message': 'Invalid user ID'
-        }), 404
+        }
+        print(f"Sending error response: {response_data}")
+        return jsonify(response_data), 404
+    except Exception as e:
+        print(f"Error during login: {str(e)}")
+        response_data = {
+            'status': 'error',
+            'message': 'Database error'
+        }
+        print(f"Sending error response: {response_data}")
+        return jsonify(response_data), 500
 
 @main.route('/calculate', methods=['POST'])
 def calculate():

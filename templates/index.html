@@ -555,15 +555,6 @@
       window.location.href = '/color-test';
     };
 
-    document.getElementById('loginForm').onsubmit = function(e) {
-      e.preventDefault();
-      const id = document.getElementById('loginId').value.toUpperCase();
-      if (id.length === 6) {
-        localStorage.setItem('userId', id);
-        document.getElementById('userModal').style.display = 'none';
-      }
-    };
-
     // Initialize the mixed color display
     calculateMixedColor();
   });
