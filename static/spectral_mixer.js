@@ -338,6 +338,45 @@ class SpectralMixer {
         const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
         return luminance > 0.5 ? '#000000' : '#ffffff';
     }
+
+    computeMixedColor(dropCounts) {
+        const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
+        if (totalDrops === 0) {
+            return {
+                rgb: [255, 255, 255],
+                spectrum: Array(this.SIZE).fill(1)
+            };
+        }
+        let mixedKS = Array(this.SIZE).fill(0);
+        let totalWeight = 0;
+        Object.entries(dropCounts).forEach(([color, drops]) => {
+            if (drops > 0) {
+                const data = spectrum_plots[color];
+                if (data) {
+                    totalWeight += drops;
+                }
+            }
+        });
+        if (totalWeight === 0) totalWeight = 1;
+        Object.entries(dropCounts).forEach(([color, drops]) => {
+            if (drops > 0) {
+                const data = spectrum_plots[color];
+                if (data) {
+                    const weight = drops / totalWeight;
+                    for (let i = 0; i < this.SIZE; i++) {
+                        const R = Math.max(0.0001, Math.min(0.9999, data.reflectances[i]));
+                        mixedKS[i] += this.KS(R) * weight;
+                    }
+                }
+            }
+        });
+        let mixedSpectrum = mixedKS.map(KS => {
+            const sqrt = Math.sqrt(KS * KS + 2 * KS);
+            return Math.max(0, Math.min(1, 1 + KS - sqrt));
+        });
+        const rgb = this.spectrumToRGB(mixedSpectrum);
+        return { rgb, spectrum: mixedSpectrum };
+    }
 }
 
 // Initialize the spectral mixer when the page loads
@@ -399,4 +438,52 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Initialize the spectral mixer
     window.spectralMixer = new SpectralMixer();
+
+    // After initializing SpectralMixer, compute and display the target color
+    setTimeout(() => {
+        if (window.spectralMixer) {
+            const targetDropCounts = { red: 0, yellow: 1, blue: 1 };
+            const { rgb, spectrum } = window.spectralMixer.computeMixedColor(targetDropCounts);
+            // Set the color for the target circle
+            const targetCircle = document.getElementById('targetCircle');
+            if (targetCircle) {
+                targetCircle.style.backgroundColor = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+                targetCircle.style.color = window.spectralMixer.getContrastColor(rgb[0], rgb[1], rgb[2]);
+            }
+            // Plot the spectrum for the target
+            const targetSpectrumDiv = document.getElementById('targetSpectrum');
+            if (targetSpectrumDiv) {
+                const trace = {
+                    x: window.spectralMixer.wavelengths,
+                    y: spectrum,
+                    type: 'scatter',
+                    mode: 'lines',
+                    name: 'Target',
+                    line: {
+                        color: `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`,
+                        width: 2
+                    }
+                };
+                const layout = {
+                    title: 'Target Spectrum',
+                    xaxis: {
+                        title: 'Wavelength (nm)',
+                        range: [400, 700],
+                        showgrid: true,
+                        gridcolor: '#ddd'
+                    },
+                    yaxis: {
+                        title: 'Reflectance',
+                        range: [0, 1],
+                        showgrid: true,
+                        gridcolor: '#ddd'
+                    },
+                    margin: { t: 30, r: 20, b: 40, l: 50 },
+                    paper_bgcolor: 'white',
+                    plot_bgcolor: 'white'
+                };
+                Plotly.newPlot(targetSpectrumDiv, [trace], layout);
+            }
+        }
+    }, 100);
 }); 
