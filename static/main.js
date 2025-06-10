@@ -90,13 +90,13 @@ document.addEventListener("DOMContentLoaded", () => {
     [113, 1, 105],     // Purple
     [78, 150, 100],    // Green
     [255, 179, 188],   // Pink
-    [128, 128, 0],     // Olive
-    [98, 135, 96],     // Custom
+    [113, 112, 62],     // Olive
+    [111, 122, 102],     // Custom
     [255, 229, 180],   // Peach
-    [255, 128, 80],    // Coral
-    [64, 224, 208],    // Turquoise
-    [128, 255, 0],     // Chartreuse
-    [0, 128, 128]      // Teal
+    [255, 129, 82],    // Coral
+    [102, 158, 165],    // Turquoise
+    [161, 212, 103],     // Chartreuse
+    [79, 123, 122]      // Teal
   ];
 
   let dropCounts = {
