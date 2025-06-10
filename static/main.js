@@ -211,16 +211,22 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("stopBtn").addEventListener("click", () => {
     stopTimer();
-    const session = {
-      user_id: window.currentUserId,
-      target: targetColor,
-      drops: { ...dropCounts },
-      deltaE: parseFloat(document.getElementById("deltaE").textContent),
-      time: parseFloat(document.getElementById("timer").textContent),
-      timestamp: new Date().toISOString()
-    };
-    sessionLogs.push(session);
-    saveSessionToServer(session);
+    const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
+    
+    // Only save if this wasn't a successful attempt (DeltaE = 0)
+    if (currentDeltaE !== 0) {
+      const session = {
+        user_id: window.currentUserId,
+        target: targetColor,
+        drops: { ...dropCounts },
+        deltaE: currentDeltaE,
+        time: parseFloat(document.getElementById("timer").textContent),
+        timestamp: new Date().toISOString()
+      };
+      sessionLogs.push(session);
+      saveSessionToServer(session);
+    }
+    
     document.getElementById("skipBtn").disabled = false;
     document.getElementById("stopBtn").disabled = true;
   });
@@ -254,9 +260,26 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("retryBtn").addEventListener("click", () => {
+    // Store current session data before resetting
+    const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
+    if (!isNaN(currentDeltaE)) {  // Only store if we have a valid DeltaE
+      const session = {
+        user_id: window.currentUserId,
+        target: targetColor,
+        drops: { ...dropCounts },
+        deltaE: currentDeltaE,
+        time: parseFloat(document.getElementById("timer").textContent),
+        timestamp: new Date().toISOString()
+      };
+      sessionLogs.push(session);
+      saveSessionToServer(session);
+    }
+
+    // Reset everything
     resetMix();
     resetTimerDisplay();
-    startTimer();
+    stopTimer();  // Make sure to stop any running timer
+    startTimer(); // Start a fresh timer
     document.getElementById("stopBtn").disabled = false;
     document.getElementById("skipBtn").disabled = false;
     document.getElementById("skipBtn").disabled = true;
