@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Spectral Reverse Engineering</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            font-weight: 300;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1em;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .upload-section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 30px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .file-upload {
+            border: 2px dashed #667eea;
+            border-radius: 10px;
+            padding: 40px;
+            margin: 20px 0;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .file-upload:hover {
+            border-color: #764ba2;
+            background: #f0f2ff;
+        }
+        
+        .file-upload input[type="file"] {
+            display: none;
+        }
+        
+        .upload-text {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 10px;
+        }
+        
+        .upload-hint {
+            font-size: 0.9em;
+            color: #999;
+        }
+        
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 10px;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .results-section {
+            display: none;
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 30px;
+            margin-top: 30px;
+        }
+        
+        .recipe-card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 20px 0;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .recipe-title {
+            font-size: 1.5em;
+            color: #333;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .pigment-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .pigment-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .pigment-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 5px;
+        }
+        
+        .pigment-drops {
+            font-size: 1.2em;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .accuracy-section {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .delta-e {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .delta-e-value {
+            color: #667eea;
+            font-size: 1.5em;
+        }
+        
+        .color-preview {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .color-box {
+            width: 60px;
+            height: 60px;
+            border-radius: 10px;
+            border: 3px solid #ddd;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .color-label {
+            text-align: center;
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            background: #ffe6e6;
+            color: #d63031;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+        }
+        
+        .nav-links {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            margin: 0 10px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+        
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="nav-links">
+            <a href="/spectral">Spectral Mixer</a>
+            <a href="/color_inspector">Color Inspector</a>
+            <a href="/reverse_engineer">Reverse Engineering</a>
+        </div>
+        
+        <div class="header">
+            <h1>Spectral Reverse Engineering</h1>
+            <p>Reverse Engineer Pigment Recipes from Reflectance Spectra</p>
+        </div>
+        
+        <div class="content">
+            <div class="upload-section">
+                <h2>Upload Reflectance Spectrum</h2>
+                <p>Upload a CSV file containing wavelength and reflectance data</p>
+                
+                <div class="file-upload" onclick="document.getElementById('spectrumFile').click()">
+                    <div class="upload-text">📁 Click to select file</div>
+                    <div class="upload-hint">CSV format with Wavelength and Reflectance columns</div>
+                    <input type="file" id="spectrumFile" accept=".csv" onchange="handleFileSelect(event)">
+                </div>
+                
+                <button class="btn" id="analyzeBtn" onclick="analyzeSpectrum()" disabled>
+                    Analyze Spectrum
+                </button>
+            </div>
+            
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Analyzing spectrum and calculating recipe...</p>
+            </div>
+            
+            <div class="results-section" id="results">
+                <div class="recipe-card">
+                    <div class="recipe-title">Recommended Pigment Recipe</div>
+                    
+                    <div class="pigment-list" id="pigmentList">
+                        <!-- Pigment items will be populated here -->
+                    </div>
+                    
+                    <div class="accuracy-section">
+                        <div class="delta-e">
+                            Color Accuracy (ΔE): <span class="delta-e-value" id="deltaE">-</span>
+                        </div>
+                        <p><small>Lower values indicate better color match</small></p>
+                    </div>
+                    
+                    <div class="color-preview">
+                        <div>
+                            <div class="color-box" id="targetColor"></div>
+                            <div class="color-label">Target Color</div>
+                        </div>
+                        <div>
+                            <div class="color-box" id="mixedColor"></div>
+                            <div class="color-label">Mixed Color</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let selectedFile = null;
+        
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (file) {
+                selectedFile = file;
+                document.getElementById('analyzeBtn').disabled = false;
+                document.querySelector('.upload-text').textContent = `📄 ${file.name}`;
+            }
+        }
+        
+        function analyzeSpectrum() {
+            if (!selectedFile) return;
+            
+            const formData = new FormData();
+            formData.append('spectrum_file', selectedFile);
+            
+            // Show loading
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('analyzeBtn').disabled = true;
+            
+            fetch('/reverse_engineer', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('analyzeBtn').disabled = false;
+                
+                if (data.error) {
+                    showError(data.error);
+                    return;
+                }
+                
+                displayResults(data);
+            })
+            .catch(error => {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('analyzeBtn').disabled = false;
+                showError('An error occurred while analyzing the spectrum.');
+                console.error('Error:', error);
+            });
+        }
+        
+        function displayResults(data) {
+            const resultsDiv = document.getElementById('results');
+            const pigmentList = document.getElementById('pigmentList');
+            
+            // Clear previous results
+            pigmentList.innerHTML = '';
+            
+            // Display pigment recipe
+            Object.entries(data.recipe).forEach(([pigment, drops]) => {
+                const pigmentItem = document.createElement('div');
+                pigmentItem.className = 'pigment-item';
+                pigmentItem.innerHTML = `
+                    <div class="pigment-name">${pigment}</div>
+                    <div class="pigment-drops">${drops} drops</div>
+                `;
+                pigmentList.appendChild(pigmentItem);
+            });
+            
+            // Display Delta E
+            document.getElementById('deltaE').textContent = data.delta_e.toFixed(2);
+            
+            // Display colors
+            const targetColor = document.getElementById('targetColor');
+            const mixedColor = document.getElementById('mixedColor');
+            
+            targetColor.style.backgroundColor = `rgb(${data.target_rgb[0]}, ${data.target_rgb[1]}, ${data.target_rgb[2]})`;
+            mixedColor.style.backgroundColor = `rgb(${data.target_rgb[0]}, ${data.target_rgb[1]}, ${data.target_rgb[2]})`; // Using target for now
+            
+            resultsDiv.style.display = 'block';
+        }
+        
+        function showError(message) {
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = `<div class="error">${message}</div>`;
+            resultsDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html> 

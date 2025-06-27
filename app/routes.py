@@ -4,7 +4,7 @@ from . import db
 from .models import User, MixingSession
 import random
 import string
-from .utils import calculate_delta_e
+from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb, reverse_engineer_recipe
 import pandas as pd
 import os
 import numpy as np
@@ -190,13 +190,17 @@ def save_session():
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
 def load_cie_data():
-    # Wavelength range 400-700nm
-    wavelengths = np.arange(400, 701)
+    # Wavelength range 400-700nm in 10nm steps (31 points)
+    wavelengths = np.arange(400, 701, 10)
     
-    # CIE 1931 color matching functions (simplified)
+    # CIE 1931 color matching functions (31 points for 400-700nm in 10nm steps)
+    # These values are interpolated to match the 31 wavelength points
     x_bar = np.array([0.0143, 0.0435, 0.1344, 0.2839, 0.3483, 0.3362, 0.2908, 0.1954, 0.0956, 0.0320, 0.0049, 0.0093, 0.0633, 0.1655, 0.2904, 0.4334, 0.5945, 0.7621, 0.9163, 1.0263, 1.0622, 1.0026, 0.8544, 0.6424, 0.4479, 0.2835, 0.1649, 0.0874, 0.0468, 0.0227, 0.0114])
     y_bar = np.array([0.0004, 0.0012, 0.0040, 0.0116, 0.023, 0.038, 0.060, 0.091, 0.139, 0.208, 0.323, 0.503, 0.710, 0.862, 0.954, 0.995, 0.995, 0.952, 0.870, 0.757, 0.631, 0.503, 0.381, 0.265, 0.175, 0.107, 0.061, 0.032, 0.017, 0.0082, 0.0041])
     z_bar = np.array([0.0679, 0.2074, 0.6456, 1.3856, 1.7471, 1.7721, 1.6692, 1.2876, 0.8130, 0.4652, 0.2720, 0.1582, 0.0782, 0.0422, 0.0203, 0.0087, 0.0039, 0.0021, 0.0017, 0.0011, 0.0008, 0.0003, 0.0002, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000])
+    
+    # Ensure arrays have the same length
+    assert len(wavelengths) == len(x_bar) == len(y_bar) == len(z_bar), "CIE data arrays must have the same length"
     
     return wavelengths, x_bar, y_bar, z_bar
 
@@ -352,3 +356,84 @@ def mix_colors():
 @main.route('/color-test')
 def color_test():
     return render_template('color_test.html')
+
+@main.route('/spectral_mixer')
+def spectral_mixer():
+    return render_template('spectral_mixer.html')
+
+@main.route('/reverse_engineer')
+def reverse_engineer_page():
+    return render_template('reverse_engineer.html')
+
+@main.route('/reverse_engineer', methods=['POST'])
+def reverse_engineer():
+    try:
+        # Get uploaded file
+        if 'spectrum_file' not in request.files:
+            return jsonify({'error': 'No file uploaded'}), 400
+        
+        file = request.files['spectrum_file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Read the uploaded spectrum
+        spectrum_data = pd.read_csv(file)
+        
+        # Validate format - should have Wavelength and Reflectance columns
+        if 'Wavelength' not in spectrum_data.columns or 'Reflectance' not in spectrum_data.columns:
+            return jsonify({'error': 'File must have Wavelength and Reflectance columns'}), 400
+        
+        # Debug: Check spectrum data
+        print(f"Spectrum data shape: {spectrum_data.shape}")
+        print(f"Wavelength range: {spectrum_data['Wavelength'].min()} - {spectrum_data['Wavelength'].max()}")
+        print(f"Reflectance range: {spectrum_data['Reflectance'].min()} - {spectrum_data['Reflectance'].max()}")
+        
+        # Load pigment data
+        pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
+        pigments = {}
+        
+        for filename in os.listdir(pigments_dir):
+            if filename.endswith('.csv'):
+                pigment_name = os.path.splitext(filename)[0].replace('_', ' ').title()
+                pigment_data = pd.read_csv(os.path.join(pigments_dir, filename))
+                
+                # Debug: Check pigment data
+                print(f"Pigment {pigment_name} data shape: {pigment_data.shape}")
+                
+                # Calculate average reflectance across all measurements
+                reflectance_cols = [col for col in pigment_data.columns if col != 'Wavelength']
+                pigment_data['Reflectance'] = pigment_data[reflectance_cols].mean(axis=1)
+                
+                pigments[pigment_name] = {
+                    'wavelengths': pigment_data['Wavelength'].tolist(),
+                    'reflectances': pigment_data['Reflectance'].tolist()
+                }
+        
+        # Load CIE data
+        wavelengths, x_bar, y_bar, z_bar = load_cie_data()
+        print(f"CIE data lengths - wavelengths: {len(wavelengths)}, x_bar: {len(x_bar)}")
+        
+        # Convert target spectrum to XYZ
+        target_xyz = spectrum_to_xyz(
+            spectrum_data['Reflectance'].tolist(),
+            spectrum_data['Wavelength'].tolist(),
+            x_bar, y_bar, z_bar
+        )
+        
+        # Convert target XYZ to RGB
+        target_rgb = xyz_to_rgb(*target_xyz)
+        
+        # Perform reverse engineering
+        recipe, delta_e = reverse_engineer_recipe(target_xyz, pigments, x_bar, y_bar, z_bar)
+        
+        return jsonify({
+            'recipe': recipe,
+            'delta_e': delta_e,
+            'target_rgb': target_rgb.tolist()
+        })
+        
+    except Exception as e:
+        print(f"Error in reverse_engineer: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
