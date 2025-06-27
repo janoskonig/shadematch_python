@@ -6,22 +6,6 @@ from scipy.optimize import minimize
 from scipy.interpolate import interp1d
 
 
-def load_cie_data():
-    # Wavelength range 400-700nm in 10nm steps (31 points)
-    wavelengths = np.arange(400, 701, 10)
-    
-    # CIE 1931 color matching functions (31 points for 400-700nm in 10nm steps)
-    # These values are interpolated to match the 31 wavelength points
-    x_bar = np.array([0.0143, 0.0435, 0.1344, 0.2839, 0.3483, 0.3362, 0.2908, 0.1954, 0.0956, 0.0320, 0.0049, 0.0093, 0.0633, 0.1655, 0.2904, 0.4334, 0.5945, 0.7621, 0.9163, 1.0263, 1.0622, 1.0026, 0.8544, 0.6424, 0.4479, 0.2835, 0.1649, 0.0874, 0.0468, 0.0227, 0.0114])
-    y_bar = np.array([0.0004, 0.0012, 0.0040, 0.0116, 0.023, 0.038, 0.060, 0.091, 0.139, 0.208, 0.323, 0.503, 0.710, 0.862, 0.954, 0.995, 0.995, 0.952, 0.870, 0.757, 0.631, 0.503, 0.381, 0.265, 0.175, 0.107, 0.061, 0.032, 0.017, 0.0082, 0.0041])
-    z_bar = np.array([0.0679, 0.2074, 0.6456, 1.3856, 1.7471, 1.7721, 1.6692, 1.2876, 0.8130, 0.4652, 0.2720, 0.1582, 0.0782, 0.0422, 0.0203, 0.0087, 0.0039, 0.0021, 0.0017, 0.0011, 0.0008, 0.0003, 0.0002, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000])
-    
-    # Ensure arrays have the same length
-    assert len(wavelengths) == len(x_bar) == len(y_bar) == len(z_bar), "CIE data arrays must have the same length"
-    
-    return wavelengths, x_bar, y_bar, z_bar
-
-
 def delta_e_cie2000(color1, color2, Kl=1, Kc=1, Kh=1):
     """
     Drop-in replacement for colormath's delta_e_cie2000 with NumPy compatibility.
@@ -224,7 +208,7 @@ def reverse_engineer_recipe(target_xyz, pigments, x_bar, y_bar, z_bar):
     for i, pigment_name in enumerate(pigment_names):
         drops = max(0, result.x[i])
         if drops > 0.01:  # Only include pigments with significant amounts
-            recipe[pigment_name] = int(round(drops))  # Convert to integer
+            recipe[pigment_name] = round(drops, 2)
     
     # Calculate final Delta E
     final_spectrum = mix_spectra(recipe, pigments)
