@@ -426,6 +426,50 @@ def spectral_mixer():
 def reverse_engineer_page():
     return render_template('reverse_engineer.html')
 
+@main.route('/results')
+def results_page():
+    return render_template('results.html')
+
+@main.route('/get_user_results', methods=['POST'])
+def get_user_results():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'User ID is required'}), 400
+    
+    try:
+        # Get all sessions for the user
+        sessions = MixingSession.query.filter_by(user_id=user_id).order_by(MixingSession.timestamp.desc()).all()
+        
+        results = []
+        for session in sessions:
+            results.append({
+                'id': session.id,
+                'target_color': f"RGB({session.target_r}, {session.target_g}, {session.target_b})",
+                'drops': {
+                    'white': session.drop_white,
+                    'black': session.drop_black,
+                    'red': session.drop_red,
+                    'yellow': session.drop_yellow,
+                    'blue': session.drop_blue
+                },
+                'delta_e': session.delta_e if session.delta_e is not None else 'N/A',
+                'time_sec': session.time_sec,
+                'timestamp': session.timestamp.isoformat() if session.timestamp else None,
+                'skipped': session.skipped
+            })
+        
+        return jsonify({
+            'status': 'success',
+            'results': results,
+            'total_sessions': len(results)
+        })
+        
+    except Exception as e:
+        print('Error fetching user results:', str(e))
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 @main.route('/reverse_engineer', methods=['POST'])
 def reverse_engineer():
     try:
