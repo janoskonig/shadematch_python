@@ -1,115 +1,118 @@
-# Color Mixing Application
+# ShadeMatch Python
 
-A web-based color mixing application that allows users to experiment with color combinations and match target colors using a sophisticated perceptual color mixing algorithm.
+A Flask-based color matching and spectral analysis application for pigment mixing and color science.
 
 ## Features
 
-- **Perceptual Color Mixing**: Uses the Mixbox library for realistic color mixing simulation
-- **User Authentication**: Track individual user progress and achievements
-- **Color Matching**: Match target colors with a Delta E color difference metric
-- **Session Tracking**: Record and analyze user performance and color mixing attempts
-- **Interactive UI**: Intuitive interface for adding color drops and monitoring progress
+- Color spectrum analysis and visualization
+- Pigment mixing calculations
+- Database-driven color management
+- Web-based interface for color operations
 
-## Base Colors
+## Local Development
 
-The application uses five base colors for mixing:
-- White [255, 255, 255]
-- Black [0, 0, 0]
-- Red [255, 0, 0]
-- Yellow [255, 255, 0]
-- Blue [0, 0, 255]
+1. Clone the repository
+2. Create a virtual environment: `python -m venv .venv`
+3. Activate the virtual environment: `source .venv/bin/activate` (Linux/Mac) or `.venv\Scripts\activate` (Windows)
+4. Install dependencies: `pip install -r requirements.txt`
+5. Set up environment variables (see Environment Variables section)
+6. Run the application: `python run.py`
 
-## Target Colors
+## Environment Variables
 
-The application includes a variety of target colors to match:
-- Orange [255, 102, 30]
-- Purple [113, 1, 105]
-- Green [78, 150, 100]
-- Pink [255, 179, 188]
-- Olive [128, 128, 0]
-- Custom [98, 135, 96]
-- Peach [255, 229, 180]
-- Coral [255, 128, 80]
-- Turquoise [64, 224, 208]
-- Chartreuse [128, 255, 0]
-- Teal [0, 128, 128]
+Create a `.env` file in the root directory with:
 
-## Technical Stack
+```env
+DATABASE_URL=your_database_connection_string
+SECRET_KEY=your_secret_key
+FLASK_ENV=development
+```
 
-### Backend
-- Flask 2.1.2
-- Flask-SQLAlchemy 2.5.1
-- Python-dotenv 1.0.0
-- Gunicorn 20.1.0
-- Colormath 3.0.0
-- NumPy 1.24.3
+## Database Setup
 
-### Frontend
-- HTML5
-- CSS3
-- JavaScript
-- Mixbox.js (for perceptual color mixing)
+1. Ensure your database is running and accessible
+2. Run the database initialization script: `python init_db.py`
+
+## Deployment on Render
+
+### Prerequisites
+- A Render account
+- A PostgreSQL database (Render provides this)
+
+### Deployment Steps
+
+1. **Connect your GitHub repository to Render**
+   - Go to Render Dashboard
+   - Click "New +" and select "Web Service"
+   - Connect your GitHub repository
+
+2. **Configure the Web Service**
+   - **Name**: `shadematch-python` (or your preferred name)
+   - **Environment**: `Python 3`
+   - **Build Command**: `pip install -r requirements.txt`
+   - **Start Command**: `gunicorn run:app`
+   - **Plan**: Choose your preferred plan (Free tier available)
+
+3. **Environment Variables**
+   - `DATABASE_URL`: Your PostgreSQL connection string from Render
+   - `SECRET_KEY`: A secure random string for Flask sessions
+   - `FLASK_ENV`: Set to `production`
+
+4. **Database Setup**
+   - Create a PostgreSQL database in Render
+   - Copy the connection string to your `DATABASE_URL` environment variable
+   - The app will automatically create tables on first run
+
+### Troubleshooting Render Deployment
+
+If you encounter the "Cannot import 'setuptools.build_meta'" error:
+
+1. **Check requirements.txt**: Ensure all packages have specific versions
+2. **Verify Python version**: The app is configured for Python 3.11.7
+3. **Clear build cache**: Sometimes Render needs a fresh build
+4. **Check logs**: Review the build logs for specific dependency conflicts
+
+### Alternative Deployment Files
+
+The repository includes:
+- `render.yaml`: Render-specific configuration
+- `Procfile`: Alternative deployment configuration
+- `runtime.txt`: Python version specification
 
 ## Project Structure
 
 ```
-.
-├── app/                    # Application package
-├── static/                 # Static files (JS, CSS)
-├── templates/             # HTML templates
+shadematch_python/
+├── app/                    # Flask application package
+│   ├── __init__.py        # App factory and configuration
+│   ├── models.py          # Database models
+│   ├── routes.py          # Route definitions
+│   └── utils.py           # Utility functions
+├── static/                 # Static assets (CSS, JS, images)
+├── templates/              # HTML templates
+├── pigments/               # Pigment data files
+├── requirements.txt        # Python dependencies
 ├── config.py              # Configuration settings
-├── init_db.py            # Database initialization
-├── requirements.txt       # Python dependencies
-└── run.py                # Application entry point
+├── run.py                 # Application entry point
+└── init_db.py             # Database initialization script
 ```
 
-## Setup and Installation
+## Dependencies
 
-1. Clone the repository
-2. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Initialize the database:
-   ```bash
-   python init_db.py
-   ```
-5. Run the application:
-   ```bash
-   python run.py
-   ```
-
-## Usage
-
-1. Start the application and log in
-2. Click "Start" to begin a new color matching session
-3. Add drops of base colors by clicking on the color circles
-4. Try to match the target color shown
-5. The Delta E value shows how close your mix is to the target
-6. When Delta E < 5, the colors are considered matched
-7. Use the control buttons to:
-   - Start/Stop the session
-   - Skip to the next color
-   - Retry the current color
-   - Restart the entire sequence
-
-## Color Mixing Algorithm
-
-The application uses the Mixbox library for perceptual color mixing, which:
-- Converts RGB colors to a latent space representation
-- Performs weighted mixing in the latent space
-- Converts back to RGB for display
-- Provides realistic color mixing simulation
+- **Web Framework**: Flask 2.1.2
+- **Database**: SQLAlchemy, PostgreSQL support
+- **Color Science**: colormath, numpy
+- **Data Processing**: pandas, matplotlib, plotly
+- **Production Server**: gunicorn
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+[Add your license information here] 
