@@ -25,44 +25,64 @@ def spectral():
     # Load CIE data
     wavelengths, x_bar, y_bar, z_bar = load_cie_data()
     
-    # Read pigment data from CSV files
+    # Read pigment data from CSV and TXT files
     pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
     spectrum_plots = {}
     
     for filename in os.listdir(pigments_dir):
-        if filename.endswith('.csv'):
-            # Read the CSV file
-            df = pd.read_csv(os.path.join(pigments_dir, filename))
+        if filename.endswith(('.csv', '.txt')):
+            file_path = os.path.join(pigments_dir, filename)
             
-            # Get wavelengths and reflectance data
-            pigment_wavelengths = df['Wavelength'].tolist()
-            
-            # Calculate average reflectance across all measurements
-            reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
-            
-            # Convert spectrum to XYZ
-            X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
-            
-            # Convert XYZ to RGB
-            rgb = xyz_to_rgb(X, Y, Z)
-            
-            # Get pigment name from filename
-            pigment_name = os.path.splitext(filename)[0].replace('_', ' ').title()
-            
-            # Map filename to color key
-            color_key = filename.lower().replace('.csv', '')
-            if 'phtalo_blue' in color_key:
-                color_key = 'blue'
-            elif 'cadmium_red' in color_key:
-                color_key = 'red'
-            elif 'isoindol_yellow' in color_key:
-                color_key = 'yellow'
-            
-            spectrum_plots[color_key] = {
-                'wavelengths': pigment_wavelengths,
-                'reflectances': reflectances,
-                'rgb': rgb.tolist()
-            }
+            try:
+                if filename.endswith('.csv'):
+                    # Read CSV file
+                    df = pd.read_csv(file_path)
+                    pigment_wavelengths = df['Wavelength'].tolist()
+                    # Calculate average reflectance across all measurements
+                    reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
+                else:
+                    # Read TXT file (space-separated values)
+                    data = []
+                    with open(file_path, 'r') as f:
+                        for line in f:
+                            parts = line.strip().split()
+                            if len(parts) == 2:
+                                try:
+                                    wavelength = float(parts[0])
+                                    reflectance = float(parts[1]) / 100.0  # Convert percentage to decimal
+                                    data.append([wavelength, reflectance])
+                                except ValueError:
+                                    continue
+                    
+                    if data:
+                        data = sorted(data, key=lambda x: x[0])
+                        pigment_wavelengths = [row[0] for row in data]
+                        reflectances = [row[1] for row in data]
+                    else:
+                        continue
+                
+                # Convert spectrum to XYZ
+                X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
+                
+                # Convert XYZ to RGB
+                rgb = xyz_to_rgb(X, Y, Z)
+                
+                # Get pigment name from filename
+                pigment_name = os.path.splitext(filename)[0].replace('_', ' ').title()
+                
+                # Create a unique key for each pigment
+                color_key = os.path.splitext(filename)[0].lower()
+                
+                spectrum_plots[color_key] = {
+                    'wavelengths': pigment_wavelengths,
+                    'reflectances': reflectances,
+                    'rgb': rgb.tolist(),
+                    'name': pigment_name
+                }
+                
+            except Exception as e:
+                print(f"Error loading {filename}: {str(e)}")
+                continue
     
     return render_template('spectral_mixer.html', spectrum_plots=spectrum_plots)
 

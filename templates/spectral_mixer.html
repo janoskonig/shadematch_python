@@ -162,35 +162,17 @@
         <h1>Spectral Mixer</h1>
         
         <div class="color-controls">
-            <div class="color-control" data-color="red">
-                <h2>Cadmium Red</h2>
-                <div class="color-circle" id="redCircle">0</div>
+            {% for color_key, pigment_data in spectrum_plots.items() %}
+            <div class="color-control" data-color="{{ color_key }}">
+                <h2>{{ pigment_data.name }}</h2>
+                <div class="color-circle" id="{{ color_key }}Circle">0</div>
                 <div class="drop-buttons">
-                    <button class="drop-button" id="redMinus">-</button>
-                    <button class="drop-button" id="redPlus">+</button>
+                    <button class="drop-button" id="{{ color_key }}Minus">-</button>
+                    <button class="drop-button" id="{{ color_key }}Plus">+</button>
                 </div>
-                <div class="spectrum-plot" id="redSpectrum"></div>
+                <div class="spectrum-plot" id="{{ color_key }}Spectrum"></div>
             </div>
-            
-            <div class="color-control" data-color="yellow">
-                <h2>Isoindol Yellow</h2>
-                <div class="color-circle" id="yellowCircle">0</div>
-                <div class="drop-buttons">
-                    <button class="drop-button" id="yellowMinus">-</button>
-                    <button class="drop-button" id="yellowPlus">+</button>
-                </div>
-                <div class="spectrum-plot" id="yellowSpectrum"></div>
-            </div>
-            
-            <div class="color-control" data-color="blue">
-                <h2>Phtalo Blue</h2>
-                <div class="color-circle" id="blueCircle">0</div>
-                <div class="drop-buttons">
-                    <button class="drop-button" id="blueMinus">-</button>
-                    <button class="drop-button" id="bluePlus">+</button>
-                </div>
-                <div class="spectrum-plot" id="blueSpectrum"></div>
-            </div>
+            {% endfor %}
         </div>
         
         <div class="mixed-color">

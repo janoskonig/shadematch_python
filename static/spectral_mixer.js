@@ -20,7 +20,13 @@ class SpectralMixer {
         this.wavelengths = spectrum_plots[firstColor].wavelengths;
         this.SIZE = this.wavelengths.length;
         this.GAMMA = 2.4;
-        this.dropCounts = { red: 0, yellow: 0, blue: 0 };
+        
+        // Initialize drop counts for all available pigments
+        this.dropCounts = {};
+        Object.keys(spectrum_plots).forEach(color => {
+            this.dropCounts[color] = 0;
+        });
+        
         this.initializeControls();
         this.initializePlots();
     }
@@ -82,7 +88,7 @@ class SpectralMixer {
     initializeControls() {
         console.log('Initializing controls');
         
-        // Only initialize controls for available pigments
+        // Initialize controls for all available pigments
         Object.keys(this.dropCounts).forEach(color => {
             const control = document.querySelector(`.color-control[data-color="${color}"]`);
             if (!control) {
@@ -130,7 +136,7 @@ class SpectralMixer {
     }
 
     initializePlots() {
-        // Initialize individual color plots
+        // Initialize individual color plots for all pigments
         Object.entries(spectrum_plots).forEach(([color, data]) => {
             const plotDiv = document.getElementById(`${color}Spectrum`);
             if (!plotDiv) return;
@@ -143,7 +149,7 @@ class SpectralMixer {
                 y: data.reflectances,
                 type: 'scatter',
                 mode: 'lines',
-                name: color.charAt(0).toUpperCase() + color.slice(1),
+                name: data.name || color.charAt(0).toUpperCase() + color.slice(1),
                 line: {
                     color: `rgb(${r}, ${g}, ${b})`,
                     width: 2
@@ -151,7 +157,7 @@ class SpectralMixer {
             };
 
             const layout = {
-                title: `${color.charAt(0).toUpperCase() + color.slice(1)} Spectrum`,
+                title: `${data.name || color.charAt(0).toUpperCase() + color.slice(1)} Spectrum`,
                 xaxis: {
                     title: 'Wavelength (nm)',
                     range: [400, 700],
@@ -345,7 +351,7 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing spectral mixer...');
     console.log('Spectrum plots:', spectrum_plots);
     
-    // Initialize plots for each available color
+    // Initialize plots for each available pigment
     Object.keys(spectrum_plots).forEach(color => {
         console.log(`Initializing ${color}...`);
         const plotDiv = document.getElementById(`${color}Spectrum`);
@@ -368,7 +374,7 @@ document.addEventListener('DOMContentLoaded', function() {
             y: plotData.reflectances,
             type: 'scatter',
             mode: 'lines',
-            name: color.charAt(0).toUpperCase() + color.slice(1),
+            name: plotData.name || color.charAt(0).toUpperCase() + color.slice(1),
             line: {
                 color: `rgb(${r}, ${g}, ${b})`,
                 width: 2
@@ -376,7 +382,7 @@ document.addEventListener('DOMContentLoaded', function() {
         };
 
         const layout = {
-            title: `${color.charAt(0).toUpperCase() + color.slice(1)} Spectrum`,
+            title: `${plotData.name || color.charAt(0).toUpperCase() + color.slice(1)} Spectrum`,
             xaxis: {
                 title: 'Wavelength (nm)',
                 range: [400, 700],
