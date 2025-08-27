@@ -73,6 +73,11 @@
       font-size: 16px;
     }
 
+    .welcome-message {
+      font-weight: bold;
+      font-size: 1.1em;
+    }
+
     .user-input-section button {
       background: var(--accent-color);
       color: var(--text-color);
@@ -214,7 +219,7 @@
 
     <div class="user-input-section">
       <div id="stored-user-info" style="display: none;">
-        <p>Welcome back! Loading your results...</p>
+        <p id="welcome-message" style="font-weight: bold; font-size: 1.1em;">Welcome back! Loading your results...</p>
         <button onclick="clearUserAndReload()">Switch User</button>
       </div>
       
@@ -239,6 +244,8 @@
       if (storedUserId) {
         document.getElementById('stored-user-info').style.display = 'block';
         document.getElementById('user-input-form').style.display = 'none';
+        // Update welcome message with user ID
+        document.getElementById('welcome-message').textContent = `Welcome back, ${storedUserId}!`;
         loadUserResults(storedUserId);
       }
     });
