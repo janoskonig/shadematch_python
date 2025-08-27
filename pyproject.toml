@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=69.0.0", "wheel>=0.42.0", "setuptools-scm>=7.1.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "shadematch-python"
+version = "1.0.0"
+description = "A Flask-based color matching and spectral analysis application"
+requires-python = ">=3.13"
+dependencies = [
+    "Flask>=2.3.3",
+    "Flask-SQLAlchemy>=3.1.1",
+    "gunicorn>=21.2.0",
+    "python-dotenv>=1.0.0",
+    "colormath>=3.0.0",
+    "numpy>=1.26.2",
+    "pandas>=2.1.4",
+    "matplotlib>=3.8.2",
+    "openpyxl>=3.1.2",
+    "plotly>=5.17.0",
+    "mysql-connector-python>=8.2.0",
+    "psycopg2-binary>=2.9.9",
+    "Pillow>=10.1.0",
+    "scipy>=1.11.4",
+    "statsmodels>=0.14.0",
+    "scikit-learn>=1.3.2",
+]
+
+[tool.setuptools]
+packages = ["app"]
+
+[tool.setuptools.package-data]
+app = ["templates/*", "static/*"]
