@@ -1,5 +1,5 @@
-# Core dependencies with specific versions for Python 3.13 compatibility
-# Note: For Python 3.13, use pre-compiled wheels when possible
+# Core dependencies with specific versions for Python 3.12 compatibility
+# Note: Python 3.12 provides stable package support and avoids compilation issues
 setuptools==69.0.0
 wheel==0.42.0
 pip==23.3.2
