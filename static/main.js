@@ -4,13 +4,11 @@ import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 
 console.log("✅ main.js loaded");
 let sessionLogs = [];
-let currentSessionSaved = false; // Flag to prevent duplicate saves
 
 // Store user ID globally for this session
 window.currentUserId = localStorage.getItem('userId');
 window.currentUserBirthdate = localStorage.getItem('userBirthdate');
 window.currentUserGender = localStorage.getItem('userGender');
-window.currentSessionSaved = false; // Make accessible to HTML template
 
 // Define dropCounts globally
 let dropCounts = {
@@ -41,10 +39,6 @@ function resetMix() {
     yellow: 0,
     blue: 0
   };
-  
-  // Reset the session saved flag for the new color
-  currentSessionSaved = false;
-  window.currentSessionSaved = false; // Also update global reference
 }
 
 // Listen for user ID changes
@@ -192,8 +186,6 @@ document.addEventListener("DOMContentLoaded", () => {
         };
         sessionLogs.push(session);
         saveSessionToServer(session);
-        currentSessionSaved = true; // Mark this session as saved
-        window.currentSessionSaved = true; // Also update global reference
 
         const skipBtn = document.getElementById("skipBtn");
         skipBtn.disabled = false;
@@ -243,34 +235,29 @@ document.addEventListener("DOMContentLoaded", () => {
     // Get current deltaE value
     const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
     
-    // Only save skip if this wasn't already saved as a successful completion
-    // (i.e., if ΔE is not 0.00, meaning no automatic save happened)
-    if (currentDeltaE !== 0.00) {
-      const skipData = {
-        user_id: window.currentUserId,
-        target_r: targetColor[0],
-        target_g: targetColor[1],
-        target_b: targetColor[2],
-        time_sec: parseFloat(document.getElementById("timer").textContent),
-        timestamp: new Date().toISOString(),
-        delta_e: isNaN(currentDeltaE) ? null : currentDeltaE
-      };
-      
-      fetch('/save_skip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(skipData)
-      })
-      .then(res => res.json())
-      .then(data => {
-        console.log('Skip saved to server:', data);
-      })
-      .catch(error => {
-        console.error('Error saving skip:', error);
-      });
-    } else {
-      console.log('Skip not saved - session already recorded as successful completion');
-    }
+    // Save skip event to database with current deltaE
+    const skipData = {
+      user_id: window.currentUserId,
+      target_r: targetColor[0],
+      target_g: targetColor[1],
+      target_b: targetColor[2],
+      time_sec: parseFloat(document.getElementById("timer").textContent),
+      timestamp: new Date().toISOString(),
+      delta_e: isNaN(currentDeltaE) ? null : currentDeltaE
+    };
+    
+    fetch('/save_skip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(skipData)
+    })
+    .then(res => res.json())
+    .then(data => {
+      console.log('Skip saved to server:', data);
+    })
+    .catch(error => {
+      console.error('Error saving skip:', error);
+    });
     
     currentTargetIndex++;
     if (currentTargetIndex < targetColors.length) {

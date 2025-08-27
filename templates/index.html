@@ -430,9 +430,6 @@
         <button id="restartBtn" disabled>Restart</button>
         <button id="retryBtn" disabled>Retry</button>
         <button id="switchUserBtn">Switch User</button>
-        <a href="/results" style="text-decoration: none;">
-          <button type="button" style="background: var(--accent-color); color: var(--text-color); border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 1em; box-shadow: 0 2px 4px var(--shadow-color);">View Results</button>
-        </a>
       </div>
       <p>⏱️ Time: <span id="timer">0.0</span> sec</p>
     </div>
@@ -539,9 +536,9 @@
       const currentTimer = parseFloat(document.getElementById('timer').textContent);
       
       if (!isNaN(currentDeltaE) && !isNaN(currentTimer)) {
-        // Only save if we have valid data, user has made progress, AND session hasn't been saved yet
+        // Only save if we have valid data and the user has made some progress
         const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
-        if ((totalDrops > 0 || currentDeltaE !== 0) && !window.currentSessionSaved) {
+        if (totalDrops > 0 || currentDeltaE !== 0) {
           const sessionData = {
             user_id: localStorage.getItem('userId'),
             target_r: targetColor[0],
@@ -605,9 +602,9 @@
       const currentTimer = parseFloat(document.getElementById('timer').textContent);
       
       if (!isNaN(currentDeltaE) && !isNaN(currentTimer)) {
-        // Only save if we have valid data, user has made progress, AND session hasn't been saved yet
+        // Only save if we have valid data and the user has made some progress
         const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
-        if ((totalDrops > 0 || currentDeltaE !== 0) && !window.currentSessionSaved) {
+        if (totalDrops > 0 || currentDeltaE !== 0) {
           const sessionData = {
             user_id: localStorage.getItem('userId'),
             target_r: targetColor[0],
