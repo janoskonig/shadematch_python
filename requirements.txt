@@ -17,7 +17,7 @@ colormath==3.0.0
 numpy==1.26.4
 
 # Data Processing and Visualization
-pandas==2.2.0
+pandas==2.3.0
 matplotlib==3.8.2
 openpyxl==3.1.2
 plotly==5.17.0

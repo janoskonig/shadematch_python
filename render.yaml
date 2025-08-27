@@ -5,10 +5,14 @@ services:
     plan: free
     buildCommand: |
       pip install --upgrade pip setuptools wheel
-      pip install -r requirements.txt
+      pip install --only-binary=all --prefer-binary -r requirements.txt
     startCommand: gunicorn run:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.12
       - key: PIP_NO_CACHE_DIR
         value: "1"
+      - key: PIP_PREFER_BINARY
+        value: "1"
+      - key: PIP_ONLY_BINARY
+        value: "all"
