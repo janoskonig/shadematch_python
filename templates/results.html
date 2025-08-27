@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Your Color Matching Results</title>
+  <style>
+    :root {
+      --bg-color: rgb(46, 46, 46);
+      --surface-color: rgb(66, 66, 66);
+      --accent-color: rgb(86, 86, 86);
+      --text-color: white;
+      --border-color: rgb(86, 86, 86);
+      --shadow-color: rgba(0, 0, 0, 0.2);
+      --success-color: #4CAF50;
+      --warning-color: #FF9800;
+      --error-color: #f44336;
+    }
+
+    body {
+      font-family: sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 1400px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 30px;
+    }
+
+    .header h1 {
+      color: var(--text-color);
+      margin-bottom: 10px;
+    }
+
+    .back-link {
+      display: inline-block;
+      background: var(--accent-color);
+      color: var(--text-color);
+      text-decoration: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      margin-bottom: 20px;
+      transition: background-color 0.3s;
+    }
+
+    .back-link:hover {
+      background: var(--surface-color);
+    }
+
+    .user-input-section {
+      background: var(--surface-color);
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 30px;
+      text-align: center;
+      box-shadow: 0 2px 8px var(--shadow-color);
+    }
+
+    .user-input-section input {
+      background: var(--bg-color);
+      border: 1px solid var(--border-color);
+      color: var(--text-color);
+      padding: 10px;
+      border-radius: 4px;
+      margin-right: 10px;
+      font-size: 16px;
+    }
+
+    .user-input-section button {
+      background: var(--accent-color);
+      color: var(--text-color);
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 16px;
+      transition: background-color 0.3s;
+    }
+
+    .user-input-section button:hover {
+      background: var(--surface-color);
+    }
+
+    .results-section {
+      background: var(--surface-color);
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px var(--shadow-color);
+    }
+
+    .results-summary {
+      display: flex;
+      justify-content: space-around;
+      margin-bottom: 20px;
+      padding: 20px;
+      background: var(--bg-color);
+      border-radius: 8px;
+    }
+
+    .summary-item {
+      text-align: center;
+    }
+
+    .summary-number {
+      font-size: 2em;
+      font-weight: bold;
+      color: var(--accent-color);
+    }
+
+    .summary-label {
+      font-size: 0.9em;
+      color: var(--text-color);
+      opacity: 0.8;
+    }
+
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      background: var(--bg-color);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .results-table th,
+    .results-table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .results-table th {
+      background: var(--accent-color);
+      color: var(--text-color);
+      font-weight: bold;
+    }
+
+    .results-table tr:hover {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .color-preview {
+      width: 30px;
+      height: 20px;
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      display: inline-block;
+      margin-right: 10px;
+    }
+
+    .status-skipped {
+      color: var(--warning-color);
+      font-weight: bold;
+    }
+
+    .status-completed {
+      color: var(--success-color);
+      font-weight: bold;
+    }
+
+    .no-results {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-color);
+      opacity: 0.7;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 40px;
+      color: var(--text-color);
+    }
+
+    .error-message {
+      background: var(--error-color);
+      color: white;
+      padding: 15px;
+      border-radius: 4px;
+      margin: 20px 0;
+      text-align: center;
+    }
+
+    @media (max-width: 768px) {
+      .results-table {
+        font-size: 14px;
+      }
+      
+      .results-table th,
+      .results-table td {
+        padding: 8px 6px;
+      }
+      
+      .summary-item {
+        margin: 0 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎨 Your Color Matching Results</h1>
+      <p>View all your color matching attempts and progress</p>
+    </div>
+
+    <a href="/" class="back-link">← Back to Color Mixing</a>
+
+    <div class="user-input-section">
+      <div id="stored-user-info" style="display: none;">
+        <p>Welcome back! Loading your results...</p>
+        <button onclick="clearUserAndReload()">Switch User</button>
+      </div>
+      
+      <div id="user-input-form">
+        <p>Enter your 6-character user ID to view your results:</p>
+        <input type="text" id="userIdInput" placeholder="e.g., ABC123" maxlength="6" style="text-transform: uppercase;">
+        <button onclick="loadUserResults()">View Results</button>
+      </div>
+    </div>
+
+    <div class="results-section">
+      <div id="results-content">
+        <div class="loading">Enter your user ID above to view your results</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Check if user ID is stored in localStorage
+    window.addEventListener('DOMContentLoaded', function() {
+      const storedUserId = localStorage.getItem('userId');
+      if (storedUserId) {
+        document.getElementById('stored-user-info').style.display = 'block';
+        document.getElementById('user-input-form').style.display = 'none';
+        loadUserResults(storedUserId);
+      }
+    });
+
+    function loadUserResults(userId = null) {
+      const userIdToUse = userId || document.getElementById('userIdInput').value.toUpperCase();
+      
+      if (!userIdToUse || userIdToUse.length !== 6) {
+        showError('Please enter a valid 6-character user ID');
+        return;
+      }
+
+      // Show loading state
+      document.getElementById('results-content').innerHTML = '<div class="loading">Loading your results...</div>';
+
+      fetch('/get_user_results', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ user_id: userIdToUse })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'success') {
+          displayResults(data.results, data.total_sessions);
+        } else {
+          showError(data.message || 'Failed to load results');
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        showError('Failed to load results. Please try again.');
+      });
+    }
+
+    function displayResults(results, totalSessions) {
+      if (results.length === 0) {
+        document.getElementById('results-content').innerHTML = 
+          '<div class="no-results">No results found for this user ID. Make sure you have completed some color matching sessions.</div>';
+        return;
+      }
+
+      // Calculate summary statistics
+      const completedSessions = results.filter(r => !r.skipped).length;
+      const skippedSessions = results.filter(r => r.skipped).length;
+      const avgDeltaE = results.filter(r => r.delta_e !== 'N/A' && r.delta_e !== null).reduce((sum, r) => sum + r.delta_e, 0);
+      const avgDeltaEFormatted = avgDeltaE > 0 ? (avgDeltaE / results.filter(r => r.delta_e !== 'N/A' && r.delta_e !== null).length).toFixed(2) : 'N/A';
+
+      const summaryHTML = `
+        <div class="results-summary">
+          <div class="summary-item">
+            <div class="summary-number">${totalSessions}</div>
+            <div class="summary-label">Total Sessions</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-number">${completedSessions}</div>
+            <div class="summary-label">Completed</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-number">${skippedSessions}</div>
+            <div class="summary-label">Skipped</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-number">${avgDeltaEFormatted}</div>
+            <div class="summary-label">Avg ΔE</div>
+          </div>
+        </div>
+      `;
+
+      const tableHTML = `
+        <table class="results-table">
+          <thead>
+            <tr>
+              <th>Date & Time</th>
+              <th>Target Color</th>
+              <th>Drops Used</th>
+              <th>ΔE (CIEDE2000)</th>
+              <th>Time (sec)</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${results.map(result => `
+              <tr>
+                <td>${formatTimestamp(result.timestamp)}</td>
+                <td>
+                  <div class="color-preview" style="background-color: rgb(${result.target_color.match(/\d+/g).join(',')})"></div>
+                  ${result.target_color}
+                </td>
+                <td>
+                  ${result.drops.white > 0 ? `W:${result.drops.white} ` : ''}
+                  ${result.drops.black > 0 ? `B:${result.drops.black} ` : ''}
+                  ${result.drops.red > 0 ? `R:${result.drops.red} ` : ''}
+                  ${result.drops.yellow > 0 ? `Y:${result.drops.yellow} ` : ''}
+                  ${result.drops.blue > 0 ? `Bl:${result.drops.blue}` : ''}
+                  ${Object.values(result.drops).every(d => d === 0) ? 'None' : ''}
+                </td>
+                <td>${result.delta_e === 'N/A' ? 'N/A' : result.delta_e.toFixed(2)}</td>
+                <td>${result.time_sec.toFixed(1)}</td>
+                <td class="${result.skipped ? 'status-skipped' : 'status-completed'}">
+                  ${result.skipped ? '⏭️ Skipped' : '✅ Completed'}
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+
+      document.getElementById('results-content').innerHTML = summaryHTML + tableHTML;
+    }
+
+    function formatTimestamp(timestamp) {
+      if (!timestamp) return 'N/A';
+      const date = new Date(timestamp);
+      return date.toLocaleString();
+    }
+
+    function showError(message) {
+      document.getElementById('results-content').innerHTML = 
+        `<div class="error-message">${message}</div>`;
+    }
+
+    function clearUserAndReload() {
+      localStorage.removeItem('userId');
+      localStorage.removeItem('userBirthdate');
+      localStorage.removeItem('userGender');
+      location.reload();
+    }
+
+    // Allow Enter key to submit
+    document.getElementById('userIdInput').addEventListener('keypress', function(e) {
+      if (e.key === 'Enter') {
+        loadUserResults();
+      }
+    });
+  </script>
+</body>
+</html>
