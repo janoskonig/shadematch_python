@@ -33,3 +33,4 @@ class MixingSession(db.Model):
     delta_e = db.Column(db.Float)
     time_sec = db.Column(db.Float)
     timestamp = db.Column(db.DateTime)
+    skipped = db.Column(db.Boolean, default=False)

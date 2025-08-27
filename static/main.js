@@ -213,8 +213,8 @@ document.addEventListener("DOMContentLoaded", () => {
     stopTimer();
     const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
     
-    // Only save if this wasn't a successful attempt (DeltaE = 0)
-    if (currentDeltaE !== 0) {
+    // Always save the current session data when Stop is clicked
+    if (!isNaN(currentDeltaE)) {  // Only save if we have a valid DeltaE
       const session = {
         user_id: window.currentUserId,
         target: targetColor,
@@ -232,6 +232,33 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("skipBtn").addEventListener("click", () => {
+    // Get current deltaE value
+    const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
+    
+    // Save skip event to database with current deltaE
+    const skipData = {
+      user_id: window.currentUserId,
+      target_r: targetColor[0],
+      target_g: targetColor[1],
+      target_b: targetColor[2],
+      time_sec: parseFloat(document.getElementById("timer").textContent),
+      timestamp: new Date().toISOString(),
+      delta_e: isNaN(currentDeltaE) ? null : currentDeltaE
+    };
+    
+    fetch('/save_skip', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(skipData)
+    })
+    .then(res => res.json())
+    .then(data => {
+      console.log('Skip saved to server:', data);
+    })
+    .catch(error => {
+      console.error('Error saving skip:', error);
+    });
+    
     currentTargetIndex++;
     if (currentTargetIndex < targetColors.length) {
       targetColor = targetColors[currentTargetIndex];

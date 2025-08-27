@@ -195,7 +195,8 @@ def save_session():
             drop_blue=data['drop_blue'],
             delta_e=data['delta_e'],
             time_sec=data['time_sec'],
-            timestamp=datetime.fromisoformat(data['timestamp'])
+            timestamp=datetime.fromisoformat(data['timestamp']),
+            skipped=data.get('skipped', False)
         )
         print('Created session object:', session)
         db.session.add(session)
@@ -205,6 +206,46 @@ def save_session():
         return jsonify({'status': 'success'})
     except Exception as e:
         print('Error saving session:', str(e))
+        print('Error type:', type(e).__name__)
+        db.session.rollback()
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+@main.route('/save_skip', methods=['POST'])
+def save_skip():
+    data = request.get_json()
+    print('Received skip data:', data)
+    
+    try:
+        # Debug database connection
+        print('Database URI:', db.engine.url)
+        print('Database connected:', db.engine.pool.checkedin())
+        
+        # Get deltaE value from request, default to None if not provided
+        delta_e = data.get('delta_e')
+        
+        session = MixingSession(
+            user_id=data['user_id'],
+            target_r=data['target_r'],
+            target_g=data['target_g'],
+            target_b=data['target_b'],
+            drop_white=0,
+            drop_black=0,
+            drop_red=0,
+            drop_yellow=0,
+            drop_blue=0,
+            delta_e=delta_e,
+            time_sec=data['time_sec'],
+            timestamp=datetime.fromisoformat(data['timestamp']),
+            skipped=True
+        )
+        print('Created skip session object:', session)
+        db.session.add(session)
+        print('Added skip session to db.session')
+        db.session.commit()
+        print('Skip session saved successfully')
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        print('Error saving skip session:', str(e))
         print('Error type:', type(e).__name__)
         db.session.rollback()
         return jsonify({'status': 'error', 'error': str(e)}), 500

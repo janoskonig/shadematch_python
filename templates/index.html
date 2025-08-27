@@ -531,6 +531,44 @@
     });
 
     document.getElementById('switchUserBtn').onclick = function() {
+      // Save current session data before switching users
+      const currentDeltaE = parseFloat(document.getElementById('deltaE').textContent);
+      const currentTimer = parseFloat(document.getElementById('timer').textContent);
+      
+      if (!isNaN(currentDeltaE) && !isNaN(currentTimer)) {
+        // Only save if we have valid data and the user has made some progress
+        const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
+        if (totalDrops > 0 || currentDeltaE !== 0) {
+          const sessionData = {
+            user_id: localStorage.getItem('userId'),
+            target_r: targetColor[0],
+            target_g: targetColor[1],
+            target_b: targetColor[2],
+            drop_white: dropCounts.white || 0,
+            drop_black: dropCounts.black || 0,
+            drop_red: dropCounts.red || 0,
+            drop_yellow: dropCounts.yellow || 0,
+            drop_blue: dropCounts.blue || 0,
+            delta_e: currentDeltaE,
+            time_sec: currentTimer,
+            timestamp: new Date().toISOString()
+          };
+          
+          fetch('/save_session', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sessionData)
+          })
+          .then(res => res.json())
+          .then(data => {
+            console.log('Session saved before user switch:', data);
+          })
+          .catch(error => {
+            console.error('Error saving session before user switch:', error);
+          });
+        }
+      }
+      
       showUserModal();
     };
 
@@ -557,6 +595,44 @@
 
     // Initialize the mixed color display
     calculateMixedColor();
+    
+    // Save session data when page is unloaded
+    window.addEventListener('beforeunload', function() {
+      const currentDeltaE = parseFloat(document.getElementById('deltaE').textContent);
+      const currentTimer = parseFloat(document.getElementById('timer').textContent);
+      
+      if (!isNaN(currentDeltaE) && !isNaN(currentTimer)) {
+        // Only save if we have valid data and the user has made some progress
+        const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
+        if (totalDrops > 0 || currentDeltaE !== 0) {
+          const sessionData = {
+            user_id: localStorage.getItem('userId'),
+            target_r: targetColor[0],
+            target_g: targetColor[1],
+            target_b: targetColor[2],
+            drop_white: dropCounts.white || 0,
+            drop_black: dropCounts.black || 0,
+            drop_red: dropCounts.red || 0,
+            drop_yellow: dropCounts.yellow || 0,
+            drop_blue: dropCounts.blue || 0,
+            delta_e: currentDeltaE,
+            time_sec: currentTimer,
+            timestamp: new Date().toISOString()
+          };
+          
+          // Use sendBeacon for reliable data sending during page unload
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon('/save_session', JSON.stringify(sessionData));
+          } else {
+            // Fallback to synchronous XMLHttpRequest
+            const xhr = new XMLHttpRequest();
+            xhr.open('POST', '/save_session', false);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify(sessionData));
+          }
+        }
+      }
+    });
   });
 
   // Optional: Add a "Log out" button somewhere in your app to clear the ID
