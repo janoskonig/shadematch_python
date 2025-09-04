@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, send_from_directory
 from datetime import datetime
 from . import db
 from .models import User, MixingSession
@@ -462,6 +462,15 @@ def mix_colors():
 def color_test():
     return render_template('color_test.html')
 
+@main.route('/ishihara-test')
+def ishihara_test():
+    from flask import make_response
+    response = make_response(render_template('ishihara_test.html'))
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
 @main.route('/spectral_mixer')
 def spectral_mixer():
     return render_template('spectral_mixer.html')
@@ -542,3 +551,9 @@ def reverse_engineer():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
+@main.route('/ishihara/<filename>')
+def serve_ishihara_image(filename):
+    """Serve Ishihara test images"""
+    ishihara_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ishihara')
+    return send_from_directory(ishihara_dir, filename)
