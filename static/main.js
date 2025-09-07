@@ -104,6 +104,8 @@ window.addEventListener('storage', (e) => {
     document.getElementById("skipBtn").disabled = true;
     document.getElementById("restartBtn").disabled = true;
     document.getElementById("retryBtn").disabled = true;
+    // Ensure color mixing is disabled when user changes until Start is clicked
+    disableColorMixing();
   }
 });
 
@@ -157,6 +159,9 @@ function saveSessionToServer(session) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // Disable color mixing by default until Start button is clicked
+  disableColorMixing();
+  
   const baseColors = {
     white: [255, 255, 255],
     black: [0, 0, 0],
@@ -555,6 +560,8 @@ document.getElementById('loginForm').addEventListener('submit', async function(e
             document.getElementById('userModal').style.display = 'none';
             resetMix();
             resetTimerDisplay();
+            // Ensure color mixing is disabled after login until Start is clicked
+            disableColorMixing();
             console.log('User data stored, modal closed');
         } else {
             console.log('Login failed:', data.message);
@@ -571,6 +578,8 @@ document.getElementById('continueBtn').addEventListener('click', function() {
     document.getElementById('userModal').style.display = 'none';
     resetMix();
     resetTimerDisplay();
+    // Ensure color mixing is disabled after continuing until Start is clicked
+    disableColorMixing();
 });
 
 // Handle show login button click

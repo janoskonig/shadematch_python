@@ -620,6 +620,8 @@
     modal.addEventListener('click', function(e) {
       if (e.target === modal) {
         modal.style.display = 'none';
+        // Ensure color mixing is disabled when modal is closed until Start is clicked
+        disableColorMixing();
       }
     });
 
@@ -667,6 +669,8 @@
 
     document.getElementById('continueBtn').onclick = function() {
       document.getElementById('userModal').style.display = 'none';
+      // Ensure color mixing is disabled when continuing until Start is clicked
+      disableColorMixing();
     };
 
     document.getElementById('showLoginBtn').onclick = function() {
