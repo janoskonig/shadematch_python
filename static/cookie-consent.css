@@ -303,6 +303,77 @@
     background: #7f8c8d;
 }
 
+/* MacBook Pro 1728x1117 optimization */
+@media (min-width: 1600px) and (max-width: 1800px) and (min-height: 1000px) and (max-height: 1200px) {
+    .cookie-consent-banner {
+        padding: 25px;
+    }
+
+    .cookie-consent-content {
+        max-width: 1400px;
+        gap: 25px;
+    }
+
+    .cookie-consent-text {
+        font-size: 15px;
+        min-width: 400px;
+    }
+
+    .cookie-consent-text h3 {
+        font-size: 18px;
+        margin-bottom: 10px;
+    }
+
+    .cookie-consent-buttons {
+        gap: 15px;
+    }
+
+    .cookie-consent-btn {
+        padding: 12px 24px;
+        font-size: 15px;
+    }
+
+    .cookie-settings-content {
+        max-width: 700px;
+        max-height: 85vh;
+    }
+
+    .cookie-settings-header {
+        padding: 25px;
+    }
+
+    .cookie-settings-header h2 {
+        font-size: 22px;
+    }
+
+    .cookie-settings-body {
+        padding: 25px;
+    }
+
+    .cookie-category {
+        margin-bottom: 30px;
+        padding: 20px;
+    }
+
+    .cookie-category-title {
+        font-size: 18px;
+    }
+
+    .cookie-category-description {
+        font-size: 15px;
+    }
+
+    .cookie-settings-footer {
+        padding: 25px;
+        gap: 15px;
+    }
+
+    .cookie-settings-btn {
+        padding: 12px 24px;
+        font-size: 15px;
+    }
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     .cookie-consent-content {

@@ -93,6 +93,64 @@
         .nav-links a:hover {
             background: rgba(255, 255, 255, 0.2);
         }
+
+        /* MacBook Pro 1728x1117 optimization */
+        @media (min-width: 1600px) and (max-width: 1800px) and (min-height: 1000px) and (max-height: 1200px) {
+            body {
+                padding: 25px;
+            }
+
+            .container {
+                max-width: 1600px;
+                padding: 25px;
+            }
+
+            h1 {
+                font-size: 2.5em;
+                margin-bottom: 50px;
+            }
+
+            .samples-grid {
+                grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+                gap: 25px;
+                margin-top: 25px;
+            }
+
+            .sample-card {
+                padding: 25px;
+            }
+
+            .sample-name {
+                font-size: 1.3em;
+                margin-bottom: 15px;
+            }
+
+            .color-display {
+                height: 120px;
+                margin-bottom: 15px;
+            }
+
+            .spectrum-plot {
+                height: 250px;
+                margin-top: 15px;
+            }
+
+            .rgb-values {
+                font-size: 1.1em;
+                margin-top: 15px;
+                padding: 8px;
+            }
+
+            .nav-links {
+                margin-bottom: 25px;
+            }
+
+            .nav-links a {
+                padding: 8px 15px;
+                font-size: 1.1em;
+                margin: 0 12px;
+            }
+        }
     </style>
 </head>
 <body>

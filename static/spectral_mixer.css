@@ -189,4 +189,86 @@ body {
 
 .back-button:hover {
     background: #1976D2;
+}
+
+/* MacBook Pro 1728x1117 optimization */
+@media (min-width: 1600px) and (max-width: 1800px) and (min-height: 1000px) and (max-height: 1200px) {
+    body {
+        padding: 25px;
+    }
+
+    .container {
+        max-width: 1600px;
+        padding: 25px;
+    }
+
+    .controls {
+        gap: 25px;
+        margin-bottom: 30px;
+    }
+
+    .color-control {
+        padding: 20px;
+        min-width: 180px;
+    }
+
+    .color-circle {
+        width: 120px;
+        height: 120px;
+        font-size: 28px;
+    }
+
+    .drop-button {
+        width: 45px;
+        height: 45px;
+        font-size: 22px;
+    }
+
+    #spectrumPlot {
+        height: 350px;
+        margin: 25px 0;
+    }
+
+    .spectrum-plot {
+        width: 220px;
+        height: 70px;
+        margin-bottom: 15px;
+    }
+
+    .mixed-color {
+        margin-top: 40px;
+        padding: 25px;
+    }
+
+    .mixed-color h2 {
+        font-size: 1.8em;
+        margin-bottom: 25px;
+    }
+
+    #mixedColorBox {
+        width: 120px;
+        height: 120px;
+        margin-bottom: 15px;
+    }
+
+    #colorValues {
+        font-size: 18px;
+        margin: 15px 0;
+    }
+
+    #resetButton {
+        padding: 12px 25px;
+        font-size: 18px;
+    }
+
+    #mixedSpectrumPlot {
+        height: 180px;
+        margin: 25px 0;
+    }
+
+    .back-button {
+        padding: 12px 25px;
+        font-size: 1.1em;
+        margin-top: 25px;
+    }
 } 
