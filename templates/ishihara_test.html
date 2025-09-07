@@ -284,6 +284,9 @@
         <div class="header">
             <h1>Ishihara Color Vision Test</h1>
             <p>Identify the number or pattern you see in each circle</p>
+            <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 10px; margin: 10px 0; color: #856404;">
+                <strong>⚠️ TEMPORARY:</strong> This test is currently limited to 5 plates for testing purposes.
+            </div>
             <div class="test-info">
                 <span id="timer">Time: 00:00</span> | 
                 <span id="currentPlate">Loading...</span>
@@ -355,7 +358,11 @@
             const headers = lines[0].split(',');
             const plates = [];
             
-            for (let i = 1; i < lines.length; i++) {
+            // TEMPORARY: Only process first 5 plates (skip last 20)
+            // TO REVERT: Change maxPlates back to lines.length - 1 or remove this limit entirely
+            const maxPlates = 5;
+            
+            for (let i = 1; i <= maxPlates && i < lines.length; i++) {
                 const values = lines[i].split(',');
                 const plate = {
                     id: parseInt(values[0]),
@@ -534,6 +541,9 @@
             document.getElementById('results').style.display = 'block';
             
             testCompleted = true;
+            
+            // Register the user after completing the Ishihara test
+            registerUserAfterTest();
         }
 
         // Get result message based on score
@@ -543,6 +553,62 @@
             if (score >= 70) return "Moderate color vision deficiency detected.";
             if (score >= 60) return "Significant color vision deficiency detected.";
             return "Severe color vision deficiency detected. Consider consulting an eye care professional.";
+        }
+
+        // Register user after completing the Ishihara test
+        async function registerUserAfterTest() {
+            try {
+                const birthdate = localStorage.getItem('userBirthdate');
+                const gender = localStorage.getItem('userGender');
+                
+                if (!birthdate || !gender) {
+                    console.error('Missing user data for registration');
+                    return;
+                }
+                
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        birthdate: birthdate,
+                        gender: gender
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    // Store the user ID
+                    localStorage.setItem('userId', data.userId);
+                    console.log('User registered successfully with ID:', data.userId);
+                    
+                    // Display the user ID to the user
+                    displayUserID(data.userId);
+                } else {
+                    console.error('Registration failed:', data.message);
+                }
+            } catch (error) {
+                console.error('Error registering user:', error);
+            }
+        }
+
+        // Display the user ID to the user
+        function displayUserID(userId) {
+            const resultMessage = document.getElementById('resultMessage');
+            const currentContent = resultMessage.innerHTML;
+            
+            resultMessage.innerHTML = `
+                ${currentContent}<br><br>
+                <div style="background: #e8f5e8; border: 2px solid #28a745; border-radius: 10px; padding: 20px; margin: 20px 0; text-align: center;">
+                    <h3 style="color: #28a745; margin: 0 0 10px 0;">🎉 Your User ID</h3>
+                    <div style="font-size: 2em; font-weight: bold; color: #2c3e50; letter-spacing: 3px; margin: 10px 0;">${userId}</div>
+                    <p style="margin: 10px 0 0 0; color: #6c757d; font-size: 0.9em;">
+                        Save this ID to access your results later!
+                    </p>
+                </div>
+            `;
         }
 
         // Event listeners

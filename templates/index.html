@@ -357,21 +357,11 @@
     </div>
   </div>
 
-  <h1>Color Mixing App</h1>
+  <h1>Welcome to your digital color mixing palette!</h1>
+  <p style="text-align: center; font-size: 1.2em; color: #666; margin: 10px 0 30px 0;">
+    Once you are ready, hit Start and enjoy the game!
+  </p>
 
-  <div style="max-width: 800px; margin: 20px auto; padding: 20px; background-color: var(--surface-color); border-radius: 8px; box-shadow: 0 2px 8px var(--shadow-color);">
-    <h2 style="margin-top: 0;">Kedves Kollégák!</h2>
-    <p style="line-height: 1.6;">
-      Szeretném, ha egy kicsit nyomkodnátok, használnátok a színkeverős webalkalmazásunkat. 
-      A célunk az vele, hogy megismerjük a "laikusok" színkeverő teljesítményét a bőrszínek színterében. 
-      Ha bármi hibaüzenetet tapasztaltok, 
-      kérlek jelezzétek nekem <a href="mailto:konig.janos@semmelweis.hu">e-mailben</a> "SHADEMATCH" tárggyal. Köszönjük!
-    </p>
-    <p style="margin-bottom: 0;">
-      König János<br>
-      Labancz Laura
-    </p>
-  </div>
 
   <div style="display: flex; gap: 20px; max-width: 1200px; margin: 20px auto; padding: 0 20px;">
     <!-- Main Content -->
@@ -686,4 +676,14 @@
 
   <!-- ✅ Load your app's logic -->
   <script type="module" src="{{ url_for('static', filename='main.js') }}"></script>
+
+  <!-- SHADE Study Footer -->
+  <footer style="text-align: center; padding: 20px; margin-top: 40px; border-top: 1px solid #e0e0e0; background-color: #f8f9fa; color: #666; font-size: 0.9em;">
+    <p style="margin: 0;">
+      <strong>S.H.A.D.E.</strong> - Study of Human Accuracy in Digital Experiments
+    </p>
+    <p style="margin: 5px 0 0 0; font-size: 0.8em; opacity: 0.8;">
+      © 2024 König János, Labancz Laura
+    </p>
+  </footer>
 {% endblock %}

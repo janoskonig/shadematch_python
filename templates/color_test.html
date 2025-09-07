@@ -351,7 +351,11 @@
       const headers = lines[0].split(',');
       const plates = [];
       
-      for (let i = 1; i < lines.length; i++) {
+      // TEMPORARY: Only process first 5 plates (skip last 20)
+      // TO REVERT: Change maxPlates back to lines.length - 1 or remove this limit entirely
+      const maxPlates = 5;
+      
+      for (let i = 1; i <= maxPlates && i < lines.length; i++) {
         const values = lines[i].split(',');
         const plate = {
           id: parseInt(values[0]),
@@ -564,16 +568,38 @@
           localStorage.setItem('userId', data.userId);
           console.log('User registered successfully with ID:', data.userId);
           
+          // Display the user ID to the user
+          displayUserID(data.userId);
+          
           // Update the continue button to show success
           const continueBtn = document.querySelector('.continue-btn');
-          continueBtn.textContent = 'Continue to Color Mixing App';
-          continueBtn.style.background = '#28a745';
+          if (continueBtn) {
+            continueBtn.textContent = 'Continue to Color Mixing App';
+            continueBtn.style.background = '#28a745';
+          }
         } else {
           console.error('Registration failed:', data.message);
         }
       } catch (error) {
         console.error('Error registering user:', error);
       }
+    }
+
+    // Display the user ID to the user
+    function displayUserID(userId) {
+      const resultMessage = document.getElementById('resultMessage');
+      const currentContent = resultMessage.innerHTML;
+      
+      resultMessage.innerHTML = `
+        ${currentContent}<br><br>
+        <div style="background: #e8f5e8; border: 2px solid #28a745; border-radius: 10px; padding: 20px; margin: 20px 0; text-align: center;">
+          <h3 style="color: #28a745; margin: 0 0 10px 0;">🎉 Your User ID</h3>
+          <div style="font-size: 2em; font-weight: bold; color: #2c3e50; letter-spacing: 3px; margin: 10px 0;">${userId}</div>
+          <p style="margin: 10px 0 0 0; color: #6c757d; font-size: 0.9em;">
+            Save this ID to access your results later!
+          </p>
+        </div>
+      `;
     }
 
     // Get result message based on score
