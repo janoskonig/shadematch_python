@@ -557,3 +557,54 @@ def serve_ishihara_image(filename):
     """Serve Ishihara test images"""
     ishihara_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ishihara')
     return send_from_directory(ishihara_dir, filename)
+
+@main.route('/privacy-policy')
+def privacy_policy():
+    """Privacy Policy page for GDPR compliance"""
+    return render_template('privacy_policy.html')
+
+@main.route('/cookie-consent', methods=['POST'])
+def save_cookie_consent():
+    """Save user's cookie consent preferences"""
+    try:
+        data = request.get_json()
+        consent_data = data.get('consent', {})
+        
+        # Log consent for audit purposes (optional)
+        print(f"Cookie consent received: {consent_data}")
+        
+        # Here you could save to database if needed
+        # For now, we'll just return success as the consent is stored in browser cookies
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Cookie preferences saved successfully'
+        })
+    except Exception as e:
+        print(f"Error saving cookie consent: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to save cookie preferences'
+        }), 500
+
+@main.route('/cookie-consent', methods=['GET'])
+def get_cookie_consent():
+    """Get current cookie consent status"""
+    try:
+        # This could be used to check server-side consent status
+        # For now, we'll return a basic response
+        return jsonify({
+            'status': 'success',
+            'consent_required': True,
+            'categories': {
+                'necessary': True,
+                'analytics': False,
+                'preferences': False
+            }
+        })
+    except Exception as e:
+        print(f"Error getting cookie consent: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': 'Failed to get cookie preferences'
+        }), 500

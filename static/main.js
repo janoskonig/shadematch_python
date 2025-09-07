@@ -6,6 +6,49 @@ console.log("✅ main.js loaded");
 let sessionLogs = [];
 let currentSessionSaved = false; // Flag to prevent duplicate saves
 
+// Cookie Consent Integration Example
+// This shows how to use the cookie consent system in your application
+document.addEventListener('DOMContentLoaded', function() {
+    // Wait for cookie consent to be initialized
+    setTimeout(() => {
+        if (window.cookieConsent) {
+            console.log("🍪 Cookie consent system loaded");
+            
+            // Example: Only track analytics if user has consented
+            if (window.cookieConsent.canUseAnalytics()) {
+                console.log("📊 Analytics cookies enabled - tracking user interactions");
+                // Here you would initialize Google Analytics or other tracking
+                // gtag('config', 'GA_MEASUREMENT_ID');
+            } else {
+                console.log("📊 Analytics cookies disabled - respecting user privacy");
+            }
+            
+            // Example: Only save preferences if user has consented
+            if (window.cookieConsent.canUsePreferences()) {
+                console.log("⚙️ Preference cookies enabled - saving user settings");
+                // Here you would save user preferences
+            } else {
+                console.log("⚙️ Preference cookies disabled - not saving preferences");
+            }
+            
+            // Listen for consent changes
+            document.addEventListener('cookieConsentUpdated', function(event) {
+                const consent = event.detail;
+                console.log("🍪 Cookie consent updated:", consent);
+                
+                // Update services based on new consent
+                if (consent.categories.analytics) {
+                    console.log("📊 Enabling analytics tracking");
+                    // Enable analytics
+                } else {
+                    console.log("📊 Disabling analytics tracking");
+                    // Disable analytics
+                }
+            });
+        }
+    }, 1000);
+});
+
 // Store user ID globally for this session
 window.currentUserId = localStorage.getItem('userId');
 window.currentUserBirthdate = localStorage.getItem('userBirthdate');

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Policy - ShadeMatch{% endblock %}
+
+{% block extra_css %}
+<style>
+    :root {
+        --bg-color: rgb(46, 46, 46);
+        --surface-color: rgb(66, 66, 66);
+        --accent-color: rgb(86, 86, 86);
+        --text-color: white;
+        --border-color: rgb(86, 86, 86);
+        --shadow-color: rgba(0, 0, 0, 0.2);
+    }
+
+    body {
+        font-family: sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        line-height: 1.6;
+        margin: 0;
+        padding: 20px;
+    }
+
+    .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: var(--surface-color);
+        padding: 40px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px var(--shadow-color);
+    }
+
+    h1 {
+        color: var(--text-color);
+        text-align: center;
+        margin-bottom: 30px;
+        border-bottom: 2px solid var(--accent-color);
+        padding-bottom: 10px;
+    }
+
+    h2 {
+        color: var(--accent-color);
+        margin-top: 30px;
+        margin-bottom: 15px;
+    }
+
+    h3 {
+        color: var(--text-color);
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+
+    p {
+        margin-bottom: 15px;
+    }
+
+    ul {
+        margin-bottom: 15px;
+        padding-left: 20px;
+    }
+
+    li {
+        margin-bottom: 5px;
+    }
+
+    .contact-info {
+        background-color: var(--bg-color);
+        padding: 20px;
+        border-radius: 6px;
+        margin-top: 30px;
+        border-left: 4px solid var(--accent-color);
+    }
+
+    .back-link {
+        display: inline-block;
+        margin-bottom: 20px;
+        color: var(--accent-color);
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .back-link:hover {
+        color: var(--text-color);
+    }
+
+    .last-updated {
+        text-align: center;
+        font-style: italic;
+        color: #bdc3c7;
+        margin-top: 30px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <a href="/" class="back-link">← Back to ShadeMatch</a>
+    
+    <h1>Privacy Policy</h1>
+    
+    <p><strong>Last Updated:</strong> December 2024</p>
+    
+    <h2>1. Introduction</h2>
+    <p>
+        This Privacy Policy explains how ShadeMatch ("we", "our", or "us") collects, uses, and protects your personal information when you use our color vision testing and color mixing application.
+    </p>
+    
+    <h2>2. Information We Collect</h2>
+    
+    <h3>2.1 Personal Information</h3>
+    <p>We may collect the following personal information:</p>
+    <ul>
+        <li><strong>User ID:</strong> A randomly generated 6-character identifier</li>
+        <li><strong>Birthdate:</strong> For research purposes related to color vision</li>
+        <li><strong>Gender:</strong> For demographic analysis (optional)</li>
+        <li><strong>Test Results:</strong> Color mixing performance data and timing</li>
+    </ul>
+    
+    <h3>2.2 Technical Information</h3>
+    <p>We automatically collect certain technical information:</p>
+    <ul>
+        <li>Browser type and version</li>
+        <li>Device information</li>
+        <li>IP address (anonymized)</li>
+        <li>Session data for application functionality</li>
+    </ul>
+    
+    <h2>3. How We Use Your Information</h2>
+    <p>We use your information for the following purposes:</p>
+    <ul>
+        <li><strong>Research:</strong> To study color vision and color mixing performance</li>
+        <li><strong>Application Functionality:</strong> To provide personalized color testing experiences</li>
+        <li><strong>Analytics:</strong> To understand how users interact with our application</li>
+        <li><strong>Improvement:</strong> To enhance our application and research methods</li>
+    </ul>
+    
+    <h2>4. Cookie Usage</h2>
+    <p>We use cookies to enhance your experience:</p>
+    
+    <h3>4.1 Necessary Cookies</h3>
+    <p>These cookies are essential for the website to function properly:</p>
+    <ul>
+        <li>Session management</li>
+        <li>User authentication</li>
+        <li>Security tokens</li>
+    </ul>
+    
+    <h3>4.2 Analytics Cookies</h3>
+    <p>These cookies help us understand website usage (with your consent):</p>
+    <ul>
+        <li>Page views and user interactions</li>
+        <li>Performance metrics</li>
+        <li>Error tracking</li>
+    </ul>
+    
+    <h3>4.3 Preference Cookies</h3>
+    <p>These cookies remember your settings (with your consent):</p>
+    <ul>
+        <li>Display preferences</li>
+        <li>Language settings</li>
+        <li>Theme preferences</li>
+    </ul>
+    
+    <p><strong>Note:</strong> We do not use marketing or advertising cookies.</p>
+    
+    <h2>5. Data Sharing</h2>
+    <p>We do not sell, trade, or otherwise transfer your personal information to third parties, except:</p>
+    <ul>
+        <li>For research purposes with anonymized data</li>
+        <li>When required by law</li>
+        <li>To protect our rights and safety</li>
+    </ul>
+    
+    <h2>6. Data Security</h2>
+    <p>We implement appropriate security measures to protect your personal information:</p>
+    <ul>
+        <li>Encrypted data transmission</li>
+        <li>Secure data storage</li>
+        <li>Regular security updates</li>
+        <li>Access controls and monitoring</li>
+    </ul>
+    
+    <h2>7. Your Rights (GDPR)</h2>
+    <p>Under the General Data Protection Regulation, you have the right to:</p>
+    <ul>
+        <li><strong>Access:</strong> Request a copy of your personal data</li>
+        <li><strong>Rectification:</strong> Correct inaccurate personal data</li>
+        <li><strong>Erasure:</strong> Request deletion of your personal data</li>
+        <li><strong>Portability:</strong> Receive your data in a structured format</li>
+        <li><strong>Objection:</strong> Object to processing of your personal data</li>
+        <li><strong>Withdraw Consent:</strong> Withdraw consent for cookie usage</li>
+    </ul>
+    
+    <h2>8. Data Retention</h2>
+    <p>We retain your personal information for as long as necessary to:</p>
+    <ul>
+        <li>Provide our services</li>
+        <li>Conduct research</li>
+        <li>Comply with legal obligations</li>
+        <li>Resolve disputes</li>
+    </ul>
+    
+    <h2>9. Age Requirements</h2>
+    <p>Our application is intended for individuals aged 18 and above. We do not knowingly collect personal information from individuals under 18 years of age.</p>
+    
+    <h2>10. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page.</p>
+    
+    <div class="contact-info">
+        <h2>11. Contact Information</h2>
+        <p>If you have any questions about this Privacy Policy or our data practices, please contact us:</p>
+        <p>
+            <strong>Email:</strong> <a href="mailto:konig.janos@semmelweis.hu" style="color: var(--accent-color);">konig.janos@semmelweis.hu</a><br>
+            <strong>Subject Line:</strong> "SHADEMATCH Privacy Policy"<br>
+            <strong>Institution:</strong> Semmelweis University
+        </p>
+    </div>
+    
+    <div class="last-updated">
+        <p>This Privacy Policy was last updated on December 2024.</p>
+    </div>
+</div>
+{% endblock %}

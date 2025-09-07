@@ -1,13 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ishihara Color Vision Test</title>
+{% extends "base.html" %}
+
+{% block title %}Ishihara Color Vision Test{% endblock %}
+
+{% block extra_head %}
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
-    <style>
+{% endblock %}
+
+{% block extra_css %}
+<style>
         * {
             margin: 0;
             padding: 0;
@@ -275,8 +277,9 @@
             }
         }
     </style>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
     <div class="test-container">
         <div class="header">
             <h1>Ishihara Color Vision Test</h1>
@@ -556,6 +559,5 @@
         // Load test data when page loads
         document.addEventListener('DOMContentLoaded', loadTestData);
     </script>
-</body>
-</html>
+{% endblock %}
 

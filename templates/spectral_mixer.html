@@ -1,11 +1,13 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Spectral Mixer</title>
+{% extends "base.html" %}
+
+{% block title %}Spectral Mixer{% endblock %}
+
+{% block extra_head %}
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <style>
+{% endblock %}
+
+{% block extra_css %}
+<style>
         :root {
             --surface-color: white;
             --background-color: rgb(46, 46, 46);
@@ -151,8 +153,9 @@
             background: rgba(255, 255, 255, 0.2);
         }
     </style>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
     <div class="container">
         <div class="nav-links">
             <a href="/spectral">Spectral Mixer</a>
@@ -186,6 +189,5 @@
         // Make spectrum_plots available to JavaScript
         const spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
     </script>
-    <script src="{{ url_for('static', filename='spectral_mixer.js') }}"></script>
-</body>
-</html> 
+    <script src="{{ url_for('static', filename='spectral_mixer.js') }}">    </script>
+{% endblock %} 

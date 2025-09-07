@@ -1,9 +1,9 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Color Mixing App</title>
-  <style>
+{% extends "base.html" %}
+
+{% block title %}Color Mixing App{% endblock %}
+
+{% block extra_css %}
+<style>
     :root {
       --bg-color: rgb(46, 46, 46);  /* 18% grey */
       --surface-color: rgb(66, 66, 66);
@@ -300,14 +300,9 @@
       text-align: center;
     }
   </style>
+{% endblock %}
 
-  <!-- ✅ Load Mixbox for perceptual mixing -->
-  <script src="{{ url_for('static', filename='mixbox.js') }}"></script>
-
-  <!-- ✅ Load your app's logic -->
-  <script type="module" src="{{ url_for('static', filename='main.js') }}"></script>
-</head>
-<body>
+{% block content %}
   <div id="userModal">
     <div class="modal-content">
       <div id="registerSection">
@@ -683,6 +678,12 @@
     return mixedColor;
   }
   </script>
+{% endblock %}
 
-</body>
-</html>
+{% block extra_js %}
+  <!-- ✅ Load Mixbox for perceptual mixing -->
+  <script src="{{ url_for('static', filename='mixbox.js') }}"></script>
+
+  <!-- ✅ Load your app's logic -->
+  <script type="module" src="{{ url_for('static', filename='main.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}ShadeMatch{% endblock %}</title>
+    
+    <!-- GDPR Cookie Consent CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='cookie-consent.css') }}">
+    
+    <!-- Additional CSS -->
+    {% block extra_css %}{% endblock %}
+    
+    <!-- Additional head content -->
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <!-- Main content -->
+    {% block content %}{% endblock %}
+    
+    <!-- GDPR Cookie Consent JavaScript -->
+    <script src="{{ url_for('static', filename='cookie-consent.js') }}"></script>
+    
+    <!-- Additional JavaScript -->
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

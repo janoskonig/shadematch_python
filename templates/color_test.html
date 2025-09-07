@@ -1,12 +1,15 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Ishihara Color Vision Test</title>
+{% extends "base.html" %}
+
+{% block title %}Ishihara Color Vision Test{% endblock %}
+
+{% block extra_head %}
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
-  <style>
+{% endblock %}
+
+{% block extra_css %}
+<style>
     :root {
       --bg-color: rgb(46, 46, 46);
       --surface-color: rgb(66, 66, 66);
@@ -271,8 +274,9 @@
       }
     }
   </style>
-</head>
-<body>
+{% endblock %}
+
+{% block content %}
   <div class="test-container">
     <div class="header">
       <h1>Ishihara Color Vision Test</h1>
@@ -526,6 +530,50 @@
       document.getElementById('results').style.display = 'block';
       
       testCompleted = true;
+      
+      // Register the user after completing the Ishihara test
+      registerUserAfterTest();
+    }
+    
+    // Register user after completing the Ishihara test
+    async function registerUserAfterTest() {
+      try {
+        const birthdate = localStorage.getItem('userBirthdate');
+        const gender = localStorage.getItem('userGender');
+        
+        if (!birthdate || !gender) {
+          console.error('Missing user data for registration');
+          return;
+        }
+        
+        const response = await fetch('/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            birthdate: birthdate,
+            gender: gender
+          })
+        });
+        
+        const data = await response.json();
+        
+        if (data.status === 'success') {
+          // Store the user ID
+          localStorage.setItem('userId', data.userId);
+          console.log('User registered successfully with ID:', data.userId);
+          
+          // Update the continue button to show success
+          const continueBtn = document.querySelector('.continue-btn');
+          continueBtn.textContent = 'Continue to Color Mixing App';
+          continueBtn.style.background = '#28a745';
+        } else {
+          console.error('Registration failed:', data.message);
+        }
+      } catch (error) {
+        console.error('Error registering user:', error);
+      }
     }
 
     // Get result message based on score
@@ -544,5 +592,4 @@
     // Load test data when page loads
     document.addEventListener('DOMContentLoaded', loadTestData);
   </script>
-</body>
-</html> 
+{% endblock %} 
