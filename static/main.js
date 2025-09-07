@@ -253,6 +253,9 @@ document.addEventListener("DOMContentLoaded", () => {
     resetMix();
     startTimer();
 
+    // Enable color mixing functionality
+    enableColorMixing();
+
     document.getElementById("stopBtn").disabled = false;
     document.getElementById("startBtn").disabled = true;
     document.getElementById("restartBtn").disabled = false;
@@ -277,6 +280,9 @@ document.addEventListener("DOMContentLoaded", () => {
       sessionLogs.push(session);
       saveSessionToServer(session);
     }
+    
+    // Disable color mixing functionality
+    disableColorMixing();
     
     document.getElementById("skipBtn").disabled = false;
     document.getElementById("stopBtn").disabled = true;
@@ -337,6 +343,10 @@ document.addEventListener("DOMContentLoaded", () => {
     resetMix();
     resetTimerDisplay();
     startTimer();
+    
+    // Enable color mixing functionality
+    enableColorMixing();
+    
     document.getElementById("stopBtn").disabled = false;
     document.getElementById("skipBtn").disabled = false;
     document.getElementById("skipBtn").disabled = true;
@@ -363,6 +373,10 @@ document.addEventListener("DOMContentLoaded", () => {
     resetTimerDisplay();
     stopTimer();  // Make sure to stop any running timer
     startTimer(); // Start a fresh timer
+    
+    // Enable color mixing functionality
+    enableColorMixing();
+    
     document.getElementById("stopBtn").disabled = false;
     document.getElementById("skipBtn").disabled = false;
     document.getElementById("skipBtn").disabled = true;
@@ -389,6 +403,56 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   });
+
+  // Function to disable color mixing functionality
+  function disableColorMixing() {
+    // Hide the target color and current mix display
+    const targetColorElement = document.getElementById("targetColor");
+    const currentMixElement = document.getElementById("currentMix");
+    if (targetColorElement) targetColorElement.style.display = "none";
+    if (currentMixElement) currentMixElement.style.display = "none";
+    
+    // Hide the palette with color controls
+    const paletteElement = document.getElementById("palette");
+    if (paletteElement) paletteElement.style.display = "none";
+    
+    // Disable all color circle click events
+    document.querySelectorAll(".color-circle").forEach(circle => {
+      circle.style.pointerEvents = "none";
+      circle.style.opacity = "0.5";
+    });
+    
+    // Disable all minus button click events
+    document.querySelectorAll(".minus-button").forEach(button => {
+      button.disabled = true;
+      button.style.opacity = "0.5";
+    });
+  }
+
+  // Function to enable color mixing functionality
+  function enableColorMixing() {
+    // Show the target color and current mix display
+    const targetColorElement = document.getElementById("targetColor");
+    const currentMixElement = document.getElementById("currentMix");
+    if (targetColorElement) targetColorElement.style.display = "";
+    if (currentMixElement) currentMixElement.style.display = "";
+    
+    // Show the palette with color controls
+    const paletteElement = document.getElementById("palette");
+    if (paletteElement) paletteElement.style.display = "";
+    
+    // Enable all color circle click events
+    document.querySelectorAll(".color-circle").forEach(circle => {
+      circle.style.pointerEvents = "";
+      circle.style.opacity = "";
+    });
+    
+    // Enable all minus button click events
+    document.querySelectorAll(".minus-button").forEach(button => {
+      button.disabled = false;
+      button.style.opacity = "";
+    });
+  }
 
   // Optionally, you can comment out or remove the CSV export logic below if you no longer want to support CSV export.
   // document.getElementById("exportBtn").addEventListener("click", () => {
