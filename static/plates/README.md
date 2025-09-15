@@ -46,3 +46,5 @@ The test configuration (answers, options, questions) is stored in `../ishihara_t
 - Plates can be created using graphic design software or specialized Ishihara plate generators
 
 
+
+
