@@ -170,22 +170,58 @@ document.addEventListener("DOMContentLoaded", () => {
     blue: [0, 0, 255]
   };
 
+  // Hard-coded target colors with skin color classifications
   const targetColors = [
-    [255, 102, 30],    // Orange
-    [113, 1, 105],     // Purple
-    [78, 150, 100],    // Green
-    [255, 179, 188],   // Pink
-    [113, 112, 62],     // Olive
-    [111, 122, 102],     // Custom
-    [255, 229, 180],   // Peach
-    [255, 129, 82],    // Coral
-    [102, 158, 165],    // Turquoise
-    [161, 212, 103],     // Chartreuse
-    [79, 123, 122]      // Teal
+    // Basic colors
+    { name: 'Orange', type: 'basic', classification: null, rgb: [255, 102, 30] },
+    { name: 'Purple', type: 'basic', classification: null, rgb: [113, 1, 105] },
+    { name: 'Green', type: 'basic', classification: null, rgb: [78, 150, 100] },
+    { name: 'Pink', type: 'basic', classification: null, rgb: [255, 179, 188] },
+    { name: 'Olive', type: 'basic', classification: null, rgb: [113, 112, 62] },
+    { name: 'Custom', type: 'basic', classification: null, rgb: [111, 122, 102] },
+    { name: 'Peach', type: 'basic', classification: null, rgb: [255, 228, 175] },
+    { name: 'Coral', type: 'basic', classification: null, rgb: [255, 131, 82] },
+    { name: 'Turquoise', type: 'basic', classification: null, rgb: [103, 157, 174] },
+    { name: 'Chartreuse', type: 'basic', classification: null, rgb: [157, 210, 103] },
+    { name: 'Teal', type: 'basic', classification: null, rgb: [84, 122, 122] },
+    
+    // Skin colors - Light
+    { name: '#D1AE90', type: 'skin', classification: 'skin_light', rgb: [208, 176, 148] },
+    { name: '#AE967E', type: 'skin', classification: 'skin_light', rgb: [175, 149, 126] },
+    { name: '#C3A28F', type: 'skin', classification: 'skin_light', rgb: [242, 166, 129] },
+    { name: '#BE8870', type: 'skin', classification: 'skin_light', rgb: [193, 135, 115] },
+    { name: '#6D544D', type: 'skin', classification: 'skin_light', rgb: [178, 125, 107] },
+    { name: '#34261B', type: 'skin', classification: 'skin_light', rgb: [205, 87, 91] },
+    { name: '#C8AF91', type: 'skin', classification: 'skin_light', rgb: [208, 176, 148] },
+    { name: '#A97367', type: 'skin', classification: 'skin_light', rgb: [172, 115, 104] },
+    { name: '#CB9781', type: 'skin', classification: 'skin_light', rgb: [212, 147, 125] },
+    { name: '#B68678', type: 'skin', classification: 'skin_light', rgb: [193, 135, 115] },
+    { name: '#E8B7BA', type: 'skin', classification: 'skin_light', rgb: [228, 183, 190] },
+    { name: '#A58F5E', type: 'skin', classification: 'skin_light', rgb: [167, 145, 92] },
+    { name: '#B5866A', type: 'skin', classification: 'skin_light', rgb: [180, 134, 106] },
+    { name: '#DE958F', type: 'skin', classification: 'skin_light', rgb: [225, 155, 151] },
+    
+    // Skin colors - Dark
+    { name: '#99856A', type: 'skin', classification: 'skin_dark', rgb: [155, 131, 108] },
+    { name: '#A8856F', type: 'skin', classification: 'skin_dark', rgb: [182, 137, 96] },
+    { name: '#A07E63', type: 'skin', classification: 'skin_dark', rgb: [169, 120, 74] },
+    { name: '#80685C', type: 'skin', classification: 'skin_dark', rgb: [143, 103, 88] },
+    { name: '#584B42', type: 'skin', classification: 'skin_dark', rgb: [88, 71, 52] },
+    { name: '#7B5749', type: 'skin', classification: 'skin_dark', rgb: [127, 84, 67] },
+    { name: '#543B34', type: 'skin', classification: 'skin_dark', rgb: [174, 121, 123] },
+    { name: '#583E2D', type: 'skin', classification: 'skin_dark', rgb: [80, 62, 41] },
+    { name: '#A76662', type: 'skin', classification: 'skin_dark', rgb: [161, 104, 98] },
+    { name: '#A28074', type: 'skin', classification: 'skin_dark', rgb: [165, 130, 118] },
+    { name: '#8F7868', type: 'skin', classification: 'skin_dark', rgb: [144, 121, 101] },
+    { name: '#9F7954', type: 'skin', classification: 'skin_dark', rgb: [189, 131, 76] },
+    { name: '#392D1D', type: 'skin', classification: 'skin_dark', rgb: [57, 42, 22] },
+    { name: '#9D7248', type: 'skin', classification: 'skin_dark', rgb: [150, 114, 71] },
+    { name: '#58482F', type: 'skin', classification: 'skin_dark', rgb: [88, 68, 44] }
   ];
 
   let currentTargetIndex = 0;
-  let targetColor = targetColors[currentTargetIndex];
+  let currentTargetColor = targetColors[0];
+  let targetColor = currentTargetColor.rgb;
 
   function updateCurrentMix() {
     const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
@@ -253,7 +289,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // Button logic
   document.getElementById("startBtn").addEventListener("click", () => {
     currentTargetIndex = 0;
-    targetColor = targetColors[currentTargetIndex];
+    currentTargetColor = targetColors[currentTargetIndex];
+    targetColor = currentTargetColor.rgb;
     updateBox("targetColor", targetColor);
     resetMix();
     startTimer();
@@ -328,7 +365,8 @@ document.addEventListener("DOMContentLoaded", () => {
     
     currentTargetIndex++;
     if (currentTargetIndex < targetColors.length) {
-      targetColor = targetColors[currentTargetIndex];
+      currentTargetColor = targetColors[currentTargetIndex];
+      targetColor = currentTargetColor.rgb;
       updateBox("targetColor", targetColor);
       resetMix();
       startTimer();
@@ -338,12 +376,14 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       alert("✅ All colors completed!");
       document.getElementById("skipBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = true;
     }
   });
 
   document.getElementById("restartBtn").addEventListener("click", () => {
     currentTargetIndex = 0;
-    targetColor = targetColors[currentTargetIndex];
+    currentTargetColor = targetColors[currentTargetIndex];
+    targetColor = currentTargetColor.rgb;
     updateBox("targetColor", targetColor);
     resetMix();
     resetTimerDisplay();
