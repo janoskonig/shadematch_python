@@ -143,7 +143,7 @@ def login():
             response_data = {
                 'status': 'success',
                 'birthdate': '2000-01-01',  # Default value
-                'gender': 'prefer_not_to_say'  # Default value
+                'gender': 'male'  # Default value
             }
             print(f"Sending response: {response_data}")
             return jsonify(response_data)
@@ -608,3 +608,4 @@ def get_cookie_consent():
             'status': 'error',
             'message': 'Failed to get cookie preferences'
         }), 500
+

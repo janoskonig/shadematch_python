@@ -458,7 +458,7 @@
             values[4], // option3
             values[5], // option4
             values[6]  // option5
-          ].filter(opt => opt && opt.trim() !== ''), // filter out only empty options, keep 'semmi'
+          ].filter(opt => opt && opt.trim() !== ''), // filter out only empty options, keep 'lines'
           question_text: `What do you see in this plate?`
         };
         plates.push(plate);
@@ -626,8 +626,77 @@
       
       testCompleted = true;
       
-      // Register the user after completing the Ishihara test
-      registerUserAfterTest();
+      // Check test results and proceed accordingly
+      checkTestResults();
+    }
+    
+    // Check if user passed the test (90% threshold)
+    function hasPassedTest(score) {
+      return score >= 90;
+    }
+
+    // Check test results and proceed accordingly
+    function checkTestResults() {
+      // Calculate score and check if passed
+      const correctAnswers = userAnswers.filter((answer, index) => 
+        answer === ishiharaPlates[index].correct_answer
+      ).length;
+      const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
+      const passed = hasPassedTest(score);
+      
+      if (passed) {
+        // User passed, show success message and allow access
+        displayTestSuccess(score);
+        // Register the user after passing the test
+        registerUserAfterTest();
+      } else {
+        // User failed, show failure message - NO ACCESS GRANTED
+        displayTestFailure(score);
+      }
+    }
+
+    // Display test success message for users who passed
+    function displayTestSuccess(score) {
+      const resultMessage = document.getElementById('resultMessage');
+      const currentContent = resultMessage.innerHTML;
+      
+      resultMessage.innerHTML = `
+        ${currentContent}<br><br>
+        <div style="background: #e8f5e8; border: 2px solid #28a745; border-radius: 10px; padding: 20px; margin: 20px 0; text-align: center;">
+          <h3 style="color: #28a745; margin: 0 0 10px 0;">✅ Test Passed!</h3>
+          <p style="margin: 10px 0; color: #155724; font-size: 1.1em;">
+            Congratulations! Your score of <strong>${score}%</strong> meets the required threshold.
+          </p>
+          <p style="margin: 10px 0; color: #155724;">
+            You can now proceed to the color matching test.
+          </p>
+        </div>
+      `;
+    }
+
+    // Display test failure message
+    function displayTestFailure(score) {
+      const resultMessage = document.getElementById('resultMessage');
+      const currentContent = resultMessage.innerHTML;
+      
+      resultMessage.innerHTML = `
+        ${currentContent}<br><br>
+        <div style="background: #f8d7da; border: 2px solid #dc3545; border-radius: 10px; padding: 20px; margin: 20px 0; text-align: center;">
+          <h3 style="color: #dc3545; margin: 0 0 10px 0;">❌ Test Failed - Access Denied</h3>
+          <p style="margin: 10px 0; color: #721c24; font-size: 1.1em;">
+            Your score of <strong>${score}%</strong> is below the required 90% threshold.
+          </p>
+          <p style="margin: 10px 0; color: #721c24; font-weight: bold;">
+            You do not have permission to access the color matching test.
+          </p>
+          <p style="margin: 10px 0; color: #721c24;">
+            Only users with normal color vision (90% or higher) can participate in this study.
+          </p>
+          <p style="margin: 10px 0 0 0; color: #721c24; font-size: 0.9em;">
+            Please consult an eye care professional if you have concerns about your color vision.
+          </p>
+        </div>
+      `;
     }
     
     // Register user after completing the Ishihara test

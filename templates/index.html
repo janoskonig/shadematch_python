@@ -423,11 +423,9 @@
               <option value="">Select…</option>
               <option value="female">Female</option>
               <option value="male">Male</option>
-              <option value="other">Other</option>
-              <option value="prefer_not_to_say">Prefer not to say</option>
             </select>
           </label><br><br>
-          <button type="submit">Continue to Color Vision Test</button>
+          <button type="submit">Start Color Vision Test</button>
         </form>
         <hr>
         <p>Already have an ID? <button id="showLoginBtn" type="button">Log in</button></p>
@@ -686,8 +684,8 @@
       const gender = document.getElementById('userGender').value;
       localStorage.setItem('userBirthdate', birthdate);
       localStorage.setItem('userGender', gender);
-      // Redirect to the color test page
-      window.location.href = '/color-test';
+      // Redirect to the Ishihara test page first
+      window.location.href = '/ishihara-test';
     };
 
     // Initialize the mixed color display
