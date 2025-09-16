@@ -51,6 +51,56 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Store user ID globally for this session
 window.currentUserId = localStorage.getItem('userId');
+
+// Function to disable color mixing functionality
+function disableColorMixing() {
+  // Hide the target color and current mix display
+  const targetColorElement = document.getElementById("targetColor");
+  const currentMixElement = document.getElementById("currentMix");
+  if (targetColorElement) targetColorElement.style.display = "none";
+  if (currentMixElement) currentMixElement.style.display = "none";
+  
+  // Hide the palette with color controls
+  const paletteElement = document.getElementById("palette");
+  if (paletteElement) paletteElement.style.display = "none";
+  
+  // Disable all color circle click events
+  document.querySelectorAll(".color-circle").forEach(circle => {
+    circle.style.pointerEvents = "none";
+    circle.style.opacity = "0.5";
+  });
+  
+  // Disable all minus button click events
+  document.querySelectorAll(".minus-button").forEach(button => {
+    button.disabled = true;
+    button.style.opacity = "0.5";
+  });
+}
+
+// Function to enable color mixing functionality
+function enableColorMixing() {
+  // Show the target color and current mix display
+  const targetColorElement = document.getElementById("targetColor");
+  const currentMixElement = document.getElementById("currentMix");
+  if (targetColorElement) targetColorElement.style.display = "";
+  if (currentMixElement) currentMixElement.style.display = "";
+  
+  // Show the palette with color controls
+  const paletteElement = document.getElementById("palette");
+  if (paletteElement) paletteElement.style.display = "";
+  
+  // Enable all color circle click events
+  document.querySelectorAll(".color-circle").forEach(circle => {
+    circle.style.pointerEvents = "";
+    circle.style.opacity = "";
+  });
+  
+  // Enable all minus button click events
+  document.querySelectorAll(".minus-button").forEach(button => {
+    button.disabled = false;
+    button.style.opacity = "";
+  });
+}
 window.currentUserBirthdate = localStorage.getItem('userBirthdate');
 window.currentUserGender = localStorage.getItem('userGender');
 window.currentSessionSaved = false; // Make accessible to HTML template
@@ -449,55 +499,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // Function to disable color mixing functionality
-  function disableColorMixing() {
-    // Hide the target color and current mix display
-    const targetColorElement = document.getElementById("targetColor");
-    const currentMixElement = document.getElementById("currentMix");
-    if (targetColorElement) targetColorElement.style.display = "none";
-    if (currentMixElement) currentMixElement.style.display = "none";
-    
-    // Hide the palette with color controls
-    const paletteElement = document.getElementById("palette");
-    if (paletteElement) paletteElement.style.display = "none";
-    
-    // Disable all color circle click events
-    document.querySelectorAll(".color-circle").forEach(circle => {
-      circle.style.pointerEvents = "none";
-      circle.style.opacity = "0.5";
-    });
-    
-    // Disable all minus button click events
-    document.querySelectorAll(".minus-button").forEach(button => {
-      button.disabled = true;
-      button.style.opacity = "0.5";
-    });
-  }
-
-  // Function to enable color mixing functionality
-  function enableColorMixing() {
-    // Show the target color and current mix display
-    const targetColorElement = document.getElementById("targetColor");
-    const currentMixElement = document.getElementById("currentMix");
-    if (targetColorElement) targetColorElement.style.display = "";
-    if (currentMixElement) currentMixElement.style.display = "";
-    
-    // Show the palette with color controls
-    const paletteElement = document.getElementById("palette");
-    if (paletteElement) paletteElement.style.display = "";
-    
-    // Enable all color circle click events
-    document.querySelectorAll(".color-circle").forEach(circle => {
-      circle.style.pointerEvents = "";
-      circle.style.opacity = "";
-    });
-    
-    // Enable all minus button click events
-    document.querySelectorAll(".minus-button").forEach(button => {
-      button.disabled = false;
-      button.style.opacity = "";
-    });
-  }
 
   // Optionally, you can comment out or remove the CSV export logic below if you no longer want to support CSV export.
   // document.getElementById("exportBtn").addEventListener("click", () => {
@@ -574,62 +575,80 @@ async function saveSessionData() {
 }
 
 // Handle login form submission
-document.getElementById('loginForm').addEventListener('submit', async function(e) {
-    e.preventDefault();
-    const userId = document.getElementById('loginId').value.toUpperCase();
-    console.log('Attempting login with ID:', userId);
-    
-    try {
-        const response = await fetch('/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ userId })
+document.addEventListener('DOMContentLoaded', function() {
+    const loginForm = document.getElementById('loginForm');
+    if (loginForm) {
+        loginForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const userId = document.getElementById('loginId').value.toUpperCase();
+            console.log('Attempting login with ID:', userId);
+            
+            try {
+                const response = await fetch('/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ userId })
+                });
+                
+                console.log('Login response status:', response.status);
+                const data = await response.json();
+                console.log('Login response data:', JSON.stringify(data, null, 2));
+                
+                if (data.status === 'success') {
+                    console.log('Login successful, storing user data');
+                    localStorage.setItem('userId', userId);
+                    localStorage.setItem('userBirthdate', data.birthdate);
+                    localStorage.setItem('userGender', data.gender);
+                    document.getElementById('userModal').style.display = 'none';
+                    resetMix();
+                    resetTimerDisplay();
+                    // Ensure color mixing is disabled after login until Start is clicked
+                    disableColorMixing();
+                    console.log('User data stored, modal closed');
+                } else {
+                    console.log('Login failed:', data.message);
+                    alert('Invalid user ID. Please try again.');
+                }
+            } catch (error) {
+                console.error('Login error:', error);
+                alert('Invalid user ID. Please try again.');
+            }
         });
-        
-        console.log('Login response status:', response.status);
-        const data = await response.json();
-        console.log('Login response data:', JSON.stringify(data, null, 2));
-        
-        if (data.status === 'success') {
-            console.log('Login successful, storing user data');
-            localStorage.setItem('userId', userId);
-            localStorage.setItem('userBirthdate', data.birthdate);
-            localStorage.setItem('userGender', data.gender);
-            document.getElementById('userModal').style.display = 'none';
-            resetMix();
-            resetTimerDisplay();
-            // Ensure color mixing is disabled after login until Start is clicked
-            disableColorMixing();
-            console.log('User data stored, modal closed');
-        } else {
-            console.log('Login failed:', data.message);
-            alert('Invalid user ID. Please try again.');
-        }
-    } catch (error) {
-        console.error('Login error:', error);
-        alert('Invalid user ID. Please try again.');
+    } else {
+        console.error('Login form not found');
     }
 });
 
 // Handle continue button click
-document.getElementById('continueBtn').addEventListener('click', function() {
-    document.getElementById('userModal').style.display = 'none';
-    resetMix();
-    resetTimerDisplay();
-    // Ensure color mixing is disabled after continuing until Start is clicked
-    disableColorMixing();
-});
+document.addEventListener('DOMContentLoaded', function() {
+    const continueBtn = document.getElementById('continueBtn');
+    if (continueBtn) {
+        continueBtn.addEventListener('click', function() {
+            document.getElementById('userModal').style.display = 'none';
+            resetMix();
+            resetTimerDisplay();
+            // Ensure color mixing is disabled after continuing until Start is clicked
+            disableColorMixing();
+        });
+    }
 
-// Handle show login button click
-document.getElementById('showLoginBtn').addEventListener('click', function() {
-    document.getElementById('registerSection').style.display = 'none';
-    document.getElementById('loginSection').style.display = 'block';
-});
+    // Handle show login button click
+    const showLoginBtn = document.getElementById('showLoginBtn');
+    if (showLoginBtn) {
+        showLoginBtn.addEventListener('click', function() {
+            document.getElementById('registerSection').style.display = 'none';
+            document.getElementById('loginSection').style.display = 'block';
+        });
+    }
 
-// Handle show register button click
-document.getElementById('showRegisterBtn').addEventListener('click', function() {
-    document.getElementById('loginSection').style.display = 'none';
-    document.getElementById('registerSection').style.display = 'block';
+    // Handle show register button click
+    const showRegisterBtn = document.getElementById('showRegisterBtn');
+    if (showRegisterBtn) {
+        showRegisterBtn.addEventListener('click', function() {
+            document.getElementById('loginSection').style.display = 'none';
+            document.getElementById('registerSection').style.display = 'block';
+        });
+    }
 });
