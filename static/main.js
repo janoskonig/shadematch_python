@@ -167,11 +167,12 @@ function updateBox(id, rgb) {
 
 function saveSessionToServer(session) {
   if (!window.currentUserId) {
-    console.error('No user ID found');
+    console.error('❌ No user ID found - cannot save session');
+    alert('No user ID found. Please log in again.');
     return;
   }
 
-  console.log('Current user ID:', window.currentUserId);
+  console.log('💾 Saving session for user ID:', window.currentUserId);
   console.log('Session data:', session);
 
   const sessionData = {
@@ -196,15 +197,25 @@ function saveSessionToServer(session) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(sessionData)
   })
-  .then(res => res.json())
+  .then(res => {
+    console.log('Save session response status:', res.status);
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
+    return res.json();
+  })
   .then(data => {
     console.log('Server response:', data);
     if (data.status !== 'success') {
       console.error('Failed to save session:', data.error);
+      alert('Failed to save session data. Please try again.');
+    } else {
+      console.log('Session saved successfully to database');
     }
   })
   .catch(error => {
     console.error('Error saving session:', error);
+    alert('Error saving session data. Please check your connection and try again.');
   });
 }
 
@@ -351,8 +362,11 @@ document.addEventListener("DOMContentLoaded", () => {
     .then(data => {
       if (data.error) return console.error("Server error:", data.error);
       document.getElementById("deltaE").textContent = data.delta_e.toFixed(2);
+      
+      console.log(`Current DeltaE: ${data.delta_e}, Threshold check: ${data.delta_e <= 0.01}`);
 
-      if (data.delta_e === 0.00) {
+      if (data.delta_e <= 0.01) { // Use threshold instead of exact equality for floating point
+        console.log('🎯 Perfect match achieved! Auto-saving session...');
         stopTimer();
         const session = {
           user_id: window.currentUserId,
@@ -404,6 +418,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Always save the current session data when Stop is clicked
     if (!isNaN(currentDeltaE)) {  // Only save if we have a valid DeltaE
+      console.log('🛑 Stop button clicked - saving session with DeltaE:', currentDeltaE);
       const session = {
         user_id: window.currentUserId,
         target: targetColor,
@@ -414,6 +429,8 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       sessionLogs.push(session);
       saveSessionToServer(session);
+    } else {
+      console.log('🛑 Stop button clicked but no valid DeltaE to save');
     }
     
     // Disable color mixing functionality
@@ -428,8 +445,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
     
     // Only save skip if this wasn't already saved as a successful completion
-    // (i.e., if ΔE is not 0.00, meaning no automatic save happened)
-    if (currentDeltaE !== 0.00) {
+    // (i.e., if ΔE is not <= 0.01, meaning no automatic save happened)
+    console.log(`⏭️ Skip button clicked - DeltaE: ${currentDeltaE}, Will save skip: ${currentDeltaE > 0.01}`);
+    if (currentDeltaE > 0.01) {
       const skipData = {
         user_id: window.currentUserId,
         target_r: targetColor[0],
@@ -445,12 +463,25 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(skipData)
       })
-      .then(res => res.json())
+      .then(res => {
+        console.log('Save skip response status:', res.status);
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
       .then(data => {
         console.log('Skip saved to server:', data);
+        if (data.status !== 'success') {
+          console.error('Failed to save skip:', data.error);
+          alert('Failed to save skip data. Please try again.');
+        } else {
+          console.log('Skip saved successfully to database');
+        }
       })
       .catch(error => {
         console.error('Error saving skip:', error);
+        alert('Error saving skip data. Please check your connection and try again.');
       });
     } else {
       console.log('Skip not saved - session already recorded as successful completion');
@@ -559,6 +590,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Store current session data before resetting
     const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
     if (!isNaN(currentDeltaE)) {  // Only store if we have a valid DeltaE
+      console.log('🔄 Retry button clicked - saving session with DeltaE:', currentDeltaE);
       const session = {
         user_id: window.currentUserId,
         target: targetColor,
@@ -569,6 +601,8 @@ document.addEventListener("DOMContentLoaded", () => {
       };
       sessionLogs.push(session);
       saveSessionToServer(session);
+    } else {
+      console.log('🔄 Retry button clicked but no valid DeltaE to save');
     }
 
     // Reset everything
