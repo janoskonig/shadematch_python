@@ -424,9 +424,69 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("stopBtn").disabled = false;
       document.getElementById("skipBtn").textContent = "Skip";
     } else {
-      alert("✅ All colors completed!");
+      // All colors completed - show congratulatory message with confetti and redirect
+      const congratulations = `
+        <div id="congratulations-modal" style="
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 10000;
+          font-family: sans-serif;
+        ">
+          <div style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 500px;
+            margin: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+          ">
+            <div style="font-size: 4em; margin-bottom: 20px;">🎉</div>
+            <h2 style="margin: 0 0 20px 0; font-size: 2.5em; font-weight: 300;">Congratulations!</h2>
+            <p style="margin: 0 0 30px 0; font-size: 1.2em; line-height: 1.6;">
+              You have successfully completed all color matching challenges!<br>
+              Your dedication and color perception skills are impressive.
+            </p>
+            <p style="margin: 0 0 30px 0; font-size: 1em; opacity: 0.9;">
+              You will now be redirected to view your detailed results and performance analysis.
+            </p>
+            <div style="
+              display: inline-block;
+              background: rgba(255, 255, 255, 0.2);
+              padding: 15px 30px;
+              border-radius: 25px;
+              font-size: 1.1em;
+              font-weight: 500;
+            ">
+              Redirecting to results...
+            </div>
+          </div>
+        </div>
+      `;
+      
+      document.body.insertAdjacentHTML('beforeend', congratulations);
+      
+      // Create confetti effect
+      createConfetti();
+      
+      // Disable all buttons
       document.getElementById("skipBtn").disabled = true;
       document.getElementById("stopBtn").disabled = true;
+      
+      // Redirect to results page after 4 seconds (giving time for confetti)
+      setTimeout(() => {
+        window.location.href = '/results';
+      }, 4000);
     }
   });
 
@@ -649,6 +709,73 @@ document.addEventListener('DOMContentLoaded', function() {
         showRegisterBtn.addEventListener('click', function() {
             document.getElementById('loginSection').style.display = 'none';
             document.getElementById('registerSection').style.display = 'block';
-        });
-    }
+    });
+  }
 });
+
+// Confetti animation function
+function createConfetti() {
+  const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd'];
+  const confettiCount = 150;
+  
+  for (let i = 0; i < confettiCount; i++) {
+    setTimeout(() => {
+      createConfettiPiece(colors);
+    }, i * 20); // Stagger the creation for a more natural effect
+  }
+}
+
+function createConfettiPiece(colors) {
+  const confetti = document.createElement('div');
+  const color = colors[Math.floor(Math.random() * colors.length)];
+  const size = Math.random() * 8 + 4; // Random size between 4-12px
+  const startX = Math.random() * window.innerWidth;
+  const startY = -10;
+  const endY = window.innerHeight + 10;
+  const rotation = Math.random() * 360;
+  const rotationSpeed = (Math.random() - 0.5) * 20;
+  const horizontalDrift = (Math.random() - 0.5) * 100;
+  
+  confetti.style.cssText = `
+    position: fixed;
+    left: ${startX}px;
+    top: ${startY}px;
+    width: ${size}px;
+    height: ${size}px;
+    background: ${color};
+    border-radius: ${Math.random() > 0.5 ? '50%' : '0'};
+    pointer-events: none;
+    z-index: 10001;
+    box-shadow: 0 0 6px ${color};
+  `;
+  
+  document.body.appendChild(confetti);
+  
+  // Animate the confetti
+  let startTime = null;
+  const duration = 3000 + Math.random() * 2000; // 3-5 seconds
+  
+  function animate(currentTime) {
+    if (!startTime) startTime = currentTime;
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Easing function for natural fall
+    const easeOut = 1 - Math.pow(1 - progress, 3);
+    
+    const currentY = startY + (endY - startY) * easeOut;
+    const currentX = startX + horizontalDrift * Math.sin(progress * Math.PI);
+    const currentRotation = rotation + rotationSpeed * elapsed / 1000;
+    
+    confetti.style.transform = `translate(${currentX - startX}px, ${currentY - startY}px) rotate(${currentRotation}deg)`;
+    confetti.style.opacity = 1 - progress;
+    
+    if (progress < 1) {
+      requestAnimationFrame(animate);
+    } else {
+      confetti.remove();
+    }
+  }
+  
+  requestAnimationFrame(animate);
+}
