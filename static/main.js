@@ -220,8 +220,8 @@ document.addEventListener("DOMContentLoaded", () => {
     blue: [0, 0, 255]
   };
 
-  // Hard-coded target colors with skin color classifications
-  const targetColors = [
+  // All available target colors with skin color classifications
+  const allTargetColors = [
     // Basic colors
     { name: 'Orange', type: 'basic', classification: null, rgb: [255, 102, 30] },
     { name: 'Purple', type: 'basic', classification: null, rgb: [113, 1, 105] },
@@ -268,6 +268,44 @@ document.addEventListener("DOMContentLoaded", () => {
     { name: '#9D7248', type: 'skin', classification: 'skin_dark', rgb: [150, 114, 71] },
     { name: '#58482F', type: 'skin', classification: 'skin_dark', rgb: [88, 68, 44] }
   ];
+
+  // Function to generate randomized color selection for a session
+  function generateRandomizedColors() {
+    // Always include first 3 basic colors
+    const firstThreeBasic = allTargetColors.slice(0, 3);
+    
+    // Get remaining basic colors (indices 3-10, which are 8 colors)
+    const remainingBasic = allTargetColors.slice(3, 11);
+    
+    // Randomly select 3 from remaining basic colors
+    const shuffledRemainingBasic = [...remainingBasic].sort(() => Math.random() - 0.5);
+    const selectedRemainingBasic = shuffledRemainingBasic.slice(0, 3);
+    
+    // Get all skin colors (indices 11-39, which are 29 colors)
+    const skinColors = allTargetColors.slice(11);
+    
+    // Randomly select 5 skin colors
+    const shuffledSkinColors = [...skinColors].sort(() => Math.random() - 0.5);
+    const selectedSkinColors = shuffledSkinColors.slice(0, 5);
+    
+    // Combine all selected colors
+    const selectedColors = [
+      ...firstThreeBasic,
+      ...selectedRemainingBasic,
+      ...selectedSkinColors
+    ];
+    
+    console.log('🎨 Generated randomized color selection:');
+    console.log('- First 3 basic colors:', firstThreeBasic.map(c => c.name));
+    console.log('- 3 random remaining basic colors:', selectedRemainingBasic.map(c => c.name));
+    console.log('- 5 random skin colors:', selectedSkinColors.map(c => c.name));
+    console.log('- Total colors for this session:', selectedColors.length);
+    
+    return selectedColors;
+  }
+
+  // Generate the randomized target colors for this session
+  const targetColors = generateRandomizedColors();
 
   let currentTargetIndex = 0;
   let currentTargetColor = targetColors[0];
@@ -338,6 +376,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Button logic
   document.getElementById("startBtn").addEventListener("click", () => {
+    // Generate new randomized colors for the start
+    const newTargetColors = generateRandomizedColors();
+    targetColors.length = 0; // Clear existing array
+    targetColors.push(...newTargetColors); // Add new colors
+    
     currentTargetIndex = 0;
     currentTargetColor = targetColors[currentTargetIndex];
     targetColor = currentTargetColor.rgb;
@@ -491,6 +534,11 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.getElementById("restartBtn").addEventListener("click", () => {
+    // Generate new randomized colors for the restart
+    const newTargetColors = generateRandomizedColors();
+    targetColors.length = 0; // Clear existing array
+    targetColors.push(...newTargetColors); // Add new colors
+    
     currentTargetIndex = 0;
     currentTargetColor = targetColors[currentTargetIndex];
     targetColor = currentTargetColor.rgb;
