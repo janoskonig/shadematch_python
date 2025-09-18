@@ -468,6 +468,26 @@
     Once you are ready, hit Start and enjoy the game!
   </p>
 
+  <!-- Instructional Video Modal -->
+  <div id="videoModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.8); z-index: 2000; display: flex; align-items: center; justify-content: center;">
+    <div style="position: relative; width: 90%; max-width: 800px; background: var(--surface-color); border-radius: 10px; padding: 20px;">
+      <button id="closeVideoBtn" style="position: absolute; top: 10px; right: 15px; background: none; border: none; color: var(--text-color); font-size: 24px; cursor: pointer; z-index: 2001;">&times;</button>
+      <div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
+        <iframe id="videoFrame" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; border-radius: 8px;" 
+                src="" 
+                allow="autoplay; encrypted-media" allowfullscreen>
+        </iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Thumbnail Button -->
+  <div style="text-align: center; margin: 20px 0;">
+    <button id="showVideoBtn" style="background: var(--accent-color); color: var(--text-color); border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; font-size: 1.1em; box-shadow: 0 2px 8px var(--shadow-color); transition: background-color 0.3s;">
+      📹 Watch Instructional Video
+    </button>
+  </div>
+
 
   <div style="display: flex; gap: 20px; max-width: 1200px; margin: 20px auto; padding: 0 20px;">
     <!-- Main Content -->
@@ -597,9 +617,35 @@
 
   window.addEventListener('DOMContentLoaded', () => {
     const modal = document.getElementById('userModal');
+    const videoModal = document.getElementById('videoModal');
     const storedId = localStorage.getItem('userId');
     const storedBirthdate = localStorage.getItem('userBirthdate');
     const storedGender = localStorage.getItem('userGender');
+    
+    // Video modal functionality
+    document.getElementById('showVideoBtn').onclick = function() {
+      videoModal.style.display = 'flex';
+      // Reload the video when opening the modal
+      const iframe = document.getElementById('videoFrame');
+      iframe.src = 'https://www.youtube.com/embed/rGQ7LR3PPG0?autoplay=1&rel=0';
+    };
+    
+    document.getElementById('closeVideoBtn').onclick = function() {
+      videoModal.style.display = 'none';
+      // Stop the video when closing by removing the src
+      const iframe = document.getElementById('videoFrame');
+      iframe.src = ''; // This stops the video completely
+    };
+    
+    // Close video modal when clicking outside
+    videoModal.addEventListener('click', function(e) {
+      if (e.target === videoModal) {
+        videoModal.style.display = 'none';
+        // Stop the video when closing by removing the src
+        const iframe = document.getElementById('videoFrame');
+        iframe.src = ''; // This stops the video completely
+      }
+    });
     
     // Clear any incomplete registration data
     if (storedBirthdate && storedGender && !storedId) {
@@ -609,6 +655,18 @@
     
     if (storedId) {
       modal.style.display = 'none';
+      // Check if this is a first-time visit (no video shown before)
+      const videoShown = localStorage.getItem('videoShown');
+      if (!videoShown) {
+        // Show video for first-time visitors
+        setTimeout(() => {
+          videoModal.style.display = 'flex';
+          // Ensure video is loaded when showing automatically
+          const iframe = document.getElementById('videoFrame');
+          iframe.src = 'https://www.youtube.com/embed/rGQ7LR3PPG0?autoplay=1&rel=0';
+          localStorage.setItem('videoShown', 'true');
+        }, 1000); // Small delay to let the page load
+      }
     } else {
       modal.style.display = 'flex';
       showSection('register');

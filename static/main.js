@@ -175,20 +175,43 @@ function saveSessionToServer(session) {
   console.log('💾 Saving session for user ID:', window.currentUserId);
   console.log('Session data:', session);
 
-  const sessionData = {
-    user_id: window.currentUserId,
-    target_r: session.target[0],
-    target_g: session.target[1],
-    target_b: session.target[2],
-    drop_white: session.drops.white,
-    drop_black: session.drops.black,
-    drop_red: session.drops.red,
-    drop_yellow: session.drops.yellow,
-    drop_blue: session.drops.blue,
-    delta_e: session.deltaE,
-    time_sec: session.time,
-    timestamp: session.timestamp
-  };
+  // Handle both old format (with target/drops objects) and new format (with individual fields)
+  let sessionData;
+  if (session.target && session.drops) {
+    // Old format - convert to new format
+    sessionData = {
+      user_id: window.currentUserId,
+      target_r: session.target[0],
+      target_g: session.target[1],
+      target_b: session.target[2],
+      drop_white: session.drops.white,
+      drop_black: session.drops.black,
+      drop_red: session.drops.red,
+      drop_yellow: session.drops.yellow,
+      drop_blue: session.drops.blue,
+      delta_e: session.deltaE,
+      time_sec: session.time,
+      timestamp: session.timestamp,
+      skipped: session.skipped || false
+    };
+  } else {
+    // New format - use as is
+    sessionData = {
+      user_id: session.user_id,
+      target_r: session.target_r,
+      target_g: session.target_g,
+      target_b: session.target_b,
+      drop_white: session.drop_white,
+      drop_black: session.drop_black,
+      drop_red: session.drop_red,
+      drop_yellow: session.drop_yellow,
+      drop_blue: session.drop_blue,
+      delta_e: session.delta_e,
+      time_sec: session.time_sec,
+      timestamp: session.timestamp,
+      skipped: session.skipped || false
+    };
+  }
 
   console.log('Sending session data to server:', sessionData);
 
@@ -374,7 +397,8 @@ document.addEventListener("DOMContentLoaded", () => {
           drops: { ...dropCounts },
           deltaE: data.delta_e,
           time: parseFloat(document.getElementById("timer").textContent),
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
+          skipped: false  // Explicitly mark as completed (not skipped)
         };
         sessionLogs.push(session);
         saveSessionToServer(session);
@@ -418,17 +442,35 @@ document.addEventListener("DOMContentLoaded", () => {
     
     // Always save the current session data when Stop is clicked
     if (!isNaN(currentDeltaE)) {  // Only save if we have a valid DeltaE
-      console.log('🛑 Stop button clicked - saving session with DeltaE:', currentDeltaE);
+      console.log('🛑 Stop button clicked - saving session as SKIPPED with DeltaE:', currentDeltaE);
       const session = {
         user_id: window.currentUserId,
         target: targetColor,
         drops: { ...dropCounts },
         deltaE: currentDeltaE,
         time: parseFloat(document.getElementById("timer").textContent),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        skipped: true  // Mark as skipped since user manually stopped
       };
       sessionLogs.push(session);
-      saveSessionToServer(session);
+      
+      // Save to server with correct data structure
+      const sessionData = {
+        user_id: window.currentUserId,
+        target_r: targetColor[0],
+        target_g: targetColor[1],
+        target_b: targetColor[2],
+        drop_white: dropCounts.white,
+        drop_black: dropCounts.black,
+        drop_red: dropCounts.red,
+        drop_yellow: dropCounts.yellow,
+        drop_blue: dropCounts.blue,
+        delta_e: currentDeltaE,
+        time_sec: parseFloat(document.getElementById("timer").textContent),
+        timestamp: new Date().toISOString(),
+        skipped: true
+      };
+      saveSessionToServer(sessionData);
     } else {
       console.log('🛑 Stop button clicked but no valid DeltaE to save');
     }
@@ -444,10 +486,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // Get current deltaE value
     const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
     
+    // Check if we're in a "Stop then Skip" scenario by checking if color mixing is disabled
+    const isAfterStop = document.getElementById("palette").style.display === "none";
+    
     // Only save skip if this wasn't already saved as a successful completion
     // (i.e., if ΔE is not <= 0.01, meaning no automatic save happened)
-    console.log(`⏭️ Skip button clicked - DeltaE: ${currentDeltaE}, Will save skip: ${currentDeltaE > 0.01}`);
-    if (currentDeltaE > 0.01) {
+    // AND if we're not in a "Stop then Skip" scenario (where Stop already saved the data)
+    console.log(`⏭️ Skip button clicked - DeltaE: ${currentDeltaE}, After Stop: ${isAfterStop}, Will save skip: ${currentDeltaE > 0.01 && !isAfterStop}`);
+    if (currentDeltaE > 0.01 && !isAfterStop) {
       const skipData = {
         user_id: window.currentUserId,
         target_r: targetColor[0],
@@ -484,7 +530,7 @@ document.addEventListener("DOMContentLoaded", () => {
         alert('Error saving skip data. Please check your connection and try again.');
       });
     } else {
-      console.log('Skip not saved - session already recorded as successful completion');
+      console.log('Skip not saved - session already recorded as successful completion or already saved by Stop button');
     }
     
     currentTargetIndex++;
@@ -494,6 +540,10 @@ document.addEventListener("DOMContentLoaded", () => {
       updateBox("targetColor", targetColor);
       resetMix();
       startTimer();
+      
+      // Enable color mixing functionality for the new color
+      enableColorMixing();
+      
       document.getElementById("skipBtn").disabled = false;
       document.getElementById("stopBtn").disabled = false;
       document.getElementById("skipBtn").textContent = "Skip";
@@ -597,7 +647,8 @@ document.addEventListener("DOMContentLoaded", () => {
         drops: { ...dropCounts },
         deltaE: currentDeltaE,
         time: parseFloat(document.getElementById("timer").textContent),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        skipped: true  // Mark as skipped since user chose to retry
       };
       sessionLogs.push(session);
       saveSessionToServer(session);

@@ -727,6 +727,18 @@
         document.getElementById('prevBtn').addEventListener('click', prevPlate);
         document.getElementById('restartBtn').addEventListener('click', function() {
             stopTimer();
+            
+            // Hide results section and show plate container
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('plateContainer').style.display = 'block';
+            
+            // Reset test state
+            testCompleted = false;
+            
+            // Reset timer display
+            document.getElementById('timer').textContent = 'Time: 00:00';
+            
+            // Initialize the test
             initTest();
         });
         document.getElementById('homeBtn').addEventListener('click', () => {
