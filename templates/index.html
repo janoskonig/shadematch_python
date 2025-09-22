@@ -630,20 +630,28 @@
       iframe.src = 'https://www.youtube.com/embed/4MAaDDelYMA?autoplay=1&rel=0&modestbranding=1';
     };
     
-    document.getElementById('closeVideoBtn').onclick = function() {
+    // Function to close video modal and proceed with user flow
+    function closeVideoAndProceed() {
       videoModal.style.display = 'none';
       // Stop the video when closing by removing the src
       const iframe = document.getElementById('videoFrame');
       iframe.src = ''; // This stops the video completely
-    };
+      
+      // Proceed with user registration/login flow
+      if (storedId) {
+        modal.style.display = 'none';
+      } else {
+        modal.style.display = 'flex';
+        showSection('register');
+      }
+    }
+    
+    document.getElementById('closeVideoBtn').onclick = closeVideoAndProceed;
     
     // Close video modal when clicking outside
     videoModal.addEventListener('click', function(e) {
       if (e.target === videoModal) {
-        videoModal.style.display = 'none';
-        // Stop the video when closing by removing the src
-        const iframe = document.getElementById('videoFrame');
-        iframe.src = ''; // This stops the video completely
+        closeVideoAndProceed();
       }
     });
     
@@ -653,23 +661,26 @@
       localStorage.removeItem('userGender');
     }
     
-    if (storedId) {
-      modal.style.display = 'none';
-      // Check if this is a first-time visit (no video shown before)
-      const videoShown = localStorage.getItem('videoShown');
-      if (!videoShown) {
-        // Show video for first-time visitors
-        setTimeout(() => {
-          videoModal.style.display = 'flex';
-          // Ensure video is loaded when showing automatically
-          const iframe = document.getElementById('videoFrame');
-          iframe.src = 'https://www.youtube.com/embed/4MAaDDelYMA?autoplay=1&rel=0&modestbranding=1';
-          localStorage.setItem('videoShown', 'true');
-        }, 1000); // Small delay to let the page load
-      }
+    // Check if this is a first-time visit (no video shown before)
+    const videoShown = localStorage.getItem('videoShown');
+    if (!videoShown) {
+      // Show video FIRST for all first-time visitors
+      setTimeout(() => {
+        videoModal.style.display = 'flex';
+        // Ensure video is loaded when showing automatically
+        const iframe = document.getElementById('videoFrame');
+        iframe.src = 'https://www.youtube.com/embed/4MAaDDelYMA?autoplay=1&rel=0&modestbranding=1';
+        localStorage.setItem('videoShown', 'true');
+      }, 1000); // Small delay to let the page load
+      
     } else {
-      modal.style.display = 'flex';
-      showSection('register');
+      // Video already shown, proceed with normal user flow
+      if (storedId) {
+        modal.style.display = 'none';
+      } else {
+        modal.style.display = 'flex';
+        showSection('register');
+      }
     }
 
     // Add click event listener to close modal when clicking outside
