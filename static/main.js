@@ -52,6 +52,25 @@ document.addEventListener('DOMContentLoaded', function() {
 // Store user ID globally for this session
 window.currentUserId = localStorage.getItem('userId');
 
+// Display user ID if logged in
+function displayUserId() {
+  const userInfoDiv = document.getElementById('userInfo');
+  const userIdDisplay = document.getElementById('userIdDisplay');
+  
+  if (window.currentUserId && userInfoDiv && userIdDisplay) {
+    userIdDisplay.textContent = window.currentUserId;
+    userInfoDiv.style.display = 'block';
+    console.log('User ID displayed:', window.currentUserId);
+  } else {
+    console.log('No user ID found in localStorage');
+  }
+}
+
+// Call displayUserId when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+  displayUserId();
+});
+
 // Function to disable color mixing functionality
 function disableColorMixing() {
   // Hide the target color and current mix display
@@ -794,11 +813,14 @@ document.addEventListener('DOMContentLoaded', function() {
                     localStorage.setItem('userId', userId);
                     localStorage.setItem('userBirthdate', data.birthdate);
                     localStorage.setItem('userGender', data.gender);
+                    window.currentUserId = userId; // Update global variable
                     document.getElementById('userModal').style.display = 'none';
                     resetMix();
                     resetTimerDisplay();
                     // Ensure color mixing is disabled after login until Start is clicked
                     disableColorMixing();
+                    // Display user ID after successful login
+                    displayUserId();
                     console.log('User data stored, modal closed');
                 } else {
                     console.log('Login failed:', data.message);

@@ -351,6 +351,19 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('Initializing spectral mixer...');
     console.log('Spectrum plots:', spectrum_plots);
     
+    // Check for user ID in localStorage and display it
+    const storedUserId = localStorage.getItem('userId');
+    const userInfoDiv = document.getElementById('userInfo');
+    const userIdDisplay = document.getElementById('userIdDisplay');
+    
+    if (storedUserId && userInfoDiv && userIdDisplay) {
+        userIdDisplay.textContent = storedUserId;
+        userInfoDiv.style.display = 'block';
+        console.log('User ID displayed:', storedUserId);
+    } else {
+        console.log('No user ID found in localStorage');
+    }
+    
     // Initialize plots for each available pigment
     Object.keys(spectrum_plots).forEach(color => {
         console.log(`Initializing ${color}...`);

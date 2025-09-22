@@ -36,6 +36,33 @@
             margin-bottom: 40px;
         }
 
+        .user-info {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+        }
+
+        .user-id-display {
+            background: var(--surface-color);
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px var(--shadow-color);
+            display: inline-block;
+        }
+
+        .user-label {
+            color: var(--text-color);
+            font-weight: bold;
+            margin-right: 8px;
+        }
+
+        .user-id {
+            color: #007bff;
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 1.1em;
+        }
+
         .color-controls {
             display: flex;
             flex-direction: row;
@@ -239,6 +266,15 @@
             <a href="/color_inspector">Color Inspector</a>
             <a href="/reverse_engineer">Reverse Engineering</a>
         </div>
+        
+        <!-- User ID Display -->
+        <div class="user-info" id="userInfo" style="display: none;">
+            <div class="user-id-display">
+                <span class="user-label">User ID:</span>
+                <span class="user-id" id="userIdDisplay"></span>
+            </div>
+        </div>
+        
         <h1>Spectral Mixer</h1>
         
         <div class="color-controls">
