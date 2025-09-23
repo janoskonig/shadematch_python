@@ -196,7 +196,8 @@ def save_session():
             delta_e=data['delta_e'],
             time_sec=data['time_sec'],
             timestamp=datetime.fromisoformat(data['timestamp']),
-            skipped=data.get('skipped', False)
+            skipped=data.get('skipped', False),
+            quality_score=data.get('quality_score')
         )
         print('Created session object:', session)
         db.session.add(session)
@@ -228,15 +229,16 @@ def save_skip():
             target_r=data['target_r'],
             target_g=data['target_g'],
             target_b=data['target_b'],
-            drop_white=0,
-            drop_black=0,
-            drop_red=0,
-            drop_yellow=0,
-            drop_blue=0,
+            drop_white=data.get('drop_white', 0),
+            drop_black=data.get('drop_black', 0),
+            drop_red=data.get('drop_red', 0),
+            drop_yellow=data.get('drop_yellow', 0),
+            drop_blue=data.get('drop_blue', 0),
             delta_e=delta_e,
             time_sec=data['time_sec'],
             timestamp=datetime.fromisoformat(data['timestamp']),
-            skipped=True
+            skipped=True,
+            quality_score=data.get('quality_score')
         )
         print('Created skip session object:', session)
         db.session.add(session)
