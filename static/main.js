@@ -715,7 +715,6 @@ document.addEventListener("DOMContentLoaded", () => {
     
     document.getElementById("stopBtn").disabled = false;
     document.getElementById("skipBtn").disabled = false;
-    document.getElementById("skipBtn").disabled = true;
   });
 
   document.querySelectorAll(".color-circle").forEach(circle => {
