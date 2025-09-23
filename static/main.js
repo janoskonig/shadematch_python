@@ -69,6 +69,35 @@ function displayUserId() {
 // Call displayUserId when the page loads
 document.addEventListener('DOMContentLoaded', function() {
   displayUserId();
+  
+  // Check if user just completed registration (came from Ishihara test)
+  const justRegistered = localStorage.getItem('justRegistered');
+  if (justRegistered === 'true') {
+    // Clear the flag
+    localStorage.removeItem('justRegistered');
+    // Force display of user ID
+    const userId = localStorage.getItem('userId');
+    if (userId) {
+      window.currentUserId = userId;
+      displayUserId();
+    }
+  }
+  
+  // Also check for user ID periodically in case it gets set after page load
+  // This handles the case where first-time users complete the Ishihara test
+  const checkUserIdInterval = setInterval(() => {
+    const currentUserId = localStorage.getItem('userId');
+    if (currentUserId && currentUserId !== window.currentUserId) {
+      window.currentUserId = currentUserId;
+      displayUserId();
+      clearInterval(checkUserIdInterval); // Stop checking once we find the ID
+    }
+  }, 1000); // Check every second
+  
+  // Stop checking after 30 seconds to avoid infinite checking
+  setTimeout(() => {
+    clearInterval(checkUserIdInterval);
+  }, 30000);
 });
 
 // Function to disable color mixing functionality

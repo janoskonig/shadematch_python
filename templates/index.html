@@ -237,6 +237,21 @@
       align-items: center;
       justify-content: center;
       z-index: 1000;
+      /* Prevent clicking through the backdrop */
+      pointer-events: auto;
+      /* Add subtle animation to indicate modal is active */
+      animation: modalFadeIn 0.3s ease-out;
+    }
+
+    @keyframes modalFadeIn {
+      from {
+        opacity: 0;
+        background: rgba(0, 0, 0, 0.3);
+      }
+      to {
+        opacity: 1;
+        background: rgba(0, 0, 0, 0.7);
+      }
     }
 
     .modal-content {
@@ -247,6 +262,14 @@
       min-width: 300px;
       color: var(--text-color);
       box-shadow: 0 4px 12px var(--shadow-color);
+      /* Ensure modal content is clickable and prevents event bubbling */
+      pointer-events: auto;
+      position: relative;
+      z-index: 1001;
+      /* Add subtle border to indicate modal is active and blocking */
+      border: 2px solid var(--accent-color);
+      /* Add subtle glow effect */
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--accent-color);
     }
 
     .modal-content h2 {
@@ -477,8 +500,8 @@
   </div>
 
   <!-- Instructional Video Modal -->
-  <div id="videoModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.8); z-index: 2000; align-items: center; justify-content: center;">
-    <div style="position: relative; width: 90%; max-width: 800px; background: var(--surface-color); border-radius: 10px; padding: 20px;">
+  <div id="videoModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.8); z-index: 2000; align-items: center; justify-content: center; pointer-events: auto; animation: modalFadeIn 0.3s ease-out;">
+    <div style="position: relative; width: 90%; max-width: 800px; background: var(--surface-color); border-radius: 10px; padding: 20px; pointer-events: auto; z-index: 2001; border: 2px solid var(--accent-color); box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--accent-color);">
       <button id="closeVideoBtn" style="position: absolute; top: 10px; right: 15px; background: none; border: none; color: var(--text-color); font-size: 24px; cursor: pointer; z-index: 2001;">&times;</button>
       <div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
         <iframe id="videoFrame" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; border-radius: 8px;" 
@@ -656,12 +679,7 @@
     
     document.getElementById('closeVideoBtn').onclick = closeVideoAndProceed;
     
-    // Close video modal when clicking outside
-    videoModal.addEventListener('click', function(e) {
-      if (e.target === videoModal) {
-        closeVideoAndProceed();
-      }
-    });
+    // Video modal click-outside-to-close removed to prevent bypassing registration
     
     // Clear any incomplete registration data
     if (storedBirthdate && storedGender && !storedId) {
@@ -691,14 +709,7 @@
       }
     }
 
-    // Add click event listener to close modal when clicking outside
-    modal.addEventListener('click', function(e) {
-      if (e.target === modal) {
-        modal.style.display = 'none';
-        // Ensure color mixing is disabled when modal is closed until Start is clicked
-        disableColorMixing();
-      }
-    });
+    // User modal click-outside-to-close removed to prevent bypassing registration
 
     document.getElementById('switchUserBtn').onclick = function() {
       // Save current session data before switching users
