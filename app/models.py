@@ -34,4 +34,3 @@ class MixingSession(db.Model):
     time_sec = db.Column(db.Float)
     timestamp = db.Column(db.DateTime)
     skipped = db.Column(db.Boolean, default=False)
-    quality_score = db.Column(db.Integer)  # 1 = perfect match, 2 = acceptable difference, 3 = unacceptable difference

@@ -240,8 +240,7 @@ function saveSessionToServer(session) {
       delta_e: session.deltaE,
       time_sec: session.time,
       timestamp: session.timestamp,
-      skipped: session.skipped || false,
-      quality_score: session.quality_score || null
+      skipped: session.skipped || false
     };
   } else {
     // New format - use as is
@@ -258,8 +257,7 @@ function saveSessionToServer(session) {
       delta_e: session.delta_e,
       time_sec: session.time_sec,
       timestamp: session.timestamp,
-      skipped: session.skipped || false,
-      quality_score: session.quality_score || null
+      skipped: session.skipped || false
     };
   }
 
@@ -443,19 +441,12 @@ document.addEventListener("DOMContentLoaded", () => {
         stopTimer();
         const session = {
           user_id: window.currentUserId,
-          target_r: targetColor[0],
-          target_g: targetColor[1],
-          target_b: targetColor[2],
-          drop_white: dropCounts.white,
-          drop_black: dropCounts.black,
-          drop_red: dropCounts.red,
-          drop_yellow: dropCounts.yellow,
-          drop_blue: dropCounts.blue,
-          delta_e: data.delta_e,
-          time_sec: parseFloat(document.getElementById("timer").textContent),
+          target: targetColor,
+          drops: { ...dropCounts },
+          deltaE: data.delta_e,
+          time: parseFloat(document.getElementById("timer").textContent),
           timestamp: new Date().toISOString(),
-          skipped: false,  // Explicitly mark as completed (not skipped)
-          quality_score: 1  // Perfect match - no further information needed
+          skipped: false  // Explicitly mark as completed (not skipped)
         };
         sessionLogs.push(session);
         saveSessionToServer(session);
@@ -551,12 +542,123 @@ document.addEventListener("DOMContentLoaded", () => {
     // AND if we're not in a "Stop then Skip" scenario (where Stop already saved the data)
     console.log(`⏭️ Skip button clicked - DeltaE: ${currentDeltaE}, After Stop: ${isAfterStop}, Will save skip: ${currentDeltaE > 0.01 && !isAfterStop}`);
     if (currentDeltaE > 0.01 && !isAfterStop) {
-      // Show color difference perception questions
-      showColorDifferenceQuestions(currentDeltaE);
+      const skipData = {
+        user_id: window.currentUserId,
+        target_r: targetColor[0],
+        target_g: targetColor[1],
+        target_b: targetColor[2],
+        time_sec: parseFloat(document.getElementById("timer").textContent),
+        timestamp: new Date().toISOString(),
+        delta_e: isNaN(currentDeltaE) ? null : currentDeltaE
+      };
+      
+      fetch('/save_skip', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(skipData)
+      })
+      .then(res => {
+        console.log('Save skip response status:', res.status);
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(data => {
+        console.log('Skip saved to server:', data);
+        if (data.status !== 'success') {
+          console.error('Failed to save skip:', data.error);
+          alert('Failed to save skip data. Please try again.');
+        } else {
+          console.log('Skip saved successfully to database');
+        }
+      })
+      .catch(error => {
+        console.error('Error saving skip:', error);
+        alert('Error saving skip data. Please check your connection and try again.');
+      });
     } else {
       console.log('Skip not saved - session already recorded as successful completion or already saved by Stop button');
-      // Still proceed to next color if it was already saved
-      proceedToNextColor();
+    }
+    
+    currentTargetIndex++;
+    if (currentTargetIndex < targetColors.length) {
+      currentTargetColor = targetColors[currentTargetIndex];
+      targetColor = currentTargetColor.rgb;
+      updateBox("targetColor", targetColor);
+      resetMix();
+      startTimer();
+      
+      // Enable color mixing functionality for the new color
+      enableColorMixing();
+      
+      document.getElementById("skipBtn").disabled = false;
+      document.getElementById("stopBtn").disabled = false;
+      document.getElementById("skipBtn").textContent = "Skip";
+    } else {
+      // All colors completed - show congratulatory message with confetti and redirect
+      const congratulations = `
+        <div id="congratulations-modal" style="
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background: rgba(0, 0, 0, 0.8);
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          z-index: 10000;
+          font-family: sans-serif;
+        ">
+          <div style="
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 500px;
+            margin: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+          ">
+            <div style="font-size: 4em; margin-bottom: 20px;">🎉</div>
+            <h2 style="margin: 0 0 20px 0; font-size: 2.5em; font-weight: 300;">Congratulations!</h2>
+            <p style="margin: 0 0 30px 0; font-size: 1.2em; line-height: 1.6;">
+              You have successfully completed all color matching challenges!<br>
+              Your dedication and color perception skills are impressive.
+            </p>
+            <p style="margin: 0 0 30px 0; font-size: 1em; opacity: 0.9;">
+              You will now be redirected to view your detailed results and performance analysis.
+            </p>
+            <div style="
+              display: inline-block;
+              background: rgba(255, 255, 255, 0.2);
+              padding: 15px 30px;
+              border-radius: 25px;
+              font-size: 1.1em;
+              font-weight: 500;
+            ">
+              Redirecting to results...
+            </div>
+          </div>
+        </div>
+      `;
+      
+      document.body.insertAdjacentHTML('beforeend', congratulations);
+      
+      // Create confetti effect
+      createConfetti();
+      
+      // Disable all buttons
+      document.getElementById("skipBtn").disabled = true;
+      document.getElementById("stopBtn").disabled = true;
+      
+      // Redirect to results page after 4 seconds (giving time for confetti)
+      setTimeout(() => {
+        window.location.href = '/results';
+      }, 4000);
     }
   });
 
@@ -794,252 +896,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 });
-
-// Function to show color difference perception questions
-function showColorDifferenceQuestions(currentDeltaE) {
-  const modal = document.createElement('div');
-  modal.id = 'color-difference-modal';
-  modal.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.8);
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    z-index: 10000;
-    font-family: sans-serif;
-  `;
-  
-  modal.innerHTML = `
-    <div style="
-      background: white;
-      padding: 40px;
-      border-radius: 20px;
-      text-align: center;
-      max-width: 500px;
-      margin: 20px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-    ">
-      <h2 style="margin: 0 0 30px 0; color: #333;">Color Matching Assessment</h2>
-      <p style="margin: 0 0 30px 0; color: #666; font-size: 1.1em;">
-        Since you chose to skip this color, we'd like to understand your perception of the color match.
-      </p>
-      
-      <div id="question1" style="margin-bottom: 30px;">
-        <h3 style="margin: 0 0 20px 0; color: #333;">Do you notice a perceivable color difference between your mix and the target color?</h3>
-        <div style="display: flex; gap: 20px; justify-content: center;">
-          <button id="yes-difference" style="
-            padding: 15px 30px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1em;
-            cursor: pointer;
-            min-width: 100px;
-          ">Yes</button>
-          <button id="no-difference" style="
-            padding: 15px 30px;
-            background: #f44336;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1em;
-            cursor: pointer;
-            min-width: 100px;
-          ">No</button>
-        </div>
-      </div>
-      
-      <div id="question2" style="display: none; margin-bottom: 30px;">
-        <h3 style="margin: 0 0 20px 0; color: #333;">Would this color mismatch be acceptable on your clothing or skin (especially on your face)?</h3>
-        <div style="display: flex; gap: 20px; justify-content: center;">
-          <button id="acceptable" style="
-            padding: 15px 30px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1em;
-            cursor: pointer;
-            min-width: 100px;
-          ">Acceptable</button>
-          <button id="not-acceptable" style="
-            padding: 15px 30px;
-            background: #f44336;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1.1em;
-            cursor: pointer;
-            min-width: 100px;
-          ">Not Acceptable</button>
-        </div>
-      </div>
-    </div>
-  `;
-  
-  document.body.appendChild(modal);
-  
-  // Handle question 1 responses
-  document.getElementById('yes-difference').addEventListener('click', () => {
-    document.getElementById('question1').style.display = 'none';
-    document.getElementById('question2').style.display = 'block';
-  });
-  
-  document.getElementById('no-difference').addEventListener('click', () => {
-    // No perceivable difference - store score 1
-    saveSkipWithScore(currentDeltaE, 1);
-    document.body.removeChild(modal);
-    proceedToNextColor();
-  });
-  
-  // Handle question 2 responses
-  document.getElementById('acceptable').addEventListener('click', () => {
-    // Perceivable difference but acceptable - store score 2
-    saveSkipWithScore(currentDeltaE, 2);
-    document.body.removeChild(modal);
-    proceedToNextColor();
-  });
-  
-  document.getElementById('not-acceptable').addEventListener('click', () => {
-    // Perceivable difference and not acceptable - store score 3
-    saveSkipWithScore(currentDeltaE, 3);
-    document.body.removeChild(modal);
-    proceedToNextColor();
-  });
-}
-
-// Function to save skip data with quality score
-function saveSkipWithScore(currentDeltaE, qualityScore) {
-  const skipData = {
-    user_id: window.currentUserId,
-    target_r: targetColor[0],
-    target_g: targetColor[1],
-    target_b: targetColor[2],
-    drop_white: dropCounts.white,
-    drop_black: dropCounts.black,
-    drop_red: dropCounts.red,
-    drop_yellow: dropCounts.yellow,
-    drop_blue: dropCounts.blue,
-    time_sec: parseFloat(document.getElementById("timer").textContent),
-    timestamp: new Date().toISOString(),
-    delta_e: isNaN(currentDeltaE) ? null : currentDeltaE,
-    quality_score: qualityScore
-  };
-  
-  fetch('/save_skip', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(skipData)
-  })
-  .then(res => {
-    console.log('Save skip response status:', res.status);
-    if (!res.ok) {
-      throw new Error(`HTTP error! status: ${res.status}`);
-    }
-    return res.json();
-  })
-  .then(data => {
-    console.log('Skip saved to server:', data);
-    if (data.status !== 'success') {
-      console.error('Failed to save skip:', data.error);
-      alert('Failed to save skip data. Please try again.');
-    } else {
-      console.log('Skip saved successfully to database with quality score:', qualityScore);
-    }
-  })
-  .catch(error => {
-    console.error('Error saving skip:', error);
-    alert('Error saving skip data. Please check your connection and try again.');
-  });
-}
-
-// Function to proceed to next color
-function proceedToNextColor() {
-  currentTargetIndex++;
-  if (currentTargetIndex < targetColors.length) {
-    currentTargetColor = targetColors[currentTargetIndex];
-    targetColor = currentTargetColor.rgb;
-    updateBox("targetColor", targetColor);
-    resetMix();
-    startTimer();
-    
-    // Enable color mixing functionality for the new color
-    enableColorMixing();
-    
-    document.getElementById("skipBtn").disabled = false;
-    document.getElementById("stopBtn").disabled = false;
-    document.getElementById("skipBtn").textContent = "Skip";
-  } else {
-    // All colors completed - show congratulatory message with confetti and redirect
-    const congratulations = `
-      <div id="congratulations-modal" style="
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0, 0, 0, 0.8);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 10000;
-        font-family: sans-serif;
-      ">
-        <div style="
-          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          color: white;
-          padding: 40px;
-          border-radius: 20px;
-          text-align: center;
-          max-width: 500px;
-          margin: 20px;
-          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-          position: relative;
-          overflow: hidden;
-        ">
-          <div style="font-size: 4em; margin-bottom: 20px;">🎉</div>
-          <h2 style="margin: 0 0 20px 0; font-size: 2.5em; font-weight: 300;">Congratulations!</h2>
-          <p style="margin: 0 0 30px 0; font-size: 1.2em; line-height: 1.6;">
-            You have successfully completed all color matching challenges!<br>
-            Your dedication and color perception skills are impressive.
-          </p>
-          <p style="margin: 0 0 30px 0; font-size: 1em; opacity: 0.9;">
-            You will now be redirected to view your detailed results and performance analysis.
-          </p>
-          <div style="
-            display: inline-block;
-            background: rgba(255, 255, 255, 0.2);
-            padding: 15px 30px;
-            border-radius: 25px;
-            font-size: 1.1em;
-            font-weight: 500;
-          ">
-            Redirecting to results...
-          </div>
-        </div>
-      </div>
-    `;
-    
-    document.body.insertAdjacentHTML('beforeend', congratulations);
-    
-    // Create confetti effect
-    createConfetti();
-    
-    // Disable all buttons
-    document.getElementById("skipBtn").disabled = true;
-    document.getElementById("stopBtn").disabled = true;
-    
-    // Redirect to results page after 4 seconds (giving time for confetti)
-    setTimeout(() => {
-      window.location.href = '/results';
-    }, 4000);
-  }
-}
 
 // Confetti animation function
 function createConfetti() {
