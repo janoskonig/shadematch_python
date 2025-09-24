@@ -547,6 +547,11 @@ document.addEventListener("DOMContentLoaded", () => {
         target_r: targetColor[0],
         target_g: targetColor[1],
         target_b: targetColor[2],
+        drop_white: dropCounts.white || 0,
+        drop_black: dropCounts.black || 0,
+        drop_red: dropCounts.red || 0,
+        drop_yellow: dropCounts.yellow || 0,
+        drop_blue: dropCounts.blue || 0,
         time_sec: parseFloat(document.getElementById("timer").textContent),
         timestamp: new Date().toISOString(),
         delta_e: isNaN(currentDeltaE) ? null : currentDeltaE
