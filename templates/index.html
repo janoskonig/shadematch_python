@@ -770,10 +770,110 @@
       e.preventDefault();
       const birthdate = document.getElementById('userBirthdate').value;
       const gender = document.getElementById('userGender').value;
-      localStorage.setItem('userBirthdate', birthdate);
-      localStorage.setItem('userGender', gender);
-      // Redirect to the Ishihara test page first
-      window.location.href = '/ishihara-test';
+      
+      // Validate birthdate - year must be 2015 or later and not too recent
+      if (birthdate) {
+        const birthDate = new Date(birthdate);
+        const birthYear = birthDate.getFullYear();
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
+        
+        // Calculate minimum allowed birthdate (10 years ago from today)
+        const minBirthDate = new Date(today);
+        minBirthDate.setFullYear(today.getFullYear() - 10);
+        
+        if (birthYear < 2015) {
+          // Show error message
+          const errorDiv = document.getElementById('birthdateError');
+          if (errorDiv) {
+            errorDiv.textContent = 'Birth year must be 2015 or later.';
+            errorDiv.style.display = 'block';
+          } else {
+            // Create error message if it doesn't exist
+            const errorMsg = document.createElement('div');
+            errorMsg.id = 'birthdateError';
+            errorMsg.style.color = 'red';
+            errorMsg.style.marginTop = '5px';
+            errorMsg.textContent = 'Birth year must be 2015 or later.';
+            document.getElementById('userBirthdate').parentNode.appendChild(errorMsg);
+          }
+          return; // Stop form submission
+        } else if (birthDate > minBirthDate) {
+          // Show error message for dates too recent (within last 10 years)
+          const errorDiv = document.getElementById('birthdateError');
+          if (errorDiv) {
+            errorDiv.textContent = 'You must be at least 10 years old to participate.';
+            errorDiv.style.display = 'block';
+          } else {
+            // Create error message if it doesn't exist
+            const errorMsg = document.createElement('div');
+            errorMsg.id = 'birthdateError';
+            errorMsg.style.color = 'red';
+            errorMsg.style.marginTop = '5px';
+            errorMsg.textContent = 'You must be at least 10 years old to participate.';
+            document.getElementById('userBirthdate').parentNode.appendChild(errorMsg);
+          }
+          return; // Stop form submission
+        }
+      }
+      
+      // Clear any existing error message
+      const errorDiv = document.getElementById('birthdateError');
+      if (errorDiv) {
+        errorDiv.style.display = 'none';
+      }
+      
+      // Call server-side registration endpoint for validation
+      fetch('/register', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          birthdate: birthdate,
+          gender: gender
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.status === 'success') {
+          // Store user data and redirect on successful registration
+          localStorage.setItem('userBirthdate', birthdate);
+          localStorage.setItem('userGender', gender);
+          localStorage.setItem('userId', data.userId);
+          window.location.href = '/ishihara-test';
+        } else {
+          // Show server validation error
+          const errorDiv = document.getElementById('birthdateError');
+          if (errorDiv) {
+            errorDiv.textContent = data.message;
+            errorDiv.style.display = 'block';
+          } else {
+            const errorMsg = document.createElement('div');
+            errorMsg.id = 'birthdateError';
+            errorMsg.style.color = 'red';
+            errorMsg.style.marginTop = '5px';
+            errorMsg.textContent = data.message;
+            document.getElementById('userBirthdate').parentNode.appendChild(errorMsg);
+          }
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        // Show generic error message
+        const errorDiv = document.getElementById('birthdateError');
+        if (errorDiv) {
+          errorDiv.textContent = 'An error occurred. Please try again.';
+          errorDiv.style.display = 'block';
+        } else {
+          const errorMsg = document.createElement('div');
+          errorMsg.id = 'birthdateError';
+          errorMsg.style.color = 'red';
+          errorMsg.style.marginTop = '5px';
+          errorMsg.textContent = 'An error occurred. Please try again.';
+          document.getElementById('userBirthdate').parentNode.appendChild(errorMsg);
+        }
+      });
     };
 
     // Initialize the mixed color display
