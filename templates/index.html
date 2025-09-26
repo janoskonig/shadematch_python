@@ -771,22 +771,15 @@
       const birthdate = document.getElementById('userBirthdate').value;
       const gender = document.getElementById('userGender').value;
       
-      // Validate birthdate - year must be 2015 or later and not too recent
+      // Validate birthdate - must be born before 2015
       if (birthdate) {
-        const birthDate = new Date(birthdate);
-        const birthYear = birthDate.getFullYear();
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Reset time to start of day for accurate comparison
+        const birthYear = new Date(birthdate).getFullYear();
         
-        // Calculate minimum allowed birthdate (16 years ago from today)
-        const minBirthDate = new Date(today);
-        minBirthDate.setFullYear(today.getFullYear() - 16);
-        
-        if (birthYear < 2015) {
+        if (birthYear >= 2015) {
           // Show error message
           const errorDiv = document.getElementById('birthdateError');
           if (errorDiv) {
-            errorDiv.textContent = 'Birth year must be 2015 or later.';
+            errorDiv.textContent = 'You must be born before 2015 to participate.';
             errorDiv.style.display = 'block';
           } else {
             // Create error message if it doesn't exist
@@ -794,23 +787,7 @@
             errorMsg.id = 'birthdateError';
             errorMsg.style.color = 'red';
             errorMsg.style.marginTop = '5px';
-            errorMsg.textContent = 'Birth year must be 2015 or later.';
-            document.getElementById('userBirthdate').parentNode.appendChild(errorMsg);
-          }
-          return; // Stop form submission
-        } else if (birthDate > minBirthDate) {
-          // Show error message for dates too recent (within last 16 years)
-          const errorDiv = document.getElementById('birthdateError');
-          if (errorDiv) {
-            errorDiv.textContent = 'You must be at least 16 years old to participate.';
-            errorDiv.style.display = 'block';
-          } else {
-            // Create error message if it doesn't exist
-            const errorMsg = document.createElement('div');
-            errorMsg.id = 'birthdateError';
-            errorMsg.style.color = 'red';
-            errorMsg.style.marginTop = '5px';
-            errorMsg.textContent = 'You must be at least 16 years old to participate.';
+            errorMsg.textContent = 'You must be born before 2015 to participate.';
             document.getElementById('userBirthdate').parentNode.appendChild(errorMsg);
           }
           return; // Stop form submission

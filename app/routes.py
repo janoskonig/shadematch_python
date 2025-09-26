@@ -92,22 +92,11 @@ def register():
     birthdate = datetime.strptime(data['birthdate'], '%Y-%m-%d').date()
     gender = data['gender']
     
-    # Validate birthdate - year must be 2015 or later and not too recent
-    from datetime import date, timedelta
-    today = date.today()
-    
-    # Calculate minimum allowed birthdate (16 years ago from today)
-    min_birthdate = date(today.year - 16, today.month, today.day)
-    
-    if birthdate.year < 2015:
+    # Validate birthdate - must be born before 2015
+    if birthdate.year >= 2015:
         return jsonify({
             'status': 'error',
-            'message': 'Birth year must be 2015 or later.'
-        }), 400
-    elif birthdate > min_birthdate:
-        return jsonify({
-            'status': 'error',
-            'message': 'You must be at least 16 years old to participate.'
+            'message': 'You must be born before 2015 to participate.'
         }), 400
     
     # Generate a unique user ID
