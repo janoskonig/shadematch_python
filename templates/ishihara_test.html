@@ -785,6 +785,15 @@
                     return;
                 }
                 
+                // Check if user is already registered
+                const existingUserId = localStorage.getItem('userId');
+                if (existingUserId) {
+                    console.log('User already registered with ID:', existingUserId);
+                    // Display the existing user ID instead of registering again
+                    displayUserID(existingUserId);
+                    return;
+                }
+                
                 const response = await fetch('/register', {
                     method: 'POST',
                     headers: {
