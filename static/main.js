@@ -592,6 +592,10 @@ document.addEventListener("DOMContentLoaded", () => {
       targetColor = currentTargetColor.rgb;
       updateBox("targetColor", targetColor);
       resetMix();
+      
+      // Stop current timer and reset display before starting new timer
+      stopTimer();
+      resetTimerDisplay();
       startTimer();
       
       // Enable color mixing functionality for the new color
