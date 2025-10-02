@@ -213,6 +213,34 @@ function updateBox(id, rgb) {
   el.style.backgroundColor = `rgb(${rgb.join(',')})`;
 }
 
+// Function to refresh database connection
+async function refreshDatabaseConnection() {
+  try {
+    console.log('🔄 Refreshing database connection...');
+    const response = await fetch('/refresh_connection', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    
+    if (response.ok) {
+      const result = await response.json();
+      if (result.status === 'success') {
+        console.log('✅ Database connection refreshed');
+        return true;
+      } else {
+        console.warn('⚠️ Connection refresh returned error:', result.message);
+        return false;
+      }
+    } else {
+      console.warn('⚠️ Connection refresh failed with status:', response.status);
+      return false;
+    }
+  } catch (error) {
+    console.warn('⚠️ Connection refresh failed:', error);
+    return false;
+  }
+}
+
 function saveSessionToServer(session) {
   if (!window.currentUserId) {
     console.error('❌ No user ID found - cannot save session');
@@ -351,24 +379,117 @@ document.addEventListener("DOMContentLoaded", () => {
     { name: '#58482F', type: 'skin', classification: 'skin_dark', rgb: [88, 68, 44] }
   ];
 
+  // Color appearance frequency data from preliminary results (excluding orange, green, purple)
+  const colorFrequencyData = {
+    // Basic colors (excluding orange, green, purple which are fixed)
+    '#FFB3BC': 145, // Pink
+    '#FFE4AF': 108, // Peach  
+    '#6F7A66': 102, // Custom
+    '#71703E': 101, // Olive
+    '#547A7A': 96,  // Teal
+    '#FF8352': 90,  // Coral
+    '#679DAE': 68,  // Turquoise
+    '#9DD267': 66,  // Chartreuse
+    
+    // Skin colors - Light
+    '#D1AE90': 48,
+    '#BE8870': 39,
+    '#AE967E': 22,
+    '#C3A28F': 17,
+    '#A97367': 16,
+    '#CB9781': 11,
+    '#E8B7BA': 10,
+    '#A58F5E': 18,
+    '#B5866A': 20,
+    '#DE958F': 1,
+    
+    // Skin colors - Dark
+    '#99856A': 5,
+    '#A8856F': 23,
+    '#A07E63': 4,
+    '#80685C': 3,
+    '#584B42': 13,
+    '#7B5749': 14,
+    '#543B34': 9,
+    '#583E2D': 2,
+    '#A76662': 21,
+    '#A28074': 7,
+    '#8F7868': 8,
+    '#9F7954': 1,
+    '#392D1D': 19,
+    '#9D7248': 12,
+    '#58482F': 24
+  };
+
+  // Function to convert RGB to hex for matching
+  function rgbToHex(rgb) {
+    return '#' + rgb.map(x => {
+      const hex = x.toString(16);
+      return hex.length === 1 ? '0' + hex : hex;
+    }).join('').toUpperCase();
+  }
+
+  // Function to get weighted random selection
+  function weightedRandomSelection(items, weights, count) {
+    // Calculate total weight
+    const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+    
+    // Create cumulative weights
+    const cumulativeWeights = [];
+    let cumulative = 0;
+    for (let i = 0; i < weights.length; i++) {
+      cumulative += weights[i];
+      cumulativeWeights.push(cumulative);
+    }
+    
+    const selected = [];
+    const selectedIndices = new Set();
+    
+    while (selected.length < count && selected.length < items.length) {
+      const random = Math.random() * totalWeight;
+      
+      for (let i = 0; i < cumulativeWeights.length; i++) {
+        if (random <= cumulativeWeights[i] && !selectedIndices.has(i)) {
+          selected.push(items[i]);
+          selectedIndices.add(i);
+          break;
+        }
+      }
+    }
+    
+    return selected;
+  }
+
   // Function to generate randomized color selection for a session
   function generateRandomizedColors() {
-    // Always include first 3 basic colors
+    // Always include first 3 basic colors (Orange, Purple, Green)
     const firstThreeBasic = allTargetColors.slice(0, 3);
     
     // Get remaining basic colors (indices 3-10, which are 8 colors)
     const remainingBasic = allTargetColors.slice(3, 11);
     
-    // Randomly select 3 from remaining basic colors
-    const shuffledRemainingBasic = [...remainingBasic].sort(() => Math.random() - 0.5);
-    const selectedRemainingBasic = shuffledRemainingBasic.slice(0, 3);
+    // Calculate weights for remaining basic colors (inverse of frequency)
+    const basicWeights = remainingBasic.map(color => {
+      const hex = rgbToHex(color.rgb);
+      const frequency = colorFrequencyData[hex] || 1; // Default to 1 if not found
+      return 1 / frequency; // Inverse weight - lower frequency = higher weight
+    });
+    
+    // Weighted selection of 3 from remaining basic colors
+    const selectedRemainingBasic = weightedRandomSelection(remainingBasic, basicWeights, 3);
     
     // Get all skin colors (indices 11-39, which are 29 colors)
     const skinColors = allTargetColors.slice(11);
     
-    // Randomly select 5 skin colors
-    const shuffledSkinColors = [...skinColors].sort(() => Math.random() - 0.5);
-    const selectedSkinColors = shuffledSkinColors.slice(0, 5);
+    // Calculate weights for skin colors (inverse of frequency)
+    const skinWeights = skinColors.map(color => {
+      const hex = rgbToHex(color.rgb);
+      const frequency = colorFrequencyData[hex] || 1; // Default to 1 if not found
+      return 1 / frequency; // Inverse weight - lower frequency = higher weight
+    });
+    
+    // Weighted selection of 5 skin colors
+    const selectedSkinColors = weightedRandomSelection(skinColors, skinWeights, 5);
     
     // Combine all selected colors
     const selectedColors = [
@@ -377,10 +498,10 @@ document.addEventListener("DOMContentLoaded", () => {
       ...selectedSkinColors
     ];
     
-    console.log('🎨 Generated randomized color selection:');
-    console.log('- First 3 basic colors:', firstThreeBasic.map(c => c.name));
-    console.log('- 3 random remaining basic colors:', selectedRemainingBasic.map(c => c.name));
-    console.log('- 5 random skin colors:', selectedSkinColors.map(c => c.name));
+    console.log('🎨 Generated weighted randomized color selection:');
+    console.log('- Fixed 3 basic colors:', firstThreeBasic.map(c => c.name));
+    console.log('- 3 weighted remaining basic colors:', selectedRemainingBasic.map(c => c.name));
+    console.log('- 5 weighted skin colors:', selectedSkinColors.map(c => c.name));
     console.log('- Total colors for this session:', selectedColors.length);
     
     return selectedColors;
@@ -461,7 +582,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Button logic
-  document.getElementById("startBtn").addEventListener("click", () => {
+  document.getElementById("startBtn").addEventListener("click", async () => {
+    // Refresh database connection before starting
+    await refreshDatabaseConnection();
+    
     // Generate new randomized colors for the start
     const newTargetColors = generateRandomizedColors();
     targetColors.length = 0; // Clear existing array
@@ -530,7 +654,10 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("stopBtn").disabled = true;
   });
 
-  document.getElementById("skipBtn").addEventListener("click", () => {
+  document.getElementById("skipBtn").addEventListener("click", async () => {
+    // Refresh database connection before skipping
+    await refreshDatabaseConnection();
+    
     // Get current deltaE value
     const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
     
@@ -671,7 +798,10 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  document.getElementById("restartBtn").addEventListener("click", () => {
+  document.getElementById("restartBtn").addEventListener("click", async () => {
+    // Refresh database connection before restarting
+    await refreshDatabaseConnection();
+    
     // Generate new randomized colors for the restart
     const newTargetColors = generateRandomizedColors();
     targetColors.length = 0; // Clear existing array

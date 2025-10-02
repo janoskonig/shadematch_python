@@ -9,12 +9,31 @@ import pandas as pd
 import os
 import numpy as np
 import json
+import time
 
 main = Blueprint('main', __name__)
 
 def generate_user_id():
     """Generate a random 6-character user ID"""
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+
+def refresh_db_connection():
+    """Refresh database connection to handle stale connections"""
+    try:
+        # Test the current connection
+        db.session.execute(db.text('SELECT 1'))
+        print('✅ Database connection is healthy')
+        return True
+    except Exception as e:
+        print(f'⚠️ Database connection is stale, refreshing... Error: {e}')
+        try:
+            # Close all connections in the pool
+            db.engine.dispose()
+            print('✅ Database connection pool refreshed')
+            return True
+        except Exception as refresh_error:
+            print(f'❌ Failed to refresh database connection: {refresh_error}')
+            return False
 
 @main.route('/')
 def index():
@@ -185,6 +204,10 @@ def save_session():
     data = request.get_json()
     print('Received session data:', data)
     
+    # Refresh database connection to handle stale connections
+    if not refresh_db_connection():
+        return jsonify({'status': 'error', 'error': 'Database connection failed'}), 500
+    
     try:
         # Debug database connection
         print('Database URI:', db.engine.url)
@@ -222,6 +245,10 @@ def save_skip():
     data = request.get_json()
     print('Received skip data:', data)
     
+    # Refresh database connection to handle stale connections
+    if not refresh_db_connection():
+        return jsonify({'status': 'error', 'error': 'Database connection failed'}), 500
+    
     try:
         # Debug database connection
         print('Database URI:', db.engine.url)
@@ -255,6 +282,18 @@ def save_skip():
         print('Error saving skip session:', str(e))
         print('Error type:', type(e).__name__)
         db.session.rollback()
+        return jsonify({'status': 'error', 'error': str(e)}), 500
+
+@main.route('/refresh_connection', methods=['POST'])
+def refresh_connection():
+    """Refresh database connection - called by frontend on key actions"""
+    try:
+        if refresh_db_connection():
+            return jsonify({'status': 'success', 'message': 'Connection refreshed'})
+        else:
+            return jsonify({'status': 'error', 'message': 'Failed to refresh connection'}), 500
+    except Exception as e:
+        print(f'Error refreshing connection: {e}')
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
 @main.route('/results')
