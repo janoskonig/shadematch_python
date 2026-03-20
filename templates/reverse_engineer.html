@@ -154,22 +154,6 @@
             font-weight: bold;
         }
         
-        .accuracy-section {
-            text-align: center;
-            margin-top: 20px;
-        }
-        
-        .delta-e {
-            font-size: 1.3em;
-            font-weight: bold;
-            color: #333;
-        }
-        
-        .delta-e-value {
-            color: #667eea;
-            font-size: 1.5em;
-        }
-        
         .color-preview {
             display: flex;
             justify-content: center;
@@ -336,18 +320,6 @@
                 font-size: 1.3em;
             }
 
-            .accuracy-section {
-                margin-top: 25px;
-            }
-
-            .delta-e {
-                font-size: 1.4em;
-            }
-
-            .delta-e-value {
-                font-size: 1.6em;
-            }
-
             .color-preview {
                 gap: 25px;
                 margin: 25px 0;
@@ -432,13 +404,6 @@
                         <!-- Pigment items will be populated here -->
                     </div>
                     
-                    <div class="accuracy-section">
-                        <div class="delta-e">
-                            Color Accuracy (ΔE): <span class="delta-e-value" id="deltaE">-</span>
-                        </div>
-                        <p><small>Lower values indicate better color match</small></p>
-                    </div>
-                    
                     <div class="color-preview">
                         <div>
                             <div class="color-box" id="targetColor"></div>
@@ -518,9 +483,6 @@
                 `;
                 pigmentList.appendChild(pigmentItem);
             });
-            
-            // Display Delta E
-            document.getElementById('deltaE').textContent = data.delta_e.toFixed(2);
             
             // Display colors
             const targetColor = document.getElementById('targetColor');

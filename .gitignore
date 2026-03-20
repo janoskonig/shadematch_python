@@ -1,4 +1,5 @@
 .env
+node_modules/
 taf_dataapp_example.py
 spectraljs_package_readme.py
 spectral_by_wijnen.js

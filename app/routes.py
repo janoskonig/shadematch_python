@@ -13,6 +13,41 @@ import time
 
 main = Blueprint('main', __name__)
 
+# “Perfect” / effective zero: same threshold as static/main.js auto-save (CIEDE2000 rarely equals 0.0 exactly)
+MATCH_PERFECT_DELTA_E = 0.01
+
+
+def derive_match_category(delta_e, skipped, skip_perception=None):
+    """
+    Non-null category for each row:
+    perfect | no_perceivable_difference | acceptable_difference | big_difference | stopped
+    """
+    if delta_e is None:
+        de_not_perfect = True
+    else:
+        try:
+            de_not_perfect = float(delta_e) > MATCH_PERFECT_DELTA_E
+        except (TypeError, ValueError):
+            de_not_perfect = True
+
+    if not de_not_perfect:
+        return 'perfect'
+
+    if not skipped:
+        # Should only happen if ΔE is already “zero” (handled above); otherwise classify as stopped
+        return 'stopped'
+
+    if skip_perception == 'identical':
+        return 'no_perceivable_difference'
+    if skip_perception == 'acceptable':
+        return 'acceptable_difference'
+    if skip_perception == 'unacceptable':
+        return 'big_difference'
+
+    # Skipped without survey (Stop or Retry): no “non‑perfect” bucket — use stopped
+    return 'stopped'
+
+
 def generate_user_id():
     """Generate a random 6-character user ID"""
     return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
@@ -213,6 +248,12 @@ def save_session():
         print('Database URI:', db.engine.url)
         print('Database connected:', db.engine.pool.checkedin())
         
+        skipped = data.get('skipped', False)
+        mc = derive_match_category(
+            data.get('delta_e'),
+            skipped,
+            skip_perception=None,
+        )
         session = MixingSession(
             user_id=data['user_id'],
             target_r=data['target_r'],
@@ -226,7 +267,8 @@ def save_session():
             delta_e=data['delta_e'],
             time_sec=data['time_sec'],
             timestamp=datetime.fromisoformat(data['timestamp']),
-            skipped=data.get('skipped', False)
+            skipped=skipped,
+            match_category=mc,
         )
         print('Created session object:', session)
         db.session.add(session)
@@ -256,7 +298,11 @@ def save_skip():
         
         # Get deltaE value from request, default to None if not provided
         delta_e = data.get('delta_e')
+        allowed_skip = {'identical', 'acceptable', 'unacceptable'}
+        raw_perception = data.get('skip_perception')
+        skip_perception = raw_perception if raw_perception in allowed_skip else None
         
+        mc = derive_match_category(delta_e, True, skip_perception=skip_perception)
         session = MixingSession(
             user_id=data['user_id'],
             target_r=data['target_r'],
@@ -270,7 +316,9 @@ def save_skip():
             delta_e=delta_e,
             time_sec=data['time_sec'],
             timestamp=datetime.fromisoformat(data['timestamp']),
-            skipped=True
+            skipped=True,
+            skip_perception=skip_perception,
+            match_category=mc,
         )
         print('Created skip session object:', session)
         db.session.add(session)
@@ -327,7 +375,9 @@ def get_user_results():
                 'delta_e': session.delta_e if session.delta_e is not None else 'N/A',
                 'time_sec': session.time_sec,
                 'timestamp': session.timestamp.isoformat() if session.timestamp else None,
-                'skipped': session.skipped
+                'skipped': session.skipped,
+                'skip_perception': session.skip_perception,
+                'match_category': session.match_category,
             })
         
         return jsonify({

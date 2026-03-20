@@ -6,6 +6,9 @@ console.log("✅ main.js loaded");
 let sessionLogs = [];
 let currentSessionSaved = false; // Flag to prevent duplicate saves
 
+window.lastMixDeltaE = NaN;
+window.shadeMatchTargetRgb = [255, 255, 255];
+
 // Cookie Consent Integration Example
 // This shows how to use the cookie consent system in your application
 document.addEventListener('DOMContentLoaded', function() {
@@ -161,6 +164,7 @@ let dropCounts = {
   yellow: 0,
   blue: 0
 };
+window.shadeMatchDropCounts = dropCounts;
 
 // Define resetMix function
 function resetMix() {
@@ -172,8 +176,8 @@ function resetMix() {
   // Reset the mixed color display to white
   document.getElementById('currentMix').style.backgroundColor = 'rgb(255, 255, 255)';
   document.getElementById('mixedRgbValues').textContent = 'RGB: [255, 255, 255]';
-  document.getElementById('deltaE').textContent = '-';
-  
+  window.lastMixDeltaE = NaN;
+
   // Reset drop counts object
   dropCounts = {
     white: 0,
@@ -182,7 +186,8 @@ function resetMix() {
     yellow: 0,
     blue: 0
   };
-  
+  window.shadeMatchDropCounts = dropCounts;
+
   // Reset the session saved flag for the new color
   currentSessionSaved = false;
   window.currentSessionSaved = false; // Also update global reference
@@ -514,11 +519,48 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentTargetColor = targetColors[0];
   let targetColor = currentTargetColor.rgb;
 
+  function setGameTargetRgb(rgb) {
+    targetColor = rgb;
+    window.shadeMatchTargetRgb = rgb;
+  }
+  setGameTargetRgb(currentTargetColor.rgb);
+
+  function showSkipPerceptionModal() {
+    return new Promise((resolve) => {
+      const modal = document.getElementById('skipPerceptionModal');
+      if (!modal) {
+        resolve(null);
+        return;
+      }
+      modal.style.display = 'flex';
+      const options = [
+        { id: 'skipPerceptionIdentical', value: 'identical' },
+        { id: 'skipPerceptionAcceptable', value: 'acceptable' },
+        { id: 'skipPerceptionUnacceptable', value: 'unacceptable' }
+      ];
+      const handlers = [];
+      const finish = (value) => {
+        modal.style.display = 'none';
+        for (const { el, fn } of handlers) {
+          el.removeEventListener('click', fn);
+        }
+        resolve(value);
+      };
+      for (const { id, value } of options) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        const fn = () => finish(value);
+        el.addEventListener('click', fn);
+        handlers.push({ el, fn });
+      }
+    });
+  }
+
   function updateCurrentMix() {
     const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
     if (totalDrops === 0) {
       updateBox("currentMix", [255, 255, 255]);
-      document.getElementById("deltaE").textContent = "-";
+      window.lastMixDeltaE = NaN;
       return;
     }
 
@@ -553,8 +595,8 @@ document.addEventListener("DOMContentLoaded", () => {
     .then(res => res.json())
     .then(data => {
       if (data.error) return console.error("Server error:", data.error);
-      document.getElementById("deltaE").textContent = data.delta_e.toFixed(2);
-      
+      window.lastMixDeltaE = data.delta_e;
+
       console.log(`Current DeltaE: ${data.delta_e}, Threshold check: ${data.delta_e <= 0.01}`);
 
       if (data.delta_e <= 0.01) { // Use threshold instead of exact equality for floating point
@@ -593,7 +635,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     currentTargetIndex = 0;
     currentTargetColor = targetColors[currentTargetIndex];
-    targetColor = currentTargetColor.rgb;
+    setGameTargetRgb(currentTargetColor.rgb);
     updateBox("targetColor", targetColor);
     resetMix();
     startTimer();
@@ -610,7 +652,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("stopBtn").addEventListener("click", () => {
     stopTimer();
-    const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
+    const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     
     // Always save the current session data when Stop is clicked
     if (!isNaN(currentDeltaE)) {  // Only save if we have a valid DeltaE
@@ -657,18 +699,28 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("skipBtn").addEventListener("click", async () => {
     // Refresh database connection before skipping
     await refreshDatabaseConnection();
-    
-    // Get current deltaE value
-    const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
-    
+
+    const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
+
     // Check if we're in a "Stop then Skip" scenario by checking if color mixing is disabled
     const isAfterStop = document.getElementById("palette").style.display === "none";
-    
-    // Only save skip if this wasn't already saved as a successful completion
-    // (i.e., if ΔE is not <= 0.01, meaning no automatic save happened)
-    // AND if we're not in a "Stop then Skip" scenario (where Stop already saved the data)
-    console.log(`⏭️ Skip button clicked - DeltaE: ${currentDeltaE}, After Stop: ${isAfterStop}, Will save skip: ${currentDeltaE > 0.01 && !isAfterStop}`);
-    if (currentDeltaE > 0.01 && !isAfterStop) {
+
+    // If we already auto-saved a perfect match (ΔE≤0.01), this round is complete even if the user
+    // added more drops and raised ΔE before pressing "Next color" — do not treat as mid-trial skip.
+    const alreadyCompletedThisColor = window.currentSessionSaved === true;
+
+    const shouldSaveSkip =
+      currentDeltaE > 0.01 && !isAfterStop && !alreadyCompletedThisColor;
+    console.log(
+      `⏭️ Skip button clicked - DeltaE: ${currentDeltaE}, After Stop: ${isAfterStop}, alreadyCompleted: ${alreadyCompletedThisColor}, Will save skip: ${shouldSaveSkip}`
+    );
+
+    if (shouldSaveSkip) {
+      const skipPerception = await showSkipPerceptionModal();
+      if (!skipPerception) {
+        console.warn('Skip perception modal closed without selection');
+        return;
+      }
       const skipData = {
         user_id: window.currentUserId,
         target_r: targetColor[0],
@@ -681,42 +733,38 @@ document.addEventListener("DOMContentLoaded", () => {
         drop_blue: dropCounts.blue || 0,
         time_sec: parseFloat(document.getElementById("timer").textContent),
         timestamp: new Date().toISOString(),
-        delta_e: isNaN(currentDeltaE) ? null : currentDeltaE
+        delta_e: currentDeltaE,
+        skip_perception: skipPerception
       };
-      
-      fetch('/save_skip', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(skipData)
-      })
-      .then(res => {
-        console.log('Save skip response status:', res.status);
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        return res.json();
-      })
-      .then(data => {
-        console.log('Skip saved to server:', data);
-        if (data.status !== 'success') {
+      try {
+        const res = await fetch('/save_skip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(skipData)
+        });
+        const data = await res.json();
+        console.log('Save skip response status:', res.status, data);
+        if (!res.ok || data.status !== 'success') {
           console.error('Failed to save skip:', data.error);
           alert('Failed to save skip data. Please try again.');
-        } else {
-          console.log('Skip saved successfully to database');
+          return;
         }
-      })
-      .catch(error => {
+        console.log('Skip saved successfully to database');
+      } catch (error) {
         console.error('Error saving skip:', error);
         alert('Error saving skip data. Please check your connection and try again.');
-      });
+        return;
+      }
     } else {
-      console.log('Skip not saved - session already recorded as successful completion or already saved by Stop button');
+      console.log(
+        'Skip not saved - already completed this color, ΔE≤threshold completion, or saved by Stop'
+      );
     }
-    
+
     currentTargetIndex++;
     if (currentTargetIndex < targetColors.length) {
       currentTargetColor = targetColors[currentTargetIndex];
-      targetColor = currentTargetColor.rgb;
+      setGameTargetRgb(currentTargetColor.rgb);
       updateBox("targetColor", targetColor);
       resetMix();
       
@@ -809,7 +857,7 @@ document.addEventListener("DOMContentLoaded", () => {
     
     currentTargetIndex = 0;
     currentTargetColor = targetColors[currentTargetIndex];
-    targetColor = currentTargetColor.rgb;
+    setGameTargetRgb(currentTargetColor.rgb);
     updateBox("targetColor", targetColor);
     resetMix();
     resetTimerDisplay();
@@ -825,7 +873,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.getElementById("retryBtn").addEventListener("click", () => {
     // Store current session data before resetting
-    const currentDeltaE = parseFloat(document.getElementById("deltaE").textContent);
+    const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     if (!isNaN(currentDeltaE)) {  // Only store if we have a valid DeltaE
       console.log('🔄 Retry button clicked - saving session with DeltaE:', currentDeltaE);
       const session = {
@@ -924,9 +972,9 @@ async function saveSessionData() {
 
   const sessionData = {
     userId: window.currentUserId,
-    target: targetColor,
-    drops: dropCounts,
-    deltaE: parseFloat(document.getElementById('deltaE').textContent),
+    target: window.shadeMatchTargetRgb,
+    drops: window.shadeMatchDropCounts,
+    deltaE: Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN,
     time: parseFloat(document.getElementById('timer').textContent),
     timestamp: new Date().toISOString()
   };

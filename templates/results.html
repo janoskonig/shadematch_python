@@ -389,8 +389,30 @@
       // Calculate summary statistics
       const completedSessions = results.filter(r => !r.skipped).length;
       const skippedSessions = results.filter(r => r.skipped).length;
-      const avgDeltaE = results.filter(r => r.delta_e !== 'N/A' && r.delta_e !== null).reduce((sum, r) => sum + r.delta_e, 0);
-      const avgDeltaEFormatted = avgDeltaE > 0 ? (avgDeltaE / results.filter(r => r.delta_e !== 'N/A' && r.delta_e !== null).length).toFixed(2) : 'N/A';
+
+      function formatMatchCategory(val, legacySkipPerception, skipped) {
+        if (val) {
+          const labels = {
+            perfect: 'Perfect (ΔE ≤ 0.01)',
+            perfect_match: 'Perfect (ΔE ≤ 0.01)',
+            no_perceivable_difference: 'No perceivable difference',
+            no_perceptible_diff: 'No perceivable difference',
+            acceptable_difference: 'Acceptable difference',
+            acceptable_diff: 'Acceptable difference',
+            big_difference: 'Big difference',
+            big_diff: 'Big difference',
+            stopped: 'Stopped (no survey)',
+            non_perfect: 'Stopped (legacy)',
+            skipped_no_rating: 'Stopped (legacy)',
+          };
+          return labels[val] || val;
+        }
+        if (skipped && legacySkipPerception) {
+          const raw = { identical: 'Identical', acceptable: 'Acceptable', unacceptable: 'Not acceptable' };
+          return (raw[legacySkipPerception] || legacySkipPerception) + ' (legacy row)';
+        }
+        return '—';
+      }
 
       const summaryHTML = `
         <div class="results-summary">
@@ -406,10 +428,6 @@
             <div class="summary-number">${skippedSessions}</div>
             <div class="summary-label">Skipped</div>
           </div>
-          <div class="summary-item">
-            <div class="summary-number">${avgDeltaEFormatted}</div>
-            <div class="summary-label">Avg ΔE</div>
-          </div>
         </div>
       `;
 
@@ -420,7 +438,7 @@
               <th>Date & Time</th>
               <th>Target Color</th>
               <th>Drops Used</th>
-              <th>ΔE (CIEDE2000)</th>
+              <th>Match (outcome)</th>
               <th>Time (sec)</th>
               <th>Status</th>
             </tr>
@@ -441,7 +459,7 @@
                   ${result.drops.blue > 0 ? `Bl:${result.drops.blue}` : ''}
                   ${Object.values(result.drops).every(d => d === 0) ? 'None' : ''}
                 </td>
-                <td>${result.delta_e === 'N/A' ? 'N/A' : result.delta_e.toFixed(2)}</td>
+                <td>${formatMatchCategory(result.match_category, result.skip_perception, result.skipped)}</td>
                 <td>${result.time_sec.toFixed(1)}</td>
                 <td class="${result.skipped ? 'status-skipped' : 'status-completed'}">
                   ${result.skipped ? '⏭️ Skipped' : '✅ Completed'}

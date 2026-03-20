@@ -34,3 +34,6 @@ class MixingSession(db.Model):
     time_sec = db.Column(db.Float)
     timestamp = db.Column(db.DateTime)
     skipped = db.Column(db.Boolean, default=False)
+    skip_perception = db.Column(db.String(32), nullable=True)
+    # perfect | no_perceivable_difference | acceptable_difference | big_difference | stopped
+    match_category = db.Column(db.String(40), nullable=True)

@@ -1,0 +1,12 @@
+{
+  "name": "shadematch-python",
+  "private": true,
+  "description": "Minimal Node toolchain for PostgreSQL migrations only.",
+  "scripts": {
+    "db:migrate": "node scripts/migrate-mixing-sessions.js"
+  },
+  "devDependencies": {
+    "dotenv": "^16.4.7",
+    "pg": "^8.13.1"
+  }
+}
