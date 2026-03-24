@@ -1,113 +1,286 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Color Mixing App</title>
-  <style>
-    body {
-      font-family: sans-serif;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    .color-box {
-      width: 200px;
-      height: 200px;
-      margin: 10px;
-      border: 2px solid #333;
-    }
-    #palette {
-      display: flex;
-      gap: 10px;
-      margin-top: 20px;
-    }
-    .color-circle {
-      width: 50px;
-      height: 50px;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      color: white;
-      font-weight: bold;
-    }
-    #stats {
-      margin-top: 20px;
-    }
-    .color-control {
+{% extends "base.html" %}
+
+{% block title %}Color Mixing App{% endblock %}
+
+{% block head_extra %}
+<style>
+  :root {
+    color-scheme: light dark;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    font-family: sans-serif;
+    min-height: 100vh;
+    min-height: 100dvh;
+    background: #f3f3f7;
+    color: #17181d;
+  }
+
+  .app-shell {
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px 16px 28px;
+  }
+
+  .app-title {
+    margin: 0 0 16px;
+    text-align: center;
+  }
+
+  .app-layout {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .main-panel {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .color-pair {
+    display: flex;
+    gap: 16px;
+    width: 100%;
+    max-width: 600px;
+    height: auto;
+    aspect-ratio: 2 / 1;
+    min-width: 0;
+  }
+
+  .color-box-wrap {
+    min-width: 0;
+    flex: 1 1 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .color-box-title {
+    margin: 0;
+    font-size: 1rem;
+  }
+
+  .color-box {
+    border: 2px solid #333;
+    border-radius: 10px;
+    width: 100%;
+    height: 100%;
+  }
+
+  #palette {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 20px;
+    min-width: 0;
+  }
+
+  .color-control {
     display: flex;
     flex-direction: column;
     align-items: center;
-    }
-    .minus-button {
-    margin-top: 4px;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .color-hit-target {
+    width: 50px;
+    height: 50px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .color-circle {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: #fff;
+    font-weight: bold;
+    border: 1px solid rgba(0, 0, 0, 0.3);
+    user-select: none;
+    pointer-events: none;
+  }
+
+  .minus-button {
+    margin-top: 0;
     font-size: 16px;
-    padding: 0 6px;
+    width: 32px;
+    height: 32px;
     border: none;
-    background: #ccc;
+    background: #d5d5db;
     border-radius: 50%;
     cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  .color-relationships-sidebar {
+    width: 320px;
+    max-width: 100%;
+    flex-shrink: 0;
+    min-width: 0;
+    border-radius: 12px;
+    padding: 16px;
+    background: #fff;
+    box-shadow: 0 2px 14px rgba(0, 0, 0, 0.07);
+  }
+
+  #stats {
+    margin-top: 0;
+    margin-bottom: 14px;
+  }
+
+  #stats p,
+  .timer-line {
+    margin: 0;
+  }
+
+  #controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  #controls button,
+  #exportBtn {
+    touch-action: manipulation;
+    border-radius: 8px;
+    border: 1px solid #babac2;
+    background: #f4f4fa;
+    padding: 8px 12px;
+    cursor: pointer;
+  }
+
+  #exportBtn {
+    margin-top: 14px;
+  }
+
+  @media (max-width: 768px) {
+    .app-shell {
+      padding: 16px 12px 22px;
     }
-  </style>
 
-  <!-- ✅ Load Mixbox for perceptual mixing -->
-  <script src="{{ url_for('static', filename='mixbox.js') }}"></script>
+    .app-layout {
+      flex-direction: column;
+      gap: 14px;
+    }
 
-  <!-- ✅ Load your app's logic -->
-  <script type="module" src="{{ url_for('static', filename='main.js') }}"></script>
-</head>
-<body>
+    .color-relationships-sidebar {
+      width: 100%;
+      max-width: none;
+    }
 
-  <h1>Color Mixing App</h1>
+    .color-pair {
+      max-width: 100%;
+    }
 
-  <div style="display: flex; justify-content: center; gap: 50px;">
-    <div>
-      <h3>Target Color</h3>
-      <div id="targetColor" class="color-box"></div>
-    </div>
-    <div>
-      <h3>Current Mix</h3>
-      <div id="currentMix" class="color-box"></div>
-    </div>
+    #palette {
+      flex-wrap: wrap;
+      justify-content: center;
+      row-gap: 10px;
+      column-gap: 12px;
+    }
+
+    .color-hit-target {
+      width: 56px;
+      height: 56px;
+    }
+
+    .minus-button {
+      width: 36px;
+      height: 36px;
+    }
+  }
+</style>
+
+<script src="{{ url_for('static', filename='mixbox.js') }}"></script>
+{% endblock %}
+
+{% block content %}
+<main class="app-shell">
+  <h1 class="app-title">Color Mixing App</h1>
+
+  <div class="app-layout">
+    <section class="main-panel">
+      <div class="color-pair">
+        <div class="color-box-wrap">
+          <h3 class="color-box-title">Target Color</h3>
+          <div id="targetColor" class="color-box"></div>
+        </div>
+        <div class="color-box-wrap">
+          <h3 class="color-box-title">Current Mix</h3>
+          <div id="currentMix" class="color-box"></div>
+        </div>
+      </div>
+
+      <div id="palette">
+        <div class="color-control">
+          <button class="color-hit-target" data-color="white" type="button" aria-label="Add white">
+            <span class="color-circle" data-color="white" style="background: white; color: black;">0</span>
+          </button>
+          <button class="minus-button" data-color="white" type="button" aria-label="Remove white">−</button>
+        </div>
+        <div class="color-control">
+          <button class="color-hit-target" data-color="black" type="button" aria-label="Add black">
+            <span class="color-circle" data-color="black" style="background: black;">0</span>
+          </button>
+          <button class="minus-button" data-color="black" type="button" aria-label="Remove black">−</button>
+        </div>
+        <div class="color-control">
+          <button class="color-hit-target" data-color="red" type="button" aria-label="Add red">
+            <span class="color-circle" data-color="red" style="background: red;">0</span>
+          </button>
+          <button class="minus-button" data-color="red" type="button" aria-label="Remove red">−</button>
+        </div>
+        <div class="color-control">
+          <button class="color-hit-target" data-color="yellow" type="button" aria-label="Add yellow">
+            <span class="color-circle" data-color="yellow" style="background: yellow; color: black;">0</span>
+          </button>
+          <button class="minus-button" data-color="yellow" type="button" aria-label="Remove yellow">−</button>
+        </div>
+        <div class="color-control">
+          <button class="color-hit-target" data-color="blue" type="button" aria-label="Add blue">
+            <span class="color-circle" data-color="blue" style="background: blue;">0</span>
+          </button>
+          <button class="minus-button" data-color="blue" type="button" aria-label="Remove blue">−</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="color-relationships-sidebar">
+      <div id="stats">
+        <p>ΔE (CIEDE2000): <span id="deltaE">-</span></p>
+      </div>
+      <div id="controls">
+        <button id="startBtn" type="button">Start</button>
+        <button id="stopBtn" type="button" disabled>Stop</button>
+        <button id="skipBtn" type="button" disabled>Skip</button>
+        <button id="restartBtn" type="button" disabled>Restart</button>
+        <button id="retryBtn" type="button" disabled>Retry</button>
+      </div>
+      <p class="timer-line">⏱️ Time: <span id="timer">0.0</span> sec</p>
+      <button id="exportBtn" type="button">Download CSV</button>
+    </aside>
   </div>
+</main>
+{% endblock %}
 
-  <div id="palette">
-    <div class="color-control">
-        <div class="color-circle" data-color="white" style="background: white; color: black;">0</div>
-        <button class="minus-button" data-color="white">−</button>
-      </div>
-    <div class="color-control">
-        <div class="color-circle" data-color="black" style="background: black;">0</div>
-        <button class="minus-button" data-color="black">−</button>
-      </div>
-    <div class="color-control">
-        <div class="color-circle" data-color="red" style="background: red;">0</div>
-        <button class="minus-button" data-color="red">−</button>
-      </div>
-    <div class="color-control">
-        <div class="color-circle" data-color="yellow" style="background: yellow; color: black;">0</div>
-        <button class="minus-button" data-color="yellow">−</button>
-      </div>
-    <div class="color-control">
-        <div class="color-circle" data-color="blue" style="background: blue;">0</div>
-        <button class="minus-button" data-color="blue">−</button>
-      </div>
-        
-  </div>
-
-  <div id="stats">
-    <p>ΔE (CIEDE2000): <span id="deltaE">-</span></p>
-  </div>
-  <div id="controls" style="margin-top: 20px;">
-    <button id="startBtn">Start</button>
-    <button id="stopBtn" disabled>Stop</button>
-    <button id="skipBtn" disabled>Skip</button>
-    <button id="restartBtn" disabled>Restart</button>
-    <button id="retryBtn" disabled>Retry</button>
-    </div>
-    <p>⏱️ Time: <span id="timer">0.0</span> sec</p>
-    <button id="exportBtn">Download CSV</button>
-
-</body>
-</html>
+{% block scripts %}
+<script type="module" src="{{ url_for('static', filename='main.js') }}"></script>
+{% endblock %}

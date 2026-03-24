@@ -175,11 +175,14 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("skipBtn").disabled = true;
   });
 
-  document.querySelectorAll(".color-circle").forEach(circle => {
-    circle.addEventListener("click", () => {
-      const color = circle.dataset.color;
+  document.querySelectorAll(".color-hit-target").forEach(button => {
+    button.addEventListener("click", () => {
+      const color = button.dataset.color;
+      const circle = button.querySelector(".color-circle");
       dropCounts[color]++;
-      circle.textContent = dropCounts[color];
+      if (circle) {
+        circle.textContent = dropCounts[color];
+      }
       updateCurrentMix();
     });
   });
