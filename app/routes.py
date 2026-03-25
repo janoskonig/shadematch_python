@@ -692,6 +692,19 @@ def vapid_public_key():
     return jsonify({'vapid_public_key': key})
 
 
+@main.route('/sw.js')
+def service_worker():
+    """Serve the service worker from the root path so scope '/' is valid."""
+    from flask import make_response
+    sw_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'sw.js')
+    with open(sw_path, 'r') as f:
+        content = f.read()
+    response = make_response(content)
+    response.headers['Content-Type'] = 'application/javascript'
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return response
+
+
 # ── Misc / existing routes ─────────────────────────────────────────────────
 
 @main.route('/refresh_connection', methods=['POST'])

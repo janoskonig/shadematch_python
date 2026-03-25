@@ -822,27 +822,55 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // ── Push notification opt-in ──────────────────────────────────────────────
 window.requestPushPermission = async function () {
-  if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
-  const permission = await Notification.requestPermission();
-  if (permission !== 'granted') return;
+  const btn = document.getElementById('pushOptInBtn');
+
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) {
+    showToast('Push notifications are not supported in this browser.', 'info', 4000);
+    return;
+  }
+
+  const userId = window.currentUserId || localStorage.getItem('userId');
+  if (!userId) {
+    showToast('Please log in before enabling reminders.', 'info', 4000);
+    return;
+  }
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Setting up…'; }
 
   try {
+    const permission = await Notification.requestPermission();
+    if (permission === 'denied') {
+      showToast('Notifications blocked. Enable them in browser settings.', 'info', 5000);
+      if (btn) { btn.disabled = false; btn.innerHTML = '🔔 Enable daily reminders'; }
+      return;
+    }
+    if (permission !== 'granted') {
+      if (btn) { btn.disabled = false; btn.innerHTML = '🔔 Enable daily reminders'; }
+      return;
+    }
+
     const keyRes = await fetch('/push/vapid-public-key');
     const keyData = await keyRes.json();
     const vapidKey = keyData.vapid_public_key;
-    if (!vapidKey) return;
+    if (!vapidKey) {
+      showToast('Push notifications not configured on this server.', 'info', 4000);
+      if (btn) btn.style.display = 'none';
+      return;
+    }
 
-    const swReg = await navigator.serviceWorker.ready;
+    // Wait for the service worker to be ready (registered from /sw.js)
+    const swReg = await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('SW timeout')), 8000)),
+    ]);
+
     const subscription = await swReg.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(vapidKey),
     });
 
-    const userId = window.currentUserId || localStorage.getItem('userId');
-    if (!userId) return;
-
     const subJson = subscription.toJSON();
-    await fetch('/push/subscribe', {
+    const res = await fetch('/push/subscribe', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -852,9 +880,18 @@ window.requestPushPermission = async function () {
         auth: subJson.keys.auth,
       }),
     });
-    showToast('🔔 Daily reminders enabled!', 'info', 4000);
+    const data = await res.json();
+    if (data.status === 'success') {
+      showToast('🔔 Daily reminders enabled!', 'award', 4000);
+      if (btn) btn.style.display = 'none';
+      localStorage.setItem('pushSubscribed', '1');
+    } else {
+      throw new Error(data.message || 'Subscribe failed');
+    }
   } catch (err) {
     console.error('Push subscribe error:', err);
+    showToast('Could not enable reminders. Try again later.', 'info', 4000);
+    if (btn) { btn.disabled = false; btn.innerHTML = '🔔 Enable daily reminders'; }
   }
 };
 

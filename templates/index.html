@@ -558,15 +558,19 @@
     location.reload();
   }
 
-  /* Show push opt-in if user is logged in + Notifications supported + not already granted */
+  /* Show push opt-in after SW is ready, user is logged in, and not already subscribed */
   window.addEventListener('DOMContentLoaded', function() {
     var pushBtn = document.getElementById('pushOptInBtn');
-    if (pushBtn && 'Notification' in window && 'serviceWorker' in navigator) {
-      var uid = localStorage.getItem('userId');
-      if (uid && Notification.permission === 'default') {
+    if (!pushBtn || !('Notification' in window) || !('serviceWorker' in navigator)) return;
+    var uid = localStorage.getItem('userId');
+    if (!uid) return;
+    if (Notification.permission === 'granted' || localStorage.getItem('pushSubscribed')) return;
+    /* Only show once SW is confirmed registered */
+    navigator.serviceWorker.ready.then(function() {
+      if (Notification.permission !== 'denied') {
         pushBtn.style.display = 'flex';
       }
-    }
+    }).catch(function() {});
   });
 
   function calculateMixedColor() {
