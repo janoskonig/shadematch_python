@@ -309,11 +309,17 @@ def grant_daily_champion(user_id, challenge_date_str):
 
 def get_quota_ordered_catalog(user_id, full_catalog):
     """
-    Annotate each catalog entry with attempt_count and under_quota flag.
-    The client uses this for quota-priority selection.
+    Annotate each catalog entry with:
+      - attempt_count  : per-user plays (from UserTargetColorStats)
+      - under_quota    : attempt_count < COVERAGE_QUOTA
+      - unlocked       : user's level >= color's level_required
+    The client uses these flags for quota-priority, level-gated selection.
     """
     if not user_id:
         return full_catalog
+
+    up = UserProgress.query.filter_by(user_id=user_id).first()
+    user_level = compute_level(up.xp) if up else 1
 
     stats_map = {
         s.target_color_id: s.attempt_count
@@ -325,6 +331,7 @@ def get_quota_ordered_catalog(user_id, full_catalog):
         c_copy = dict(c)
         c_copy['attempt_count'] = stats_map.get(c['id'], 0)
         c_copy['under_quota'] = c_copy['attempt_count'] < COVERAGE_QUOTA
+        c_copy['unlocked'] = user_level >= c.get('level_required', 1)
         result.append(c_copy)
     return result
 

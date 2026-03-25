@@ -33,6 +33,7 @@ class TargetColor(db.Model):
     b = db.Column(db.Integer, nullable=False)
     frequency = db.Column(db.Integer, nullable=False, default=1)
     catalog_order = db.Column(db.Integer, nullable=False, unique=True)
+    level_required = db.Column(db.Integer, nullable=False, default=1)
 
 
 class MixingSession(db.Model):

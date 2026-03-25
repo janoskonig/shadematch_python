@@ -193,6 +193,7 @@ def get_target_colors():
             'rgb': [tc.r, tc.g, tc.b],
             'frequency': tc.frequency,
             'catalog_order': tc.catalog_order,
+            'level_required': tc.level_required,
         }
         for tc in rows
     ]

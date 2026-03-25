@@ -414,44 +414,34 @@ document.addEventListener('DOMContentLoaded', async () => {
   function generateRandomizedColors() {
     const sorted = [...fullCatalog].sort((a, b) => a.catalog_order - b.catalog_order);
 
-    // Determine if any colors are under quota (field added by server when user_id provided)
+    // Server annotates `unlocked` (level_required <= user level) and `under_quota`
+    // when a user_id is provided. Fall back to all colors when not logged in.
+    const hasLevelData = sorted.some(c => 'unlocked' in c);
+    const eligible = hasLevelData ? sorted.filter(c => c.unlocked) : sorted;
+    const pool = eligible.length > 0 ? eligible : sorted;
+
+    const poolBasic = pool.filter(c => c.type === 'basic');
+    const poolSkin = pool.filter(c => c.type === 'skin');
+
     const hasQuota = sorted.some(c => 'under_quota' in c);
 
-    if (hasQuota) {
-      const allUnderQuota = sorted.filter(c => c.under_quota);
-      // If there are colors under quota, restrict pool to those only
-      const pool = allUnderQuota.length > 0 ? allUnderQuota : sorted;
-
-      const poolBasic = pool.filter(c => c.type === 'basic');
-      const poolSkin = pool.filter(c => c.type === 'skin');
-      const fallbackBasic = sorted.filter(c => c.type === 'basic');
-      const fallbackSkin = sorted.filter(c => c.type === 'skin');
-
-      const basicFirst = poolBasic.slice(0, 3);
-      const basicRest = poolBasic.slice(3, 11);
-      const skinPool = poolSkin.length >= 5 ? poolSkin : fallbackSkin;
-      const basicRestPool = basicRest.length >= 3 ? basicRest : fallbackBasic.slice(3, 11);
-
-      // Weight by inverse attempt_count (lower count = higher weight)
-      const basicWeights = basicRestPool.map(c => 1 / ((c.attempt_count || 0) + 1));
-      const skinWeights = skinPool.map(c => 1 / ((c.attempt_count || 0) + 1));
-
-      const selectedBasic = weightedRandomSelection(basicRestPool, basicWeights, Math.min(3, basicRestPool.length));
-      const selectedSkin = weightedRandomSelection(skinPool, skinWeights, Math.min(5, skinPool.length));
-
-      const base = basicFirst.length >= 3 ? basicFirst : fallbackBasic.slice(0, 3);
-      return [...base, ...selectedBasic, ...selectedSkin];
+    // Within the eligible pool, prefer under-quota colors (weighted by inverse
+    // attempt_count). If all are at quota, use the full eligible pool uniformly.
+    function buildWeightedPool(items) {
+      if (!hasQuota) return { pool: items, weights: items.map(() => 1) };
+      const underQuota = items.filter(c => c.under_quota);
+      const activePool = underQuota.length > 0 ? underQuota : items;
+      const weights = activePool.map(c => 1 / ((c.attempt_count || 0) + 1));
+      return { pool: activePool, weights };
     }
 
-    // Fallback: original frequency-weighted selection
-    const firstThreeBasic = sorted.slice(0, 3);
-    const remainingBasic = sorted.slice(3, 11);
-    const basicWeights = remainingBasic.map(c => 1 / (c.frequency || 1));
-    const selectedRemainingBasic = weightedRandomSelection(remainingBasic, basicWeights, 3);
-    const skinColors = sorted.slice(11);
-    const skinWeights = skinColors.map(c => 1 / (c.frequency || 1));
-    const selectedSkinColors = weightedRandomSelection(skinColors, skinWeights, 5);
-    return [...firstThreeBasic, ...selectedRemainingBasic, ...selectedSkinColors];
+    const basic = buildWeightedPool(poolBasic);
+    const skin = buildWeightedPool(poolSkin);
+
+    const selectedBasic = weightedRandomSelection(basic.pool, basic.weights, Math.min(6, basic.pool.length));
+    const selectedSkin = weightedRandomSelection(skin.pool, skin.weights, Math.min(5, skin.pool.length));
+
+    return [...selectedBasic, ...selectedSkin];
   }
 
   const targetColors = generateRandomizedColors();
