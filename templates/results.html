@@ -1,314 +1,131 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Your Color Matching Results</title>
-  <style>
-    :root {
-      --bg-color: rgb(46, 46, 46);
-      --surface-color: rgb(66, 66, 66);
-      --accent-color: rgb(86, 86, 86);
-      --text-color: white;
-      --border-color: rgb(86, 86, 86);
-      --shadow-color: rgba(0, 0, 0, 0.2);
-      --success-color: #4CAF50;
-      --warning-color: #FF9800;
-      --error-color: #f44336;
+{% extends "base.html" %}
+
+{% block title %}Your Color Matching Results{% endblock %}
+
+{% block extra_css %}
+<style>
+  body { padding: var(--space-md); }
+
+  .results-container { max-width: 1200px; margin: 0 auto; }
+
+  .results-header { text-align: center; margin-bottom: var(--space-xl); }
+  .results-header h1 { font-size: var(--font-size-2xl); font-weight: 800; margin-bottom: var(--space-sm); color: var(--text-primary); }
+  .results-header p { color: var(--text-secondary); }
+
+  .back-link {
+    display: inline-flex; align-items: center; gap: var(--space-sm);
+    text-decoration: none; color: var(--accent-primary); font-weight: 700;
+    margin-bottom: var(--space-lg); font-size: var(--font-size-sm);
+  }
+  .back-link:hover { text-decoration: underline; }
+
+  .user-input-section {
+    background: var(--surface); padding: var(--space-lg);
+    border-radius: var(--radius-lg); margin-bottom: var(--space-xl);
+    text-align: center; box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+  }
+  .user-input-section input {
+    min-height: var(--touch-min); padding: var(--space-sm) var(--space-md);
+    border: 2px solid var(--border); border-radius: var(--radius-md);
+    font-size: 1rem; color: var(--text-primary); background: var(--surface);
+    margin-right: var(--space-sm); font-family: monospace;
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+  .user-input-section input:focus {
+    border-color: var(--accent-primary); outline: none;
+    box-shadow: 0 0 0 3px rgba(74,144,217,0.15);
+  }
+  .user-input-section button {
+    min-height: var(--touch-min); padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-full); border: none; cursor: pointer;
+    font-weight: 700; font-size: 1rem;
+    background: var(--accent-primary); color: var(--text-on-accent);
+    touch-action: manipulation;
+  }
+  .user-input-section button:hover { background: #3a7bc8; }
+  .welcome-message { font-weight: 700; font-size: var(--font-size-lg); color: var(--text-primary); }
+
+  .results-section {
+    background: var(--surface); padding: var(--space-lg);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+  }
+
+  .results-summary {
+    display: flex; justify-content: space-around;
+    margin-bottom: var(--space-lg); padding: var(--space-lg);
+    background: var(--bg-primary); border-radius: var(--radius-md);
+  }
+  .summary-item { text-align: center; }
+  .summary-number { font-size: 2.2em; font-weight: 900; color: var(--accent-primary); }
+  .summary-label { font-size: var(--font-size-sm); color: var(--text-secondary); font-weight: 600; }
+
+  /* Desktop table */
+  .results-table {
+    width: 100%; border-collapse: collapse; margin-top: var(--space-md);
+    border-radius: var(--radius-md); overflow: hidden;
+  }
+  .results-table th, .results-table td {
+    padding: var(--space-md) var(--space-sm);
+    text-align: left; border-bottom: 1px solid var(--border);
+  }
+  .results-table th {
+    background: var(--bg-primary); color: var(--text-primary);
+    font-weight: 700; font-size: var(--font-size-sm);
+    text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .results-table tr:hover { background: rgba(74,144,217,0.04); }
+  .color-preview {
+    width: 30px; height: 20px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); display: inline-block; margin-right: var(--space-sm);
+    vertical-align: middle;
+  }
+  .status-skipped { color: var(--accent-warning); font-weight: 700; }
+  .status-completed { color: var(--accent-success); font-weight: 700; }
+  .no-results { text-align: center; padding: var(--space-2xl); color: var(--text-secondary); }
+  .loading { text-align: center; padding: var(--space-2xl); color: var(--text-secondary); }
+  .error-message {
+    background: #FFEBEE; color: var(--accent-danger);
+    padding: var(--space-md); border-radius: var(--radius-md);
+    margin: var(--space-md) 0; text-align: center; font-weight: 600;
+    border: 1px solid var(--accent-danger);
+  }
+
+  /* Mobile: card layout */
+  .result-cards { display: none; }
+
+  @media (max-width: 768px) {
+    .results-table { display: none; }
+    .result-cards { display: flex; flex-direction: column; gap: var(--space-md); margin-top: var(--space-md); }
+    .result-card {
+      background: var(--bg-primary); border-radius: var(--radius-md);
+      padding: var(--space-md); border: 1px solid var(--border);
     }
-
-    body {
-      font-family: sans-serif;
-      background-color: var(--bg-color);
-      color: var(--text-color);
-      margin: 0;
-      padding: 20px;
+    .result-card-header {
+      display: flex; align-items: center; gap: var(--space-sm);
+      margin-bottom: var(--space-sm);
     }
-
-    .container {
-      max-width: 1400px;
-      margin: 0 auto;
+    .result-card-swatch {
+      width: 40px; height: 40px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); flex-shrink: 0;
     }
-
-    .header {
-      text-align: center;
-      margin-bottom: 30px;
+    .result-card-title { font-weight: 700; font-size: var(--font-size-sm); }
+    .result-card-meta {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: var(--space-xs); font-size: var(--font-size-sm);
+      color: var(--text-secondary);
     }
+    .result-card-meta strong { color: var(--text-primary); }
+    .summary-item { margin: 0 var(--space-sm); }
+  }
+</style>
+{% endblock %}
 
-    .header h1 {
-      color: var(--text-color);
-      margin-bottom: 10px;
-    }
-
-    .back-link {
-      display: inline-block;
-      background: var(--accent-color);
-      color: var(--text-color);
-      text-decoration: none;
-      padding: 10px 20px;
-      border-radius: 4px;
-      margin-bottom: 20px;
-      transition: background-color 0.3s;
-    }
-
-    .back-link:hover {
-      background: var(--surface-color);
-    }
-
-    .user-input-section {
-      background: var(--surface-color);
-      padding: 20px;
-      border-radius: 8px;
-      margin-bottom: 30px;
-      text-align: center;
-      box-shadow: 0 2px 8px var(--shadow-color);
-    }
-
-    .user-input-section input {
-      background: var(--bg-color);
-      border: 1px solid var(--border-color);
-      color: var(--text-color);
-      padding: 10px;
-      border-radius: 4px;
-      margin-right: 10px;
-      font-size: 16px;
-    }
-
-    .welcome-message {
-      font-weight: bold;
-      font-size: 1.1em;
-    }
-
-    .user-input-section button {
-      background: var(--accent-color);
-      color: var(--text-color);
-      border: none;
-      padding: 10px 20px;
-      border-radius: 4px;
-      cursor: pointer;
-      font-size: 16px;
-      transition: background-color 0.3s;
-    }
-
-    .user-input-section button:hover {
-      background: var(--surface-color);
-    }
-
-    .results-section {
-      background: var(--surface-color);
-      padding: 20px;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px var(--shadow-color);
-    }
-
-    .results-summary {
-      display: flex;
-      justify-content: space-around;
-      margin-bottom: 20px;
-      padding: 20px;
-      background: var(--bg-color);
-      border-radius: 8px;
-    }
-
-    .summary-item {
-      text-align: center;
-    }
-
-    .summary-number {
-      font-size: 2em;
-      font-weight: bold;
-      color: var(--accent-color);
-    }
-
-    .summary-label {
-      font-size: 0.9em;
-      color: var(--text-color);
-      opacity: 0.8;
-    }
-
-    .results-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-      background: var(--bg-color);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    .results-table th,
-    .results-table td {
-      padding: 12px;
-      text-align: left;
-      border-bottom: 1px solid var(--border-color);
-    }
-
-    .results-table th {
-      background: var(--accent-color);
-      color: var(--text-color);
-      font-weight: bold;
-    }
-
-    .results-table tr:hover {
-      background: rgba(255, 255, 255, 0.05);
-    }
-
-    .color-preview {
-      width: 30px;
-      height: 20px;
-      border: 1px solid var(--border-color);
-      border-radius: 4px;
-      display: inline-block;
-      margin-right: 10px;
-    }
-
-    .status-skipped {
-      color: var(--warning-color);
-      font-weight: bold;
-    }
-
-    .status-completed {
-      color: var(--success-color);
-      font-weight: bold;
-    }
-
-    .no-results {
-      text-align: center;
-      padding: 40px;
-      color: var(--text-color);
-      opacity: 0.7;
-    }
-
-    .loading {
-      text-align: center;
-      padding: 40px;
-      color: var(--text-color);
-    }
-
-    .error-message {
-      background: var(--error-color);
-      color: white;
-      padding: 15px;
-      border-radius: 4px;
-      margin: 20px 0;
-      text-align: center;
-    }
-
-    /* MacBook Pro 1728x1117 optimization */
-    @media (min-width: 1600px) and (max-width: 1800px) and (min-height: 1000px) and (max-height: 1200px) {
-      body {
-        padding: 25px;
-      }
-
-      .container {
-        max-width: 1600px;
-      }
-
-      .header {
-        margin-bottom: 40px;
-      }
-
-      .header h1 {
-        font-size: 2.5em;
-        margin-bottom: 15px;
-      }
-
-      .header p {
-        font-size: 1.2em;
-      }
-
-      .back-link {
-        padding: 12px 25px;
-        font-size: 1.1em;
-        margin-bottom: 25px;
-      }
-
-      .user-input-section {
-        padding: 25px;
-        margin-bottom: 40px;
-      }
-
-      .user-input-section input {
-        padding: 12px;
-        font-size: 18px;
-        margin-right: 15px;
-      }
-
-      .user-input-section button {
-        padding: 12px 25px;
-        font-size: 18px;
-      }
-
-      .welcome-message {
-        font-size: 1.2em;
-      }
-
-      .results-section {
-        padding: 25px;
-      }
-
-      .results-summary {
-        padding: 25px;
-        margin-bottom: 25px;
-      }
-
-      .summary-number {
-        font-size: 2.5em;
-      }
-
-      .summary-label {
-        font-size: 1em;
-      }
-
-      .results-table {
-        font-size: 16px;
-      }
-
-      .results-table th,
-      .results-table td {
-        padding: 15px 12px;
-      }
-
-      .color-preview {
-        width: 35px;
-        height: 25px;
-        margin-right: 12px;
-      }
-
-      .no-results {
-        padding: 50px;
-        font-size: 1.1em;
-      }
-
-      .loading {
-        padding: 50px;
-        font-size: 1.1em;
-      }
-
-      .error-message {
-        padding: 20px;
-        font-size: 1.1em;
-      }
-    }
-
-    @media (max-width: 768px) {
-      .results-table {
-        font-size: 14px;
-      }
-      
-      .results-table th,
-      .results-table td {
-        padding: 8px 6px;
-      }
-      
-      .summary-item {
-        margin: 0 10px;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>🎨 Your Color Matching Results</h1>
+{% block content %}
+  <div class="results-container">
+    <div class="results-header">
+      <h1>Your Color Matching Results</h1>
       <p>View all your color matching attempts and progress</p>
     </div>
 
@@ -316,14 +133,13 @@
 
     <div class="user-input-section">
       <div id="stored-user-info" style="display: none;">
-        <p id="welcome-message" style="font-weight: bold; font-size: 1.1em;">Welcome back! Loading your results...</p>
-        <button onclick="clearUserAndReload()">Switch User</button>
+        <p id="welcome-message" class="welcome-message">Welcome back! Loading your results...</p>
+        <button onclick="clearUserAndReload()" type="button" style="margin-top:var(--space-sm);">Switch User</button>
       </div>
-      
       <div id="user-input-form">
-        <p>Enter your 6-character user ID to view your results:</p>
-        <input type="text" id="userIdInput" placeholder="e.g., ABC123" maxlength="6" style="text-transform: uppercase;">
-        <button onclick="loadUserResults()">View Results</button>
+        <p style="margin-bottom:var(--space-md); color:var(--text-secondary);">Enter your 6-character user ID to view your results:</p>
+        <input type="text" id="userIdInput" placeholder="e.g., ABC123" maxlength="6">
+        <button onclick="loadUserResults()" type="button">View Results</button>
       </div>
     </div>
 
@@ -335,153 +151,99 @@
   </div>
 
   <script>
-    // Check if user ID is stored in localStorage
     window.addEventListener('DOMContentLoaded', function() {
       const storedUserId = localStorage.getItem('userId');
       if (storedUserId) {
         document.getElementById('stored-user-info').style.display = 'block';
         document.getElementById('user-input-form').style.display = 'none';
-        // Update welcome message with user ID
-        document.getElementById('welcome-message').textContent = `Welcome back, ${storedUserId}!`;
+        document.getElementById('welcome-message').textContent = 'Welcome back, ' + storedUserId + '!';
         loadUserResults(storedUserId);
       }
     });
 
-    function loadUserResults(userId = null) {
+    function loadUserResults(userId) {
       const userIdToUse = userId || document.getElementById('userIdInput').value.toUpperCase();
-      
-      if (!userIdToUse || userIdToUse.length !== 6) {
-        showError('Please enter a valid 6-character user ID');
-        return;
-      }
-
-      // Show loading state
+      if (!userIdToUse || userIdToUse.length !== 6) { showError('Please enter a valid 6-character user ID'); return; }
       document.getElementById('results-content').innerHTML = '<div class="loading">Loading your results...</div>';
-
       fetch('/get_user_results', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userIdToUse })
       })
-      .then(response => response.json())
+      .then(r => r.json())
       .then(data => {
-        if (data.status === 'success') {
-          displayResults(data.results, data.total_sessions);
-        } else {
-          showError(data.message || 'Failed to load results');
-        }
+        if (data.status === 'success') displayResults(data.results, data.total_sessions);
+        else showError(data.message || 'Failed to load results');
       })
-      .catch(error => {
-        console.error('Error:', error);
-        showError('Failed to load results. Please try again.');
-      });
+      .catch(() => showError('Failed to load results. Please try again.'));
     }
 
     function displayResults(results, totalSessions) {
       if (results.length === 0) {
-        document.getElementById('results-content').innerHTML = 
-          '<div class="no-results">No results found for this user ID. Make sure you have completed some color matching sessions.</div>';
+        document.getElementById('results-content').innerHTML = '<div class="no-results">No results found for this user ID.</div>';
         return;
       }
+      const completed = results.filter(r => !r.skipped).length;
+      const skipped = results.filter(r => r.skipped).length;
 
-      // Calculate summary statistics
-      const completedSessions = results.filter(r => !r.skipped).length;
-      const skippedSessions = results.filter(r => r.skipped).length;
-
-      function formatMatchCategory(val, legacySkipPerception, skipped) {
+      function fmtCat(val, legacySkip, isSkipped) {
         if (val) {
           const labels = {
-            perfect: 'Perfect (ΔE ≤ 0.01)',
-            perfect_match: 'Perfect (ΔE ≤ 0.01)',
-            no_perceivable_difference: 'No perceivable difference',
-            no_perceptible_diff: 'No perceivable difference',
-            acceptable_difference: 'Acceptable difference',
-            acceptable_diff: 'Acceptable difference',
-            big_difference: 'Big difference',
-            big_diff: 'Big difference',
-            stopped: 'Stopped (no survey)',
-            non_perfect: 'Stopped (legacy)',
-            skipped_no_rating: 'Stopped (legacy)',
+            perfect: 'Perfect', perfect_match: 'Perfect',
+            no_perceivable_difference: 'No perceivable difference', no_perceptible_diff: 'No perceivable difference',
+            acceptable_difference: 'Acceptable difference', acceptable_diff: 'Acceptable difference',
+            big_difference: 'Big difference', big_diff: 'Big difference',
+            stopped: 'Stopped', non_perfect: 'Stopped (legacy)', skipped_no_rating: 'Stopped (legacy)'
           };
           return labels[val] || val;
         }
-        if (skipped && legacySkipPerception) {
-          const raw = { identical: 'Identical', acceptable: 'Acceptable', unacceptable: 'Not acceptable' };
-          return (raw[legacySkipPerception] || legacySkipPerception) + ' (legacy row)';
+        if (isSkipped && legacySkip) {
+          return ({ identical: 'Identical', acceptable: 'Acceptable', unacceptable: 'Not acceptable' }[legacySkip] || legacySkip) + ' (legacy)';
         }
         return '—';
       }
 
-      const summaryHTML = `
-        <div class="results-summary">
-          <div class="summary-item">
-            <div class="summary-number">${totalSessions}</div>
-            <div class="summary-label">Total Sessions</div>
-          </div>
-          <div class="summary-item">
-            <div class="summary-number">${completedSessions}</div>
-            <div class="summary-label">Completed</div>
-          </div>
-          <div class="summary-item">
-            <div class="summary-number">${skippedSessions}</div>
-            <div class="summary-label">Skipped</div>
-          </div>
-        </div>
-      `;
+      const summaryHTML = '<div class="results-summary">' +
+        '<div class="summary-item"><div class="summary-number">' + totalSessions + '</div><div class="summary-label">Total</div></div>' +
+        '<div class="summary-item"><div class="summary-number">' + completed + '</div><div class="summary-label">Completed</div></div>' +
+        '<div class="summary-item"><div class="summary-number">' + skipped + '</div><div class="summary-label">Skipped</div></div></div>';
 
-      const tableHTML = `
-        <table class="results-table">
-          <thead>
-            <tr>
-              <th>Date & Time</th>
-              <th>Target Color</th>
-              <th>Drops Used</th>
-              <th>Match (outcome)</th>
-              <th>Time (sec)</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${results.map(result => `
-              <tr>
-                <td>${formatTimestamp(result.timestamp)}</td>
-                <td>
-                  <div class="color-preview" style="background-color: rgb(${result.target_color.match(/\d+/g).join(',')})"></div>
-                  ${result.target_color}
-                </td>
-                <td>
-                  ${result.drops.white > 0 ? `W:${result.drops.white} ` : ''}
-                  ${result.drops.black > 0 ? `B:${result.drops.black} ` : ''}
-                  ${result.drops.red > 0 ? `R:${result.drops.red} ` : ''}
-                  ${result.drops.yellow > 0 ? `Y:${result.drops.yellow} ` : ''}
-                  ${result.drops.blue > 0 ? `Bl:${result.drops.blue}` : ''}
-                  ${Object.values(result.drops).every(d => d === 0) ? 'None' : ''}
-                </td>
-                <td>${formatMatchCategory(result.match_category, result.skip_perception, result.skipped)}</td>
-                <td>${result.time_sec.toFixed(1)}</td>
-                <td class="${result.skipped ? 'status-skipped' : 'status-completed'}">
-                  ${result.skipped ? '⏭️ Skipped' : '✅ Completed'}
-                </td>
-              </tr>
-            `).join('')}
-          </tbody>
-        </table>
-      `;
+      let tableHTML = '<table class="results-table"><thead><tr>' +
+        '<th>Date</th><th>Target</th><th>Drops</th><th>Outcome</th><th>Time</th><th>Status</th></tr></thead><tbody>';
+      let cardsHTML = '<div class="result-cards">';
 
-      document.getElementById('results-content').innerHTML = summaryHTML + tableHTML;
-    }
+      results.forEach(r => {
+        const rgb = r.target_color.match(/\d+/g);
+        const rgbStr = rgb ? rgb.join(',') : '128,128,128';
+        const drops = [r.drops.white > 0 ? 'W:' + r.drops.white : '', r.drops.black > 0 ? 'B:' + r.drops.black : '',
+          r.drops.red > 0 ? 'R:' + r.drops.red : '', r.drops.yellow > 0 ? 'Y:' + r.drops.yellow : '',
+          r.drops.blue > 0 ? 'Bl:' + r.drops.blue : ''].filter(Boolean).join(' ') || 'None';
+        const cat = fmtCat(r.match_category, r.skip_perception, r.skipped);
+        const statusClass = r.skipped ? 'status-skipped' : 'status-completed';
+        const statusText = r.skipped ? 'Skipped' : 'Completed';
+        const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A';
 
-    function formatTimestamp(timestamp) {
-      if (!timestamp) return 'N/A';
-      const date = new Date(timestamp);
-      return date.toLocaleString();
+        tableHTML += '<tr><td>' + ts + '</td>' +
+          '<td><div class="color-preview" style="background-color:rgb(' + rgbStr + ')"></div>' + r.target_color + '</td>' +
+          '<td>' + drops + '</td><td>' + cat + '</td><td>' + r.time_sec.toFixed(1) + '</td>' +
+          '<td class="' + statusClass + '">' + statusText + '</td></tr>';
+
+        cardsHTML += '<div class="result-card"><div class="result-card-header">' +
+          '<div class="result-card-swatch" style="background-color:rgb(' + rgbStr + ')"></div>' +
+          '<div><div class="result-card-title">' + r.target_color + '</div>' +
+          '<div style="font-size:0.8rem;color:var(--text-secondary);">' + ts + '</div></div></div>' +
+          '<div class="result-card-meta"><div><strong>Drops:</strong> ' + drops + '</div>' +
+          '<div><strong>Time:</strong> ' + r.time_sec.toFixed(1) + 's</div>' +
+          '<div><strong>Outcome:</strong> ' + cat + '</div>' +
+          '<div class="' + statusClass + '">' + statusText + '</div></div></div>';
+      });
+
+      tableHTML += '</tbody></table>';
+      cardsHTML += '</div>';
+      document.getElementById('results-content').innerHTML = summaryHTML + tableHTML + cardsHTML;
     }
 
     function showError(message) {
-      document.getElementById('results-content').innerHTML = 
-        `<div class="error-message">${message}</div>`;
+      document.getElementById('results-content').innerHTML = '<div class="error-message">' + message + '</div>';
     }
 
     function clearUserAndReload() {
@@ -491,12 +253,8 @@
       location.reload();
     }
 
-    // Allow Enter key to submit
     document.getElementById('userIdInput').addEventListener('keypress', function(e) {
-      if (e.key === 'Enter') {
-        loadUserResults();
-      }
+      if (e.key === 'Enter') loadUserResults();
     });
   </script>
-</body>
-</html>
+{% endblock %}

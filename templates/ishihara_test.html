@@ -10,402 +10,143 @@
 
 {% block extra_css %}
 <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+    body { padding: var(--space-md); }
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #2e2e2e;
-            min-height: 100vh;
-            padding: 20px;
-        }
+    .test-container {
+      max-width: 800px; margin: 0 auto;
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+    .ish-header {
+      background: linear-gradient(135deg, #3a5a8c 0%, #4a7ab5 100%);
+      color: var(--text-on-accent);
+      padding: var(--space-xl); text-align: center;
+    }
+    .ish-header h1 { font-size: var(--font-size-2xl); font-weight: 300; margin-bottom: var(--space-sm); }
+    .ish-header p { font-size: 1rem; opacity: 0.9; }
+    .ish-header .test-info { margin-top: var(--space-md); font-size: var(--font-size-sm); opacity: 0.8; }
 
-        .test-container {
-            max-width: 800px;
-            margin: 0 auto;
-            background: #3a3a3a;
-            border-radius: 15px;
-            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
+    .ish-warning {
+      background: #FFF8E1; border: 1px solid #FFE082;
+      border-radius: var(--radius-sm); padding: var(--space-md);
+      margin: var(--space-sm) 0; color: #6D4C00; font-size: var(--font-size-sm);
+    }
 
-        .header {
-            background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
+    .progress-bar {
+      background: var(--border); height: 6px; position: relative;
+    }
+    .progress-fill {
+      background: linear-gradient(90deg, var(--accent-success), #8BC34A);
+      height: 100%; width: 0%; border-radius: 3px;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .progress-fill { transition: width 0.3s ease; }
+    }
 
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-            font-weight: 300;
-        }
+    .plate-container { padding: var(--space-xl); text-align: center; }
+    .plate {
+      width: 320px; height: 320px; margin: 0 auto var(--space-lg);
+      border-radius: 50%; background-size: contain;
+      background-position: center; background-repeat: no-repeat;
+      background-color: #f8f9fa; box-shadow: var(--shadow-lg);
+      border: 6px solid var(--border); position: relative;
+    }
+    .plate img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
 
-        .header p {
-            font-size: 1.1em;
-            opacity: 0.9;
-        }
+    .question {
+      font-size: var(--font-size-lg); margin-bottom: var(--space-lg);
+      color: var(--text-primary); font-weight: 600;
+    }
 
-        .header .test-info {
-            margin-top: 15px;
-            font-size: 0.9em;
-            opacity: 0.8;
-        }
+    .options {
+      display: flex; flex-wrap: nowrap; gap: var(--space-sm);
+      max-width: 800px; margin: 0 auto; justify-content: center;
+    }
+    .option {
+      background: var(--bg-primary); border: 2px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: var(--space-md) var(--space-md);
+      cursor: pointer; font-size: 1rem; font-weight: 600;
+      flex: 1; min-width: 0; text-align: center;
+      color: var(--text-primary); min-height: 56px;
+      display: flex; align-items: center; justify-content: center;
+      touch-action: manipulation;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .option { transition: all 0.15s ease; }
+    }
+    .option:hover { background: var(--surface); border-color: var(--accent-primary); }
+    .option.selected { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
+    .option.correct { background: var(--accent-success); color: var(--text-on-accent); border-color: var(--accent-success); }
+    .option.incorrect { background: var(--accent-danger); color: var(--text-on-accent); border-color: var(--accent-danger); }
 
-        .progress-bar {
-            background: #ecf0f1;
-            height: 8px;
-            position: relative;
-        }
+    .navigation {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: var(--space-xl); padding: 0 var(--space-md);
+    }
+    .nav-btn {
+      min-height: var(--touch-min); padding: var(--space-sm) var(--space-lg);
+      border-radius: var(--radius-full); cursor: pointer; font-size: 1rem;
+      font-weight: 700; border: 2px solid var(--border-strong);
+      background: var(--surface); color: var(--text-primary);
+      touch-action: manipulation;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .nav-btn { transition: all 0.15s ease; }
+    }
+    .nav-btn:hover:not(:disabled) { background: var(--bg-primary); }
+    .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .nav-btn.primary { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
+    .nav-btn.primary:hover:not(:disabled) { background: #3a7bc8; }
 
-        .progress-fill {
-            background: linear-gradient(90deg, #27ae60, #2ecc71);
-            height: 100%;
-            width: 0%;
-            transition: width 0.3s ease;
-        }
+    .results { display: none; padding: var(--space-xl); text-align: center; }
+    .results h2 { color: var(--text-primary); margin-bottom: var(--space-md); font-size: var(--font-size-2xl); }
+    .score-display { font-size: 3em; font-weight: 900; color: var(--accent-primary); margin: var(--space-md) 0; }
+    .result-message { font-size: var(--font-size-lg); color: var(--text-secondary); margin-bottom: var(--space-lg); line-height: 1.6; }
 
-        .plate-container {
-            padding: 40px;
-            text-align: center;
-        }
+    .restart-btn, .home-btn {
+      min-height: var(--touch-min); padding: var(--space-md) var(--space-xl);
+      border-radius: var(--radius-full); cursor: pointer; font-size: 1rem;
+      font-weight: 700; border: none; touch-action: manipulation;
+    }
+    .restart-btn { background: var(--accent-success); color: var(--text-on-accent); }
+    .restart-btn:hover { background: #4ea84e; }
+    .home-btn { background: var(--surface); color: var(--text-primary); border: 2px solid var(--border-strong); margin-left: var(--space-md); }
+    .home-btn:hover { background: var(--bg-primary); }
 
-        .plate {
-            width: 320px;
-            height: 320px;
-            margin: 0 auto 30px;
-            border-radius: 50%;
-            background-size: contain;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-color: #f8f9fa;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            border: 8px solid #fff;
-            position: relative;
-        }
+    .loading { text-align: center; padding: var(--space-xl); color: var(--text-secondary); }
+    .spinner {
+      border: 4px solid var(--border); border-top: 4px solid var(--accent-primary);
+      border-radius: 50%; width: 40px; height: 40px;
+      animation: spin 1s linear infinite; margin: var(--space-md) auto;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-        .plate img {
-            width: 100%;
-            height: 100%;
-            object-fit: contain;
-            border-radius: 50%;
-        }
-
-        .question {
-            font-size: 1.3em;
-            margin-bottom: 30px;
-            color: #ffffff;
-            font-weight: 500;
-        }
-
-        .options {
-            display: flex;
-            flex-wrap: nowrap;
-            gap: 10px;
-            max-width: 800px;
-            margin: 0 auto;
-            justify-content: center;
-        }
-
-        .option {
-            background: #4a4a4a;
-            border: 2px solid #5a5a5a;
-            border-radius: 10px;
-            padding: 12px 16px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            font-size: 0.95em;
-            font-weight: 500;
-            flex: 1;
-            min-width: 0;
-            text-align: center;
-            color: #ffffff;
-        }
-
-        .option:hover {
-            background: #5a5a5a;
-            border-color: #6a6a6a;
-            transform: translateY(-2px);
-        }
-
-        .option.selected {
-            background: #007bff;
-            color: white;
-            border-color: #0056b3;
-        }
-
-        .option.correct {
-            background: #28a745;
-            color: white;
-            border-color: #1e7e34;
-        }
-
-        .option.incorrect {
-            background: #dc3545;
-            color: white;
-            border-color: #c82333;
-        }
-
-        .navigation {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 40px;
-            padding: 0 20px;
-        }
-
-        .nav-btn {
-            background: #6c757d;
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 1em;
-            transition: all 0.3s ease;
-        }
-
-        .nav-btn:hover:not(:disabled) {
-            background: #5a6268;
-            transform: translateY(-2px);
-        }
-
-        .nav-btn:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-
-        .nav-btn.primary {
-            background: #007bff;
-        }
-
-        .nav-btn.primary:hover:not(:disabled) {
-            background: #0056b3;
-        }
-
-        .results {
-            display: none;
-            padding: 40px;
-            text-align: center;
-        }
-
-        .results h2 {
-            color: #ffffff;
-            margin-bottom: 20px;
-            font-size: 2em;
-        }
-
-        .score-display {
-            font-size: 3em;
-            font-weight: bold;
-            color: #007bff;
-            margin: 20px 0;
-        }
-
-        .result-message {
-            font-size: 1.2em;
-            color: #cccccc;
-            margin-bottom: 30px;
-            line-height: 1.6;
-        }
-
-        .restart-btn {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 1.1em;
-            transition: all 0.3s ease;
-        }
-
-        .restart-btn:hover {
-            background: #218838;
-            transform: translateY(-2px);
-        }
-
-        .home-btn {
-            background: #6c757d;
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 25px;
-            cursor: pointer;
-            font-size: 1.1em;
-            margin-left: 15px;
-            transition: all 0.3s ease;
-        }
-
-        .home-btn:hover {
-            background: #5a6268;
-            transform: translateY(-2px);
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #cccccc;
-        }
-
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #007bff;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 20px auto;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        @media (max-width: 768px) {
-            .plate {
-                width: 240px;
-                height: 240px;
-            }
-            
-            .options {
-                flex-wrap: wrap;
-                gap: 8px;
-            }
-            
-            .option {
-                flex: 1;
-                min-width: calc(50% - 4px);
-                font-size: 0.85em;
-                padding: 10px 12px;
-            }
-            
-            .header h1 {
-                font-size: 2em;
-            }
-        }
-
-        /* MacBook Pro 1728x1117 optimization */
-        @media (min-width: 1600px) and (max-width: 1800px) and (min-height: 1000px) and (max-height: 1200px) {
-            body {
-                padding: 25px;
-            }
-
-            .test-container {
-                max-width: 1000px;
-            }
-
-            .header {
-                padding: 40px;
-            }
-
-            .header h1 {
-                font-size: 3em;
-                margin-bottom: 15px;
-            }
-
-            .header p {
-                font-size: 1.2em;
-            }
-
-            .header .test-info {
-                font-size: 1em;
-                margin-top: 20px;
-            }
-
-            .progress-bar {
-                height: 10px;
-            }
-
-            .plate-container {
-                padding: 50px;
-            }
-
-            .plate {
-                width: 400px;
-                height: 400px;
-                margin: 0 auto 40px;
-                border: 10px solid #fff;
-            }
-
-            .question {
-                font-size: 1.5em;
-                margin-bottom: 40px;
-                color: #ffffff;
-            }
-
-            .options {
-                display: flex;
-                flex-wrap: nowrap;
-                gap: 12px;
-                max-width: 900px;
-                margin: 0 auto;
-                justify-content: center;
-            }
-
-            .option {
-                padding: 12px 16px;
-                font-size: 0.95em;
-            }
-
-            .navigation {
-                margin-top: 50px;
-                padding: 0 30px;
-            }
-
-            .nav-btn {
-                padding: 15px 30px;
-                font-size: 1.1em;
-            }
-
-            .results {
-                padding: 50px;
-            }
-
-            .results h2 {
-                font-size: 2.5em;
-                margin-bottom: 30px;
-                color: #ffffff;
-            }
-
-            .score-display {
-                font-size: 4em;
-                margin: 30px 0;
-            }
-
-            .result-message {
-                font-size: 1.3em;
-                margin-bottom: 40px;
-                color: #cccccc;
-            }
-
-            .restart-btn, .home-btn {
-                padding: 18px 35px;
-                font-size: 1.2em;
-            }
-        }
-    </style>
+    @media (max-width: 768px) {
+      .plate { width: 260px; height: 260px; }
+      .options { flex-wrap: wrap; gap: var(--space-sm); }
+      .option { flex: 1; min-width: calc(50% - 4px); padding: var(--space-sm) var(--space-sm); }
+      .ish-header h1 { font-size: var(--font-size-xl); }
+    }
+</style>
 {% endblock %}
 
 {% block content %}
     <div class="test-container">
-        <div class="header">
+        <div class="ish-header">
             <h1>Ishihara Color Vision Test</h1>
             <p>Identify the number or pattern you see in each circle</p>
-            <div style="background: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 10px; margin: 10px 0; color: #856404;">
-                <strong>⚠️ TEMPORARY:</strong> This test is currently limited to 5 plates for testing purposes.
+            <div class="ish-warning">
+                <strong>Note:</strong> This test is currently limited to 5 plates for testing purposes.
             </div>
             <div class="test-info">
-                <span id="timer">Time: 00:00</span> | 
+                <span id="timer">Time: 00:00</span> |
                 <span id="currentPlate">Loading...</span>
             </div>
         </div>
-        
+
         <div class="progress-bar">
             <div class="progress-fill" id="progressFill"></div>
         </div>
@@ -419,10 +160,10 @@
             <div class="plate" id="plate"></div>
             <div class="question" id="question"></div>
             <div class="options" id="options"></div>
-            
+
             <div class="navigation">
-                <button class="nav-btn" id="prevBtn" disabled>Previous</button>
-                <button class="nav-btn primary" id="nextBtn">Next</button>
+                <button class="nav-btn" id="prevBtn" type="button" disabled>Previous</button>
+                <button class="nav-btn primary" id="nextBtn" type="button">Next</button>
             </div>
         </div>
 
@@ -430,8 +171,8 @@
             <h2>Test Complete!</h2>
             <div class="score-display" id="scoreDisplay"></div>
             <div class="result-message" id="resultMessage"></div>
-            <button class="restart-btn" id="restartBtn">Take Test Again</button>
-            <button class="home-btn" id="homeBtn">Go Home</button>
+            <button class="restart-btn" id="restartBtn" type="button">Take Test Again</button>
+            <button class="home-btn" id="homeBtn" type="button">Go Home</button>
         </div>
     </div>
 
@@ -443,422 +184,200 @@
         let startTime = null;
         let timerInterval = null;
 
-        // Load test data from CSV
         async function loadTestData() {
             try {
                 const response = await fetch('/static/ishihara_test_data.csv?v=' + Date.now());
                 const csvText = await response.text();
                 ishiharaPlates = parseCSV(csvText);
-                
-                // Hide loading, show test
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('plateContainer').style.display = 'block';
-                
-                // Initialize the test
                 initTest();
             } catch (error) {
                 console.error('Error loading test data:', error);
-                document.getElementById('loading').innerHTML = `
-                    <p style="color: #dc3545;">Error loading test data. Please refresh the page.</p>
-                    <button onclick="location.reload()" style="padding: 10px 20px; margin-top: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer;">Refresh</button>
-                `;
+                document.getElementById('loading').innerHTML =
+                    '<p style="color:var(--accent-danger);">Error loading test data. Please refresh the page.</p>' +
+                    '<button onclick="location.reload()" class="btn btn-primary" style="margin-top:var(--space-md);">Refresh</button>';
             }
         }
 
-        // Parse CSV data
         function parseCSV(csvText) {
             const lines = csvText.trim().split('\n');
-            const headers = lines[0].split(',');
             const plates = [];
-            
-            // TEMPORARY: Only process first 5 plates (skip last 20)
-            // TO REVERT: Change maxPlates back to lines.length - 1 or remove this limit entirely
             const maxPlates = 5;
-            
             for (let i = 1; i <= maxPlates && i < lines.length; i++) {
                 const values = lines[i].split(',');
-                const plate = {
+                plates.push({
                     id: parseInt(values[0]),
                     image_file: values[1],
-                    correct_answer: values[7], // solution column
-                    options: [
-                        values[2], // option1
-                        values[3], // option2
-                        values[4], // option3
-                        values[5], // option4
-                        values[6]  // option5
-                    ].filter(opt => opt && opt.trim() !== ''), // filter out only empty options, keep 'lines'
-                    question_text: `What do you see in this plate?`
-                };
-                plates.push(plate);
+                    correct_answer: values[7],
+                    options: [values[2], values[3], values[4], values[5], values[6]].filter(opt => opt && opt.trim() !== ''),
+                    question_text: 'What do you see in this plate?'
+                });
             }
-            
             return plates;
         }
 
-        // Initialize the test
         function initTest() {
             currentPlateIndex = 0;
             userAnswers = new Array(ishiharaPlates.length).fill(null);
             testCompleted = false;
             startTime = new Date();
-            startTimer();
+            startTimerFn();
             showPlate(currentPlateIndex);
             updateProgress();
         }
 
-        // Start the timer
-        function startTimer() {
-            if (timerInterval) clearInterval(timerInterval);
-            timerInterval = setInterval(updateTimer, 1000);
-        }
-
-        // Update the timer display
+        function startTimerFn() { if (timerInterval) clearInterval(timerInterval); timerInterval = setInterval(updateTimer, 1000); }
         function updateTimer() {
             if (!startTime) return;
-            
-            const now = new Date();
-            const elapsed = Math.floor((now - startTime) / 1000);
-            const minutes = Math.floor(elapsed / 60);
-            const seconds = elapsed % 60;
-            
-            document.getElementById('timer').textContent = `Time: ${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            const elapsed = Math.floor((new Date() - startTime) / 1000);
+            document.getElementById('timer').textContent = 'Time: ' + Math.floor(elapsed / 60).toString().padStart(2, '0') + ':' + (elapsed % 60).toString().padStart(2, '0');
         }
+        function stopTimerFn() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
 
-        // Stop the timer
-        function stopTimer() {
-            if (timerInterval) {
-                clearInterval(timerInterval);
-                timerInterval = null;
-            }
-        }
-
-        // Show a specific plate
         function showPlate(index) {
             const plate = ishiharaPlates[index];
-            const plateElement = document.getElementById('plate');
-            const questionElement = document.getElementById('question');
-            const optionsElement = document.getElementById('options');
-
-            // Load the PNG image from ishihara folder
-            plateElement.innerHTML = `<img src="/ishihara/${plate.image_file}" alt="Ishihara Plate ${plate.id}" onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\'display:flex;align-items:center;justify-content:center;height:100%;color:#6c757d;font-size:1.2em;\'>Plate ${plate.id}<br>Image not found</div>'">`;
-            
-            questionElement.textContent = `Plate ${plate.id}: ${plate.question_text}`;
-            
-            // Clear previous options
-            optionsElement.innerHTML = '';
-            
-            // Create option buttons
+            document.getElementById('plate').innerHTML = '<img src="/ishihara/' + plate.image_file + '" alt="Ishihara Plate ' + plate.id + '" onerror="this.style.display=\'none\'">';
+            document.getElementById('question').textContent = 'Plate ' + plate.id + ': ' + plate.question_text;
+            const optionsEl = document.getElementById('options');
+            optionsEl.innerHTML = '';
             plate.options.forEach(option => {
-                const optionBtn = document.createElement('div');
-                optionBtn.className = 'option';
-                optionBtn.textContent = option;
-                optionBtn.onclick = () => selectOption(option);
-                
-                // Mark as selected if user already answered
-                if (userAnswers[index] === option) {
-                    optionBtn.classList.add('selected');
-                }
-                
-                optionsElement.appendChild(optionBtn);
+                const btn = document.createElement('button');
+                btn.className = 'option';
+                btn.type = 'button';
+                btn.textContent = option;
+                btn.onclick = () => selectOption(option);
+                if (userAnswers[index] === option) btn.classList.add('selected');
+                optionsEl.appendChild(btn);
             });
-
-            // Update navigation buttons and current plate display
             updateNavigationButtons();
-            document.getElementById('currentPlate').textContent = `Plate ${plate.id} of ${ishiharaPlates.length}`;
+            document.getElementById('currentPlate').textContent = 'Plate ' + plate.id + ' of ' + ishiharaPlates.length;
         }
 
-        // Handle option selection
         function selectOption(selectedOption) {
-            const currentPlate = ishiharaPlates[currentPlateIndex];
             userAnswers[currentPlateIndex] = selectedOption;
-            
-            // Update visual feedback
-            const options = document.querySelectorAll('.option');
-            options.forEach(option => {
-                option.classList.remove('selected', 'correct', 'incorrect');
-                if (option.textContent == selectedOption) {
-                    option.classList.add('selected');
-                }
+            document.querySelectorAll('.option').forEach(opt => {
+                opt.classList.remove('selected', 'correct', 'incorrect');
+                if (opt.textContent == selectedOption) opt.classList.add('selected');
             });
-            
-            // Enable next button
             document.getElementById('nextBtn').disabled = false;
         }
 
-        // Update navigation buttons
         function updateNavigationButtons() {
-            const prevBtn = document.getElementById('prevBtn');
+            document.getElementById('prevBtn').disabled = currentPlateIndex === 0;
             const nextBtn = document.getElementById('nextBtn');
-            
-            prevBtn.disabled = currentPlateIndex === 0;
-            
-            if (currentPlateIndex === ishiharaPlates.length - 1) {
-                nextBtn.textContent = 'Finish Test';
-                nextBtn.disabled = userAnswers[currentPlateIndex] === null;
-            } else {
-                nextBtn.textContent = 'Next';
-                nextBtn.disabled = userAnswers[currentPlateIndex] === null;
-            }
+            nextBtn.textContent = currentPlateIndex === ishiharaPlates.length - 1 ? 'Finish Test' : 'Next';
+            nextBtn.disabled = userAnswers[currentPlateIndex] === null;
         }
 
-        // Update progress bar
         function updateProgress() {
-            const progress = ((currentPlateIndex + 1) / ishiharaPlates.length) * 100;
-            document.getElementById('progressFill').style.width = progress + '%';
+            document.getElementById('progressFill').style.width = ((currentPlateIndex + 1) / ishiharaPlates.length * 100) + '%';
         }
 
-        // Navigate to next plate
         function nextPlate() {
-            if (currentPlateIndex < ishiharaPlates.length - 1) {
-                currentPlateIndex++;
-                showPlate(currentPlateIndex);
-                updateProgress();
-            } else {
-                finishTest();
-            }
+            if (currentPlateIndex < ishiharaPlates.length - 1) { currentPlateIndex++; showPlate(currentPlateIndex); updateProgress(); }
+            else finishTest();
         }
-
-        // Navigate to previous plate
         function prevPlate() {
-            if (currentPlateIndex > 0) {
-                currentPlateIndex--;
-                showPlate(currentPlateIndex);
-                updateProgress();
-            }
+            if (currentPlateIndex > 0) { currentPlateIndex--; showPlate(currentPlateIndex); updateProgress(); }
         }
 
-        // Finish the test and show results
         function finishTest() {
-            stopTimer();
-            
-            const correctAnswers = userAnswers.filter((answer, index) => 
-                answer === ishiharaPlates[index].correct_answer
-            ).length;
-            
+            stopTimerFn();
+            const correctAnswers = userAnswers.filter((a, i) => a === ishiharaPlates[i].correct_answer).length;
             const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
             const totalTime = startTime ? Math.floor((new Date() - startTime) / 1000) : 0;
-            const minutes = Math.floor(totalTime / 60);
-            const seconds = totalTime % 60;
-            
             document.getElementById('scoreDisplay').textContent = score + '%';
-            document.getElementById('resultMessage').innerHTML = `
-                ${getResultMessage(score)}<br><br>
-                <strong>Results:</strong><br>
-                • Correct answers: ${correctAnswers}/${ishiharaPlates.length}<br>
-                • Total time: ${minutes}:${seconds.toString().padStart(2, '0')}<br>
-                • Average time per plate: ${Math.round(totalTime / ishiharaPlates.length)} seconds
-            `;
-            
+            document.getElementById('resultMessage').innerHTML =
+                getResultMessage(score) + '<br><br><strong>Results:</strong><br>' +
+                '• Correct: ' + correctAnswers + '/' + ishiharaPlates.length + '<br>' +
+                '• Time: ' + Math.floor(totalTime / 60) + ':' + (totalTime % 60).toString().padStart(2, '0') + '<br>' +
+                '• Avg per plate: ' + Math.round(totalTime / ishiharaPlates.length) + 's';
             document.getElementById('plateContainer').style.display = 'none';
             document.getElementById('results').style.display = 'block';
-            
             testCompleted = true;
-            
-            // Check test results and proceed accordingly
             checkTestResults();
         }
 
-        // Get result message based on score
         function getResultMessage(score) {
             if (score >= 90) return "Excellent color vision! You have normal color perception.";
             if (score >= 80) return "Good color vision with minor difficulties.";
             if (score >= 70) return "Moderate color vision deficiency detected.";
             if (score >= 60) return "Significant color vision deficiency detected.";
-            return "Severe color vision deficiency detected. Consider consulting an eye care professional.";
+            return "Severe color vision deficiency detected.";
         }
+        function hasPassedTest(score) { return score >= 90; }
 
-        // Check if user passed the test (90% threshold)
-        function hasPassedTest(score) {
-            return score >= 90;
-        }
-
-        // Check test results and proceed accordingly
         function checkTestResults() {
-            // Calculate score and check if passed
-            const correctAnswers = userAnswers.filter((answer, index) => 
-                answer === ishiharaPlates[index].correct_answer
-            ).length;
+            const correctAnswers = userAnswers.filter((a, i) => a === ishiharaPlates[i].correct_answer).length;
             const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
-            const passed = hasPassedTest(score);
-            
-            if (passed) {
-                // User passed, show success message and allow access
-                displayTestSuccess(score);
-            } else {
-                // User failed, show failure message - NO ACCESS GRANTED
-                displayTestFailure(score);
-            }
+            if (hasPassedTest(score)) { displayTestSuccess(score); registerUserAfterTest(); }
+            else displayTestFailure(score);
         }
 
-        // Display test success message for users who passed
         function displayTestSuccess(score) {
-            const resultMessage = document.getElementById('resultMessage');
-            const currentContent = resultMessage.innerHTML;
-            
-            resultMessage.innerHTML = `
-                ${currentContent}<br><br>
-                <div style="background: #e8f5e8; border: 2px solid #28a745; border-radius: 10px; padding: 20px; margin: 20px 0; text-align: center;">
-                    <h3 style="color: #28a745; margin: 0 0 10px 0;">✅ Test Passed!</h3>
-                    <p style="margin: 10px 0; color: #155724; font-size: 1.1em;">
-                        Congratulations! Your score of <strong>${score}%</strong> meets the required threshold.
-                    </p>
-                    <p style="margin: 10px 0; color: #155724;">
-                        You can now proceed to the color matching test.
-                    </p>
-                </div>
-            `;
-            
-            // Register the user after passing the test
-            registerUserAfterTest();
+            const rm = document.getElementById('resultMessage');
+            rm.innerHTML += '<br><br><div style="background:#E8F5E9;border:2px solid var(--accent-success);border-radius:var(--radius-md);padding:var(--space-lg);margin:var(--space-md) 0;text-align:center;">' +
+                '<h3 style="color:var(--accent-success);margin:0 0 var(--space-sm) 0;">Test Passed!</h3>' +
+                '<p style="margin:var(--space-sm) 0;color:var(--text-primary);">Your score of <strong>' + score + '%</strong> meets the threshold. You can proceed.</p></div>';
         }
 
-
-        // Display test failure message
         function displayTestFailure(score) {
-            const resultMessage = document.getElementById('resultMessage');
-            const currentContent = resultMessage.innerHTML;
-            
-            resultMessage.innerHTML = `
-                ${currentContent}<br><br>
-                <div style="background: #f8d7da; border: 2px solid #dc3545; border-radius: 10px; padding: 20px; margin: 20px 0; text-align: center;">
-                    <h3 style="color: #dc3545; margin: 0 0 10px 0;">❌ Test Failed - Access Denied</h3>
-                    <p style="margin: 10px 0; color: #721c24; font-size: 1.1em;">
-                        Your score of <strong>${score}%</strong> is below the required 90% threshold.
-                    </p>
-                    <p style="margin: 10px 0; color: #721c24; font-weight: bold;">
-                        You do not have permission to access the color matching test.
-                    </p>
-                    <p style="margin: 10px 0; color: #721c24;">
-                        Only users with normal color vision (90% or higher) can participate in this study.
-                    </p>
-                    <p style="margin: 10px 0 0 0; color: #721c24; font-size: 0.9em;">
-                        Please consult an eye care professional if you have concerns about your color vision.
-                    </p>
-                </div>
-            `;
+            const rm = document.getElementById('resultMessage');
+            rm.innerHTML += '<br><br><div style="background:#FFEBEE;border:2px solid var(--accent-danger);border-radius:var(--radius-md);padding:var(--space-lg);margin:var(--space-md) 0;text-align:center;">' +
+                '<h3 style="color:var(--accent-danger);margin:0 0 var(--space-sm) 0;">Test Failed — Access Denied</h3>' +
+                '<p style="margin:var(--space-sm) 0;color:var(--text-primary);">Your score of <strong>' + score + '%</strong> is below the required 90%.</p>' +
+                '<p style="margin:var(--space-sm) 0;color:var(--text-secondary);">Only users with normal color vision can participate.</p></div>';
         }
 
-
-        // Event listeners
-        document.getElementById('nextBtn').addEventListener('click', nextPlate);
-        document.getElementById('prevBtn').addEventListener('click', prevPlate);
-        document.getElementById('restartBtn').addEventListener('click', function() {
-            stopTimer();
-            
-            // Hide results section and show plate container
-            document.getElementById('results').style.display = 'none';
-            document.getElementById('plateContainer').style.display = 'block';
-            
-            // Reset test state
-            testCompleted = false;
-            
-            // Reset timer display
-            document.getElementById('timer').textContent = 'Time: 00:00';
-            
-            // Initialize the test
-            initTest();
-        });
-        document.getElementById('homeBtn').addEventListener('click', () => {
-            // Only allow home navigation if user passed the test
-            const correctAnswers = userAnswers.filter((answer, index) => 
-                answer === ishiharaPlates[index].correct_answer
-            ).length;
-            const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
-            
-            if (hasPassedTest(score)) {
-                window.location.href = '/';
-            } else {
-                // Failed users can only restart the test
-                alert('You must pass the Ishihara test to access other features.');
-            }
-        });
-
-        // Register user after completing the Ishihara test
         async function registerUserAfterTest() {
             try {
                 const birthdate = localStorage.getItem('userBirthdate');
                 const gender = localStorage.getItem('userGender');
-                
-                if (!birthdate || !gender) {
-                    console.error('Missing user data for registration');
-                    return;
-                }
-                
-                // Check if user is already registered
+                if (!birthdate || !gender) return;
                 const existingUserId = localStorage.getItem('userId');
-                if (existingUserId) {
-                    console.log('User already registered with ID:', existingUserId);
-                    // Display the existing user ID instead of registering again
-                    displayUserID(existingUserId);
-                    return;
-                }
-                
-                const response = await fetch('/register', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        birthdate: birthdate,
-                        gender: gender
-                    })
-                });
-                
+                if (existingUserId) { displayUserID(existingUserId); return; }
+                const response = await fetch('/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ birthdate, gender }) });
                 const data = await response.json();
-                
                 if (data.status === 'success') {
-                    // Store the user ID
                     localStorage.setItem('userId', data.userId);
-                    console.log('User registered successfully with ID:', data.userId);
-                    
-                    // Display the user ID to the user
                     displayUserID(data.userId);
-                } else {
-                    console.error('Registration failed:', data.message);
                 }
-            } catch (error) {
-                console.error('Error registering user:', error);
-            }
+            } catch (error) { console.error('Error registering user:', error); }
         }
 
-        // Display the user ID to the user
         function displayUserID(userId) {
-            const resultMessage = document.getElementById('resultMessage');
-            const currentContent = resultMessage.innerHTML;
-            
-            resultMessage.innerHTML = `
-                ${currentContent}<br><br>
-                <div style="background: #e8f5e8; border: 2px solid #28a745; border-radius: 10px; padding: 20px; margin: 20px 0; text-align: center;">
-                    <h3 style="color: #28a745; margin: 0 0 10px 0;">🎉 Your User ID</h3>
-                    <div style="font-size: 2em; font-weight: bold; color: #2c3e50; letter-spacing: 3px; margin: 10px 0;">${userId}</div>
-                    <p style="margin: 10px 0 0 0; color: #6c757d; font-size: 0.9em;">
-                        Save this ID to access your results later!
-                    </p>
-                    <button onclick="proceedToMainPage()" style="background: #28a745; color: white; border: none; padding: 15px 30px; border-radius: 25px; cursor: pointer; font-size: 1.1em; margin-top: 15px;">
-                        Start Color Matching Test
-                    </button>
-                </div>
-            `;
+            const rm = document.getElementById('resultMessage');
+            rm.innerHTML += '<br><br><div style="background:#E8F5E9;border:2px solid var(--accent-success);border-radius:var(--radius-md);padding:var(--space-lg);margin:var(--space-md) 0;text-align:center;">' +
+                '<h3 style="color:var(--accent-success);margin:0 0 var(--space-sm) 0;">Your User ID</h3>' +
+                '<div style="font-size:2em;font-weight:900;color:var(--accent-primary);letter-spacing:3px;margin:var(--space-sm) 0;font-family:monospace;">' + userId + '</div>' +
+                '<p style="color:var(--text-secondary);font-size:var(--font-size-sm);">Save this ID to access your results later!</p>' +
+                '<button onclick="proceedToMainPage()" class="btn btn-primary btn-lg" style="margin-top:var(--space-md);">Start Color Matching</button></div>';
         }
 
-        // Function to proceed to main page with proper user ID handling
         function proceedToMainPage() {
-            // Ensure user ID is stored in localStorage
             const userId = localStorage.getItem('userId');
-            if (userId) {
-                // Set a flag to indicate the user just completed registration
-                localStorage.setItem('justRegistered', 'true');
-                // Redirect to main page
-                window.location.href = '/';
-            } else {
-                console.error('User ID not found, cannot proceed');
-                alert('Error: User ID not found. Please try again.');
-            }
+            if (userId) { localStorage.setItem('justRegistered', 'true'); window.location.href = '/'; }
+            else alert('Error: User ID not found.');
         }
 
-        // Load test data when page loads
+        document.getElementById('nextBtn').addEventListener('click', nextPlate);
+        document.getElementById('prevBtn').addEventListener('click', prevPlate);
+        document.getElementById('restartBtn').addEventListener('click', function() {
+            stopTimerFn();
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('plateContainer').style.display = 'block';
+            testCompleted = false;
+            document.getElementById('timer').textContent = 'Time: 00:00';
+            initTest();
+        });
+        document.getElementById('homeBtn').addEventListener('click', () => {
+            const correctAnswers = userAnswers.filter((a, i) => a === ishiharaPlates[i].correct_answer).length;
+            const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
+            if (hasPassedTest(score)) window.location.href = '/';
+            else alert('You must pass the Ishihara test to access other features.');
+        });
+
         document.addEventListener('DOMContentLoaded', loadTestData);
     </script>
 {% endblock %}
-

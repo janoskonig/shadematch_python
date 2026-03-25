@@ -3,8 +3,8 @@
   "short_name": "SHADE",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "rgb(46, 46, 46)",
-  "theme_color": "rgb(46, 46, 46)",
+  "background_color": "#F8F6F3",
+  "theme_color": "#F8F6F3",
   "icons": [
     {
       "src": "/static/icons/icon-192.png",

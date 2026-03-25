@@ -1,0 +1,216 @@
+/* ================================================================
+   main.css — Index page layout (color mixing app)
+   ================================================================ */
+
+/* ---- App header ---- */
+.app-header {
+  position: sticky; top: 0; z-index: 100;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-sm) var(--space-md);
+}
+.app-header-inner {
+  max-width: 1200px; margin: 0 auto;
+  display: flex; align-items: center;
+  gap: var(--space-md);
+}
+.header-right {
+  display: flex; align-items: center;
+  gap: var(--space-sm); margin-left: auto;
+  flex-shrink: 0;
+}
+
+/* ---- Two-column layout ---- */
+.app-row {
+  display: flex; gap: var(--space-lg);
+  max-width: 1200px; margin: var(--space-lg) auto;
+  padding: 0 var(--space-md); width: 100%;
+  align-items: flex-start;
+}
+.main-content { flex: 1; min-width: 0; }
+
+/* ---- Color swatch pair ---- */
+.swatches-container { margin-bottom: var(--space-md); }
+.swatch-labels-row {
+  display: flex; justify-content: space-around;
+  font-size: var(--font-size-sm); font-weight: 700;
+  color: var(--text-secondary); margin-top: var(--space-xs);
+}
+.color-pair {
+  display: flex; width: 100%; max-width: 600px;
+  aspect-ratio: 2.2 / 1;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  margin: 0 auto;
+}
+.color-half { flex: 1; height: 100%; }
+
+/* ---- RGB debug ---- */
+.rgb-debug {
+  font-family: monospace; font-size: var(--font-size-sm);
+  text-align: right; color: var(--text-secondary);
+  padding: var(--space-xs) 0;
+}
+
+/* ---- Palette grid ---- */
+.palette {
+  display: flex; flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-lg);
+  margin: var(--space-lg) 0;
+  padding: var(--space-md) 0;
+}
+.color-control {
+  display: flex; flex-direction: column;
+  align-items: center; gap: var(--space-xs);
+}
+.color-circle {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex; justify-content: center; align-items: center;
+  font-size: 0; color: transparent;
+  box-shadow: var(--shadow-md);
+  border: 3px solid rgba(0,0,0,0.08);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.color-circle:hover { box-shadow: var(--shadow-lg); }
+.minus-button {
+  min-width: 44px; min-height: 44px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem; font-weight: 700;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer; touch-action: manipulation;
+}
+.minus-button:hover:not(:disabled) { background: var(--bg-primary); color: var(--text-primary); }
+.minus-button:disabled { opacity: 0.3; cursor: not-allowed; }
+.color-name {
+  font-size: var(--font-size-sm); font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* ---- Controls bar ---- */
+.controls-bar {
+  display: flex; flex-wrap: wrap;
+  gap: var(--space-sm);
+  justify-content: center; align-items: center;
+  margin: var(--space-md) 0;
+  padding: var(--space-sm) 0;
+}
+
+/* ---- Mixing disabled state ---- */
+.mixing-disabled .color-circle {
+  pointer-events: none; opacity: 0.4;
+  filter: grayscale(0.5);
+}
+.mixing-disabled .minus-button {
+  pointer-events: none; opacity: 0.3;
+}
+.mixing-disabled .color-pair { opacity: 0.5; }
+
+/* ---- Sidebar ---- */
+.color-relationships-sidebar {
+  width: 380px; flex-shrink: 0; min-width: 0;
+}
+.sidebar-card {
+  background: var(--surface);
+  padding: var(--space-lg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+}
+.sidebar-card h2 {
+  font-size: var(--font-size-lg); font-weight: 800;
+  text-align: center; margin-bottom: var(--space-md);
+  color: var(--text-primary);
+}
+.sidebar-info { color: var(--text-secondary); text-align: center; font-size: var(--font-size-sm); margin-top: var(--space-md); }
+.sidebar-info p { margin: var(--space-xs) 0; }
+
+.sidebar-drawer-trigger { display: none; }
+
+/* ---- Hex diagram colors ---- */
+.hex-diagram { position: relative; width: 300px; height: 320px; margin: 0 auto; }
+.hex-dot {
+  position: absolute; width: 36px; height: 36px;
+  border-radius: 50%; border: 3px solid var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+.hex-label {
+  position: absolute; font-weight: 700;
+  font-size: var(--font-size-sm); color: var(--text-primary);
+}
+
+/* --- Mobile layout --- */
+@media (max-width: 768px) {
+  .app-row {
+    flex-direction: column; gap: var(--space-md);
+    padding: 0 var(--space-sm);
+  }
+  .main-content { max-width: 100%; }
+
+  .color-relationships-sidebar { display: none; }
+  .sidebar-drawer-trigger {
+    display: flex;
+    position: fixed; bottom: 80px; right: var(--space-md);
+    z-index: 90;
+  }
+
+  .color-pair { max-width: 100%; aspect-ratio: 2.5 / 1; }
+
+  .palette { gap: var(--space-md); }
+  .color-circle { width: 72px; height: 72px; }
+
+  .controls-bar {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+    padding: var(--space-sm) var(--space-md) max(var(--space-sm), env(safe-area-inset-bottom));
+    z-index: 200;
+    margin: 0;
+    justify-content: center;
+  }
+
+  .main-content {
+    padding-bottom: 80px;
+  }
+
+  .swatches-container {
+    position: sticky; top: 52px; z-index: 90;
+    background: var(--bg-primary);
+    padding: var(--space-sm) 0;
+    margin: 0 calc(-1 * var(--space-sm));
+    padding-left: var(--space-sm);
+    padding-right: var(--space-sm);
+  }
+}
+
+/* ---- Sidebar drawer (mobile) ---- */
+.sidebar-drawer-backdrop {
+  display: none; position: fixed; inset: 0;
+  background: rgba(0,0,0,0.3); z-index: 900;
+}
+.sidebar-drawer-backdrop.is-open { display: block; }
+
+.sidebar-drawer {
+  display: none; position: fixed;
+  bottom: 0; left: 0; right: 0;
+  max-height: 70vh; overflow-y: auto;
+  background: var(--surface);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: 0 -8px 30px rgba(0,0,0,0.15);
+  z-index: 910; padding: var(--space-lg);
+  padding-bottom: max(var(--space-lg), env(safe-area-inset-bottom));
+}
+.sidebar-drawer.is-open { display: block; }
+.drawer-handle {
+  width: 40px; height: 4px;
+  background: var(--border-strong); border-radius: 2px;
+  margin: 0 auto var(--space-md);
+}
