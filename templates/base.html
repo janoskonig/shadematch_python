@@ -3,6 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="rgb(46, 46, 46)">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
     <title>{% block title %}ShadeMatch{% endblock %}</title>
     
     <!-- GDPR Cookie Consent CSS -->
@@ -23,5 +26,14 @@
     
     <!-- Additional JavaScript -->
     {% block extra_js %}{% endblock %}
+
+    <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/static/sw.js', { scope: '/' })
+          .catch(function () {});
+      });
+    }
+    </script>
 </body>
 </html>
