@@ -149,45 +149,62 @@
 /* --- Mobile layout --- */
 @media (max-width: 768px) {
   .app-row {
-    flex-direction: column; gap: var(--space-md);
+    flex-direction: column; gap: var(--space-xs);
     padding: 0 var(--space-sm);
+    margin-top: var(--space-xs); margin-bottom: 0;
+    align-items: stretch;
   }
-  .main-content { max-width: 100%; }
+  .main-content { max-width: 100%; padding-bottom: 60px; width: 100%; }
 
   .color-relationships-sidebar { display: none; }
   .sidebar-drawer-trigger {
     display: flex;
-    position: fixed; bottom: 80px; right: var(--space-md);
+    position: fixed; bottom: 60px; right: var(--space-md);
     z-index: 90;
   }
 
-  .color-pair { max-width: 100%; aspect-ratio: 2.5 / 1; }
+  .app-header { padding: var(--space-xs) var(--space-md); }
 
-  .palette { gap: var(--space-md); }
-  .color-circle { width: 72px; height: 72px; }
+  .swatches-container {
+    position: sticky; top: 44px; z-index: 90;
+    background: var(--bg-primary);
+    padding: var(--space-xs) var(--space-sm);
+    margin: 0 calc(-1 * var(--space-sm)) var(--space-xs);
+  }
+  .color-pair { max-width: 100%; aspect-ratio: 3.5 / 1; }
+  .swatch-labels-row { margin-top: 2px; font-size: 0.75rem; }
+
+  .match-bar-wrap { margin: var(--space-xs) 0; }
+
+  .palette {
+    flex-wrap: nowrap;
+    gap: 0;
+    margin: var(--space-sm) 0;
+    padding: var(--space-xs) 0;
+    justify-content: space-evenly;
+  }
+  .color-control { gap: 2px; }
+  .color-circle { width: 52px; height: 52px; border-width: 2px; }
+  .drop-badge { min-width: 22px; height: 20px; font-size: 0.7rem; padding: 0 4px; }
+  .minus-button { min-width: 36px; min-height: 36px; font-size: 1.1rem; }
+  .color-name { font-size: 0.7rem; }
+
+  .timer-display { padding: 2px 0; }
 
   .controls-bar {
     position: fixed; bottom: 0; left: 0; right: 0;
     background: var(--surface);
     border-top: 1px solid var(--border);
     box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
-    padding: var(--space-sm) var(--space-md) max(var(--space-sm), env(safe-area-inset-bottom));
+    padding: var(--space-xs) var(--space-md) max(var(--space-xs), env(safe-area-inset-bottom));
     z-index: 200;
     margin: 0;
     justify-content: center;
   }
-
-  .main-content {
-    padding-bottom: 80px;
-  }
-
-  .swatches-container {
-    position: sticky; top: 52px; z-index: 90;
-    background: var(--bg-primary);
-    padding: var(--space-sm) 0;
-    margin: 0 calc(-1 * var(--space-sm));
-    padding-left: var(--space-sm);
-    padding-right: var(--space-sm);
+  .controls-bar .btn-lg {
+    min-height: 44px;
+    padding: var(--space-sm) var(--space-lg);
+    font-size: 1rem;
   }
 }
 

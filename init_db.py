@@ -1,7 +1,7 @@
 # Import the create_app function and db instance from the app package
 from app import create_app, db
 # Import the database models that need to be initialized
-from app.models import User, Session, MixingSession
+from app.models import User, Session, MixingSession, TargetColor
 
 # Create a Flask application instance
 app = create_app()

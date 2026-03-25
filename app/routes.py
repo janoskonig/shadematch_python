@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, jsonify, send_from_directory
 from datetime import datetime
 from . import db
-from .models import User, MixingSession
+from .models import User, MixingSession, TargetColor
 import random
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb, reverse_engineer_recipe
@@ -73,6 +73,24 @@ def refresh_db_connection():
 @main.route('/')
 def index():
     return render_template('index.html')
+
+
+@main.route('/api/target-colors', methods=['GET'])
+def get_target_colors():
+    rows = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
+    colors = []
+    for tc in rows:
+        colors.append({
+            'id': tc.id,
+            'name': tc.name,
+            'type': tc.color_type,
+            'classification': tc.classification,
+            'rgb': [tc.r, tc.g, tc.b],
+            'frequency': tc.frequency,
+            'catalog_order': tc.catalog_order,
+        })
+    return jsonify({'status': 'success', 'colors': colors})
+
 
 @main.route('/spectral')
 def spectral():
@@ -256,6 +274,7 @@ def save_session():
         )
         session = MixingSession(
             user_id=data['user_id'],
+            target_color_id=data.get('target_color_id'),
             target_r=data['target_r'],
             target_g=data['target_g'],
             target_b=data['target_b'],
@@ -305,6 +324,7 @@ def save_skip():
         mc = derive_match_category(delta_e, True, skip_perception=skip_perception)
         session = MixingSession(
             user_id=data['user_id'],
+            target_color_id=data.get('target_color_id'),
             target_r=data['target_r'],
             target_g=data['target_g'],
             target_b=data['target_b'],
@@ -364,6 +384,7 @@ def get_user_results():
         for session in sessions:
             results.append({
                 'id': session.id,
+                'target_color_id': session.target_color_id,
                 'target_color': f"RGB({session.target_r}, {session.target_g}, {session.target_b})",
                 'drops': {
                     'white': session.drop_white,

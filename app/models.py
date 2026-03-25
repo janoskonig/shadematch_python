@@ -18,10 +18,26 @@ class Session(db.Model):
     delta_e = db.Column(db.Float)
     elapsed_time = db.Column(db.Float)
 
+
+class TargetColor(db.Model):
+    __tablename__ = 'target_colors'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), nullable=False)
+    color_type = db.Column(db.String(32), nullable=False)
+    classification = db.Column(db.String(64), nullable=True)
+    r = db.Column(db.Integer, nullable=False)
+    g = db.Column(db.Integer, nullable=False)
+    b = db.Column(db.Integer, nullable=False)
+    frequency = db.Column(db.Integer, nullable=False, default=1)
+    catalog_order = db.Column(db.Integer, nullable=False, unique=True)
+
+
 class MixingSession(db.Model):
     __tablename__ = 'mixing_sessions'
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.String(6), nullable=False)
+    target_color_id = db.Column(db.Integer, db.ForeignKey('target_colors.id'), nullable=True)
     target_r = db.Column(db.Integer)
     target_g = db.Column(db.Integer)
     target_b = db.Column(db.Integer)

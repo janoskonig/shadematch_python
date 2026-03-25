@@ -226,6 +226,7 @@ function saveSessionToServer(session) {
   if (session.target && session.drops) {
     sessionData = {
       user_id: window.currentUserId,
+      target_color_id: session.target_color_id ?? null,
       target_r: session.target[0], target_g: session.target[1], target_b: session.target[2],
       drop_white: session.drops.white, drop_black: session.drops.black,
       drop_red: session.drops.red, drop_yellow: session.drops.yellow, drop_blue: session.drops.blue,
@@ -235,6 +236,7 @@ function saveSessionToServer(session) {
   } else {
     sessionData = {
       user_id: session.user_id,
+      target_color_id: session.target_color_id ?? null,
       target_r: session.target_r, target_g: session.target_g, target_b: session.target_b,
       drop_white: session.drop_white, drop_black: session.drop_black,
       drop_red: session.drop_red, drop_yellow: session.drop_yellow, drop_blue: session.drop_blue,
@@ -264,7 +266,7 @@ function saveSessionToServer(session) {
   });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   disableColorMixing();
 
   const baseColors = {
@@ -272,63 +274,19 @@ document.addEventListener("DOMContentLoaded", () => {
     red: [255, 0, 0], yellow: [255, 255, 0], blue: [0, 0, 255]
   };
 
-  const allTargetColors = [
-    { name: 'Orange', type: 'basic', classification: null, rgb: [255, 102, 30] },
-    { name: 'Purple', type: 'basic', classification: null, rgb: [113, 1, 105] },
-    { name: 'Green', type: 'basic', classification: null, rgb: [78, 150, 100] },
-    { name: 'Pink', type: 'basic', classification: null, rgb: [255, 179, 188] },
-    { name: 'Olive', type: 'basic', classification: null, rgb: [113, 112, 62] },
-    { name: 'Custom', type: 'basic', classification: null, rgb: [111, 122, 102] },
-    { name: 'Peach', type: 'basic', classification: null, rgb: [255, 228, 175] },
-    { name: 'Coral', type: 'basic', classification: null, rgb: [255, 131, 82] },
-    { name: 'Turquoise', type: 'basic', classification: null, rgb: [103, 157, 174] },
-    { name: 'Chartreuse', type: 'basic', classification: null, rgb: [157, 210, 103] },
-    { name: 'Teal', type: 'basic', classification: null, rgb: [84, 122, 122] },
-    { name: '#D1AE90', type: 'skin', classification: 'skin_light', rgb: [208, 176, 148] },
-    { name: '#AE967E', type: 'skin', classification: 'skin_light', rgb: [175, 149, 126] },
-    { name: '#C3A28F', type: 'skin', classification: 'skin_light', rgb: [242, 166, 129] },
-    { name: '#BE8870', type: 'skin', classification: 'skin_light', rgb: [193, 135, 115] },
-    { name: '#6D544D', type: 'skin', classification: 'skin_light', rgb: [178, 125, 107] },
-    { name: '#34261B', type: 'skin', classification: 'skin_light', rgb: [205, 87, 91] },
-    { name: '#C8AF91', type: 'skin', classification: 'skin_light', rgb: [208, 176, 148] },
-    { name: '#A97367', type: 'skin', classification: 'skin_light', rgb: [172, 115, 104] },
-    { name: '#CB9781', type: 'skin', classification: 'skin_light', rgb: [212, 147, 125] },
-    { name: '#B68678', type: 'skin', classification: 'skin_light', rgb: [193, 135, 115] },
-    { name: '#E8B7BA', type: 'skin', classification: 'skin_light', rgb: [228, 183, 190] },
-    { name: '#A58F5E', type: 'skin', classification: 'skin_light', rgb: [167, 145, 92] },
-    { name: '#B5866A', type: 'skin', classification: 'skin_light', rgb: [180, 134, 106] },
-    { name: '#DE958F', type: 'skin', classification: 'skin_light', rgb: [225, 155, 151] },
-    { name: '#99856A', type: 'skin', classification: 'skin_dark', rgb: [155, 131, 108] },
-    { name: '#A8856F', type: 'skin', classification: 'skin_dark', rgb: [182, 137, 96] },
-    { name: '#A07E63', type: 'skin', classification: 'skin_dark', rgb: [169, 120, 74] },
-    { name: '#80685C', type: 'skin', classification: 'skin_dark', rgb: [143, 103, 88] },
-    { name: '#584B42', type: 'skin', classification: 'skin_dark', rgb: [88, 71, 52] },
-    { name: '#7B5749', type: 'skin', classification: 'skin_dark', rgb: [127, 84, 67] },
-    { name: '#543B34', type: 'skin', classification: 'skin_dark', rgb: [174, 121, 123] },
-    { name: '#583E2D', type: 'skin', classification: 'skin_dark', rgb: [80, 62, 41] },
-    { name: '#A76662', type: 'skin', classification: 'skin_dark', rgb: [161, 104, 98] },
-    { name: '#A28074', type: 'skin', classification: 'skin_dark', rgb: [165, 130, 118] },
-    { name: '#8F7868', type: 'skin', classification: 'skin_dark', rgb: [144, 121, 101] },
-    { name: '#9F7954', type: 'skin', classification: 'skin_dark', rgb: [189, 131, 76] },
-    { name: '#392D1D', type: 'skin', classification: 'skin_dark', rgb: [57, 42, 22] },
-    { name: '#9D7248', type: 'skin', classification: 'skin_dark', rgb: [150, 114, 71] },
-    { name: '#58482F', type: 'skin', classification: 'skin_dark', rgb: [88, 68, 44] }
-  ];
-
-  const colorFrequencyData = {
-    '#FFB3BC': 145, '#FFE4AF': 108, '#6F7A66': 102, '#71703E': 101,
-    '#547A7A': 96, '#FF8352': 90, '#679DAE': 68, '#9DD267': 66,
-    '#D1AE90': 48, '#BE8870': 39, '#AE967E': 22, '#C3A28F': 17,
-    '#A97367': 16, '#CB9781': 11, '#E8B7BA': 10, '#A58F5E': 18,
-    '#B5866A': 20, '#DE958F': 1,
-    '#99856A': 5, '#A8856F': 23, '#A07E63': 4, '#80685C': 3,
-    '#584B42': 13, '#7B5749': 14, '#543B34': 9, '#583E2D': 2,
-    '#A76662': 21, '#A28074': 7, '#8F7868': 8, '#9F7954': 1,
-    '#392D1D': 19, '#9D7248': 12, '#58482F': 24
-  };
-
-  function rgbToHex(rgb) {
-    return '#' + rgb.map(x => { const h = x.toString(16); return h.length === 1 ? '0' + h : h; }).join('').toUpperCase();
+  let fullCatalog = [];
+  try {
+    const res = await fetch('/api/target-colors');
+    const data = await res.json();
+    if (data.status === 'success' && Array.isArray(data.colors) && data.colors.length > 0) {
+      fullCatalog = data.colors;
+    }
+  } catch (e) {
+    console.error('Failed to load target colors:', e);
+  }
+  if (!fullCatalog.length) {
+    alert('Could not load target colors. Ensure the database is migrated (npm run db:migrate) and try again.');
+    return;
   }
 
   function weightedRandomSelection(items, weights, count) {
@@ -349,12 +307,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function generateRandomizedColors() {
-    const firstThreeBasic = allTargetColors.slice(0, 3);
-    const remainingBasic = allTargetColors.slice(3, 11);
-    const basicWeights = remainingBasic.map(c => 1 / (colorFrequencyData[rgbToHex(c.rgb)] || 1));
+    const sorted = [...fullCatalog].sort((a, b) => a.catalog_order - b.catalog_order);
+    const firstThreeBasic = sorted.slice(0, 3);
+    const remainingBasic = sorted.slice(3, 11);
+    const basicWeights = remainingBasic.map(c => 1 / (c.frequency || 1));
     const selectedRemainingBasic = weightedRandomSelection(remainingBasic, basicWeights, 3);
-    const skinColors = allTargetColors.slice(11);
-    const skinWeights = skinColors.map(c => 1 / (colorFrequencyData[rgbToHex(c.rgb)] || 1));
+    const skinColors = sorted.slice(11);
+    const skinWeights = skinColors.map(c => 1 / (c.frequency || 1));
     const selectedSkinColors = weightedRandomSelection(skinColors, skinWeights, 5);
     return [...firstThreeBasic, ...selectedRemainingBasic, ...selectedSkinColors];
   }
@@ -364,8 +323,11 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentTargetColor = targetColors[0];
   let targetColor = currentTargetColor.rgb;
 
-  function setGameTargetRgb(rgb) { targetColor = rgb; window.shadeMatchTargetRgb = rgb; }
-  setGameTargetRgb(currentTargetColor.rgb);
+  function setGameTarget(color) {
+    targetColor = color.rgb;
+    window.shadeMatchTargetRgb = color.rgb;
+  }
+  setGameTarget(currentTargetColor);
   updateProgressIndicator(currentTargetIndex, targetColors.length);
 
   function showSkipPerceptionModal() {
@@ -432,6 +394,7 @@ document.addEventListener("DOMContentLoaded", () => {
         const session = {
           user_id: window.currentUserId,
           target: targetColor,
+          target_color_id: currentTargetColor.id,
           drops: { ...dropCounts },
           deltaE: data.delta_e,
           time: parseFloat(document.getElementById("timer").textContent),
@@ -456,7 +419,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     currentTargetIndex = 0;
     currentTargetColor = targetColors[currentTargetIndex];
-    setGameTargetRgb(currentTargetColor.rgb);
+    setGameTarget(currentTargetColor);
     updateBox("targetColor", targetColor);
     resetMix();
     startTimer();
@@ -471,6 +434,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!isNaN(currentDeltaE)) {
       const sessionData = {
         user_id: window.currentUserId,
+        target_color_id: currentTargetColor.id,
         target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
         drop_white: dropCounts.white, drop_black: dropCounts.black,
         drop_red: dropCounts.red, drop_yellow: dropCounts.yellow, drop_blue: dropCounts.blue,
@@ -499,6 +463,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!skipPerception) return;
       const skipData = {
         user_id: window.currentUserId,
+        target_color_id: currentTargetColor.id,
         target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
         drop_white: dropCounts.white || 0, drop_black: dropCounts.black || 0,
         drop_red: dropCounts.red || 0, drop_yellow: dropCounts.yellow || 0, drop_blue: dropCounts.blue || 0,
@@ -526,7 +491,7 @@ document.addEventListener("DOMContentLoaded", () => {
     currentTargetIndex++;
     if (currentTargetIndex < targetColors.length) {
       currentTargetColor = targetColors[currentTargetIndex];
-      setGameTargetRgb(currentTargetColor.rgb);
+      setGameTarget(currentTargetColor);
       updateBox("targetColor", targetColor);
       resetMix();
       stopTimer();
@@ -577,7 +542,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     currentTargetIndex = 0;
     currentTargetColor = targetColors[currentTargetIndex];
-    setGameTargetRgb(currentTargetColor.rgb);
+    setGameTarget(currentTargetColor);
     updateBox("targetColor", targetColor);
     resetMix();
     resetTimerDisplay();
@@ -594,6 +559,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const session = {
         user_id: window.currentUserId,
         target: targetColor,
+        target_color_id: currentTargetColor.id,
         drops: { ...dropCounts },
         deltaE: currentDeltaE,
         time: parseFloat(document.getElementById("timer").textContent),
