@@ -309,6 +309,20 @@ input[type="radio"]:checked + .toggle-btn {
 }
 .app-footer .footer-copy { margin-top: var(--space-xs); font-size: 0.8rem; opacity: 0.7; }
 
+/* ---- Mobile overrides ---- */
+@media (max-width: 600px) {
+  .modal-card {
+    padding: var(--space-lg);
+    max-height: 90dvh;
+    overflow-y: auto;
+  }
+  .modal-title { font-size: var(--font-size-xl); }
+  .btn-lg { min-height: 48px; font-size: 1rem; }
+  .skip-modal-panel { padding: var(--space-md); border-radius: var(--radius-lg) var(--radius-lg) 0 0; }
+  .skip-modal-title { font-size: var(--font-size-lg); margin-bottom: var(--space-md); }
+  .skip-choice { min-height: 52px; padding: var(--space-sm) var(--space-md); }
+}
+
 /* ---- Video modal ---- */
 .video-modal-inner {
   position: relative; width: 90%; max-width: 800px;

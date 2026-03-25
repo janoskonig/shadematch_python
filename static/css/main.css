@@ -157,16 +157,36 @@
   .main-content { max-width: 100%; padding-bottom: 60px; width: 100%; }
 
   .color-relationships-sidebar { display: none; }
+
+  /* Sits above the fixed controls bar; extra offset covers iOS home indicator */
   .sidebar-drawer-trigger {
     display: flex;
-    position: fixed; bottom: 60px; right: var(--space-md);
+    position: fixed;
+    bottom: calc(60px + max(0px, env(safe-area-inset-bottom)));
+    right: var(--space-md);
     z-index: 90;
   }
 
-  .app-header { padding: var(--space-xs) var(--space-md); }
+  /* ── Header ── */
+  .app-header { padding: var(--space-xs) var(--space-sm); }
+  .app-header-inner { gap: var(--space-xs); }
+  .header-right { gap: 4px; }
 
+  /* Compact the gamification strip: drop XP bar, level text, freeze count */
+  .ps-xpbar-wrap { display: none; }
+  .ps-level      { display: none; }
+  .ps-freeze     { display: none; }
+
+  /* User ID badge is accessible via overflow menu – hide to reclaim space */
+  .user-badge { display: none; }
+
+  /* Help button: icon only – hide label text via .help-label span */
+  .help-label { display: none; }
+
+  /* ── Swatches ──
+     Header height = 4px top-pad + 48px (touch-min btn) + 4px bot-pad = 56px */
   .swatches-container {
-    position: sticky; top: 44px; z-index: 90;
+    position: sticky; top: 56px; z-index: 90;
     background: var(--bg-primary);
     padding: var(--space-xs) var(--space-sm);
     margin: 0 calc(-1 * var(--space-sm)) var(--space-xs);
@@ -176,6 +196,7 @@
 
   .match-bar-wrap { margin: var(--space-xs) 0; }
 
+  /* ── Palette ── */
   .palette {
     flex-wrap: nowrap;
     gap: 0;
@@ -191,6 +212,7 @@
 
   .timer-display { padding: 2px 0; }
 
+  /* ── Fixed bottom controls bar ── */
   .controls-bar {
     position: fixed; bottom: 0; left: 0; right: 0;
     background: var(--surface);
@@ -200,12 +222,26 @@
     z-index: 200;
     margin: 0;
     justify-content: center;
+    flex-wrap: nowrap;
+    gap: var(--space-xs);
   }
   .controls-bar .btn-lg {
     min-height: 44px;
-    padding: var(--space-sm) var(--space-lg);
-    font-size: 1rem;
+    padding: var(--space-sm) var(--space-md);
+    font-size: 0.95rem;
+    white-space: nowrap;
   }
+}
+
+/* ── Extra-small screens (≤ 420 px) ── */
+@media (max-width: 420px) {
+  .color-circle { width: 44px; height: 44px; }
+  .minus-button { min-width: 32px; min-height: 32px; font-size: 1rem; }
+  .drop-badge { min-width: 20px; height: 18px; font-size: 0.65rem; }
+  .color-name { font-size: 0.65rem; }
+  .color-pair { aspect-ratio: 3 / 1; }
+  .app-header { padding: 2px var(--space-xs); }
+  .ps-streak { display: none; }
 }
 
 /* ---- Sidebar drawer (mobile) ---- */
