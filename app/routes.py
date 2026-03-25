@@ -1,19 +1,32 @@
 from flask import Blueprint, render_template, request, jsonify, send_from_directory
-from datetime import datetime
+from datetime import datetime, date
+import hashlib
+import random as _random
 from . import db
-from .models import User, MixingSession, TargetColor
-import random
+from .models import (
+    User, MixingSession, TargetColor,
+    UserProgress, UserTargetColorStats, UserAward,
+    DailyChallengeRun, DailyChallengeWinner, PushSubscription,
+)
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb, reverse_engineer_recipe
 import pandas as pd
 import os
 import numpy as np
 import json
-import time
+
+from .gamification import (
+    process_progression,
+    build_progress_response,
+    get_quota_ordered_catalog,
+    grant_daily_champion,
+    get_user_profile,
+    COVERAGE_QUOTA,
+    STREAK_FREEZE_CAP,
+)
 
 main = Blueprint('main', __name__)
 
-# “Perfect” / effective zero: same threshold as static/main.js auto-save (CIEDE2000 rarely equals 0.0 exactly)
 MATCH_PERFECT_DELTA_E = 0.01
 
 
@@ -34,7 +47,6 @@ def derive_match_category(delta_e, skipped, skip_perception=None):
         return 'perfect'
 
     if not skipped:
-        # Should only happen if ΔE is already “zero” (handled above); otherwise classify as stopped
         return 'stopped'
 
     if skip_perception == 'identical':
@@ -44,43 +56,136 @@ def derive_match_category(delta_e, skipped, skip_perception=None):
     if skip_perception == 'unacceptable':
         return 'big_difference'
 
-    # Skipped without survey (Stop or Retry): no “non‑perfect” bucket — use stopped
     return 'stopped'
 
 
 def generate_user_id():
-    """Generate a random 6-character user ID"""
-    return ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    return ''.join(_random.choices(string.ascii_uppercase + string.digits, k=6))
+
 
 def refresh_db_connection():
-    """Refresh database connection to handle stale connections"""
     try:
-        # Test the current connection
         db.session.execute(db.text('SELECT 1'))
-        print('✅ Database connection is healthy')
         return True
     except Exception as e:
-        print(f'⚠️ Database connection is stale, refreshing... Error: {e}')
+        print(f'⚠️ DB connection stale, refreshing… Error: {e}')
         try:
-            # Close all connections in the pool
             db.engine.dispose()
-            print('✅ Database connection pool refreshed')
             return True
         except Exception as refresh_error:
-            print(f'❌ Failed to refresh database connection: {refresh_error}')
+            print(f'❌ Failed to refresh DB: {refresh_error}')
             return False
+
+
+def _catalog_size():
+    return TargetColor.query.count()
+
+
+# ── Pages ──────────────────────────────────────────────────────────────────
 
 @main.route('/')
 def index():
     return render_template('index.html')
 
 
+@main.route('/results')
+def results_page():
+    return render_template('results.html')
+
+
+@main.route('/spectral')
+def spectral():
+    wavelengths, x_bar, y_bar, z_bar = load_cie_data()
+    pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
+    spectrum_plots = {}
+
+    for filename in os.listdir(pigments_dir):
+        if filename.endswith(('.csv', '.txt')):
+            file_path = os.path.join(pigments_dir, filename)
+            try:
+                if filename.endswith('.csv'):
+                    df = pd.read_csv(file_path)
+                    pigment_wavelengths = df['Wavelength'].tolist()
+                    reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
+                else:
+                    data = []
+                    with open(file_path, 'r') as f:
+                        for line in f:
+                            parts = line.strip().split()
+                            if len(parts) == 2:
+                                try:
+                                    data.append([float(parts[0]), float(parts[1]) / 100.0])
+                                except ValueError:
+                                    continue
+                    if not data:
+                        continue
+                    data = sorted(data, key=lambda x: x[0])
+                    pigment_wavelengths = [r[0] for r in data]
+                    reflectances = [r[1] for r in data]
+
+                X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
+                rgb = xyz_to_rgb(X, Y, Z)
+                color_key = os.path.splitext(filename)[0].lower()
+                spectrum_plots[color_key] = {
+                    'wavelengths': pigment_wavelengths,
+                    'reflectances': reflectances,
+                    'rgb': rgb.tolist(),
+                    'name': os.path.splitext(filename)[0].replace('_', ' ').title(),
+                }
+            except Exception as e:
+                print(f"Error loading {filename}: {e}")
+
+    return render_template('spectral_mixer.html', spectrum_plots=spectrum_plots)
+
+
+# ── Auth ───────────────────────────────────────────────────────────────────
+
+@main.route('/register', methods=['POST'])
+def register():
+    data = request.get_json()
+    birthdate = datetime.strptime(data['birthdate'], '%Y-%m-%d').date()
+    gender = data['gender']
+
+    if birthdate.year >= 2015:
+        return jsonify({'status': 'error', 'message': 'You must be born before 2015 to participate.'}), 400
+
+    user_id = generate_user_id()
+    while User.query.get(user_id) is not None:
+        user_id = generate_user_id()
+
+    user = User(id=user_id, birthdate=birthdate, gender=gender)
+    db.session.add(user)
+    db.session.commit()
+
+    return jsonify({'status': 'success', 'userId': user_id})
+
+
+@main.route('/login', methods=['POST'])
+def login():
+    data = request.get_json()
+    user_id = data['userId']
+    try:
+        user = User.query.get(user_id)
+        if user:
+            return jsonify({'status': 'success', 'birthdate': user.birthdate.isoformat(), 'gender': user.gender})
+
+        session = MixingSession.query.filter_by(user_id=user_id).first()
+        if session:
+            return jsonify({'status': 'success', 'birthdate': '2000-01-01', 'gender': 'male'})
+
+        return jsonify({'status': 'error', 'message': 'Invalid user ID'}), 404
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': 'Database error'}), 500
+
+
+# ── Target colors ──────────────────────────────────────────────────────────
+
 @main.route('/api/target-colors', methods=['GET'])
 def get_target_colors():
+    user_id = request.args.get('user_id')
     rows = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
-    colors = []
-    for tc in rows:
-        colors.append({
+    colors = [
+        {
             'id': tc.id,
             'name': tc.name,
             'type': tc.color_type,
@@ -88,250 +193,134 @@ def get_target_colors():
             'rgb': [tc.r, tc.g, tc.b],
             'frequency': tc.frequency,
             'catalog_order': tc.catalog_order,
-        })
+        }
+        for tc in rows
+    ]
+
+    if user_id:
+        colors = get_quota_ordered_catalog(user_id, colors)
+
     return jsonify({'status': 'success', 'colors': colors})
 
 
-@main.route('/spectral')
-def spectral():
-    # Load CIE data
-    wavelengths, x_bar, y_bar, z_bar = load_cie_data()
-    
-    # Read pigment data from CSV and TXT files
-    pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
-    spectrum_plots = {}
-    
-    for filename in os.listdir(pigments_dir):
-        if filename.endswith(('.csv', '.txt')):
-            file_path = os.path.join(pigments_dir, filename)
-            
-            try:
-                if filename.endswith('.csv'):
-                    # Read CSV file
-                    df = pd.read_csv(file_path)
-                    pigment_wavelengths = df['Wavelength'].tolist()
-                    # Calculate average reflectance across all measurements
-                    reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
-                else:
-                    # Read TXT file (space-separated values)
-                    data = []
-                    with open(file_path, 'r') as f:
-                        for line in f:
-                            parts = line.strip().split()
-                            if len(parts) == 2:
-                                try:
-                                    wavelength = float(parts[0])
-                                    reflectance = float(parts[1]) / 100.0  # Convert percentage to decimal
-                                    data.append([wavelength, reflectance])
-                                except ValueError:
-                                    continue
-                    
-                    if data:
-                        data = sorted(data, key=lambda x: x[0])
-                        pigment_wavelengths = [row[0] for row in data]
-                        reflectances = [row[1] for row in data]
-                    else:
-                        continue
-                
-                # Convert spectrum to XYZ
-                X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
-                
-                # Convert XYZ to RGB
-                rgb = xyz_to_rgb(X, Y, Z)
-                
-                # Get pigment name from filename
-                pigment_name = os.path.splitext(filename)[0].replace('_', ' ').title()
-                
-                # Create a unique key for each pigment
-                color_key = os.path.splitext(filename)[0].lower()
-                
-                spectrum_plots[color_key] = {
-                    'wavelengths': pigment_wavelengths,
-                    'reflectances': reflectances,
-                    'rgb': rgb.tolist(),
-                    'name': pigment_name
-                }
-                
-            except Exception as e:
-                print(f"Error loading {filename}: {str(e)}")
-                continue
-    
-    return render_template('spectral_mixer.html', spectrum_plots=spectrum_plots)
-
-@main.route('/register', methods=['POST'])
-def register():
-    data = request.get_json()
-    birthdate = datetime.strptime(data['birthdate'], '%Y-%m-%d').date()
-    gender = data['gender']
-    
-    # Validate birthdate - must be born before 2015
-    if birthdate.year >= 2015:
-        return jsonify({
-            'status': 'error',
-            'message': 'You must be born before 2015 to participate.'
-        }), 400
-    
-    # Generate a unique user ID
-    user_id = generate_user_id()
-    while User.query.get(user_id) is not None:
-        user_id = generate_user_id()
-    
-    # Create new user
-    user = User(
-        id=user_id,
-        birthdate=birthdate,
-        gender=gender
-    )
-    
-    db.session.add(user)
-    db.session.commit()
-    
-    return jsonify({
-        'status': 'success',
-        'userId': user_id
-    })
-
-@main.route('/login', methods=['POST'])
-def login():
-    data = request.get_json()
-    user_id = data['userId']
-    print(f"Login attempt for user ID: {user_id}")
-    
-    try:
-        # First try to find user in the users table
-        user = User.query.get(user_id)
-        print(f"Database query result from users table: {user}")
-        
-        if user:
-            print(f"User found in users table: {user.id}, birthdate: {user.birthdate}, gender: {user.gender}")
-            response_data = {
-                'status': 'success',
-                'birthdate': user.birthdate.isoformat(),
-                'gender': user.gender
-            }
-            print(f"Sending response: {response_data}")
-            return jsonify(response_data)
-        
-        # If not found in users table, check mixing_sessions table
-        session = MixingSession.query.filter_by(user_id=user_id).first()
-        print(f"Database query result from mixing_sessions table: {session}")
-        
-        if session:
-            print(f"User found in mixing_sessions table: {session.user_id}")
-            # Return success but with default values since we don't have birthdate/gender
-            response_data = {
-                'status': 'success',
-                'birthdate': '2000-01-01',  # Default value
-                'gender': 'male'  # Default value
-            }
-            print(f"Sending response: {response_data}")
-            return jsonify(response_data)
-        
-        print(f"No user found with ID: {user_id}")
-        response_data = {
-            'status': 'error',
-            'message': 'Invalid user ID'
-        }
-        print(f"Sending error response: {response_data}")
-        return jsonify(response_data), 404
-    except Exception as e:
-        print(f"Error during login: {str(e)}")
-        response_data = {
-            'status': 'error',
-            'message': 'Database error'
-        }
-        print(f"Sending error response: {response_data}")
-        return jsonify(response_data), 500
+# ── Calculate ──────────────────────────────────────────────────────────────
 
 @main.route('/calculate', methods=['POST'])
 def calculate():
     data = request.get_json()
-    target = data['target']  # RGB: [r, g, b]
-    mix = data['mixed']        # RGB: [r, g, b]
-
-    delta_e = calculate_delta_e(target, mix)
+    delta_e = calculate_delta_e(data['target'], data['mixed'])
     return jsonify({'delta_e': delta_e})
+
+
+# ── Save session (completed attempt) ──────────────────────────────────────
 
 @main.route('/save_session', methods=['POST'])
 def save_session():
     data = request.get_json()
-    print('Received session data:', data)
-    
-    # Refresh database connection to handle stale connections
+
     if not refresh_db_connection():
         return jsonify({'status': 'error', 'error': 'Database connection failed'}), 500
-    
+
     try:
-        # Debug database connection
-        print('Database URI:', db.engine.url)
-        print('Database connected:', db.engine.pool.checkedin())
-        
+        user_id = data['user_id']
+        attempt_uuid = data.get('attempt_uuid')
+
+        # Idempotency: if this uuid was already persisted, return current progress
+        if attempt_uuid:
+            existing = MixingSession.query.filter_by(attempt_uuid=attempt_uuid).first()
+            if existing:
+                up = UserProgress.query.filter_by(user_id=user_id).first()
+                return jsonify({
+                    'status': 'success',
+                    'duplicate': True,
+                    'progress': build_progress_response(user_id, up, _catalog_size()),
+                    'new_awards': [],
+                    'xp_earned': 0,
+                })
+
         skipped = data.get('skipped', False)
-        mc = derive_match_category(
-            data.get('delta_e'),
-            skipped,
-            skip_perception=None,
-        )
+        mc = derive_match_category(data.get('delta_e'), skipped, skip_perception=None)
+
         session = MixingSession(
-            user_id=data['user_id'],
+            attempt_uuid=attempt_uuid,
+            user_id=user_id,
             target_color_id=data.get('target_color_id'),
-            target_r=data['target_r'],
-            target_g=data['target_g'],
-            target_b=data['target_b'],
-            drop_white=data['drop_white'],
-            drop_black=data['drop_black'],
-            drop_red=data['drop_red'],
-            drop_yellow=data['drop_yellow'],
-            drop_blue=data['drop_blue'],
+            target_r=data['target_r'], target_g=data['target_g'], target_b=data['target_b'],
+            drop_white=data['drop_white'], drop_black=data['drop_black'],
+            drop_red=data['drop_red'], drop_yellow=data['drop_yellow'], drop_blue=data['drop_blue'],
             delta_e=data['delta_e'],
             time_sec=data['time_sec'],
             timestamp=datetime.fromisoformat(data['timestamp']),
             skipped=skipped,
             match_category=mc,
         )
-        print('Created session object:', session)
         db.session.add(session)
-        print('Added session to db.session')
+
+        xp_earned, new_awards, streak_event, level_up = process_progression(
+            user_id=user_id,
+            match_category=mc,
+            skipped=skipped,
+            target_color_id=data.get('target_color_id'),
+            delta_e=data.get('delta_e'),
+        )
+
         db.session.commit()
-        print('Session saved successfully')
-        return jsonify({'status': 'success'})
+
+        up = UserProgress.query.filter_by(user_id=user_id).first()
+        return jsonify({
+            'status': 'success',
+            'xp_earned': xp_earned,
+            'new_awards': new_awards,
+            'streak_event': streak_event,
+            'level_up': level_up,
+            'progress': build_progress_response(user_id, up, _catalog_size()),
+        })
+
     except Exception as e:
         print('Error saving session:', str(e))
-        print('Error type:', type(e).__name__)
         db.session.rollback()
         return jsonify({'status': 'error', 'error': str(e)}), 500
+
+
+# ── Save skip ──────────────────────────────────────────────────────────────
 
 @main.route('/save_skip', methods=['POST'])
 def save_skip():
     data = request.get_json()
-    print('Received skip data:', data)
-    
-    # Refresh database connection to handle stale connections
+
     if not refresh_db_connection():
         return jsonify({'status': 'error', 'error': 'Database connection failed'}), 500
-    
+
     try:
-        # Debug database connection
-        print('Database URI:', db.engine.url)
-        print('Database connected:', db.engine.pool.checkedin())
-        
-        # Get deltaE value from request, default to None if not provided
+        user_id = data['user_id']
+        attempt_uuid = data.get('attempt_uuid')
+
+        if attempt_uuid:
+            existing = MixingSession.query.filter_by(attempt_uuid=attempt_uuid).first()
+            if existing:
+                up = UserProgress.query.filter_by(user_id=user_id).first()
+                return jsonify({
+                    'status': 'success',
+                    'duplicate': True,
+                    'progress': build_progress_response(user_id, up, _catalog_size()),
+                    'new_awards': [],
+                    'xp_earned': 0,
+                })
+
         delta_e = data.get('delta_e')
         allowed_skip = {'identical', 'acceptable', 'unacceptable'}
         raw_perception = data.get('skip_perception')
         skip_perception = raw_perception if raw_perception in allowed_skip else None
-        
+
         mc = derive_match_category(delta_e, True, skip_perception=skip_perception)
+
         session = MixingSession(
-            user_id=data['user_id'],
+            attempt_uuid=attempt_uuid,
+            user_id=user_id,
             target_color_id=data.get('target_color_id'),
-            target_r=data['target_r'],
-            target_g=data['target_g'],
-            target_b=data['target_b'],
-            drop_white=data.get('drop_white', 0),
-            drop_black=data.get('drop_black', 0),
-            drop_red=data.get('drop_red', 0),
-            drop_yellow=data.get('drop_yellow', 0),
+            target_r=data['target_r'], target_g=data['target_g'], target_b=data['target_b'],
+            drop_white=data.get('drop_white', 0), drop_black=data.get('drop_black', 0),
+            drop_red=data.get('drop_red', 0), drop_yellow=data.get('drop_yellow', 0),
             drop_blue=data.get('drop_blue', 0),
             delta_e=delta_e,
             time_sec=data['time_sec'],
@@ -340,244 +329,427 @@ def save_skip():
             skip_perception=skip_perception,
             match_category=mc,
         )
-        print('Created skip session object:', session)
         db.session.add(session)
-        print('Added skip session to db.session')
+
+        xp_earned, new_awards, streak_event, level_up = process_progression(
+            user_id=user_id,
+            match_category=mc,
+            skipped=True,
+            target_color_id=data.get('target_color_id'),
+            delta_e=delta_e,
+        )
+
         db.session.commit()
-        print('Skip session saved successfully')
-        return jsonify({'status': 'success'})
+
+        up = UserProgress.query.filter_by(user_id=user_id).first()
+        return jsonify({
+            'status': 'success',
+            'xp_earned': xp_earned,
+            'new_awards': new_awards,
+            'streak_event': streak_event,
+            'level_up': level_up,
+            'progress': build_progress_response(user_id, up, _catalog_size()),
+        })
+
     except Exception as e:
-        print('Error saving skip session:', str(e))
-        print('Error type:', type(e).__name__)
+        print('Error saving skip:', str(e))
         db.session.rollback()
         return jsonify({'status': 'error', 'error': str(e)}), 500
 
-@main.route('/refresh_connection', methods=['POST'])
-def refresh_connection():
-    """Refresh database connection - called by frontend on key actions"""
-    try:
-        if refresh_db_connection():
-            return jsonify({'status': 'success', 'message': 'Connection refreshed'})
-        else:
-            return jsonify({'status': 'error', 'message': 'Failed to refresh connection'}), 500
-    except Exception as e:
-        print(f'Error refreshing connection: {e}')
-        return jsonify({'status': 'error', 'error': str(e)}), 500
 
-@main.route('/results')
-def results_page():
-    return render_template('results.html')
+# ── User progress ──────────────────────────────────────────────────────────
+
+@main.route('/api/user-progress', methods=['POST'])
+def get_user_progress_route():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id required'}), 400
+    try:
+        up = UserProgress.query.filter_by(user_id=user_id).first()
+        return jsonify({
+            'status': 'success',
+            'progress': build_progress_response(user_id, up, _catalog_size()),
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/user-profile', methods=['POST'])
+def get_user_profile_route():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id required'}), 400
+    try:
+        progress, awards, color_stats = get_user_profile(user_id, _catalog_size())
+        return jsonify({
+            'status': 'success',
+            'progress': progress,
+            'awards': awards,
+            'color_stats': color_stats,
+            'coverage_quota': COVERAGE_QUOTA,
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ── Results ────────────────────────────────────────────────────────────────
 
 @main.route('/get_user_results', methods=['POST'])
 def get_user_results():
     data = request.get_json()
     user_id = data.get('user_id')
-    
     if not user_id:
         return jsonify({'status': 'error', 'message': 'User ID is required'}), 400
-    
+
     try:
-        # Get all sessions for the user
-        sessions = MixingSession.query.filter_by(user_id=user_id).order_by(MixingSession.timestamp.desc()).all()
-        
-        results = []
-        for session in sessions:
-            results.append({
-                'id': session.id,
-                'target_color_id': session.target_color_id,
-                'target_color': f"RGB({session.target_r}, {session.target_g}, {session.target_b})",
+        sessions = (
+            MixingSession.query
+            .filter_by(user_id=user_id)
+            .order_by(MixingSession.timestamp.desc())
+            .all()
+        )
+        results = [
+            {
+                'id': s.id,
+                'target_color_id': s.target_color_id,
+                'target_color': f'RGB({s.target_r}, {s.target_g}, {s.target_b})',
                 'drops': {
-                    'white': session.drop_white,
-                    'black': session.drop_black,
-                    'red': session.drop_red,
-                    'yellow': session.drop_yellow,
-                    'blue': session.drop_blue
+                    'white': s.drop_white, 'black': s.drop_black,
+                    'red': s.drop_red, 'yellow': s.drop_yellow, 'blue': s.drop_blue,
                 },
-                'delta_e': session.delta_e if session.delta_e is not None else 'N/A',
-                'time_sec': session.time_sec,
-                'timestamp': session.timestamp.isoformat() if session.timestamp else None,
-                'skipped': session.skipped,
-                'skip_perception': session.skip_perception,
-                'match_category': session.match_category,
-            })
-        
-        return jsonify({
-            'status': 'success',
-            'results': results,
-            'total_sessions': len(results)
-        })
-        
+                'delta_e': s.delta_e if s.delta_e is not None else 'N/A',
+                'time_sec': s.time_sec,
+                'timestamp': s.timestamp.isoformat() if s.timestamp else None,
+                'skipped': s.skipped,
+                'skip_perception': s.skip_perception,
+                'match_category': s.match_category,
+            }
+            for s in sessions
+        ]
+        return jsonify({'status': 'success', 'results': results, 'total_sessions': len(results)})
     except Exception as e:
-        print('Error fetching user results:', str(e))
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
-def load_cie_data():
-    # Wavelength range 400-700nm in 10nm steps (31 points)
-    wavelengths = np.arange(400, 701, 10)
-    
-    # CIE 1931 color matching functions (31 points for 400-700nm in 10nm steps)
-    # These values are interpolated to match the 31 wavelength points
-    x_bar = np.array([0.0143, 0.0435, 0.1344, 0.2839, 0.3483, 0.3362, 0.2908, 0.1954, 0.0956, 0.0320, 0.0049, 0.0093, 0.0633, 0.1655, 0.2904, 0.4334, 0.5945, 0.7621, 0.9163, 1.0263, 1.0622, 1.0026, 0.8544, 0.6424, 0.4479, 0.2835, 0.1649, 0.0874, 0.0468, 0.0227, 0.0114])
-    y_bar = np.array([0.0004, 0.0012, 0.0040, 0.0116, 0.023, 0.038, 0.060, 0.091, 0.139, 0.208, 0.323, 0.503, 0.710, 0.862, 0.954, 0.995, 0.995, 0.952, 0.870, 0.757, 0.631, 0.503, 0.381, 0.265, 0.175, 0.107, 0.061, 0.032, 0.017, 0.0082, 0.0041])
-    z_bar = np.array([0.0679, 0.2074, 0.6456, 1.3856, 1.7471, 1.7721, 1.6692, 1.2876, 0.8130, 0.4652, 0.2720, 0.1582, 0.0782, 0.0422, 0.0203, 0.0087, 0.0039, 0.0021, 0.0017, 0.0011, 0.0008, 0.0003, 0.0002, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000])
-    
-    # Ensure arrays have the same length
-    assert len(wavelengths) == len(x_bar) == len(y_bar) == len(z_bar), "CIE data arrays must have the same length"
-    
-    return wavelengths, x_bar, y_bar, z_bar
 
-def spectrum_to_xyz(spectrum, wavelengths, x_bar, y_bar, z_bar):
-    """Convert spectrum to XYZ using CIE color matching functions"""
-    # Interpolate color matching functions to match spectrum wavelengths
-    x_interp = np.interp(wavelengths, np.arange(400, 701, 10), x_bar)
-    y_interp = np.interp(wavelengths, np.arange(400, 701, 10), y_bar)
-    z_interp = np.interp(wavelengths, np.arange(400, 701, 10), z_bar)
-    
-    # Calculate XYZ values
-    X = np.sum(spectrum * x_interp)
-    Y = np.sum(spectrum * y_interp)
-    Z = np.sum(spectrum * z_interp)
-    
-    # Normalize
-    sum_xyz = X + Y + Z
-    if sum_xyz > 0:
-        X = X / sum_xyz
-        Y = Y / sum_xyz
-        Z = Z / sum_xyz
-    
-    return X, Y, Z
+# ── Daily challenge ────────────────────────────────────────────────────────
 
-def xyz_to_rgb(X, Y, Z):
-    """Convert XYZ to RGB using sRGB transformation matrix"""
-    # sRGB transformation matrix
-    M = np.array([
-        [ 3.2406, -1.5372, -0.4986],
-        [-0.9689,  1.8758,  0.0415],
-        [ 0.0557, -0.2040,  1.0570]
-    ])
-    
-    # Transform XYZ to RGB
-    rgb = np.dot(M, np.array([X, Y, Z]))
-    
-    # Gamma correction
-    rgb = np.where(rgb > 0.0031308,
-                   1.055 * np.power(rgb, 1/2.4) - 0.055,
-                   12.92 * rgb)
-    
-    # Scale to 0-255 and clamp
-    rgb = np.clip(rgb * 255, 0, 255)
-    
-    return rgb.astype(int)
+def _daily_seed(d=None):
+    """Deterministic integer seed from a date string."""
+    d = d or date.today()
+    return int(hashlib.sha256(d.isoformat().encode()).hexdigest(), 16)
+
+
+def _daily_target_ids(d=None):
+    """Return a stable ordered list of target_color IDs for the day."""
+    rows = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
+    sorted_basic = [r for r in rows if r.color_type == 'basic']
+    sorted_skin = [r for r in rows if r.color_type == 'skin']
+
+    seed = _daily_seed(d)
+    rng = _random.Random(seed)
+
+    first_three = sorted_basic[:3]
+    remaining_basic = sorted_basic[3:11]
+    selected_basic = rng.sample(remaining_basic, min(3, len(remaining_basic)))
+    selected_skin = rng.sample(sorted_skin, min(5, len(sorted_skin)))
+
+    return [c.id for c in first_three + selected_basic + selected_skin]
+
+
+@main.route('/api/daily-challenge/today', methods=['GET'])
+def daily_challenge_today():
+    user_id = request.args.get('user_id')
+    today = date.today()
+    target_ids = _daily_target_ids(today)
+
+    colors_by_id = {tc.id: tc for tc in TargetColor.query.filter(TargetColor.id.in_(target_ids)).all()}
+    target_colors = [
+        {
+            'id': colors_by_id[cid].id,
+            'name': colors_by_id[cid].name,
+            'type': colors_by_id[cid].color_type,
+            'rgb': [colors_by_id[cid].r, colors_by_id[cid].g, colors_by_id[cid].b],
+        }
+        for cid in target_ids if cid in colors_by_id
+    ]
+
+    already_submitted = False
+    if user_id:
+        final_run = (
+            DailyChallengeRun.query
+            .filter_by(user_id=user_id, challenge_date=today, is_final=True)
+            .first()
+        )
+        already_submitted = final_run is not None
+
+    return jsonify({
+        'status': 'success',
+        'challenge_date': today.isoformat(),
+        'target_colors': target_colors,
+        'already_submitted': already_submitted,
+    })
+
+
+@main.route('/api/daily-challenge/submit', methods=['POST'])
+def daily_challenge_submit():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    attempt_uuid = data.get('attempt_uuid')
+    score_primary = data.get('score_primary')
+    score_secondary = data.get('score_secondary')
+    is_final = data.get('is_final', False)
+
+    if not user_id or not attempt_uuid:
+        return jsonify({'status': 'error', 'message': 'user_id and attempt_uuid required'}), 400
+
+    today = date.today()
+
+    try:
+        existing = DailyChallengeRun.query.filter_by(attempt_uuid=attempt_uuid).first()
+        if existing:
+            return jsonify({'status': 'success', 'duplicate': True})
+
+        # Enforce one-final-per-user-per-day
+        if is_final:
+            prior_final = DailyChallengeRun.query.filter_by(
+                user_id=user_id, challenge_date=today, is_final=True
+            ).first()
+            if prior_final:
+                is_final = False  # Downgrade to non-final; winner already set
+
+        run = DailyChallengeRun(
+            user_id=user_id,
+            challenge_date=today,
+            attempt_uuid=attempt_uuid,
+            score_primary=score_primary,
+            score_secondary=score_secondary,
+            is_final=is_final,
+        )
+        db.session.add(run)
+        db.session.commit()
+        return jsonify({'status': 'success', 'run_id': run.id})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/daily-challenge/resolve', methods=['POST'])
+def daily_challenge_resolve():
+    """Resolve winner for a given date. Protected by PUSH_CRON_SECRET."""
+    secret = request.headers.get('X-Cron-Secret') or request.get_json({}).get('secret')
+    if secret != os.environ.get('PUSH_CRON_SECRET', ''):
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    data = request.get_json()
+    resolve_date_str = data.get('date', date.today().isoformat())
+    resolve_date = date.fromisoformat(resolve_date_str)
+
+    try:
+        existing_winner = DailyChallengeWinner.query.filter_by(challenge_date=resolve_date).first()
+        if existing_winner:
+            return jsonify({'status': 'success', 'already_resolved': True, 'user_id': existing_winner.user_id})
+
+        # Best final run: lower score_primary → fewer score_secondary → earliest created_at
+        best = (
+            DailyChallengeRun.query
+            .filter_by(challenge_date=resolve_date, is_final=True)
+            .order_by(
+                DailyChallengeRun.score_primary.asc().nullslast(),
+                DailyChallengeRun.score_secondary.asc().nullslast(),
+                DailyChallengeRun.created_at.asc(),
+            )
+            .first()
+        )
+
+        if not best:
+            return jsonify({'status': 'success', 'no_runs': True})
+
+        winner = DailyChallengeWinner(
+            challenge_date=resolve_date,
+            user_id=best.user_id,
+            score_primary=best.score_primary,
+            score_secondary=best.score_secondary,
+        )
+        db.session.add(winner)
+
+        new_awards = grant_daily_champion(best.user_id, resolve_date_str)
+        db.session.commit()
+
+        return jsonify({'status': 'success', 'winner_user_id': best.user_id, 'new_awards': new_awards})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ── Push notifications ─────────────────────────────────────────────────────
+
+@main.route('/push/subscribe', methods=['POST'])
+def push_subscribe():
+    data = request.get_json()
+    user_id = data.get('user_id')
+    endpoint = data.get('endpoint')
+    p256dh = data.get('p256dh')
+    auth = data.get('auth')
+
+    if not all([user_id, endpoint, p256dh, auth]):
+        return jsonify({'status': 'error', 'message': 'Missing fields'}), 400
+
+    try:
+        existing = PushSubscription.query.filter_by(endpoint=endpoint).first()
+        if existing:
+            existing.user_id = user_id
+            existing.p256dh = p256dh
+            existing.auth = auth
+        else:
+            sub = PushSubscription(user_id=user_id, endpoint=endpoint, p256dh=p256dh, auth=auth)
+            db.session.add(sub)
+        db.session.commit()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/push/unsubscribe', methods=['POST'])
+def push_unsubscribe():
+    data = request.get_json()
+    endpoint = data.get('endpoint')
+    if not endpoint:
+        return jsonify({'status': 'error', 'message': 'endpoint required'}), 400
+    try:
+        PushSubscription.query.filter_by(endpoint=endpoint).delete()
+        db.session.commit()
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/push/send-daily', methods=['POST'])
+def push_send_daily():
+    """Cron-triggered endpoint to send daily challenge reminders."""
+    secret = request.headers.get('X-Cron-Secret') or (request.get_json({}) or {}).get('secret')
+    if secret != os.environ.get('PUSH_CRON_SECRET', ''):
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+
+    try:
+        from pywebpush import webpush, WebPushException
+    except ImportError:
+        return jsonify({'status': 'error', 'message': 'pywebpush not installed'}), 500
+
+    vapid_private = os.environ.get('VAPID_PRIVATE_KEY')
+    vapid_public = os.environ.get('VAPID_PUBLIC_KEY')
+    if not vapid_private or not vapid_public:
+        return jsonify({'status': 'error', 'message': 'VAPID keys not configured'}), 500
+
+    subs = PushSubscription.query.all()
+    sent = 0
+    failed = 0
+    dead_endpoints = []
+
+    payload = json.dumps({
+        'title': 'ShadeMatch Daily Challenge',
+        'body': "Today's palette challenge is live — can you match every shade?",
+        'url': '/',
+        'icon': '/static/icons/icon-192.png',
+    })
+
+    for sub in subs:
+        try:
+            webpush(
+                subscription_info={
+                    'endpoint': sub.endpoint,
+                    'keys': {'p256dh': sub.p256dh, 'auth': sub.auth},
+                },
+                data=payload,
+                vapid_private_key=vapid_private,
+                vapid_claims={'sub': 'mailto:admin@shadematch.app'},
+            )
+            sent += 1
+        except WebPushException as ex:
+            status_code = ex.response.status_code if ex.response else None
+            if status_code in (404, 410):
+                dead_endpoints.append(sub.endpoint)
+            else:
+                failed += 1
+        except Exception:
+            failed += 1
+
+    if dead_endpoints:
+        PushSubscription.query.filter(PushSubscription.endpoint.in_(dead_endpoints)).delete(synchronize_session=False)
+        db.session.commit()
+
+    return jsonify({'status': 'success', 'sent': sent, 'failed': failed, 'cleaned': len(dead_endpoints)})
+
+
+@main.route('/push/vapid-public-key', methods=['GET'])
+def vapid_public_key():
+    key = os.environ.get('VAPID_PUBLIC_KEY', '')
+    return jsonify({'vapid_public_key': key})
+
+
+# ── Misc / existing routes ─────────────────────────────────────────────────
+
+@main.route('/refresh_connection', methods=['POST'])
+def refresh_connection():
+    if refresh_db_connection():
+        return jsonify({'status': 'success'})
+    return jsonify({'status': 'error', 'message': 'Failed to refresh connection'}), 500
+
 
 @main.route('/color_inspector')
 def color_inspector():
-    # Load CIE data
     wavelengths, x_bar, y_bar, z_bar = load_cie_data()
-    
-    # Read pigment data from CSV files
     pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
     samples = []
-    
     for filename in os.listdir(pigments_dir):
         if filename.endswith('.csv'):
-            # Read the CSV file
             df = pd.read_csv(os.path.join(pigments_dir, filename))
-            
-            # Get wavelengths and reflectance data
             pigment_wavelengths = df['Wavelength'].tolist()
-            
-            # Calculate average reflectance across all measurements
             reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
-            
-            # Convert spectrum to XYZ
             X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
-            
-            # Convert XYZ to RGB
             rgb = xyz_to_rgb(X, Y, Z)
-            
-            # Get pigment name from filename
-            pigment_name = os.path.splitext(filename)[0].replace('_', ' ').title()
-            
             samples.append({
-                'name': pigment_name,
+                'name': os.path.splitext(filename)[0].replace('_', ' ').title(),
                 'wavelengths': pigment_wavelengths,
                 'reflectances': reflectances,
-                'rgb': rgb.tolist()
+                'rgb': rgb.tolist(),
             })
-    
     return render_template('color_inspector.html', samples=samples)
+
 
 @main.route('/mix_colors', methods=['POST'])
 def mix_colors():
     data = request.get_json()
     drop_counts = data.get('dropCounts', {})
-    
-    # Load CIE data
     wavelengths, x_bar, y_bar, z_bar = load_cie_data()
-    
-    # Define pigment spectra (same as in spectral route)
     pigments = {
-        'red': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.1 if w < 600 else 0.9 for w in wavelengths]
-        },
-        'yellow': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.1 if w < 500 else 0.9 for w in wavelengths]
-        },
-        'blue': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.9 if w < 500 else 0.1 for w in wavelengths]
-        },
-        'orange': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.1 if w < 550 else 0.9 for w in wavelengths]
-        },
-        'brown': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.3 if w < 500 else 0.7 for w in wavelengths]
-        },
-        'green': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.1 if w < 500 or w > 600 else 0.9 for w in wavelengths]
-        },
-        'purple': {
-            'wavelengths': wavelengths,
-            'reflectances': [0.9 if w < 450 or w > 650 else 0.1 for w in wavelengths]
-        }
+        'red':    {'reflectances': [0.1 if w < 600 else 0.9 for w in wavelengths]},
+        'yellow': {'reflectances': [0.1 if w < 500 else 0.9 for w in wavelengths]},
+        'blue':   {'reflectances': [0.9 if w < 500 else 0.1 for w in wavelengths]},
     }
-    
-    # Calculate mixed spectrum using subtractive mixing
     mixed_spectrum = np.ones(len(wavelengths))
     total_drops = sum(drop_counts.values())
-    
     if total_drops > 0:
         for color, count in drop_counts.items():
             if count > 0 and color in pigments:
-                # Apply subtractive mixing with normalized drop count
-                # This prevents the values from becoming too small
-                normalized_count = count / (total_drops * 0.5)  # Scale factor to prevent too rapid darkening
-                mixed_spectrum *= np.array(pigments[color]['reflectances']) ** normalized_count
-    
-    # Ensure the spectrum doesn't get too dark
+                n = count / (total_drops * 0.5)
+                mixed_spectrum *= np.array(pigments[color]['reflectances']) ** n
     mixed_spectrum = np.clip(mixed_spectrum, 0.01, 1.0)
-    
-    # Convert mixed spectrum to XYZ
     X, Y, Z = spectrum_to_xyz(mixed_spectrum, wavelengths, x_bar, y_bar, z_bar)
-    # Convert XYZ to RGB
     r, g, b = xyz_to_rgb(X, Y, Z)
-    
-    return jsonify({
-        'rgb': [int(r), int(g), int(b)],
-        'spectrum': {
-            'wavelengths': wavelengths.tolist(),
-            'reflectances': mixed_spectrum.tolist()
-        }
-    })
+    return jsonify({'rgb': [int(r), int(g), int(b)],
+                    'spectrum': {'wavelengths': wavelengths.tolist(), 'reflectances': mixed_spectrum.tolist()}})
+
 
 @main.route('/color-test')
 def color_test():
     return render_template('color_test.html')
+
 
 @main.route('/ishihara-test')
 def ishihara_test():
@@ -588,141 +760,119 @@ def ishihara_test():
     response.headers['Expires'] = '0'
     return response
 
+
 @main.route('/spectral_mixer')
 def spectral_mixer():
     return render_template('spectral_mixer.html')
+
 
 @main.route('/reverse_engineer')
 def reverse_engineer_page():
     return render_template('reverse_engineer.html')
 
+
 @main.route('/reverse_engineer', methods=['POST'])
 def reverse_engineer():
     try:
-        # Get uploaded file
         if 'spectrum_file' not in request.files:
             return jsonify({'error': 'No file uploaded'}), 400
-        
         file = request.files['spectrum_file']
         if file.filename == '':
             return jsonify({'error': 'No file selected'}), 400
-        
-        # Read the uploaded spectrum
         spectrum_data = pd.read_csv(file)
-        
-        # Validate format - should have Wavelength and Reflectance columns
         if 'Wavelength' not in spectrum_data.columns or 'Reflectance' not in spectrum_data.columns:
             return jsonify({'error': 'File must have Wavelength and Reflectance columns'}), 400
-        
-        # Debug: Check spectrum data
-        print(f"Spectrum data shape: {spectrum_data.shape}")
-        print(f"Wavelength range: {spectrum_data['Wavelength'].min()} - {spectrum_data['Wavelength'].max()}")
-        print(f"Reflectance range: {spectrum_data['Reflectance'].min()} - {spectrum_data['Reflectance'].max()}")
-        
-        # Load pigment data
+
         pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
         pigments = {}
-        
         for filename in os.listdir(pigments_dir):
             if filename.endswith('.csv'):
                 pigment_name = os.path.splitext(filename)[0].replace('_', ' ').title()
                 pigment_data = pd.read_csv(os.path.join(pigments_dir, filename))
-                
-                # Debug: Check pigment data
-                print(f"Pigment {pigment_name} data shape: {pigment_data.shape}")
-                
-                # Calculate average reflectance across all measurements
-                reflectance_cols = [col for col in pigment_data.columns if col != 'Wavelength']
-                pigment_data['Reflectance'] = pigment_data[reflectance_cols].mean(axis=1)
-                
+                refl_cols = [c for c in pigment_data.columns if c != 'Wavelength']
+                pigment_data['Reflectance'] = pigment_data[refl_cols].mean(axis=1)
                 pigments[pigment_name] = {
                     'wavelengths': pigment_data['Wavelength'].tolist(),
-                    'reflectances': pigment_data['Reflectance'].tolist()
+                    'reflectances': pigment_data['Reflectance'].tolist(),
                 }
-        
-        # Load CIE data
+
         wavelengths, x_bar, y_bar, z_bar = load_cie_data()
-        print(f"CIE data lengths - wavelengths: {len(wavelengths)}, x_bar: {len(x_bar)}")
-        
-        # Convert target spectrum to XYZ
         target_xyz = spectrum_to_xyz(
             spectrum_data['Reflectance'].tolist(),
             spectrum_data['Wavelength'].tolist(),
-            x_bar, y_bar, z_bar
+            x_bar, y_bar, z_bar,
         )
-        
-        # Convert target XYZ to RGB
         target_rgb = xyz_to_rgb(*target_xyz)
-        
-        # Perform reverse engineering
         recipe, delta_e = reverse_engineer_recipe(target_xyz, pigments, x_bar, y_bar, z_bar)
-        
-        return jsonify({
-            'recipe': recipe,
-            'delta_e': delta_e,
-            'target_rgb': target_rgb.tolist()
-        })
-        
+        return jsonify({'recipe': recipe, 'delta_e': delta_e, 'target_rgb': target_rgb.tolist()})
     except Exception as e:
-        print(f"Error in reverse_engineer: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        import traceback; traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
 
 @main.route('/ishihara/<filename>')
 def serve_ishihara_image(filename):
-    """Serve Ishihara test images"""
     ishihara_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'ishihara')
     return send_from_directory(ishihara_dir, filename)
 
+
 @main.route('/privacy-policy')
 def privacy_policy():
-    """Privacy Policy page for GDPR compliance"""
     return render_template('privacy_policy.html')
+
 
 @main.route('/cookie-consent', methods=['POST'])
 def save_cookie_consent():
-    """Save user's cookie consent preferences"""
     try:
         data = request.get_json()
-        consent_data = data.get('consent', {})
-        
-        # Log consent for audit purposes (optional)
-        print(f"Cookie consent received: {consent_data}")
-        
-        # Here you could save to database if needed
-        # For now, we'll just return success as the consent is stored in browser cookies
-        
-        return jsonify({
-            'status': 'success',
-            'message': 'Cookie preferences saved successfully'
-        })
+        print(f"Cookie consent: {data.get('consent', {})}")
+        return jsonify({'status': 'success', 'message': 'Cookie preferences saved successfully'})
     except Exception as e:
-        print(f"Error saving cookie consent: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to save cookie preferences'
-        }), 500
+        return jsonify({'status': 'error', 'message': 'Failed to save cookie preferences'}), 500
+
 
 @main.route('/cookie-consent', methods=['GET'])
 def get_cookie_consent():
-    """Get current cookie consent status"""
-    try:
-        # This could be used to check server-side consent status
-        # For now, we'll return a basic response
-        return jsonify({
-            'status': 'success',
-            'consent_required': True,
-            'categories': {
-                'necessary': True,
-                'analytics': False,
-                'preferences': False
-            }
-        })
-    except Exception as e:
-        print(f"Error getting cookie consent: {str(e)}")
-        return jsonify({
-            'status': 'error',
-            'message': 'Failed to get cookie preferences'
-        }), 500
+    return jsonify({
+        'status': 'success',
+        'consent_required': True,
+        'categories': {'necessary': True, 'analytics': False, 'preferences': False},
+    })
 
+
+# ── CIE helpers (local copies, identical to utils.py versions) ─────────────
+
+def load_cie_data():
+    wavelengths = np.arange(400, 701, 10)
+    x_bar = np.array([0.0143,0.0435,0.1344,0.2839,0.3483,0.3362,0.2908,0.1954,0.0956,0.0320,
+                      0.0049,0.0093,0.0633,0.1655,0.2904,0.4334,0.5945,0.7621,0.9163,1.0263,
+                      1.0622,1.0026,0.8544,0.6424,0.4479,0.2835,0.1649,0.0874,0.0468,0.0227,0.0114])
+    y_bar = np.array([0.0004,0.0012,0.0040,0.0116,0.023,0.038,0.060,0.091,0.139,0.208,
+                      0.323,0.503,0.710,0.862,0.954,0.995,0.995,0.952,0.870,0.757,
+                      0.631,0.503,0.381,0.265,0.175,0.107,0.061,0.032,0.017,0.0082,0.0041])
+    z_bar = np.array([0.0679,0.2074,0.6456,1.3856,1.7471,1.7721,1.6692,1.2876,0.8130,0.4652,
+                      0.2720,0.1582,0.0782,0.0422,0.0203,0.0087,0.0039,0.0021,0.0017,0.0011,
+                      0.0008,0.0003,0.0002,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000])
+    return wavelengths, x_bar, y_bar, z_bar
+
+
+def spectrum_to_xyz(spectrum, wavelengths, x_bar, y_bar, z_bar):
+    x_interp = np.interp(wavelengths, np.arange(400, 701, 10), x_bar)
+    y_interp = np.interp(wavelengths, np.arange(400, 701, 10), y_bar)
+    z_interp = np.interp(wavelengths, np.arange(400, 701, 10), z_bar)
+    X = np.sum(spectrum * x_interp)
+    Y = np.sum(spectrum * y_interp)
+    Z = np.sum(spectrum * z_interp)
+    s = X + Y + Z
+    if s > 0:
+        X, Y, Z = X / s, Y / s, Z / s
+    return X, Y, Z
+
+
+def xyz_to_rgb(X, Y, Z):
+    M = np.array([[3.2406, -1.5372, -0.4986],
+                  [-0.9689,  1.8758,  0.0415],
+                  [0.0557, -0.2040,  1.0570]])
+    rgb = np.dot(M, np.array([X, Y, Z]))
+    rgb = np.where(rgb > 0.0031308, 1.055 * np.power(np.clip(rgb, 0, None), 1 / 2.4) - 0.055, 12.92 * rgb)
+    return np.clip(rgb * 255, 0, 255).astype(int)

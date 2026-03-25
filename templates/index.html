@@ -4,6 +4,87 @@
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+<style>
+/* ── Progress strip ────────────────────────────────────────── */
+.progress-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.ps-rank { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em; }
+.ps-level { color: var(--text-secondary); font-size: 0.7rem; }
+.ps-xpbar-wrap {
+  width: 52px; height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ps-xpbar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.ps-streak { font-size: 0.75rem; }
+.ps-freeze { font-size: 0.75rem; }
+
+/* ── Toasts ─────────────────────────────────────────────────── */
+.shade-toast-container {
+  position: fixed;
+  bottom: 80px;
+  right: 16px;
+  z-index: 20000;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  pointer-events: none;
+  max-width: 320px;
+}
+.shade-toast {
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.22);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: auto;
+  background: #444;
+}
+.shade-toast--visible { opacity: 1; transform: translateY(0); }
+.shade-toast--xp      { background: linear-gradient(135deg,#667eea,#764ba2); }
+.shade-toast--levelup { background: linear-gradient(135deg,#f9ca24,#f0932b); color:#fff; }
+.shade-toast--streak  { background: linear-gradient(135deg,#ff6b6b,#ee5a24); }
+.shade-toast--freeze  { background: linear-gradient(135deg,#74b9ff,#0984e3); }
+.shade-toast--award   { background: linear-gradient(135deg,#55efc4,#00b894); }
+.shade-toast--info    { background: linear-gradient(135deg,#636e72,#2d3436); }
+
+/* ── Push opt-in ─────────────────────────────────────────────── */
+.push-optin-btn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-full);
+  padding: 4px 10px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+.push-optin-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+</style>
 {% endblock %}
 
 {% block content %}
@@ -98,6 +179,8 @@
         <div class="progress-segments" id="progressSegments"></div>
       </div>
       <div class="header-right">
+        <!-- Gamification progress strip -->
+        <div class="progress-strip" id="progressStrip" style="display:none;"></div>
         <div class="user-badge" id="userInfo" style="display:none;">
           <span class="user-badge-label">ID:</span>
           <span class="user-badge-id" id="userIdDisplay"></span>
@@ -191,6 +274,12 @@
       <div class="timer-display" id="timerDisplay">
         ⏱ <span id="timer">0.0</span>s
       </div>
+
+      <button id="pushOptInBtn" class="push-optin-btn" type="button"
+              onclick="window.requestPushPermission && window.requestPushPermission()"
+              title="Get notified when the daily challenge starts">
+        🔔 Enable daily reminders
+      </button>
     </div>
 
     <!-- Sidebar (desktop) -->
@@ -468,6 +557,17 @@
     localStorage.removeItem('userGender');
     location.reload();
   }
+
+  /* Show push opt-in if user is logged in + Notifications supported + not already granted */
+  window.addEventListener('DOMContentLoaded', function() {
+    var pushBtn = document.getElementById('pushOptInBtn');
+    if (pushBtn && 'Notification' in window && 'serviceWorker' in navigator) {
+      var uid = localStorage.getItem('userId');
+      if (uid && Notification.permission === 'default') {
+        pushBtn.style.display = 'flex';
+      }
+    }
+  });
 
   function calculateMixedColor() {
     var colors = { white: [255,255,255], black: [0,0,0], red: [255,0,0], yellow: [255,255,0], blue: [0,0,255] };

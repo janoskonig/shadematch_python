@@ -2,29 +2,31 @@
 
 import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 
-console.log("✅ main.js loaded");
+console.log('✅ main.js loaded');
 let sessionLogs = [];
 let currentSessionSaved = false;
 
 window.lastMixDeltaE = NaN;
 window.shadeMatchTargetRgb = [255, 255, 255];
 
-// Cookie Consent Integration
-document.addEventListener('DOMContentLoaded', function() {
-    setTimeout(() => {
-        if (window.cookieConsent) {
-            console.log("🍪 Cookie consent system loaded");
-            if (window.cookieConsent.canUseAnalytics()) {
-                console.log("📊 Analytics cookies enabled");
-            }
-            if (window.cookieConsent.canUsePreferences()) {
-                console.log("⚙️ Preference cookies enabled");
-            }
-            document.addEventListener('cookieConsentUpdated', function(event) {
-                console.log("🍪 Cookie consent updated:", event.detail);
-            });
-        }
-    }, 1000);
+// ── UUID ──────────────────────────────────────────────────────────────────
+function generateUUID() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
+// ── Cookie Consent ────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
+  setTimeout(() => {
+    if (window.cookieConsent) {
+      document.addEventListener('cookieConsentUpdated', function (event) {
+        console.log('🍪 Cookie consent updated:', event.detail);
+      });
+    }
+  }, 1000);
 });
 
 window.currentUserId = localStorage.getItem('userId');
@@ -38,8 +40,10 @@ function displayUserId() {
   }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
   displayUserId();
+  loadAndRenderProgress();
+
   const justRegistered = localStorage.getItem('justRegistered');
   if (justRegistered === 'true') {
     localStorage.removeItem('justRegistered');
@@ -51,13 +55,109 @@ document.addEventListener('DOMContentLoaded', function() {
     if (currentUserId && currentUserId !== window.currentUserId) {
       window.currentUserId = currentUserId;
       displayUserId();
+      loadAndRenderProgress();
       clearInterval(checkUserIdInterval);
     }
   }, 1000);
   setTimeout(() => clearInterval(checkUserIdInterval), 30000);
 });
 
-// ---- Badge helper ----
+// ── Toast system ──────────────────────────────────────────────────────────
+function showToast(message, type = 'info', duration = 4000) {
+  const container = document.getElementById('toastContainer') || createToastContainer();
+  const toast = document.createElement('div');
+  toast.className = `shade-toast shade-toast--${type}`;
+  toast.innerHTML = `<span class="shade-toast-msg">${message}</span>`;
+  container.appendChild(toast);
+  requestAnimationFrame(() => toast.classList.add('shade-toast--visible'));
+  setTimeout(() => {
+    toast.classList.remove('shade-toast--visible');
+    setTimeout(() => toast.remove(), 400);
+  }, duration);
+}
+
+function createToastContainer() {
+  const el = document.createElement('div');
+  el.id = 'toastContainer';
+  el.className = 'shade-toast-container';
+  document.body.appendChild(el);
+  return el;
+}
+
+// ── Progress strip ────────────────────────────────────────────────────────
+async function loadAndRenderProgress() {
+  const uid = window.currentUserId || localStorage.getItem('userId');
+  if (!uid) return;
+  try {
+    const res = await fetch('/api/user-progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: uid }),
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.status === 'success') renderProgressStrip(data.progress);
+  } catch { /* silent */ }
+}
+
+function renderProgressStrip(p) {
+  const strip = document.getElementById('progressStrip');
+  if (!strip) return;
+
+  const xpPct = p.xp_to_next_level > 0
+    ? Math.round(p.xp_in_level / (p.xp_in_level + p.xp_to_next_level) * 100)
+    : 100;
+
+  const freezeHtml = p.streak_freeze_available > 0
+    ? `<span class="ps-freeze" title="Streak freezes available">🧊 ${p.streak_freeze_available}</span>`
+    : '';
+
+  strip.innerHTML = `
+    <div class="ps-rank" style="color:${p.rank_color}" title="${p.rank}">${p.rank}</div>
+    <div class="ps-level">${p.level_name}</div>
+    <div class="ps-xpbar-wrap" title="${p.xp} XP — ${p.xp_to_next_level} to next level">
+      <div class="ps-xpbar-fill" style="width:${xpPct}%"></div>
+    </div>
+    <div class="ps-streak" title="Current streak">🔥 ${p.current_streak}</div>
+    ${freezeHtml}
+  `;
+  strip.style.display = 'flex';
+}
+
+function handleProgressionResponse(data) {
+  if (!data || data.status !== 'success' || data.duplicate) return;
+
+  if (data.progress) renderProgressStrip(data.progress);
+
+  if (data.xp_earned && data.xp_earned > 0) {
+    showToast(`+${data.xp_earned} XP`, 'xp', 2500);
+  }
+
+  if (data.level_up) {
+    showToast(`🎉 Level Up! You reached ${data.level_up.to}`, 'levelup', 5000);
+  }
+
+  if (data.streak_event === 'freeze_consumed') {
+    const freeze = data.progress ? data.progress.streak_freeze_available : '?';
+    showToast(`🧊 Streak protected — 1 freeze used (${freeze} left)`, 'freeze', 5000);
+  } else if (data.streak_event === 'incremented' && data.progress) {
+    const s = data.progress.current_streak;
+    if (s > 0 && s % 5 === 0) {
+      showToast(`🔥 ${s}-day streak!`, 'streak', 3500);
+    }
+  } else if (data.streak_event === 'reset') {
+    showToast('Streak reset. Keep going!', 'info', 3000);
+  }
+
+  if (Array.isArray(data.new_awards)) {
+    for (const award of data.new_awards) {
+      const icon = award.icon || '🏅';
+      showToast(`${icon} New badge: ${award.name}`, 'award', 5000);
+    }
+  }
+}
+
+// ── Badge helper ──────────────────────────────────────────────────────────
 function updateBadge(color, count) {
   const badge = document.querySelector(`.drop-badge[data-badge-for="${color}"]`);
   if (badge) {
@@ -71,7 +171,7 @@ function resetAllBadges() {
   document.querySelectorAll('.drop-badge').forEach(b => { b.textContent = '0'; });
 }
 
-// ---- Match quality bar ----
+// ── Match quality bar ─────────────────────────────────────────────────────
 function updateMatchBar(deltaE) {
   const container = document.getElementById('matchBarContainer');
   const fill = document.getElementById('matchBarFill');
@@ -97,7 +197,7 @@ function updateMatchBar(deltaE) {
   }
 }
 
-// ---- Progress indicator ----
+// ── Progress indicator ────────────────────────────────────────────────────
 function updateProgressIndicator(currentIndex, total) {
   const textEl = document.getElementById('progressText');
   const segEl = document.getElementById('progressSegments');
@@ -114,13 +214,13 @@ function updateProgressIndicator(currentIndex, total) {
   }
 }
 
-// ---- Control state management ----
+// ── Control state ─────────────────────────────────────────────────────────
 function setControlState(state) {
-  const startBtn = document.getElementById("startBtn");
-  const stopBtn = document.getElementById("stopBtn");
-  const skipBtn = document.getElementById("skipBtn");
-  const retryBtn = document.getElementById("retryBtn");
-  const restartBtn = document.getElementById("restartBtn");
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const skipBtn = document.getElementById('skipBtn');
+  const retryBtn = document.getElementById('retryBtn');
+  const restartBtn = document.getElementById('restartBtn');
 
   if (state === 'idle') {
     startBtn.style.display = ''; startBtn.disabled = false;
@@ -149,16 +249,16 @@ function setControlState(state) {
   }
 }
 
-// ---- Enable/disable mixing ----
+// ── Mixing enable/disable ─────────────────────────────────────────────────
 function disableColorMixing() {
-  const mc = document.getElementById("mainContent");
-  if (mc) mc.classList.add("mixing-disabled");
+  const mc = document.getElementById('mainContent');
+  if (mc) mc.classList.add('mixing-disabled');
 }
 window.disableColorMixing = disableColorMixing;
 
 function enableColorMixing() {
-  const mc = document.getElementById("mainContent");
-  if (mc) mc.classList.remove("mixing-disabled");
+  const mc = document.getElementById('mainContent');
+  if (mc) mc.classList.remove('mixing-disabled');
 }
 
 window.currentUserBirthdate = localStorage.getItem('userBirthdate');
@@ -194,6 +294,7 @@ window.addEventListener('storage', (e) => {
     resetTimerDisplay();
     setControlState('idle');
     disableColorMixing();
+    loadAndRenderProgress();
   }
 });
 
@@ -205,7 +306,7 @@ function updateBox(id, rgb) {
 async function refreshDatabaseConnection() {
   try {
     const response = await fetch('/refresh_connection', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
     });
     if (response.ok) {
       const result = await response.json();
@@ -215,68 +316,70 @@ async function refreshDatabaseConnection() {
   } catch { return false; }
 }
 
-function saveSessionToServer(session) {
+// ── Save session to server ────────────────────────────────────────────────
+async function saveSessionToServer(session) {
   if (!window.currentUserId) {
     console.error('❌ No user ID found');
-    alert('No user ID found. Please log in again.');
     return;
   }
 
   let sessionData;
   if (session.target && session.drops) {
     sessionData = {
+      attempt_uuid: session.attempt_uuid || generateUUID(),
       user_id: window.currentUserId,
       target_color_id: session.target_color_id ?? null,
       target_r: session.target[0], target_g: session.target[1], target_b: session.target[2],
       drop_white: session.drops.white, drop_black: session.drops.black,
       drop_red: session.drops.red, drop_yellow: session.drops.yellow, drop_blue: session.drops.blue,
       delta_e: session.deltaE, time_sec: session.time,
-      timestamp: session.timestamp, skipped: session.skipped || false
+      timestamp: session.timestamp, skipped: session.skipped || false,
     };
   } else {
     sessionData = {
+      attempt_uuid: session.attempt_uuid || generateUUID(),
       user_id: session.user_id,
       target_color_id: session.target_color_id ?? null,
       target_r: session.target_r, target_g: session.target_g, target_b: session.target_b,
       drop_white: session.drop_white, drop_black: session.drop_black,
       drop_red: session.drop_red, drop_yellow: session.drop_yellow, drop_blue: session.drop_blue,
       delta_e: session.delta_e, time_sec: session.time_sec,
-      timestamp: session.timestamp, skipped: session.skipped || false
+      timestamp: session.timestamp, skipped: session.skipped || false,
     };
   }
 
-  fetch('/save_session', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(sessionData)
-  })
-  .then(res => {
-    if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
-    return res.json();
-  })
-  .then(data => {
+  try {
+    const res = await fetch('/save_session', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sessionData),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
     if (data.status !== 'success') {
       console.error('Failed to save session:', data.error);
-      alert('Failed to save session data. Please try again.');
+    } else {
+      handleProgressionResponse(data);
     }
-  })
-  .catch(error => {
+  } catch (error) {
     console.error('Error saving session:', error);
-    alert('Error saving session data. Please check your connection and try again.');
-  });
+  }
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
+// ── Quota-aware target selection ──────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
   disableColorMixing();
 
   const baseColors = {
     white: [255, 255, 255], black: [0, 0, 0],
-    red: [255, 0, 0], yellow: [255, 255, 0], blue: [0, 0, 255]
+    red: [255, 0, 0], yellow: [255, 255, 0], blue: [0, 0, 255],
   };
 
   let fullCatalog = [];
   try {
-    const res = await fetch('/api/target-colors');
+    const uid = window.currentUserId || localStorage.getItem('userId') || '';
+    const url = uid ? `/api/target-colors?user_id=${encodeURIComponent(uid)}` : '/api/target-colors';
+    const res = await fetch(url);
     const data = await res.json();
     if (data.status === 'success' && Array.isArray(data.colors) && data.colors.length > 0) {
       fullCatalog = data.colors;
@@ -291,15 +394,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function weightedRandomSelection(items, weights, count) {
     const totalWeight = weights.reduce((s, w) => s + w, 0);
-    const cumulativeWeights = [];
+    const cumulative = [];
     let cum = 0;
-    for (let i = 0; i < weights.length; i++) { cum += weights[i]; cumulativeWeights.push(cum); }
-    const selected = []; const selectedIndices = new Set();
-    while (selected.length < count && selected.length < items.length) {
+    for (let i = 0; i < weights.length; i++) { cum += weights[i]; cumulative.push(cum); }
+    const selected = []; const usedIdx = new Set();
+    let attempts = 0;
+    while (selected.length < count && selected.length < items.length && attempts < 1000) {
+      attempts++;
       const r = Math.random() * totalWeight;
-      for (let i = 0; i < cumulativeWeights.length; i++) {
-        if (r <= cumulativeWeights[i] && !selectedIndices.has(i)) {
-          selected.push(items[i]); selectedIndices.add(i); break;
+      for (let i = 0; i < cumulative.length; i++) {
+        if (r <= cumulative[i] && !usedIdx.has(i)) {
+          selected.push(items[i]); usedIdx.add(i); break;
         }
       }
     }
@@ -308,6 +413,37 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   function generateRandomizedColors() {
     const sorted = [...fullCatalog].sort((a, b) => a.catalog_order - b.catalog_order);
+
+    // Determine if any colors are under quota (field added by server when user_id provided)
+    const hasQuota = sorted.some(c => 'under_quota' in c);
+
+    if (hasQuota) {
+      const allUnderQuota = sorted.filter(c => c.under_quota);
+      // If there are colors under quota, restrict pool to those only
+      const pool = allUnderQuota.length > 0 ? allUnderQuota : sorted;
+
+      const poolBasic = pool.filter(c => c.type === 'basic');
+      const poolSkin = pool.filter(c => c.type === 'skin');
+      const fallbackBasic = sorted.filter(c => c.type === 'basic');
+      const fallbackSkin = sorted.filter(c => c.type === 'skin');
+
+      const basicFirst = poolBasic.slice(0, 3);
+      const basicRest = poolBasic.slice(3, 11);
+      const skinPool = poolSkin.length >= 5 ? poolSkin : fallbackSkin;
+      const basicRestPool = basicRest.length >= 3 ? basicRest : fallbackBasic.slice(3, 11);
+
+      // Weight by inverse attempt_count (lower count = higher weight)
+      const basicWeights = basicRestPool.map(c => 1 / ((c.attempt_count || 0) + 1));
+      const skinWeights = skinPool.map(c => 1 / ((c.attempt_count || 0) + 1));
+
+      const selectedBasic = weightedRandomSelection(basicRestPool, basicWeights, Math.min(3, basicRestPool.length));
+      const selectedSkin = weightedRandomSelection(skinPool, skinWeights, Math.min(5, skinPool.length));
+
+      const base = basicFirst.length >= 3 ? basicFirst : fallbackBasic.slice(0, 3);
+      return [...base, ...selectedBasic, ...selectedSkin];
+    }
+
+    // Fallback: original frequency-weighted selection
     const firstThreeBasic = sorted.slice(0, 3);
     const remainingBasic = sorted.slice(3, 11);
     const basicWeights = remainingBasic.map(c => 1 / (c.frequency || 1));
@@ -338,7 +474,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       const options = [
         { id: 'skipPerceptionIdentical', value: 'identical' },
         { id: 'skipPerceptionAcceptable', value: 'acceptable' },
-        { id: 'skipPerceptionUnacceptable', value: 'unacceptable' }
+        { id: 'skipPerceptionUnacceptable', value: 'unacceptable' },
       ];
       const handlers = [];
       const finish = (value) => {
@@ -359,7 +495,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   function updateCurrentMix() {
     const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
     if (totalDrops === 0) {
-      updateBox("currentMix", [255, 255, 255]);
+      updateBox('currentMix', [255, 255, 255]);
       window.lastMixDeltaE = NaN;
       return;
     }
@@ -375,44 +511,55 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
 
     const mixedRGB = mixbox.latentToRgb(zMix).map(Math.round);
-    updateBox("currentMix", mixedRGB);
-    document.getElementById("mixedRgbValues").textContent = `RGB: [${mixedRGB.join(', ')}]`;
+    updateBox('currentMix', mixedRGB);
+    document.getElementById('mixedRgbValues').textContent = `RGB: [${mixedRGB.join(', ')}]`;
 
-    fetch("/calculate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ target: targetColor, mixed: mixedRGB })
+    fetch('/calculate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target: targetColor, mixed: mixedRGB }),
     })
-    .then(res => res.json())
-    .then(data => {
-      if (data.error) return console.error("Server error:", data.error);
-      window.lastMixDeltaE = data.delta_e;
-      updateMatchBar(data.delta_e);
+      .then(res => res.json())
+      .then(data => {
+        if (data.error) return console.error('Server error:', data.error);
+        window.lastMixDeltaE = data.delta_e;
+        updateMatchBar(data.delta_e);
 
-      if (data.delta_e <= 0.01) {
-        stopTimer();
-        const session = {
-          user_id: window.currentUserId,
-          target: targetColor,
-          target_color_id: currentTargetColor.id,
-          drops: { ...dropCounts },
-          deltaE: data.delta_e,
-          time: parseFloat(document.getElementById("timer").textContent),
-          timestamp: new Date().toISOString(),
-          skipped: false
-        };
-        sessionLogs.push(session);
-        saveSessionToServer(session);
-        currentSessionSaved = true;
-        window.currentSessionSaved = true;
-        setControlState('completed');
-      }
-    });
+        if (data.delta_e <= 0.01) {
+          stopTimer();
+          const uuid = generateUUID();
+          const session = {
+            attempt_uuid: uuid,
+            user_id: window.currentUserId,
+            target: targetColor,
+            target_color_id: currentTargetColor.id,
+            drops: { ...dropCounts },
+            deltaE: data.delta_e,
+            time: parseFloat(document.getElementById('timer').textContent),
+            timestamp: new Date().toISOString(),
+            skipped: false,
+          };
+          sessionLogs.push(session);
+          saveSessionToServer(session);
+          currentSessionSaved = true;
+          window.currentSessionSaved = true;
+          setControlState('completed');
+        }
+      });
   }
 
-  // ---- Button handlers ----
-  document.getElementById("startBtn").addEventListener("click", async () => {
+  // ── Button handlers ───────────────────────────────────────────────────
+  document.getElementById('startBtn').addEventListener('click', async () => {
     refreshDatabaseConnection();
+    // Re-fetch catalog with updated coverage stats
+    try {
+      const uid = window.currentUserId || localStorage.getItem('userId') || '';
+      const url = uid ? `/api/target-colors?user_id=${encodeURIComponent(uid)}` : '/api/target-colors';
+      const res = await fetch(url);
+      const d = await res.json();
+      if (d.status === 'success' && d.colors.length > 0) fullCatalog = d.colors;
+    } catch { /* use existing */ }
+
     const newTargetColors = generateRandomizedColors();
     targetColors.length = 0;
     targetColors.push(...newTargetColors);
@@ -420,7 +567,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     currentTargetIndex = 0;
     currentTargetColor = targetColors[currentTargetIndex];
     setGameTarget(currentTargetColor);
-    updateBox("targetColor", targetColor);
+    updateBox('targetColor', targetColor);
     resetMix();
     startTimer();
     enableColorMixing();
@@ -428,19 +575,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     updateProgressIndicator(currentTargetIndex, targetColors.length);
   });
 
-  document.getElementById("stopBtn").addEventListener("click", () => {
+  document.getElementById('stopBtn').addEventListener('click', () => {
     stopTimer();
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     if (!isNaN(currentDeltaE)) {
       const sessionData = {
+        attempt_uuid: generateUUID(),
         user_id: window.currentUserId,
         target_color_id: currentTargetColor.id,
         target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
         drop_white: dropCounts.white, drop_black: dropCounts.black,
         drop_red: dropCounts.red, drop_yellow: dropCounts.yellow, drop_blue: dropCounts.blue,
         delta_e: currentDeltaE,
-        time_sec: parseFloat(document.getElementById("timer").textContent),
-        timestamp: new Date().toISOString(), skipped: true
+        time_sec: parseFloat(document.getElementById('timer').textContent),
+        timestamp: new Date().toISOString(), skipped: true,
       };
       sessionLogs.push(sessionData);
       saveSessionToServer(sessionData);
@@ -449,11 +597,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     setControlState('stopped');
   });
 
-  document.getElementById("skipBtn").addEventListener("click", async () => {
+  document.getElementById('skipBtn').addEventListener('click', async () => {
     refreshDatabaseConnection();
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
-    const mc = document.getElementById("mainContent");
-    const isAfterStop = mc && mc.classList.contains("mixing-disabled");
+    const mc = document.getElementById('mainContent');
+    const isAfterStop = mc && mc.classList.contains('mixing-disabled');
     const alreadyCompletedThisColor = window.currentSessionSaved === true;
 
     const shouldSaveSkip = currentDeltaE > 0.01 && !isAfterStop && !alreadyCompletedThisColor;
@@ -462,26 +610,28 @@ document.addEventListener("DOMContentLoaded", async () => {
       const skipPerception = await showSkipPerceptionModal();
       if (!skipPerception) return;
       const skipData = {
+        attempt_uuid: generateUUID(),
         user_id: window.currentUserId,
         target_color_id: currentTargetColor.id,
         target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
         drop_white: dropCounts.white || 0, drop_black: dropCounts.black || 0,
         drop_red: dropCounts.red || 0, drop_yellow: dropCounts.yellow || 0, drop_blue: dropCounts.blue || 0,
-        time_sec: parseFloat(document.getElementById("timer").textContent),
+        time_sec: parseFloat(document.getElementById('timer').textContent),
         timestamp: new Date().toISOString(),
         delta_e: currentDeltaE,
-        skip_perception: skipPerception
+        skip_perception: skipPerception,
       };
       try {
         const res = await fetch('/save_skip', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(skipData)
+          body: JSON.stringify(skipData),
         });
         const data = await res.json();
         if (!res.ok || data.status !== 'success') {
           alert('Failed to save skip data. Please try again.');
           return;
         }
+        handleProgressionResponse(data);
       } catch {
         alert('Error saving skip data. Please check your connection and try again.');
         return;
@@ -492,7 +642,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (currentTargetIndex < targetColors.length) {
       currentTargetColor = targetColors[currentTargetIndex];
       setGameTarget(currentTargetColor);
-      updateBox("targetColor", targetColor);
+      updateBox('targetColor', targetColor);
       resetMix();
       stopTimer();
       resetTimerDisplay();
@@ -501,7 +651,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       setControlState('mixing');
       updateProgressIndicator(currentTargetIndex, targetColors.length);
     } else {
-      // All colors completed
       const congratulations = `
         <div id="congratulations-modal" style="
           position:fixed;inset:0;
@@ -529,12 +678,12 @@ document.addEventListener("DOMContentLoaded", async () => {
       document.body.insertAdjacentHTML('beforeend', congratulations);
       createConfetti();
       setControlState('idle');
-      document.getElementById("startBtn").disabled = true;
+      document.getElementById('startBtn').disabled = true;
       setTimeout(() => { window.location.href = '/results'; }, 4000);
     }
   });
 
-  document.getElementById("restartBtn").addEventListener("click", async () => {
+  document.getElementById('restartBtn').addEventListener('click', async () => {
     refreshDatabaseConnection();
     const newTargetColors = generateRandomizedColors();
     targetColors.length = 0;
@@ -543,7 +692,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     currentTargetIndex = 0;
     currentTargetColor = targetColors[currentTargetIndex];
     setGameTarget(currentTargetColor);
-    updateBox("targetColor", targetColor);
+    updateBox('targetColor', targetColor);
     resetMix();
     resetTimerDisplay();
     startTimer();
@@ -553,18 +702,19 @@ document.addEventListener("DOMContentLoaded", async () => {
     document.getElementById('overflowDropdown').classList.remove('is-open');
   });
 
-  document.getElementById("retryBtn").addEventListener("click", () => {
+  document.getElementById('retryBtn').addEventListener('click', () => {
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     if (!isNaN(currentDeltaE)) {
       const session = {
+        attempt_uuid: generateUUID(),
         user_id: window.currentUserId,
         target: targetColor,
         target_color_id: currentTargetColor.id,
         drops: { ...dropCounts },
         deltaE: currentDeltaE,
-        time: parseFloat(document.getElementById("timer").textContent),
+        time: parseFloat(document.getElementById('timer').textContent),
         timestamp: new Date().toISOString(),
-        skipped: true
+        skipped: true,
       };
       sessionLogs.push(session);
       saveSessionToServer(session);
@@ -577,16 +727,15 @@ document.addEventListener("DOMContentLoaded", async () => {
     setControlState('mixing');
   });
 
-  // ---- Palette interaction ----
-  document.querySelectorAll(".color-circle").forEach(circle => {
-    circle.addEventListener("click", (e) => {
+  // ── Palette interaction ────────────────────────────────────────────────
+  document.querySelectorAll('.color-circle').forEach(circle => {
+    circle.addEventListener('click', (e) => {
       e.preventDefault();
       const color = circle.dataset.color;
       dropCounts[color]++;
       circle.textContent = dropCounts[color];
       updateBadge(color, dropCounts[color]);
 
-      // Tap feedback
       circle.classList.add('is-tapped');
       setTimeout(() => circle.classList.remove('is-tapped'), 200);
       if (navigator.vibrate) navigator.vibrate(15);
@@ -595,8 +744,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  document.querySelectorAll(".minus-button").forEach(button => {
-    button.addEventListener("click", (e) => {
+  document.querySelectorAll('.minus-button').forEach(button => {
+    button.addEventListener('click', (e) => {
       e.preventDefault();
       const color = button.dataset.color;
       if (dropCounts[color] > 0) {
@@ -609,18 +758,18 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 });
 
-// ---- Login form handler ----
-document.addEventListener('DOMContentLoaded', function() {
+// ── Login form handler ────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
   const loginForm = document.getElementById('loginForm');
   if (loginForm) {
-    loginForm.addEventListener('submit', async function(e) {
+    loginForm.addEventListener('submit', async function (e) {
       e.preventDefault();
       const userId = document.getElementById('loginId').value.toUpperCase();
       try {
         const response = await fetch('/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId })
+          body: JSON.stringify({ userId }),
         });
         const data = await response.json();
         if (data.status === 'success') {
@@ -633,6 +782,7 @@ document.addEventListener('DOMContentLoaded', function() {
           resetTimerDisplay();
           disableColorMixing();
           displayUserId();
+          loadAndRenderProgress();
         } else {
           alert('Invalid user ID. Please try again.');
         }
@@ -643,11 +793,11 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 });
 
-// ---- Continue button handler ----
-document.addEventListener('DOMContentLoaded', function() {
+// ── Continue button handler ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function () {
   const continueBtn = document.getElementById('continueBtn');
   if (continueBtn) {
-    continueBtn.addEventListener('click', function() {
+    continueBtn.addEventListener('click', function () {
       document.getElementById('userModal').style.display = 'none';
       resetMix();
       resetTimerDisplay();
@@ -656,21 +806,66 @@ document.addEventListener('DOMContentLoaded', function() {
   }
   const showLoginBtn = document.getElementById('showLoginBtn');
   if (showLoginBtn) {
-    showLoginBtn.addEventListener('click', function() {
+    showLoginBtn.addEventListener('click', function () {
       document.getElementById('registerSection').style.display = 'none';
       document.getElementById('loginSection').style.display = 'block';
     });
   }
   const showRegisterBtn = document.getElementById('showRegisterBtn');
   if (showRegisterBtn) {
-    showRegisterBtn.addEventListener('click', function() {
+    showRegisterBtn.addEventListener('click', function () {
       document.getElementById('loginSection').style.display = 'none';
       document.getElementById('registerSection').style.display = 'block';
     });
   }
 });
 
-// ---- Confetti ----
+// ── Push notification opt-in ──────────────────────────────────────────────
+window.requestPushPermission = async function () {
+  if (!('Notification' in window) || !('serviceWorker' in navigator)) return;
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') return;
+
+  try {
+    const keyRes = await fetch('/push/vapid-public-key');
+    const keyData = await keyRes.json();
+    const vapidKey = keyData.vapid_public_key;
+    if (!vapidKey) return;
+
+    const swReg = await navigator.serviceWorker.ready;
+    const subscription = await swReg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidKey),
+    });
+
+    const userId = window.currentUserId || localStorage.getItem('userId');
+    if (!userId) return;
+
+    const subJson = subscription.toJSON();
+    await fetch('/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        user_id: userId,
+        endpoint: subJson.endpoint,
+        p256dh: subJson.keys.p256dh,
+        auth: subJson.keys.auth,
+      }),
+    });
+    showToast('🔔 Daily reminders enabled!', 'info', 4000);
+  } catch (err) {
+    console.error('Push subscribe error:', err);
+  }
+};
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
+}
+
+// ── Confetti ──────────────────────────────────────────────────────────────
 function createConfetti() {
   const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd'];
   for (let i = 0; i < 150; i++) {

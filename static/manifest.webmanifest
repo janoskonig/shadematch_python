@@ -1,20 +1,27 @@
 {
   "name": "S.H.A.D.E. — Study of Human Accuracy in Digital Experiments",
   "short_name": "SHADE",
+  "description": "Match paint colors by mixing pigment drops. Daily challenges, streaks, and XP.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
   "background_color": "#F8F6F3",
   "theme_color": "#F8F6F3",
+  "orientation": "portrait-primary",
+  "categories": ["games", "education"],
   "icons": [
     {
       "src": "/static/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/static/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }

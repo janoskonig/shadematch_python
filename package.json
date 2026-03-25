@@ -3,7 +3,7 @@
   "private": true,
   "description": "Minimal Node toolchain for PostgreSQL migrations only.",
   "scripts": {
-    "db:migrate": "node scripts/migrate-mixing-sessions.js && node scripts/migrate-target-colors.js"
+    "db:migrate": "node scripts/migrate-mixing-sessions.js && node scripts/migrate-target-colors.js && node scripts/migrate-gamification.js"
   },
   "devDependencies": {
     "dotenv": "^16.4.7",
