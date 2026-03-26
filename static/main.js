@@ -11,6 +11,10 @@ window.shadeMatchTargetRgb = [255, 255, 255];
 
 const MATCH_PERFECT_DELTA_E = 0.01;
 
+function isPerfectMatch(deltaE) {
+  return Number.isFinite(deltaE) && deltaE <= MATCH_PERFECT_DELTA_E;
+}
+
 // ── UUID ──────────────────────────────────────────────────────────────────
 function generateUUID() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -139,20 +143,28 @@ function renderProgressStrip(p) {
   const strip = document.getElementById('progressStrip');
   if (!strip) return;
 
-  const xpPct = p.xp_to_next_level > 0
-    ? Math.round(p.xp_in_level / (p.xp_in_level + p.xp_to_next_level) * 100)
-    : 100;
+  // Primary bar: quota coverage (completed_attempt_units / required_attempt_units)
+  const quotaPct = p.level_progress_pct != null ? p.level_progress_pct : 0;
 
   const freezeHtml = p.streak_freeze_available > 0
     ? `<span class="ps-freeze" title="Streak freezes available">🧊 ${p.streak_freeze_available}</span>`
     : '';
 
+  const completedColors = p.completed_colors != null ? p.completed_colors : 0;
+  const totalColors = p.total_tracked_colors != null ? p.total_tracked_colors : '?';
+  const coveragePct = p.catalog_coverage_pct != null ? p.catalog_coverage_pct.toFixed(1) : '0.0';
+
+  const levelTitle = p.is_maxed_out
+    ? `${p.level_name} — All Colors Mastered!`
+    : `${p.level_name} — ${completedColors}/${totalColors} colors complete (${coveragePct}%)`;
+
   strip.innerHTML = `
     <div class="ps-rank" style="color:${p.rank_color}" title="${p.rank}">${p.rank}</div>
     <div class="ps-level">${p.level_name}</div>
-    <div class="ps-xpbar-wrap" title="${p.xp} XP — ${p.xp_to_next_level} to next level">
-      <div class="ps-xpbar-fill" style="width:${xpPct}%"></div>
+    <div class="ps-xpbar-wrap" title="${levelTitle}">
+      <div class="ps-xpbar-fill" style="width:${quotaPct}%"></div>
     </div>
+    <div class="ps-colors" title="${completedColors} of ${totalColors} colors at quota">${completedColors}/${totalColors}</div>
     <div class="ps-streak" title="Current streak">🔥 ${p.current_streak}</div>
     ${freezeHtml}
   `;
@@ -181,19 +193,30 @@ async function handleProgressionResponse(data) {
 
   await _delay(SEQ_GAP); if (stale()) return;
 
-  // Phase 2 — XP
-  if (data.xp_earned && data.xp_earned > 0) {
-    showToast(`+${data.xp_earned} XP`, 'xp', 2500);
+  // Phase 2 — Quota-major awards (highest salience — fire before anything else)
+  if (Array.isArray(data.new_awards)) {
+    const majorAwards = data.new_awards.filter(a => a.award_class === 'quota_major');
+    for (const award of majorAwards) {
+      const icon = award.icon || '✅';
+      showToast(`${icon} ${award.name}`, 'levelup', 6000);
+      await _delay(SEQ_GAP * 2); if (stale()) return;
+    }
   }
 
-  await _delay(SEQ_GAP); if (stale()) return;
+  // Phase 3 — Level-up (quota-based)
+  if (data.level_up) {
+    const p = data.progress;
+    const colorsCtx = p ? ` (${p.completed_colors}/${p.total_tracked_colors} colors)` : '';
+    showToast(`⬆️ Level ${data.level_up.to} reached${colorsCtx}`, 'levelup', 5500);
+    await _delay(SEQ_GAP * 2); if (stale()) return;
+  }
 
-  // Phase 3 — Streak event
+  // Phase 4 — Streak event
   if (data.streak_event === 'started') {
     showToast('🔥 Streak started — play again tomorrow!', 'streak', 3500);
   } else if (data.streak_event === 'incremented' && data.progress) {
     const s = data.progress.current_streak;
-    showToast(`🔥 ${s}-day streak!`, 'streak', 3500);
+    showToast(`🔥 ${s}-day streak!`, 'streak', 3000);
   } else if (data.streak_event === 'freeze_consumed') {
     const freeze = data.progress ? data.progress.streak_freeze_available : '?';
     showToast(`🧊 Streak protected — 1 freeze used (${freeze} left)`, 'freeze', 5000);
@@ -203,22 +226,24 @@ async function handleProgressionResponse(data) {
 
   await _delay(SEQ_GAP); if (stale()) return;
 
-  // Phase 4 — Level-up (high salience — own phase before badges)
-  if (data.level_up) {
-    showToast(`🎉 Level Up! You reached Level ${data.level_up.to}`, 'levelup', 5500);
-    await _delay(SEQ_GAP * 2); if (stale()) return;
+  // Phase 5 — XP (secondary reinforcement — shown after quota signals)
+  if (data.xp_earned && data.xp_earned > 0) {
+    showToast(`+${data.xp_earned} XP`, 'xp', 2500);
   }
 
-  // Phase 5 — Badges
+  await _delay(SEQ_GAP); if (stale()) return;
+
+  // Phase 6 — Reinforcement badges (streak, achievement, level badges etc.)
   if (Array.isArray(data.new_awards)) {
-    for (const award of data.new_awards) {
+    const reinforcementAwards = data.new_awards.filter(a => a.award_class !== 'quota_major');
+    for (const award of reinforcementAwards) {
       const icon = award.icon || '🏅';
-      showToast(`${icon} ${award.name}`, 'award', 4500);
+      showToast(`${icon} ${award.name}`, 'award', 4000);
       await _delay(SEQ_GAP); if (stale()) return;
     }
   }
 
-  // Phase 6 — Next action CTA
+  // Phase 7 — Next action CTA
   if (data.next_action) {
     renderNextAction(data.next_action);
   }
@@ -282,23 +307,29 @@ function updateMatchBar(deltaE) {
   if (!container || !fill || !label) return;
 
   container.style.display = '';
-  const progress = Math.max(0, Math.min(100, 100 - deltaE * 2));
-  fill.style.width = progress + '%';
 
-  if (deltaE <= MATCH_PERFECT_DELTA_E) {
+  if (isPerfectMatch(deltaE)) {
+    fill.style.width = '100%';
     fill.style.backgroundColor = 'var(--accent-success)';
     label.textContent = 'Match!';
-  } else if (progress < 33) {
+    return;
+  }
+
+  // Exponential decay: K=3 keeps the bar well below full for deltaE ~0.5-1.0
+  const K = 3;
+  const progress = Math.max(0, Math.min(99, 100 * Math.exp(-deltaE / K)));
+  fill.style.width = progress + '%';
+
+  if (progress < 19) {
     fill.style.backgroundColor = 'var(--accent-danger)';
     label.textContent = 'Far';
-  } else if (progress < 66) {
+  } else if (progress < 51) {
     fill.style.backgroundColor = 'var(--accent-warning)';
     label.textContent = 'Closer';
-  } else if (progress < 98) {
+  } else if (progress < 85) {
     fill.style.backgroundColor = '#8BC34A';
     label.textContent = 'Very close';
   } else {
-    // High visual match but not within perfect threshold — keep encouraging
     fill.style.backgroundColor = '#8BC34A';
     label.textContent = 'Nearly there!';
   }
@@ -329,27 +360,26 @@ function setControlState(state) {
   const retryBtn = document.getElementById('retryBtn');
   const restartBtn = document.getElementById('restartBtn');
 
+  // Done button permanently removed from active play — always hidden
+  if (stopBtn) stopBtn.style.display = 'none';
+
   if (state === 'idle') {
     startBtn.style.display = ''; startBtn.disabled = false;
-    stopBtn.style.display = 'none';
     skipBtn.style.display = 'none';
     retryBtn.style.display = 'none';
     restartBtn.disabled = true;
   } else if (state === 'mixing') {
     startBtn.style.display = 'none';
-    stopBtn.style.display = ''; stopBtn.disabled = false;
     skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = 'Skip';
     retryBtn.style.display = ''; retryBtn.disabled = false;
     restartBtn.disabled = false;
   } else if (state === 'stopped') {
     startBtn.style.display = 'none';
-    stopBtn.style.display = 'none';
-    skipBtn.style.display = ''; skipBtn.disabled = false;
+    skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = 'Skip';
     retryBtn.style.display = 'none';
     restartBtn.disabled = false;
   } else if (state === 'completed') {
     startBtn.style.display = 'none';
-    stopBtn.style.display = 'none';
     skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = 'Next color';
     retryBtn.style.display = 'none';
     restartBtn.disabled = false;
@@ -627,7 +657,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.lastMixDeltaE = data.delta_e;
         updateMatchBar(data.delta_e);
 
-        if (data.delta_e <= MATCH_PERFECT_DELTA_E) {
+        if (isPerfectMatch(data.delta_e)) {
           stopTimer();
           const uuid = generateUUID();
           const session = {
@@ -677,36 +707,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateProgressIndicator(currentTargetIndex, targetColors.length);
   });
 
-  document.getElementById('stopBtn').addEventListener('click', () => {
-    stopTimer();
-    const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
-    if (!isNaN(currentDeltaE)) {
-      const sessionData = {
-        attempt_uuid: generateUUID(),
-        user_id: window.currentUserId,
-        target_color_id: currentTargetColor.id,
-        target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
-        drop_white: dropCounts.white, drop_black: dropCounts.black,
-        drop_red: dropCounts.red, drop_yellow: dropCounts.yellow, drop_blue: dropCounts.blue,
-        delta_e: currentDeltaE,
-        time_sec: parseFloat(document.getElementById('timer').textContent),
-        timestamp: new Date().toISOString(), skipped: true,
-      };
-      sessionLogs.push(sessionData);
-      saveSessionToServer(sessionData);
-    }
-    disableColorMixing();
-    setControlState('stopped');
-  });
-
   document.getElementById('skipBtn').addEventListener('click', async () => {
     refreshDatabaseConnection();
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
-    const mc = document.getElementById('mainContent');
-    const isAfterStop = mc && mc.classList.contains('mixing-disabled');
     const alreadyCompletedThisColor = window.currentSessionSaved === true;
 
-    const shouldSaveSkip = currentDeltaE > MATCH_PERFECT_DELTA_E && !isAfterStop && !alreadyCompletedThisColor;
+    const shouldSaveSkip = Number.isFinite(currentDeltaE) && !isPerfectMatch(currentDeltaE) && !alreadyCompletedThisColor;
 
     if (shouldSaveSkip) {
       const skipPerception = await showSkipPerceptionModal();
@@ -754,6 +760,38 @@ document.addEventListener('DOMContentLoaded', async () => {
       setControlState('mixing');
       updateProgressIndicator(currentTargetIndex, targetColors.length);
     } else {
+      // Fetch latest progress to determine if all colors are mastered
+      let progressData = null;
+      try {
+        const uid = window.currentUserId || localStorage.getItem('userId');
+        if (uid) {
+          const pRes = await fetch('/api/user-progress', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: uid }),
+          });
+          if (pRes.ok) {
+            const pData = await pRes.json();
+            if (pData.status === 'success') progressData = pData.progress;
+          }
+        }
+      } catch { /* use generic message */ }
+
+      const isMaxed = progressData && progressData.is_maxed_out;
+      const completedColors = progressData ? progressData.completed_colors : null;
+      const totalColors = progressData ? progressData.total_tracked_colors : null;
+
+      let headline, subtext;
+      if (isMaxed) {
+        headline = 'All Colors Mastered!';
+        subtext = 'You have completed all color matching challenges — every shade is at quota!';
+      } else if (completedColors != null && totalColors != null) {
+        headline = 'Round Complete!';
+        subtext = `${completedColors} of ${totalColors} colors fully covered. Keep going to complete the rest!`;
+      } else {
+        headline = 'Round Complete!';
+        subtext = 'Great work — start a new round to keep building your coverage.';
+      }
+
       const congratulations = `
         <div id="congratulations-modal" style="
           position:fixed;inset:0;
@@ -767,11 +805,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             text-align:center;max-width:500px;margin:20px;
             box-shadow:0 20px 40px rgba(0,0,0,0.3);
           ">
-            <div style="font-size:4em;margin-bottom:20px;">🎉</div>
-            <h2 style="margin:0 0 20px 0;font-size:2rem;font-weight:300;">Congratulations!</h2>
-            <p style="margin:0 0 30px 0;font-size:1.1em;line-height:1.6;">
-              You have completed all color matching challenges!
-            </p>
+            <div style="font-size:4em;margin-bottom:20px;">${isMaxed ? '🎊' : '🎉'}</div>
+            <h2 style="margin:0 0 20px 0;font-size:2rem;font-weight:300;">${headline}</h2>
+            <p style="margin:0 0 30px 0;font-size:1.1em;line-height:1.6;">${subtext}</p>
             <div style="
               display:inline-block;background:rgba(255,255,255,0.2);
               padding:15px 30px;border-radius:25px;font-size:1.1em;
@@ -781,7 +817,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.body.insertAdjacentHTML('beforeend', congratulations);
       createConfetti();
       setControlState('idle');
-      document.getElementById('startBtn').disabled = true;
+      document.getElementById('startBtn').disabled = isMaxed;
       setTimeout(() => { window.location.href = '/results'; }, 4000);
     }
   });

@@ -29,10 +29,11 @@
 }
 .ps-xpbar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #667eea, #764ba2);
+  background: linear-gradient(90deg, #00b894, #55efc4);
   border-radius: 3px;
   transition: width 0.4s ease;
 }
+.ps-colors { font-size: 0.7rem; color: var(--text-secondary); font-weight: 700; white-space: nowrap; }
 .ps-streak { font-size: 0.75rem; }
 .ps-freeze { font-size: 0.75rem; }
 
@@ -315,7 +316,7 @@
       <!-- Controls -->
       <div id="controls" class="controls-bar">
         <button id="startBtn" class="btn btn-primary btn-lg">Start</button>
-        <button id="stopBtn" class="btn btn-primary btn-lg" disabled style="display:none;">Done</button>
+        <button id="stopBtn" class="btn btn-primary btn-lg" disabled style="display:none;" aria-hidden="true"></button>
         <button id="skipBtn" class="btn btn-secondary btn-lg" disabled style="display:none;">Skip</button>
         <button id="retryBtn" class="btn btn-tertiary" disabled style="display:none;">Start over</button>
 
