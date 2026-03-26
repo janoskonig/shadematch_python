@@ -1,19 +1,20 @@
 """
 Next-action policy: single server-authoritative CTA envelope.
 
-Policy version: v1
+Policy version: v2  (quota-first)
 Policy order:
   1. daily_unfinished  — final run for today not yet submitted
-  2. streak_at_risk    — active streak may lapse today (predicates below)
-  3. quota_under_150   — deterministic first unlocked + under-quota target
-  4. progress_xp       — XP/coverage-focused fallback
+  2. streak_at_risk    — active streak may lapse today
+  3. quota_deficit     — nearest actionable (unlocked) under-quota color
+                         tie-break: smallest remaining, then lowest catalog_order
+  4. quota_maxed       — all colors mastered: maintenance goal
+  4. quota_locked      — no unlocked deficit (shouldn't normally occur)
 
-streak_start replaces quota_under_150 when last_activity_date is None
-(never qualified before; "save streak" copy would be nonsensical).
+streak_start replaces quota_deficit when last_activity_date is None.
 
 Streak-at-risk predicates (ALL must hold):
   - last_activity_date is not None
-  - last_activity_date != today  (no qualifying save yet today)
+  - last_activity_date != today
   - current_streak > 0
   - next qualifying save will increment or consume a freeze, NOT reset:
       last_activity_date == yesterday  OR
@@ -23,9 +24,9 @@ Guest (no user_id): returns {'next_action': None}
 """
 from datetime import date, datetime, timedelta, timezone
 from .models import UserProgress, UserTargetColorStats, DailyChallengeRun, TargetColor
-from .gamification import COVERAGE_QUOTA, compute_level, compute_level_progress
+from .gamification import COVERAGE_QUOTA, compute_quota_progress, compute_level_from_quota
 
-POLICY_VERSION = 'v1'
+POLICY_VERSION = 'v2'
 
 
 # ---------------------------------------------------------------------------
@@ -49,12 +50,13 @@ def _streak_at_risk(up: UserProgress, today: date) -> bool:
     return salvageable
 
 
-def _first_under_quota_target(user_id: str, user_level: int):
+def _nearest_deficit_unlocked_target(user_id: str, user_level: int):
     """
-    Return the first TargetColor that is:
-      - unlocked (level_required <= user_level)
-      - under quota (attempt_count < COVERAGE_QUOTA)
-    ordered by catalog_order. Returns None when all are at quota.
+    Return the TargetColor with the smallest positive remaining quota attempts
+    among colors that are unlocked (level_required <= user_level).
+
+    Tie-break: lowest catalog_order (iterated first).
+    Returns None when all unlocked colors are at or above quota.
     """
     stats_map = {
         s.target_color_id: s.attempt_count
@@ -66,10 +68,16 @@ def _first_under_quota_target(user_id: str, user_level: int):
         .order_by(TargetColor.catalog_order.asc())
         .all()
     )
+    best = None
+    best_remaining = None
     for tc in candidates:
-        if stats_map.get(tc.id, 0) < COVERAGE_QUOTA:
-            return tc
-    return None
+        remaining = max(0, COVERAGE_QUOTA - stats_map.get(tc.id, 0))
+        if remaining > 0:
+            # Smaller remaining wins; catalog_order tiebreak is already the natural iter order
+            if best is None or remaining < best_remaining:
+                best = tc
+                best_remaining = remaining
+    return best, best_remaining
 
 
 # ---------------------------------------------------------------------------
@@ -95,7 +103,11 @@ def build_next_action(user_id: str, today: date = None):
         return {'next_action': None}
 
     up = UserProgress.query.filter_by(user_id=user_id).first()
-    user_level = compute_level(up.xp) if up else 1
+
+    # Quota state (one canonical query)
+    quota = compute_quota_progress(user_id)
+    user_level = compute_level_from_quota(quota['coverage_ratio'], quota['is_maxed_out'])
+    is_maxed_out = quota['is_maxed_out']
 
     # Secondary is always a non-coercive escape hatch
     secondary = {
@@ -125,7 +137,7 @@ def build_next_action(user_id: str, today: date = None):
 
     # ── 2. Streak at risk ─────────────────────────────────────────────────
     if primary is None and _streak_at_risk(up, today):
-        tc = _first_under_quota_target(user_id, user_level)
+        tc, remaining = _nearest_deficit_unlocked_target(user_id, user_level)
         primary = {
             'id': 'streak_at_risk',
             'type': 'practice',
@@ -140,37 +152,69 @@ def build_next_action(user_id: str, today: date = None):
             },
         }
 
-    # ── 3. Under-quota target (or first-time streak start) ─────────────────
-    if primary is None:
-        tc = _first_under_quota_target(user_id, user_level)
+    # ── 3. Nearest unlocked quota deficit ────────────────────────────────
+    if primary is None and not is_maxed_out:
+        tc, remaining = _nearest_deficit_unlocked_target(user_id, user_level)
         if tc:
             never_qualified = up is None or up.last_activity_date is None
             if never_qualified:
                 action_id = 'streak_start'
                 label = 'Start your streak'
-                reason = f'Match {tc.name} to begin your first streak'
+                reason = f'Match {tc.name} to begin — {remaining} attempts to quota'
             else:
-                action_id = 'quota_under_150'
+                action_id = 'quota_deficit'
                 label = f'Practice {tc.name}'
-                reason = 'Build coverage — this color is under quota'
+                reason = (
+                    f'{remaining} attempt{"s" if remaining != 1 else ""} to '
+                    f'complete this color ({quota["completed_colors"]} of '
+                    f'{quota["total_tracked_colors"]} done)'
+                )
             primary = {
                 'id': action_id,
                 'type': 'practice',
                 'label': label,
                 'reason': reason,
-                'payload': {'route': 'free_play', 'target_color_id': tc.id},
+                'payload': {
+                    'route': 'free_play',
+                    'target_color_id': tc.id,
+                    'remaining': remaining,
+                },
+            }
+        else:
+            # All unlocked colors at quota but not globally maxed (locked colors remain)
+            primary = {
+                'id': 'quota_locked_colors',
+                'type': 'practice',
+                'label': 'Build your coverage',
+                'reason': (
+                    f'Level up to unlock more colors — {quota["remaining_attempts_total"]:,} '
+                    f'attempts remaining across all colors'
+                ),
+                'payload': {'route': 'free_play', 'target_color_id': None},
             }
 
-    # ── 4. Progress-focused fallback ──────────────────────────────────────
-    if primary is None:
-        _, xp_to_next = compute_level_progress(up.xp) if up else (0, 0)
-        label = f'{xp_to_next} XP to next level' if xp_to_next else 'Keep practicing'
+    # ── 4. Maxed-out maintenance ──────────────────────────────────────────
+    if primary is None and is_maxed_out:
         primary = {
-            'id': 'progress_xp',
+            'id': 'maintenance_delta_e',
             'type': 'practice',
-            'label': label,
-            'reason': 'Improve your coverage and level up',
+            'label': 'Refine your precision',
+            'reason': 'All colors mastered — keep improving your delta-E accuracy',
             'payload': {'route': 'free_play', 'target_color_id': None},
+        }
+
+    # ── 4. Fallback (should not normally reach here) ──────────────────────
+    if primary is None:
+        total_remaining = quota.get('remaining_attempts_total', 0)
+        primary = {
+            'id': 'quota_progress',
+            'type': 'practice',
+            'label': 'Build palette coverage',
+            'reason': (
+                f'{total_remaining:,} attempts remaining to complete all colors'
+                if total_remaining > 0 else 'Keep practicing!'
+            ),
+            'payload': {'route': 'free_play', 'target_color_id': quota.get('nearest_deficit_color_id')},
         }
 
     return {
@@ -180,5 +224,11 @@ def build_next_action(user_id: str, today: date = None):
             'generated_at': generated_at,
             'policy_day': policy_day,
             'policy_version': POLICY_VERSION,
+            'quota_summary': {
+                'completed_colors': quota['completed_colors'],
+                'total_tracked_colors': quota['total_tracked_colors'],
+                'remaining_attempts_total': quota['remaining_attempts_total'],
+                'is_maxed_out': is_maxed_out,
+            },
         }
     }

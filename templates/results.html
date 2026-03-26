@@ -54,6 +54,16 @@
     .back-link { margin-bottom: var(--space-md); }
   }
 
+  /* ── Mastered banner ────────────────────────────────────── */
+  .mastered-banner {
+    background: linear-gradient(135deg, #00b894, #00cec9);
+    color: #fff; border-radius: var(--radius-lg);
+    padding: var(--space-md) var(--space-lg);
+    margin-bottom: var(--space-lg);
+    text-align: center; font-weight: 700; font-size: 1.05rem;
+    box-shadow: var(--shadow-sm);
+  }
+
   /* ── Progress card ──────────────────────────────────────── */
   .progress-card {
     background: var(--surface);
@@ -77,22 +87,41 @@
     background: var(--bg-primary); border-radius: var(--radius-md);
     padding: var(--space-sm) var(--space-md);
   }
+  .ps-stat--primary { border: 2px solid var(--accent-primary); }
   .ps-stat-val { font-size: 1.6rem; font-weight: 900; }
   .ps-stat-lbl { font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 
-  .xp-bar-wrap {
+  /* Quota progress bar (primary) */
+  .quota-bar-wrap {
     background: var(--border); border-radius: 6px;
-    height: 10px; overflow: hidden; margin-bottom: var(--space-xs);
+    height: 12px; overflow: hidden; margin-bottom: var(--space-xs);
+  }
+  .quota-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00b894, #55efc4);
+    border-radius: 6px;
+    transition: width 0.6s ease;
+  }
+  .quota-bar-label {
+    display: flex; justify-content: space-between;
+    font-size: 0.72rem; color: var(--text-secondary);
+  }
+
+  /* XP bar (secondary, smaller) */
+  .xp-bar-wrap {
+    background: var(--border); border-radius: 4px;
+    height: 6px; overflow: hidden; margin-bottom: var(--space-xs);
+    margin-top: var(--space-md);
   }
   .xp-bar-fill {
     height: 100%;
     background: linear-gradient(90deg, #667eea, #764ba2);
-    border-radius: 6px;
+    border-radius: 4px;
     transition: width 0.6s ease;
   }
   .xp-bar-label {
     display: flex; justify-content: space-between;
-    font-size: 0.72rem; color: var(--text-secondary);
+    font-size: 0.68rem; color: var(--text-secondary);
   }
 
   .coverage-row {
@@ -127,6 +156,10 @@
     background: var(--bg-primary); border: 1px solid var(--border);
     border-radius: var(--radius-full); padding: 5px 12px;
     font-size: 0.78rem; font-weight: 700; color: var(--text-primary);
+  }
+  .award-badge--quota-major {
+    border-color: #00b894; background: #e8fff8;
+    box-shadow: 0 0 0 1px #00b894;
   }
   .award-badge--daily { border-color: #f9ca24; background: #fffdf0; }
   .award-badge--streak { border-color: #ff6b6b; background: #fff5f5; }
@@ -245,17 +278,23 @@
 
     <!-- Gamification profile card (injected by JS) -->
     <div id="profileSection" style="display:none;">
+      <!-- Mastered banner (shown only when is_maxed_out) -->
+      <div id="masteredBanner" class="mastered-banner" style="display:none;">
+        🎊 All Colors Mastered — Palette Complete!
+      </div>
+
       <!-- Progress card -->
       <div class="progress-card" id="progressCard">
         <div class="progress-card-title">Your Progress</div>
         <div class="progress-stats" id="progressStats"></div>
+
+        <!-- Primary: quota progress bar -->
+        <div class="quota-bar-wrap"><div class="quota-bar-fill" id="quotaBarFill"></div></div>
+        <div class="quota-bar-label" id="quotaBarLabel"></div>
+
+        <!-- Secondary: XP progress bar -->
         <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xpBarFill"></div></div>
         <div class="xp-bar-label" id="xpBarLabel"></div>
-        <div class="coverage-row">
-          <span class="coverage-label">Palette coverage</span>
-          <div class="coverage-bar-wrap"><div class="coverage-bar-fill" id="coverageBarFill"></div></div>
-          <span class="coverage-pct" id="coveragePct">0%</span>
-        </div>
       </div>
 
       <!-- Awards -->
@@ -315,7 +354,21 @@
       const stats = document.getElementById('progressStats');
       const rankColor = p.rank_color || '#ccc';
 
+      // Quota-dominant primary stats
+      const completedColors = p.completed_colors != null ? p.completed_colors : 0;
+      const totalColors = p.total_tracked_colors != null ? p.total_tracked_colors : '?';
+      const remaining = p.remaining_attempts_total != null ? p.remaining_attempts_total.toLocaleString() : '—';
+      const covPct = p.catalog_coverage_pct != null ? p.catalog_coverage_pct : 0;
+
       stats.innerHTML = `
+        <div class="ps-stat ps-stat--primary">
+          <div class="ps-stat-val">${completedColors}/${totalColors}</div>
+          <div class="ps-stat-lbl">Colors Done</div>
+        </div>
+        <div class="ps-stat ps-stat--primary">
+          <div class="ps-stat-val">${covPct.toFixed(1)}%</div>
+          <div class="ps-stat-lbl">Coverage</div>
+        </div>
         <div class="ps-stat">
           <div class="ps-stat-val" style="color:${rankColor}">${p.rank}</div>
           <div class="ps-stat-lbl">Rank</div>
@@ -323,10 +376,6 @@
         <div class="ps-stat">
           <div class="ps-stat-val">${p.level_name}</div>
           <div class="ps-stat-lbl">Level</div>
-        </div>
-        <div class="ps-stat">
-          <div class="ps-stat-val">${p.xp.toLocaleString()}</div>
-          <div class="ps-stat-lbl">Total XP</div>
         </div>
         <div class="ps-stat">
           <div class="ps-stat-val">🔥 ${p.current_streak}</div>
@@ -342,20 +391,42 @@
         </div>
       `;
 
+      // Mastered banner
+      const masteredBanner = document.getElementById('masteredBanner');
+      if (masteredBanner) {
+        masteredBanner.style.display = p.is_maxed_out ? '' : 'none';
+      }
+
+      // Primary bar: quota coverage
+      const quotaBarPct = p.level_progress_pct != null ? p.level_progress_pct : covPct;
+      document.getElementById('quotaBarFill').style.width = quotaBarPct + '%';
+      if (p.is_maxed_out) {
+        document.getElementById('quotaBarLabel').innerHTML =
+          '<span>All colors mastered</span><span>100%</span>';
+      } else {
+        const quotaLimit = quota || 150;
+        const remAttempts = p.remaining_attempts_total != null ? p.remaining_attempts_total.toLocaleString() : '—';
+        document.getElementById('quotaBarLabel').innerHTML =
+          `<span>${completedColors}/${totalColors} colors at quota</span>` +
+          `<span>${remAttempts} attempts remaining</span>`;
+      }
+
+      // Secondary bar: XP (reinforcement)
       const xpPct = p.xp_to_next_level > 0
         ? Math.round(p.xp_in_level / (p.xp_in_level + p.xp_to_next_level) * 100)
         : 100;
       document.getElementById('xpBarFill').style.width = xpPct + '%';
       document.getElementById('xpBarLabel').innerHTML =
-        `<span>${p.xp_in_level} XP in level</span>` +
-        (p.xp_to_next_level > 0 ? `<span>${p.xp_to_next_level} to next</span>` : '<span>Max level!</span>');
-
-      const covPct = p.catalog_coverage_pct || 0;
-      document.getElementById('coverageBarFill').style.width = covPct + '%';
-      document.getElementById('coveragePct').textContent = covPct.toFixed(1) + '%';
+        `<span>XP: ${(p.xp || 0).toLocaleString()}</span>` +
+        (p.xp_to_next_level > 0 ? `<span>+${p.xp_to_next_level} to next level</span>` : '<span>Max XP level</span>');
     }
 
-    function awardTypeClass(key) {
+    function awardTypeClass(key, meta) {
+      // Quota-major awards get a distinct style
+      const quotaMajorKeys = ['all_colors_complete'];
+      if (quotaMajorKeys.includes(key)) return 'award-badge--quota-major';
+      if (key.startsWith('quota_milestone_')) return 'award-badge--quota-major';
+      if (key.startsWith('coverage_') && meta && meta.threshold === 150) return 'award-badge--quota-major';
       if (key.startsWith('daily_champion')) return 'award-badge--daily';
       if (key.startsWith('streak_')) return 'award-badge--streak';
       if (key.startsWith('level_')) return 'award-badge--level';
@@ -363,7 +434,10 @@
       return 'award-badge--achievement';
     }
 
-    function awardIcon(key) {
+    function awardIcon(key, meta) {
+      if (key === 'all_colors_complete') return '🎊';
+      if (key.startsWith('quota_milestone_')) return '🏆';
+      if (key.startsWith('coverage_') && meta && meta.threshold === 150) return '✅';
       if (key.startsWith('daily_champion')) return '🏆';
       if (key.startsWith('streak_')) return '🔥';
       if (key.startsWith('level_')) return '⬆️';
@@ -373,6 +447,11 @@
     }
 
     function awardLabel(key, meta) {
+      if (key === 'all_colors_complete') return 'All Colors Mastered!';
+      if (key.startsWith('quota_milestone_')) {
+        const pct = meta && meta.pct ? meta.pct : key.replace('quota_milestone_', '').replace('pct', '');
+        return pct + '% Coverage Milestone';
+      }
       if (key.startsWith('daily_champion')) return 'Daily Champion' + (meta && meta.date ? ' ' + meta.date : '');
       if (key.startsWith('streak_')) return (meta && meta.days ? meta.days : '?') + '-Day Streak';
       if (key.startsWith('level_')) return 'Level ' + (meta && meta.level ? meta.level : '?');
@@ -392,9 +471,15 @@
         section.style.display = '';
         return;
       }
-      grid.innerHTML = awards.map(a => {
-        const cls = awardTypeClass(a.key);
-        const icon = awardIcon(a.key);
+      // Sort: quota-major first, then by unlocked_at desc
+      const sorted = [...awards].sort((a, b) => {
+        const aMajor = awardTypeClass(a.key, a.metadata) === 'award-badge--quota-major' ? 0 : 1;
+        const bMajor = awardTypeClass(b.key, b.metadata) === 'award-badge--quota-major' ? 0 : 1;
+        return aMajor - bMajor;
+      });
+      grid.innerHTML = sorted.map(a => {
+        const cls = awardTypeClass(a.key, a.metadata);
+        const icon = awardIcon(a.key, a.metadata);
         const label = awardLabel(a.key, a.metadata);
         return `<div class="award-badge ${cls}">${icon} ${label}</div>`;
       }).join('');
@@ -406,15 +491,30 @@
       const section = document.getElementById('colorStatsSection');
       if (!colorStats || colorStats.length === 0) return;
 
-      // Sort by attempt_count descending
-      const sorted = [...colorStats].sort((a, b) => b.attempt_count - a.attempt_count);
+      const q = quota || 150;
+
+      // Sort: at-quota colors last, then by remaining ascending (nearest to done first)
+      const sorted = [...colorStats].sort((a, b) => {
+        const aRem = Math.max(0, q - a.attempt_count);
+        const bRem = Math.max(0, q - b.attempt_count);
+        if (aRem === 0 && bRem === 0) return 0;
+        if (aRem === 0) return 1;
+        if (bRem === 0) return -1;
+        return aRem - bRem;
+      });
 
       list.innerHTML = sorted.map(s => {
-        const pct = Math.min(100, Math.round(s.attempt_count / quota * 100));
+        const pct = Math.min(100, Math.round(s.attempt_count / q * 100));
+        const remaining = Math.max(0, q - s.attempt_count);
+        const atQuota = s.attempt_count >= q;
+        const barColor = atQuota ? '#00b894' : '#667eea';
+        const countLabel = atQuota
+          ? `${s.attempt_count}/${q} ✅`
+          : `${s.attempt_count}/${q}`;
         return `<div class="color-stat-bar-row">
           <span class="csr-label">Color #${s.target_color_id}</span>
-          <div class="csr-bar-wrap"><div class="csr-bar-fill" style="width:${pct}%"></div></div>
-          <span class="csr-count">${s.attempt_count}/${quota}</span>
+          <div class="csr-bar-wrap"><div class="csr-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+          <span class="csr-count">${countLabel}</span>
         </div>`;
       }).join('');
 

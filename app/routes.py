@@ -22,6 +22,8 @@ from .gamification import (
     get_quota_ordered_catalog,
     grant_daily_champion,
     get_user_profile,
+    compute_quota_progress,
+    compute_level_from_quota,
     COVERAGE_QUOTA,
     STREAK_FREEZE_CAP,
 )
@@ -238,7 +240,7 @@ def save_session():
                 return jsonify({
                     'status': 'success',
                     'duplicate': True,
-                    'progress': build_progress_response(user_id, up, _catalog_size()),
+                    'progress': build_progress_response(user_id, up),
                     'new_awards': [],
                     'xp_earned': 0,
                 })
@@ -278,7 +280,7 @@ def save_session():
             'new_awards': new_awards,
             'streak_event': streak_event,
             'level_up': level_up,
-            'progress': build_progress_response(user_id, up, _catalog_size()),
+            'progress': build_progress_response(user_id, up),
             **build_next_action(user_id),
         })
 
@@ -308,7 +310,7 @@ def save_skip():
                 return jsonify({
                     'status': 'success',
                     'duplicate': True,
-                    'progress': build_progress_response(user_id, up, _catalog_size()),
+                    'progress': build_progress_response(user_id, up),
                     'new_awards': [],
                     'xp_earned': 0,
                 })
@@ -354,7 +356,7 @@ def save_skip():
             'new_awards': new_awards,
             'streak_event': streak_event,
             'level_up': level_up,
-            'progress': build_progress_response(user_id, up, _catalog_size()),
+            'progress': build_progress_response(user_id, up),
             **build_next_action(user_id),
         })
 
@@ -376,7 +378,7 @@ def get_user_progress_route():
         up = UserProgress.query.filter_by(user_id=user_id).first()
         return jsonify({
             'status': 'success',
-            'progress': build_progress_response(user_id, up, _catalog_size()),
+            'progress': build_progress_response(user_id, up),
             **build_next_action(user_id),
         })
     except Exception as e:
@@ -390,7 +392,7 @@ def get_user_profile_route():
     if not user_id:
         return jsonify({'status': 'error', 'message': 'user_id required'}), 400
     try:
-        progress, awards, color_stats = get_user_profile(user_id, _catalog_size())
+        progress, awards, color_stats = get_user_profile(user_id)
         return jsonify({
             'status': 'success',
             'progress': progress,
@@ -800,21 +802,70 @@ def push_send_daily():
     failed = 0
     dead_endpoints = []
 
-    payload = json.dumps({
-        'title': 'ShadeMatch Daily Challenge',
-        'body': "Today's palette challenge is live — can you match every shade?",
-        'url': '/',
-        'icon': '/static/icons/icon-192.png',
-    })
+    def _build_push_payload(user_id):
+        """Return personalized push payload dict for this user."""
+        try:
+            quota = compute_quota_progress(user_id)
+            if quota['is_maxed_out']:
+                return {
+                    'title': 'ShadeMatch',
+                    'body': "All colors mastered — keep your streak alive with today's challenge!",
+                    'url': '/',
+                    'icon': '/static/icons/icon-192.png',
+                }
+            # Find nearest actionable (unlocked) deficit color
+            user_level = compute_level_from_quota(quota['coverage_ratio'], quota['is_maxed_out'])
+            color_map = quota['color_quota_map']
+            tc_rows = (
+                TargetColor.query
+                .filter(TargetColor.level_required <= user_level)
+                .order_by(TargetColor.catalog_order.asc())
+                .all()
+            )
+            best_tc = None
+            best_rem = None
+            for tc in tc_rows:
+                rem = color_map.get(tc.id, {}).get('remaining', COVERAGE_QUOTA)
+                if rem > 0 and (best_rem is None or rem < best_rem):
+                    best_tc = tc
+                    best_rem = rem
+
+            completed = quota['completed_colors']
+            total = quota['total_tracked_colors']
+            if best_tc:
+                body = (
+                    f"Today's challenge is live — {best_tc.name} needs "
+                    f"{best_rem} more attempt{'s' if best_rem != 1 else ''} "
+                    f"({completed}/{total} colors done)"
+                )
+            else:
+                body = (
+                    f"Today's palette challenge is live — "
+                    f"{completed}/{total} colors complete so far!"
+                )
+            return {
+                'title': 'ShadeMatch Daily Challenge',
+                'body': body,
+                'url': '/',
+                'icon': '/static/icons/icon-192.png',
+            }
+        except Exception:
+            return {
+                'title': 'ShadeMatch Daily Challenge',
+                'body': "Today's palette challenge is live — can you match every shade?",
+                'url': '/',
+                'icon': '/static/icons/icon-192.png',
+            }
 
     for sub in subs:
+        payload_dict = _build_push_payload(sub.user_id)
         try:
             webpush(
                 subscription_info={
                     'endpoint': sub.endpoint,
                     'keys': {'p256dh': sub.p256dh, 'auth': sub.auth},
                 },
-                data=payload,
+                data=json.dumps(payload_dict),
                 vapid_private_key=vapid_private,
                 vapid_claims={'sub': 'mailto:admin@shadematch.app'},
             )
