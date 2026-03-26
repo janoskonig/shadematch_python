@@ -538,20 +538,29 @@ document.addEventListener('DOMContentLoaded', async () => {
   trackEvent('app_ready');
 
   function weightedRandomSelection(items, weights, count) {
-    const totalWeight = weights.reduce((s, w) => s + w, 0);
-    const cumulative = [];
-    let cum = 0;
-    for (let i = 0; i < weights.length; i++) { cum += weights[i]; cumulative.push(cum); }
-    const selected = []; const usedIdx = new Set();
-    let attempts = 0;
-    while (selected.length < count && selected.length < items.length && attempts < 1000) {
-      attempts++;
-      const r = Math.random() * totalWeight;
-      for (let i = 0; i < cumulative.length; i++) {
-        if (r <= cumulative[i] && !usedIdx.has(i)) {
-          selected.push(items[i]); usedIdx.add(i); break;
+    const n = Math.min(count, items.length);
+    if (n <= 0) return [];
+
+    // Proper weighted sampling without replacement.
+    const pool = items.map((item, i) => ({
+      item,
+      weight: Number.isFinite(weights[i]) && weights[i] > 0 ? weights[i] : 1,
+    }));
+
+    const selected = [];
+    while (selected.length < n && pool.length > 0) {
+      const total = pool.reduce((s, e) => s + e.weight, 0);
+      let r = Math.random() * total;
+      let pickIdx = pool.length - 1;
+      for (let i = 0; i < pool.length; i++) {
+        r -= pool[i].weight;
+        if (r <= 0) {
+          pickIdx = i;
+          break;
         }
       }
+      selected.push(pool[pickIdx].item);
+      pool.splice(pickIdx, 1);
     }
     return selected;
   }
@@ -562,8 +571,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Server annotates `unlocked` (level_required <= user level) and `under_quota`
     // when a user_id is provided. Fall back to all colors when not logged in.
     const hasLevelData = sorted.some(c => 'unlocked' in c);
-    const eligible = hasLevelData ? sorted.filter(c => c.unlocked) : sorted;
-    const pool = eligible.length > 0 ? eligible : sorted;
+    const unlocked = hasLevelData ? sorted.filter(c => c.unlocked) : sorted;
+
+    // Prevent early-game repetition: if too few unlocked colors exist,
+    // blend in a few nearest locked colors so rounds stay varied/motivating.
+    let pool = unlocked.length > 0 ? [...unlocked] : [...sorted];
+    if (hasLevelData && unlocked.length < 8) {
+      const locked = sorted
+        .filter(c => !c.unlocked)
+        .sort((a, b) => {
+          const la = a.level_required ?? 999;
+          const lb = b.level_required ?? 999;
+          if (la !== lb) return la - lb;
+          return a.catalog_order - b.catalog_order;
+        });
+      const needed = Math.min(8 - unlocked.length, locked.length);
+      pool.push(...locked.slice(0, needed));
+    }
 
     const poolBasic = pool.filter(c => c.type === 'basic');
     const poolSkin = pool.filter(c => c.type === 'skin');
