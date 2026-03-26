@@ -9,6 +9,8 @@ let currentSessionSaved = false;
 window.lastMixDeltaE = NaN;
 window.shadeMatchTargetRgb = [255, 255, 255];
 
+const MATCH_PERFECT_DELTA_E = 0.01;
+
 // ── UUID ──────────────────────────────────────────────────────────────────
 function generateUUID() {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
@@ -182,7 +184,10 @@ function updateMatchBar(deltaE) {
   const progress = Math.max(0, Math.min(100, 100 - deltaE * 2));
   fill.style.width = progress + '%';
 
-  if (progress < 33) {
+  if (deltaE <= MATCH_PERFECT_DELTA_E) {
+    fill.style.backgroundColor = 'var(--accent-success)';
+    label.textContent = 'Match!';
+  } else if (progress < 33) {
     fill.style.backgroundColor = 'var(--accent-danger)';
     label.textContent = 'Far';
   } else if (progress < 66) {
@@ -192,8 +197,9 @@ function updateMatchBar(deltaE) {
     fill.style.backgroundColor = '#8BC34A';
     label.textContent = 'Very close';
   } else {
-    fill.style.backgroundColor = 'var(--accent-success)';
-    label.textContent = 'Match!';
+    // High visual match but not within perfect threshold — keep encouraging
+    fill.style.backgroundColor = '#8BC34A';
+    label.textContent = 'Nearly there!';
   }
 }
 
@@ -515,7 +521,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.lastMixDeltaE = data.delta_e;
         updateMatchBar(data.delta_e);
 
-        if (data.delta_e <= 0.01) {
+        if (data.delta_e <= MATCH_PERFECT_DELTA_E) {
           stopTimer();
           const uuid = generateUUID();
           const session = {
@@ -594,7 +600,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const isAfterStop = mc && mc.classList.contains('mixing-disabled');
     const alreadyCompletedThisColor = window.currentSessionSaved === true;
 
-    const shouldSaveSkip = currentDeltaE > 0.01 && !isAfterStop && !alreadyCompletedThisColor;
+    const shouldSaveSkip = currentDeltaE > MATCH_PERFECT_DELTA_E && !isAfterStop && !alreadyCompletedThisColor;
 
     if (shouldSaveSkip) {
       const skipPerception = await showSkipPerceptionModal();
