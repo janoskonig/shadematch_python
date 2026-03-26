@@ -5,6 +5,8 @@ import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 console.log('✅ main.js loaded');
 let sessionLogs = [];
 let currentSessionSaved = false;
+// Incremented on every color change (resetMix); used to discard stale /calculate responses.
+let _calcColorGen = 0;
 
 window.lastMixDeltaE = NaN;
 window.shadeMatchTargetRgb = [255, 255, 255];
@@ -418,6 +420,7 @@ function resetMix() {
   const matchContainer = document.getElementById('matchBarContainer');
   if (matchContainer) matchContainer.style.display = 'none';
 
+  _calcColorGen++;          // invalidate any in-flight /calculate responses for the old color
   currentSessionSaved = false;
   window.currentSessionSaved = false;
 }
@@ -646,6 +649,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     updateBox('currentMix', mixedRGB);
     document.getElementById('mixedRgbValues').textContent = `RGB: [${mixedRGB.join(', ')}]`;
 
+    const _myGen = _calcColorGen;  // snapshot before async gap
     fetch('/calculate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -653,11 +657,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     })
       .then(res => res.json())
       .then(data => {
+        if (_calcColorGen !== _myGen) return;  // response belongs to a previous color — discard
         if (data.error) return console.error('Server error:', data.error);
         window.lastMixDeltaE = data.delta_e;
         updateMatchBar(data.delta_e);
 
-        if (isPerfectMatch(data.delta_e)) {
+        if (isPerfectMatch(data.delta_e) && !currentSessionSaved) {
           stopTimer();
           const uuid = generateUUID();
           const session = {
@@ -671,10 +676,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             timestamp: new Date().toISOString(),
             skipped: false,
           };
-          sessionLogs.push(session);
-          saveSessionToServer(session);
           currentSessionSaved = true;
           window.currentSessionSaved = true;
+          sessionLogs.push(session);
+          saveSessionToServer(session);
           setControlState('completed');
         }
       });
