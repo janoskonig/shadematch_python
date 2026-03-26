@@ -33,9 +33,14 @@ RANK_TIERS = [
 STREAK_MILESTONES = [3, 7, 14, 30, 60, 100]
 
 # Per-color reinforcement milestones (< COVERAGE_QUOTA only; 150 is quota_major)
+# This gives players a steady stream of smaller wins before full mastery.
 PER_COLOR_REINFORCEMENT_MILESTONES = [
-    (25,  'Quarter Coverage'),
-    (75,  'Three Quarters'),
+    (10,  'Warm-Up Complete'),
+    (25,  'Getting Started'),
+    (50,  'Halfway There'),
+    (75,  'Strong Progress'),
+    (100, 'In the Zone'),
+    (125, 'Almost Mastered'),
 ]
 
 # Global quota coverage % milestones (quota_major)
@@ -402,7 +407,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
         delta_quota_units = new_contrib - old_contrib
         color_crossed_quota = (old_count < COVERAGE_QUOTA <= stats.attempt_count)
 
-        # Per-color reinforcement milestones (25, 75 attempts)
+        # Per-color reinforcement milestones (incremental chunks before quota completion)
         for threshold, label in PER_COLOR_REINFORCEMENT_MILESTONES:
             if old_count < threshold <= stats.attempt_count:
                 _, is_new = _grant_award(

@@ -457,7 +457,8 @@
       if (key.startsWith('level_')) return 'Level ' + (meta && meta.level ? meta.level : '?');
       if (key.startsWith('coverage_')) {
         const t = meta && meta.threshold ? meta.threshold : '?';
-        return t + '/150 attempts';
+        if (meta && meta.threshold === 150) return 'Color mastered (150 attempts)';
+        return t + ' attempts milestone';
       }
       if (key === 'first_perfect_match') return 'First Perfect Match';
       return key.replace(/_/g, ' ');
