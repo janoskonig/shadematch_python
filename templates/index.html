@@ -84,6 +84,45 @@
   margin-top: 8px;
 }
 .push-optin-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
+
+/* ── Next-action CTA ─────────────────────────────────────────── */
+.next-action-cta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(102,126,234,0.1), rgba(118,75,162,0.1));
+  border: 1px solid rgba(102,126,234,0.3);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  cursor: default;
+  flex-wrap: wrap;
+}
+.na-icon { font-size: 1.1rem; flex-shrink: 0; }
+.na-label { font-weight: 700; color: var(--text-primary); }
+.na-reason { color: var(--text-secondary); font-size: 0.75rem; flex-basis: 100%; margin-top: 2px; }
+
+/* ── PWA install CTA ─────────────────────────────────────────── */
+.pwa-install-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+.pwa-install-body { display: flex; align-items: center; gap: 10px; }
+.pwa-install-icon { font-size: 1.4rem; }
+.pwa-install-text { display: flex; flex-direction: column; gap: 2px; }
+.pwa-install-text strong { font-size: 0.85rem; }
+.pwa-install-text span { color: var(--text-secondary); font-size: 0.75rem; }
+.pwa-ios-hint { font-size: 0.72rem !important; margin-top: 4px; }
+.pwa-install-actions { display: flex; gap: 6px; flex-shrink: 0; }
 </style>
 {% endblock %}
 
@@ -145,6 +184,23 @@
         <p class="generated-id" id="generatedId"></p>
         <p style="text-align:center; color:var(--text-secondary);">Please memorize this ID. You will need it to log in next time.</p>
         <button id="continueBtn" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-lg);">Continue</button>
+      </div>
+
+      <!-- Post-register: push opt-in CTA -->
+      <div id="postRegisterSection" style="display:none;">
+        <div style="text-align:center;margin-bottom:var(--space-md);">
+          <div style="font-size:2.5rem;margin-bottom:12px;">🔔</div>
+          <h2 class="modal-title">Enable daily reminders?</h2>
+          <p class="modal-subtitle">Get notified when the daily challenge goes live — one tap, turn off any time.</p>
+        </div>
+        <button id="postRegPushBtn" class="btn btn-primary btn-full btn-lg"
+                onclick="window._postRegPushOptIn && window._postRegPushOptIn()">
+          Enable reminders
+        </button>
+        <button class="btn btn-secondary btn-full" style="margin-top:8px;"
+                onclick="window.location.href='/ishihara-test'">
+          Not now
+        </button>
       </div>
     </div>
   </div>
@@ -281,6 +337,33 @@
               title="Get notified when the daily challenge starts">
         🔔 Enable daily reminders
       </button>
+
+      <!-- Next-action CTA (populated by renderNextAction after saves/progress load) -->
+      <div id="nextActionCta" class="next-action-cta" style="display:none;"></div>
+
+      <!-- PWA install affordance -->
+      <div id="pwaInstallCta" class="pwa-install-cta" style="display:none;">
+        <div class="pwa-install-body">
+          <span class="pwa-install-icon">📲</span>
+          <div class="pwa-install-text">
+            <strong>Install ShadeMatch</strong>
+            <span>Quick access from your home screen</span>
+            <span id="pwaIosHint" class="pwa-ios-hint" style="display:none;">
+              Tap <strong>Share</strong> → <strong>Add to Home Screen</strong>
+            </span>
+          </div>
+        </div>
+        <div class="pwa-install-actions">
+          <button id="pwaInstallBtn" class="btn btn-primary" style="font-size:0.8rem;padding:6px 14px;"
+                  onclick="window.triggerPwaInstall && window.triggerPwaInstall()">
+            Install
+          </button>
+          <button class="btn btn-secondary" style="font-size:0.8rem;padding:6px 10px;"
+                  onclick="window.dismissPwaInstall && window.dismissPwaInstall()">
+            ✕
+          </button>
+        </div>
+      </div>
     </div>
 
     <!-- Sidebar (desktop) -->
@@ -395,6 +478,8 @@
     document.getElementById('loginSection').style.display = section === 'login' ? '' : 'none';
     document.getElementById('idDisplaySection').style.display = section === 'idDisplay' ? '' : 'none';
     document.getElementById('colorTestSection').style.display = 'none';
+    var pr = document.getElementById('postRegisterSection');
+    if (pr) pr.style.display = section === 'postRegister' ? '' : 'none';
   }
 
   function showUserModal() {
@@ -468,9 +553,19 @@
       showUserModal();
     };
 
-    document.getElementById('continueBtn').onclick = function() {
+      document.getElementById('continueBtn').onclick = function() {
       document.getElementById('userModal').style.display = 'none';
       disableColorMixing();
+    };
+
+    /* Post-register push opt-in — reuses the same subscribe logic */
+    window._postRegPushOptIn = async function() {
+      var btn = document.getElementById('postRegPushBtn');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Setting up…'; }
+      try {
+        await window.requestPushPermission();
+      } catch(e) {}
+      window.location.href = '/ishihara-test';
     };
 
     document.getElementById('showLoginBtn').onclick = function() { showSection('login'); };
@@ -507,7 +602,17 @@
           localStorage.setItem('userBirthdate', birthdate);
           localStorage.setItem('userGender', gender);
           localStorage.setItem('userId', data.userId);
-          window.location.href = '/ishihara-test';
+          window.currentUserId = data.userId;
+          // Show push opt-in step before continuing — requires a user gesture (just registered)
+          var pushSection = document.getElementById('postRegisterSection');
+          if (pushSection && 'Notification' in window && 'serviceWorker' in navigator
+              && Notification.permission !== 'granted'
+              && !localStorage.getItem('pushSubscribed')
+              && Notification.permission !== 'denied') {
+            showSection('postRegister');
+          } else {
+            window.location.href = '/ishihara-test';
+          }
         } else {
           var ed = document.getElementById('birthdateError');
           if (ed) { ed.textContent = data.message; ed.style.display = 'block'; }

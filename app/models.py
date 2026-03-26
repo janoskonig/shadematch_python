@@ -149,3 +149,19 @@ class PushSubscription(db.Model):
     p256dh = db.Column(db.Text, nullable=False)
     auth = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class AnalyticsEvent(db.Model):
+    """
+    Lightweight client-side event log.
+    Events: app_opened | app_ready | first_palette_interaction | save_attempt
+    Metadata must always include client_session_id (UUID per browser session).
+    """
+    __tablename__ = 'analytics_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(6), nullable=True)
+    event = db.Column(db.String(64), nullable=False)
+    ts = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    metadata_json = db.Column(db.JSON, nullable=True)
+    received_at = db.Column(db.DateTime, default=datetime.utcnow)

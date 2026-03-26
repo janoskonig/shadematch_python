@@ -20,6 +20,36 @@ function generateUUID() {
   });
 }
 
+// ── Client session ID (one per browser session, for analytics funnel) ─────
+const CLIENT_SESSION_ID = (() => {
+  let id = sessionStorage.getItem('csid');
+  if (!id) { id = generateUUID(); sessionStorage.setItem('csid', id); }
+  return id;
+})();
+
+// ── Analytics ─────────────────────────────────────────────────────────────
+const ALLOWED_EVENTS = new Set([
+  'app_opened', 'app_ready', 'first_palette_interaction', 'save_attempt',
+]);
+
+function trackEvent(event, metadata = {}) {
+  if (!ALLOWED_EVENTS.has(event)) return;
+  const payload = {
+    event,
+    ts: new Date().toISOString(),
+    user_id: window.currentUserId || localStorage.getItem('userId') || null,
+    metadata: { client_session_id: CLIENT_SESSION_ID, ...metadata },
+  };
+  fetch('/api/analytics/event', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  }).catch(() => {});
+}
+
+// Fire app_opened immediately on module load
+trackEvent('app_opened');
+
 // ── Cookie Consent ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {
   setTimeout(() => {
@@ -98,7 +128,10 @@ async function loadAndRenderProgress() {
     });
     if (!res.ok) return;
     const data = await res.json();
-    if (data.status === 'success') renderProgressStrip(data.progress);
+    if (data.status === 'success') {
+      renderProgressStrip(data.progress);
+      if (data.next_action) renderNextAction(data.next_action);
+    }
   } catch { /* silent */ }
 }
 
@@ -126,37 +159,105 @@ function renderProgressStrip(p) {
   strip.style.display = 'flex';
 }
 
-function handleProgressionResponse(data) {
+// ── Post-save reinforcement sequencer ────────────────────────────────────
+// Monotonic counter: only the most-recent save response may drive UI updates.
+// Older responses cancel all pending timers and become no-ops.
+let _seqId = 0;
+
+// Gap between phases (ms)
+const SEQ_GAP = 420;
+
+function _delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function handleProgressionResponse(data) {
   if (!data || data.status !== 'success' || data.duplicate) return;
 
+  // Claim a sequence slot; abort if a newer response arrives mid-sequence.
+  const mySeq = ++_seqId;
+  const stale = () => mySeq !== _seqId;
+
+  // Phase 1 — Progress strip (render immediately, no toast)
   if (data.progress) renderProgressStrip(data.progress);
 
+  await _delay(SEQ_GAP); if (stale()) return;
+
+  // Phase 2 — XP
   if (data.xp_earned && data.xp_earned > 0) {
     showToast(`+${data.xp_earned} XP`, 'xp', 2500);
   }
 
-  if (data.level_up) {
-    showToast(`🎉 Level Up! You reached ${data.level_up.to}`, 'levelup', 5000);
-  }
+  await _delay(SEQ_GAP); if (stale()) return;
 
-  if (data.streak_event === 'freeze_consumed') {
-    const freeze = data.progress ? data.progress.streak_freeze_available : '?';
-    showToast(`🧊 Streak protected — 1 freeze used (${freeze} left)`, 'freeze', 5000);
+  // Phase 3 — Streak event
+  if (data.streak_event === 'started') {
+    showToast('🔥 Streak started — play again tomorrow!', 'streak', 3500);
   } else if (data.streak_event === 'incremented' && data.progress) {
     const s = data.progress.current_streak;
-    if (s > 0 && s % 5 === 0) {
-      showToast(`🔥 ${s}-day streak!`, 'streak', 3500);
-    }
+    showToast(`🔥 ${s}-day streak!`, 'streak', 3500);
+  } else if (data.streak_event === 'freeze_consumed') {
+    const freeze = data.progress ? data.progress.streak_freeze_available : '?';
+    showToast(`🧊 Streak protected — 1 freeze used (${freeze} left)`, 'freeze', 5000);
   } else if (data.streak_event === 'reset') {
     showToast('Streak reset. Keep going!', 'info', 3000);
   }
 
+  await _delay(SEQ_GAP); if (stale()) return;
+
+  // Phase 4 — Level-up (high salience — own phase before badges)
+  if (data.level_up) {
+    showToast(`🎉 Level Up! You reached Level ${data.level_up.to}`, 'levelup', 5500);
+    await _delay(SEQ_GAP * 2); if (stale()) return;
+  }
+
+  // Phase 5 — Badges
   if (Array.isArray(data.new_awards)) {
     for (const award of data.new_awards) {
       const icon = award.icon || '🏅';
-      showToast(`${icon} New badge: ${award.name}`, 'award', 5000);
+      showToast(`${icon} ${award.name}`, 'award', 4500);
+      await _delay(SEQ_GAP); if (stale()) return;
     }
   }
+
+  // Phase 6 — Next action CTA
+  if (data.next_action) {
+    renderNextAction(data.next_action);
+  }
+}
+
+// ── Next-action renderer ──────────────────────────────────────────────────
+function renderNextAction(na) {
+  if (!na || !na.primary) return;
+  const p = na.primary;
+
+  // Find or create the next-action slot inside the progress strip area
+  let el = document.getElementById('nextActionCta');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'nextActionCta';
+    el.className = 'next-action-cta';
+    // Insert after progressStrip if it exists, else append to body
+    const strip = document.getElementById('progressStrip');
+    if (strip && strip.parentNode) {
+      strip.parentNode.insertBefore(el, strip.nextSibling);
+    } else {
+      document.body.appendChild(el);
+    }
+  }
+
+  const typeIcon = {
+    daily_challenge: '📅',
+    practice: '🎨',
+    navigate: '→',
+  }[p.type] || '→';
+
+  el.innerHTML = `
+    <span class="na-icon">${typeIcon}</span>
+    <span class="na-label">${p.label}</span>
+    <span class="na-reason">${p.reason}</span>
+  `;
+  el.dataset.actionId = p.id;
+  el.dataset.route = (p.payload && p.payload.route) || '';
+  el.style.display = 'flex';
 }
 
 // ── Badge helper ──────────────────────────────────────────────────────────
@@ -354,6 +455,8 @@ async function saveSessionToServer(session) {
     };
   }
 
+  trackEvent('save_attempt', { skipped: sessionData.skipped || false });
+
   try {
     const res = await fetch('/save_session', {
       method: 'POST',
@@ -397,6 +500,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     alert('Could not load target colors. Ensure the database is migrated (npm run db:migrate) and try again.');
     return;
   }
+
+  // app_ready: catalog loaded, user context available, ready to play
+  trackEvent('app_ready');
 
   function weightedRandomSelection(items, weights, count) {
     const totalWeight = weights.reduce((s, w) => s + w, 0);
@@ -617,6 +723,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         delta_e: currentDeltaE,
         skip_perception: skipPerception,
       };
+      trackEvent('save_attempt', { skipped: true });
       try {
         const res = await fetch('/save_skip', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -724,6 +831,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // ── Palette interaction ────────────────────────────────────────────────
+  let _firstInteractionFired = false;
   document.querySelectorAll('.color-circle').forEach(circle => {
     circle.addEventListener('click', (e) => {
       e.preventDefault();
@@ -731,6 +839,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       dropCounts[color]++;
       circle.textContent = dropCounts[color];
       updateBadge(color, dropCounts[color]);
+
+      if (!_firstInteractionFired) {
+        _firstInteractionFired = true;
+        trackEvent('first_palette_interaction', { color });
+      }
 
       circle.classList.add('is-tapped');
       setTimeout(() => circle.classList.remove('is-tapped'), 200);
@@ -813,6 +926,65 @@ document.addEventListener('DOMContentLoaded', function () {
       document.getElementById('loginSection').style.display = 'none';
       document.getElementById('registerSection').style.display = 'block';
     });
+  }
+});
+
+// ── PWA install affordance ────────────────────────────────────────────────
+let _deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  // Show install CTA if user hasn't dismissed it
+  if (!localStorage.getItem('pwaDismissed')) {
+    _showPwaInstallCta();
+  }
+});
+
+window.addEventListener('appinstalled', () => {
+  _hidePwaInstallCta();
+  localStorage.setItem('pwaDismissed', '1');
+  _deferredInstallPrompt = null;
+});
+
+function _showPwaInstallCta() {
+  let el = document.getElementById('pwaInstallCta');
+  if (!el) return;
+  el.style.display = 'flex';
+}
+
+function _hidePwaInstallCta() {
+  const el = document.getElementById('pwaInstallCta');
+  if (el) el.style.display = 'none';
+}
+
+window.triggerPwaInstall = async function () {
+  if (_deferredInstallPrompt) {
+    _deferredInstallPrompt.prompt();
+    const { outcome } = await _deferredInstallPrompt.userChoice;
+    localStorage.setItem('pwaDismissed', '1');
+    _hidePwaInstallCta();
+    _deferredInstallPrompt = null;
+  }
+};
+
+window.dismissPwaInstall = function () {
+  localStorage.setItem('pwaDismissed', '1');
+  _hidePwaInstallCta();
+};
+
+// On DOMContentLoaded: check if already dismissed, show iOS fallback if applicable
+document.addEventListener('DOMContentLoaded', function () {
+  if (localStorage.getItem('pwaDismissed')) return;
+  // iOS Safari: no beforeinstallprompt — show manual instructions
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isInStandaloneMode = window.navigator.standalone === true;
+  if (isIos && !isInStandaloneMode) {
+    _showPwaInstallCta();
+    const hint = document.getElementById('pwaIosHint');
+    if (hint) hint.style.display = '';
+    const btn = document.getElementById('pwaInstallBtn');
+    if (btn) btn.style.display = 'none';
   }
 });
 

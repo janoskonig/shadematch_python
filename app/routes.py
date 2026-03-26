@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, send_from_directory
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import hashlib
 import random as _random
 from . import db
@@ -7,6 +7,7 @@ from .models import (
     User, MixingSession, TargetColor,
     UserProgress, UserTargetColorStats, UserAward,
     DailyChallengeRun, DailyChallengeWinner, PushSubscription,
+    AnalyticsEvent,
 )
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb, reverse_engineer_recipe
@@ -24,6 +25,7 @@ from .gamification import (
     COVERAGE_QUOTA,
     STREAK_FREEZE_CAP,
 )
+from .next_action import build_next_action
 
 main = Blueprint('main', __name__)
 
@@ -198,10 +200,12 @@ def get_target_colors():
         for tc in rows
     ]
 
+    next_action_data = {}
     if user_id:
         colors = get_quota_ordered_catalog(user_id, colors)
+        next_action_data = build_next_action(user_id)
 
-    return jsonify({'status': 'success', 'colors': colors})
+    return jsonify({'status': 'success', 'colors': colors, **next_action_data})
 
 
 # ── Calculate ──────────────────────────────────────────────────────────────
@@ -275,6 +279,7 @@ def save_session():
             'streak_event': streak_event,
             'level_up': level_up,
             'progress': build_progress_response(user_id, up, _catalog_size()),
+            **build_next_action(user_id),
         })
 
     except Exception as e:
@@ -350,6 +355,7 @@ def save_skip():
             'streak_event': streak_event,
             'level_up': level_up,
             'progress': build_progress_response(user_id, up, _catalog_size()),
+            **build_next_action(user_id),
         })
 
     except Exception as e:
@@ -371,6 +377,7 @@ def get_user_progress_route():
         return jsonify({
             'status': 'success',
             'progress': build_progress_response(user_id, up, _catalog_size()),
+            **build_next_action(user_id),
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -477,6 +484,7 @@ def daily_challenge_today():
     ]
 
     already_submitted = False
+    next_action_data = {}
     if user_id:
         final_run = (
             DailyChallengeRun.query
@@ -484,12 +492,14 @@ def daily_challenge_today():
             .first()
         )
         already_submitted = final_run is not None
+        next_action_data = build_next_action(user_id)
 
     return jsonify({
         'status': 'success',
         'challenge_date': today.isoformat(),
         'target_colors': target_colors,
         'already_submitted': already_submitted,
+        **next_action_data,
     })
 
 
@@ -581,6 +591,144 @@ def daily_challenge_resolve():
 
         return jsonify({'status': 'success', 'winner_user_id': best.user_id, 'new_awards': new_awards})
 
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Daily run comparison — shared sort key so standings and resolve never drift.
+#
+# "Better" = lower score_primary, then lower score_secondary, then earlier
+# created_at (same order as daily_challenge_resolve ORDER BY clause).
+# ---------------------------------------------------------------------------
+
+def _daily_run_sort_key(run):
+    """
+    Comparable sort key: (score_primary, score_secondary, created_at).
+    None values sort last for numeric fields (treat as +inf).
+    """
+    sp = run.score_primary if run.score_primary is not None else float('inf')
+    ss = run.score_secondary if run.score_secondary is not None else float('inf')
+    ca = run.created_at or datetime.max
+    return (sp, ss, ca)
+
+
+@main.route('/api/daily-challenge/standings', methods=['GET'])
+def daily_challenge_standings():
+    """
+    Aggregated standings for a daily challenge date.
+
+    Query params:
+      user_id  — optional; enables user_best / user_rank / user_submitted_final_today
+      date     — optional ISO date string; defaults to today
+    """
+    user_id = request.args.get('user_id')
+    date_str = request.args.get('date')
+    try:
+        target_date = date.fromisoformat(date_str) if date_str else date.today()
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Invalid date format'}), 400
+
+    try:
+        final_runs = (
+            DailyChallengeRun.query
+            .filter_by(challenge_date=target_date, is_final=True)
+            .all()
+        )
+
+        # Best final run per user (lowest sort key wins)
+        best_by_user = {}
+        for run in final_runs:
+            existing = best_by_user.get(run.user_id)
+            if existing is None or _daily_run_sort_key(run) < _daily_run_sort_key(existing):
+                best_by_user[run.user_id] = run
+
+        participant_count = len(best_by_user)
+
+        top_run = None
+        if best_by_user:
+            top_run = min(best_by_user.values(), key=_daily_run_sort_key)
+
+        top_score = None
+        if top_run:
+            top_score = {
+                'score_primary': top_run.score_primary,
+                'score_secondary': top_run.score_secondary,
+            }
+
+        user_best = None
+        user_rank = None
+        user_submitted_final_today = False
+
+        if user_id:
+            user_best_run = best_by_user.get(user_id)
+            user_submitted_final_today = user_best_run is not None
+            if user_best_run:
+                user_best = {
+                    'score_primary': user_best_run.score_primary,
+                    'score_secondary': user_best_run.score_secondary,
+                }
+                user_key = _daily_run_sort_key(user_best_run)
+                # rank = count of users with a strictly better score + 1
+                user_rank = sum(
+                    1 for r in best_by_user.values()
+                    if _daily_run_sort_key(r) < user_key
+                ) + 1
+
+        return jsonify({
+            'status': 'success',
+            'challenge_date': target_date.isoformat(),
+            'participant_count': participant_count,
+            'top_score': top_score,
+            'user_best': user_best,
+            'user_rank': user_rank,
+            'user_submitted_final_today': user_submitted_final_today,
+        })
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ── Analytics ──────────────────────────────────────────────────────────────
+
+ALLOWED_EVENTS = frozenset({
+    'app_opened',
+    'app_ready',
+    'first_palette_interaction',
+    'save_attempt',
+})
+
+
+@main.route('/api/analytics/event', methods=['POST'])
+def analytics_event():
+    """
+    Ingest a single client analytics event.
+
+    Body: { event, ts (ISO-8601), user_id (optional), metadata (object) }
+    metadata MUST include client_session_id for funnel stitching.
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        event = data.get('event', '')
+        if event not in ALLOWED_EVENTS:
+            return jsonify({'status': 'error', 'message': f'Unknown event: {event}'}), 400
+
+        ts_raw = data.get('ts')
+        try:
+            ts = datetime.fromisoformat(ts_raw) if ts_raw else datetime.utcnow()
+        except (ValueError, TypeError):
+            ts = datetime.utcnow()
+
+        ev = AnalyticsEvent(
+            user_id=data.get('user_id') or None,
+            event=event,
+            ts=ts,
+            metadata_json=data.get('metadata') or {},
+        )
+        db.session.add(ev)
+        db.session.commit()
+        return jsonify({'status': 'success'})
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500
