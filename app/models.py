@@ -60,6 +60,61 @@ class MixingSession(db.Model):
     match_category = db.Column(db.String(40), nullable=True)
 
 
+class MixingAttempt(db.Model):
+    __tablename__ = 'mixing_attempts'
+
+    attempt_uuid = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(db.String(6), db.ForeignKey('users.id'), nullable=True)
+    target_color_id = db.Column(db.Integer, db.ForeignKey('target_colors.id'), nullable=True)
+    target_r = db.Column(db.Integer, nullable=True)
+    target_g = db.Column(db.Integer, nullable=True)
+    target_b = db.Column(db.Integer, nullable=True)
+
+    initial_drop_white = db.Column(db.Integer, nullable=False, default=0)
+    initial_drop_black = db.Column(db.Integer, nullable=False, default=0)
+    initial_drop_red = db.Column(db.Integer, nullable=False, default=0)
+    initial_drop_yellow = db.Column(db.Integer, nullable=False, default=0)
+    initial_drop_blue = db.Column(db.Integer, nullable=False, default=0)
+    initial_mixed_r = db.Column(db.Integer, nullable=False, default=255)
+    initial_mixed_g = db.Column(db.Integer, nullable=False, default=255)
+    initial_mixed_b = db.Column(db.Integer, nullable=False, default=255)
+    initial_delta_e = db.Column(db.Float, nullable=True)
+
+    attempt_started_client_ts_ms = db.Column(db.BigInteger, nullable=True)
+    attempt_started_server_ts = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    first_action_client_ts_ms = db.Column(db.BigInteger, nullable=True)
+    first_action_server_ts = db.Column(db.DateTime, nullable=True)
+    attempt_ended_client_ts_ms = db.Column(db.BigInteger, nullable=True)
+    attempt_ended_server_ts = db.Column(db.DateTime, nullable=True)
+    end_reason = db.Column(db.String(32), nullable=True)
+    app_version = db.Column(db.String(64), nullable=True)
+
+
+class MixingAttemptEvent(db.Model):
+    __tablename__ = 'mixing_attempt_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    attempt_uuid = db.Column(
+        db.String(36),
+        db.ForeignKey('mixing_attempts.attempt_uuid', ondelete='CASCADE'),
+        nullable=False,
+    )
+    seq = db.Column(db.Integer, nullable=False)
+    event_type = db.Column(db.String(64), nullable=False)
+    action_color = db.Column(db.String(32), nullable=True)
+    client_ts_ms = db.Column(db.BigInteger, nullable=False)
+    server_ts = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    state_before_json = db.Column(db.JSON, nullable=False)
+    state_after_json = db.Column(db.JSON, nullable=False)
+    metadata_json = db.Column(db.JSON, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('attempt_uuid', 'seq', name='uq_mixing_attempt_events_attempt_seq'),
+        db.Index('idx_mixing_attempt_events_attempt_client_ts', 'attempt_uuid', 'client_ts_ms'),
+        db.Index('idx_mixing_attempt_events_type_server_ts', 'event_type', 'server_ts'),
+    )
+
+
 class UserProgress(db.Model):
     __tablename__ = 'user_progress'
 

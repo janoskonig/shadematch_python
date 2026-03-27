@@ -33,6 +33,203 @@ const CLIENT_SESSION_ID = (() => {
   return id;
 })();
 
+const MIXING_TELEMETRY_ENDPOINT = '/api/mixing-attempt/ingest';
+const MIXING_START_UPDATE_ENDPOINT = '/api/mixing-attempt/start-or-update';
+const APP_VERSION = document.documentElement?.dataset?.appVersion || null;
+
+let telemetryAttempt = null;
+let telemetryEventBuffer = [];
+let currentMixedRgb = [255, 255, 255];
+let mixStateStepId = 0;
+
+function nowClientTsMs() {
+  return Date.now();
+}
+
+function getTimerSec() {
+  const timerEl = document.getElementById('timer');
+  const parsed = timerEl ? parseFloat(timerEl.textContent) : NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function cloneDrops() {
+  return {
+    white: dropCounts.white | 0,
+    black: dropCounts.black | 0,
+    red: dropCounts.red | 0,
+    yellow: dropCounts.yellow | 0,
+    blue: dropCounts.blue | 0,
+  };
+}
+
+function normalizeDelta(value) {
+  return Number.isFinite(value) ? value : null;
+}
+
+function buildMixSnapshot({ mixedRgbOverride, deltaEOverride, timerSecOverride } = {}) {
+  return {
+    drops: cloneDrops(),
+    mixed_rgb: Array.isArray(mixedRgbOverride) ? [...mixedRgbOverride] : [...currentMixedRgb],
+    delta_e: normalizeDelta(deltaEOverride !== undefined ? deltaEOverride : window.lastMixDeltaE),
+    timer_sec: Number.isFinite(timerSecOverride) ? timerSecOverride : getTimerSec(),
+  };
+}
+
+function serializeAttemptHeader(attempt) {
+  return {
+    attempt_uuid: attempt.attempt_uuid,
+    user_id: window.currentUserId || localStorage.getItem('userId') || null,
+    target_color_id: attempt.target_color_id ?? null,
+    target_r: attempt.target_rgb[0],
+    target_g: attempt.target_rgb[1],
+    target_b: attempt.target_rgb[2],
+    initial_drop_white: attempt.initial_snapshot.drops.white,
+    initial_drop_black: attempt.initial_snapshot.drops.black,
+    initial_drop_red: attempt.initial_snapshot.drops.red,
+    initial_drop_yellow: attempt.initial_snapshot.drops.yellow,
+    initial_drop_blue: attempt.initial_snapshot.drops.blue,
+    initial_mixed_r: attempt.initial_snapshot.mixed_rgb[0],
+    initial_mixed_g: attempt.initial_snapshot.mixed_rgb[1],
+    initial_mixed_b: attempt.initial_snapshot.mixed_rgb[2],
+    initial_delta_e: attempt.initial_snapshot.delta_e,
+    attempt_started_client_ts_ms: attempt.attempt_started_client_ts_ms,
+    first_action_client_ts_ms: attempt.first_action_client_ts_ms,
+    attempt_ended_client_ts_ms: attempt.attempt_ended_client_ts_ms,
+    end_reason: attempt.end_reason,
+    app_version: APP_VERSION,
+  };
+}
+
+async function postAttemptHeaderUpdate() {
+  if (!telemetryAttempt) return;
+  const payload = serializeAttemptHeader(telemetryAttempt);
+  try {
+    await fetch(MIXING_START_UPDATE_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch {
+    // Keep gameplay resilient; ingest endpoint is idempotent and can recover later.
+  }
+}
+
+function enqueueTelemetryEvent({ event_type, action_color = null, state_before_json, state_after_json, client_ts_ms, metadata_json = null }) {
+  if (!telemetryAttempt) return null;
+  telemetryAttempt.seq += 1;
+  const event = {
+    attempt_uuid: telemetryAttempt.attempt_uuid,
+    seq: telemetryAttempt.seq,
+    event_type,
+    action_color,
+    client_ts_ms,
+    state_before_json,
+    state_after_json,
+    metadata_json,
+  };
+  telemetryEventBuffer.push(event);
+  return event;
+}
+
+function updateBufferedEventDelta(stepId, deltaE) {
+  for (let i = telemetryEventBuffer.length - 1; i >= 0; i -= 1) {
+    const ev = telemetryEventBuffer[i];
+    if (ev?.metadata_json?.step_id === stepId && ev.state_after_json?.delta_e == null) {
+      ev.state_after_json.delta_e = deltaE;
+      break;
+    }
+  }
+}
+
+function beginAttemptForCurrentTarget() {
+  if (!Array.isArray(targetColor) || targetColor.length !== 3) return;
+  const nowMs = nowClientTsMs();
+  const initialSnapshot = buildMixSnapshot({
+    mixedRgbOverride: currentMixedRgb,
+    deltaEOverride: window.lastMixDeltaE,
+    timerSecOverride: getTimerSec(),
+  });
+
+  telemetryAttempt = {
+    attempt_uuid: generateUUID(),
+    seq: 0,
+    target_color_id: currentTargetColor?.id ?? null,
+    target_rgb: [...targetColor],
+    attempt_started_client_ts_ms: nowMs,
+    first_action_client_ts_ms: null,
+    attempt_ended_client_ts_ms: null,
+    end_reason: null,
+    initial_snapshot: initialSnapshot,
+  };
+  telemetryEventBuffer = [];
+
+  enqueueTelemetryEvent({
+    event_type: 'boundary_start',
+    client_ts_ms: nowMs,
+    state_before_json: initialSnapshot,
+    state_after_json: initialSnapshot,
+    metadata_json: { source: 'client' },
+  });
+  enqueueTelemetryEvent({
+    event_type: 'boundary_target_shown',
+    client_ts_ms: nowMs + 1,
+    state_before_json: initialSnapshot,
+    state_after_json: initialSnapshot,
+    metadata_json: { target_color_id: currentTargetColor?.id ?? null },
+  });
+
+  postAttemptHeaderUpdate();
+}
+
+async function flushTelemetry({ finalize = false, endReason = null, terminalBoundaryType = null, useBeacon = false } = {}) {
+  if (!telemetryAttempt) return;
+
+  if (finalize && !telemetryAttempt.end_reason) {
+    telemetryAttempt.end_reason = endReason || 'abandoned';
+    telemetryAttempt.attempt_ended_client_ts_ms = nowClientTsMs();
+    if (terminalBoundaryType) {
+      const snap = buildMixSnapshot();
+      enqueueTelemetryEvent({
+        event_type: terminalBoundaryType,
+        client_ts_ms: telemetryAttempt.attempt_ended_client_ts_ms,
+        state_before_json: snap,
+        state_after_json: snap,
+        metadata_json: { terminal_end_reason: telemetryAttempt.end_reason },
+      });
+    }
+  }
+
+  const payload = {
+    attempt: serializeAttemptHeader(telemetryAttempt),
+    events: telemetryEventBuffer,
+  };
+  const hasPayload = payload.events.length > 0 || payload.attempt.end_reason !== null;
+  if (!hasPayload) return;
+
+  if (useBeacon && navigator.sendBeacon) {
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const accepted = navigator.sendBeacon(MIXING_TELEMETRY_ENDPOINT, blob);
+    if (accepted) telemetryEventBuffer = [];
+    return;
+  }
+
+  try {
+    const res = await fetch(MIXING_TELEMETRY_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      telemetryEventBuffer = [];
+      if (telemetryAttempt.end_reason) {
+        telemetryAttempt = null;
+      }
+    }
+  } catch {
+    // Keep buffer for next flush retry.
+  }
+}
+
 // ── Analytics ─────────────────────────────────────────────────────────────
 const ALLOWED_EVENTS = new Set([
   'app_opened', 'app_ready', 'first_palette_interaction', 'save_attempt',
@@ -406,12 +603,15 @@ window.currentSessionSaved = false;
 
 let dropCounts = { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
 window.shadeMatchDropCounts = dropCounts;
+let currentTargetColor = null;
+let targetColor = [255, 255, 255];
 
 function resetMix() {
   document.querySelectorAll('.color-circle').forEach(circle => { circle.textContent = '0'; });
   document.getElementById('currentMix').style.backgroundColor = 'rgb(255, 255, 255)';
   document.getElementById('mixedRgbValues').textContent = 'RGB: [255, 255, 255]';
   window.lastMixDeltaE = NaN;
+  currentMixedRgb = [255, 255, 255];
 
   dropCounts = { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
   window.shadeMatchDropCounts = dropCounts;
@@ -421,6 +621,7 @@ function resetMix() {
   if (matchContainer) matchContainer.style.display = 'none';
 
   _calcColorGen++;          // invalidate any in-flight /calculate responses for the old color
+  mixStateStepId = 0;
   currentSessionSaved = false;
   window.currentSessionSaved = false;
 }
@@ -474,6 +675,7 @@ async function saveSessionToServer(session) {
       drop_red: session.drops.red, drop_yellow: session.drops.yellow, drop_blue: session.drops.blue,
       delta_e: session.deltaE, time_sec: session.time,
       timestamp: session.timestamp, skipped: session.skipped || false,
+      attempt_ended_client_ts_ms: session.attempt_ended_client_ts_ms ?? null,
     };
   } else {
     sessionData = {
@@ -485,6 +687,7 @@ async function saveSessionToServer(session) {
       drop_red: session.drop_red, drop_yellow: session.drop_yellow, drop_blue: session.drop_blue,
       delta_e: session.delta_e, time_sec: session.time_sec,
       timestamp: session.timestamp, skipped: session.skipped || false,
+      attempt_ended_client_ts_ms: session.attempt_ended_client_ts_ms ?? null,
     };
   }
 
@@ -615,8 +818,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const targetColors = generateRandomizedColors();
   let currentTargetIndex = 0;
-  let currentTargetColor = targetColors[0];
-  let targetColor = currentTargetColor.rgb;
+  currentTargetColor = targetColors[0];
+  targetColor = currentTargetColor.rgb;
 
   function setGameTarget(color) {
     targetColor = color.rgb;
@@ -652,11 +855,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function updateCurrentMix() {
+    const stepId = ++mixStateStepId;
     const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
     if (totalDrops === 0) {
-      updateBox('currentMix', [255, 255, 255]);
+      currentMixedRgb = [255, 255, 255];
+      updateBox('currentMix', currentMixedRgb);
+      document.getElementById('mixedRgbValues').textContent = 'RGB: [255, 255, 255]';
       window.lastMixDeltaE = NaN;
-      return;
+      return { stepId, mixedRGB: [...currentMixedRgb], deltaEResolvedAtEmit: null };
     }
 
     let zMix = new Array(mixbox.LATENT_SIZE).fill(0);
@@ -669,28 +875,28 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    const mixedRGB = mixbox.latentToRgb(zMix).map(Math.round);
-    updateBox('currentMix', mixedRGB);
-    document.getElementById('mixedRgbValues').textContent = `RGB: [${mixedRGB.join(', ')}]`;
+    currentMixedRgb = mixbox.latentToRgb(zMix).map(Math.round);
+    updateBox('currentMix', currentMixedRgb);
+    document.getElementById('mixedRgbValues').textContent = `RGB: [${currentMixedRgb.join(', ')}]`;
 
     const _myGen = _calcColorGen;  // snapshot before async gap
     fetch('/calculate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ target: targetColor, mixed: mixedRGB }),
+      body: JSON.stringify({ target: targetColor, mixed: currentMixedRgb }),
     })
       .then(res => res.json())
-      .then(data => {
+      .then((data) => {
         if (_calcColorGen !== _myGen) return;  // response belongs to a previous color — discard
         if (data.error) return console.error('Server error:', data.error);
         window.lastMixDeltaE = data.delta_e;
         updateMatchBar(data.delta_e);
+        updateBufferedEventDelta(stepId, data.delta_e);
 
         if (isPerfectMatch(data.delta_e) && !currentSessionSaved) {
           stopTimer();
-          const uuid = generateUUID();
           const session = {
-            attempt_uuid: uuid,
+            attempt_uuid: telemetryAttempt?.attempt_uuid || generateUUID(),
             user_id: window.currentUserId,
             target: targetColor,
             target_color_id: currentTargetColor.id,
@@ -699,18 +905,33 @@ document.addEventListener('DOMContentLoaded', async () => {
             time: parseFloat(document.getElementById('timer').textContent),
             timestamp: new Date().toISOString(),
             skipped: false,
+            attempt_ended_client_ts_ms: nowClientTsMs(),
           };
           currentSessionSaved = true;
           window.currentSessionSaved = true;
           sessionLogs.push(session);
+          flushTelemetry({
+            finalize: true,
+            endReason: 'saved_match',
+            terminalBoundaryType: 'boundary_save',
+          });
           saveSessionToServer(session);
           setControlState('completed');
         }
       });
+
+    return { stepId, mixedRGB: [...currentMixedRgb], deltaEResolvedAtEmit: null };
   }
 
   // ── Button handlers ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', async () => {
+    if (telemetryAttempt) {
+      await flushTelemetry({
+        finalize: true,
+        endReason: 'abandoned',
+      });
+    }
+
     refreshDatabaseConnection();
     // Re-fetch catalog with updated coverage stats
     try {
@@ -734,6 +955,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     enableColorMixing();
     setControlState('mixing');
     updateProgressIndicator(currentTargetIndex, targetColors.length);
+    beginAttemptForCurrentTarget();
   });
 
   document.getElementById('skipBtn').addEventListener('click', async () => {
@@ -747,7 +969,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const skipPerception = await showSkipPerceptionModal();
       if (!skipPerception) return;
       const skipData = {
-        attempt_uuid: generateUUID(),
+        attempt_uuid: telemetryAttempt?.attempt_uuid || generateUUID(),
         user_id: window.currentUserId,
         target_color_id: currentTargetColor.id,
         target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
@@ -757,7 +979,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         timestamp: new Date().toISOString(),
         delta_e: currentDeltaE,
         skip_perception: skipPerception,
+        attempt_ended_client_ts_ms: nowClientTsMs(),
       };
+      await flushTelemetry({
+        finalize: true,
+        endReason: 'skipped',
+        terminalBoundaryType: 'boundary_skip',
+      });
       trackEvent('save_attempt', { skipped: true });
       try {
         const res = await fetch('/save_skip', {
@@ -788,6 +1016,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       enableColorMixing();
       setControlState('mixing');
       updateProgressIndicator(currentTargetIndex, targetColors.length);
+      beginAttemptForCurrentTarget();
     } else {
       // Fetch latest progress to determine if all colors are mastered
       let progressData = null;
@@ -852,6 +1081,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('restartBtn').addEventListener('click', async () => {
+    await flushTelemetry({
+      finalize: true,
+      endReason: 'restart',
+      terminalBoundaryType: 'boundary_restart',
+    });
+
     refreshDatabaseConnection();
     const newTargetColors = generateRandomizedColors();
     targetColors.length = 0;
@@ -868,13 +1103,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     setControlState('mixing');
     updateProgressIndicator(currentTargetIndex, targetColors.length);
     document.getElementById('overflowDropdown').classList.remove('is-open');
+    beginAttemptForCurrentTarget();
   });
 
   document.getElementById('retryBtn').addEventListener('click', () => {
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     if (!isNaN(currentDeltaE)) {
       const session = {
-        attempt_uuid: generateUUID(),
+        attempt_uuid: telemetryAttempt?.attempt_uuid || generateUUID(),
         user_id: window.currentUserId,
         target: targetColor,
         target_color_id: currentTargetColor.id,
@@ -883,8 +1119,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         time: parseFloat(document.getElementById('timer').textContent),
         timestamp: new Date().toISOString(),
         skipped: true,
+        attempt_ended_client_ts_ms: nowClientTsMs(),
       };
       sessionLogs.push(session);
+      flushTelemetry({
+        finalize: true,
+        endReason: 'reset',
+        terminalBoundaryType: 'boundary_reset',
+      });
       saveSessionToServer(session);
     }
     resetMix();
@@ -893,6 +1135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTimer();
     enableColorMixing();
     setControlState('mixing');
+    beginAttemptForCurrentTarget();
   });
 
   // ── Palette interaction ────────────────────────────────────────────────
@@ -901,6 +1144,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     circle.addEventListener('click', (e) => {
       e.preventDefault();
       const color = circle.dataset.color;
+      const clickTs = nowClientTsMs();
+      const beforeSnapshot = buildMixSnapshot();
       dropCounts[color]++;
       circle.textContent = dropCounts[color];
       updateBadge(color, dropCounts[color]);
@@ -914,7 +1159,28 @@ document.addEventListener('DOMContentLoaded', async () => {
       setTimeout(() => circle.classList.remove('is-tapped'), 200);
       if (navigator.vibrate) navigator.vibrate(15);
 
-      updateCurrentMix();
+      const mixResult = updateCurrentMix();
+      const afterSnapshot = buildMixSnapshot({
+        mixedRgbOverride: mixResult?.mixedRGB,
+        deltaEOverride: null,
+      });
+
+      if (telemetryAttempt && telemetryAttempt.first_action_client_ts_ms == null) {
+        telemetryAttempt.first_action_client_ts_ms = clickTs;
+        postAttemptHeaderUpdate();
+      }
+
+      enqueueTelemetryEvent({
+        event_type: 'action_add',
+        action_color: color,
+        client_ts_ms: clickTs,
+        state_before_json: beforeSnapshot,
+        state_after_json: afterSnapshot,
+        metadata_json: {
+          step_id: mixResult?.stepId ?? null,
+          interaction: 'click_add',
+        },
+      });
     });
   });
 
@@ -923,10 +1189,33 @@ document.addEventListener('DOMContentLoaded', async () => {
       e.preventDefault();
       const color = button.dataset.color;
       if (dropCounts[color] > 0) {
+        const clickTs = nowClientTsMs();
+        const beforeSnapshot = buildMixSnapshot();
         dropCounts[color]--;
         document.querySelector(`.color-circle[data-color='${color}']`).textContent = dropCounts[color];
         updateBadge(color, dropCounts[color]);
-        updateCurrentMix();
+        const mixResult = updateCurrentMix();
+        const afterSnapshot = buildMixSnapshot({
+          mixedRgbOverride: mixResult?.mixedRGB,
+          deltaEOverride: null,
+        });
+
+        if (telemetryAttempt && telemetryAttempt.first_action_client_ts_ms == null) {
+          telemetryAttempt.first_action_client_ts_ms = clickTs;
+          postAttemptHeaderUpdate();
+        }
+
+        enqueueTelemetryEvent({
+          event_type: 'action_remove',
+          action_color: color,
+          client_ts_ms: clickTs,
+          state_before_json: beforeSnapshot,
+          state_after_json: afterSnapshot,
+          metadata_json: {
+            step_id: mixResult?.stepId ?? null,
+            interaction: 'click_remove',
+          },
+        });
       }
     });
   });
@@ -1037,6 +1326,20 @@ window.dismissPwaInstall = function () {
   localStorage.setItem('pwaDismissed', '1');
   _hidePwaInstallCta();
 };
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'hidden') {
+    flushTelemetry({ useBeacon: true });
+  }
+});
+
+window.addEventListener('beforeunload', () => {
+  if (telemetryAttempt && !telemetryAttempt.end_reason) {
+    telemetryAttempt.end_reason = 'abandoned';
+    telemetryAttempt.attempt_ended_client_ts_ms = nowClientTsMs();
+  }
+  flushTelemetry({ useBeacon: true });
+});
 
 // On DOMContentLoaded: check if already dismissed, show iOS fallback if applicable
 document.addEventListener('DOMContentLoaded', function () {

@@ -7,7 +7,7 @@ from .models import (
     User, MixingSession, TargetColor,
     UserProgress, UserTargetColorStats, UserAward,
     DailyChallengeRun, DailyChallengeWinner, PushSubscription,
-    AnalyticsEvent,
+    AnalyticsEvent, MixingAttempt, MixingAttemptEvent,
 )
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb, reverse_engineer_recipe
@@ -15,6 +15,7 @@ import pandas as pd
 import os
 import numpy as np
 import json
+from sqlalchemy import func
 
 from .gamification import (
     process_progression,
@@ -219,6 +220,394 @@ def calculate():
     return jsonify({'delta_e': delta_e})
 
 
+MIXING_EVENT_TYPES = frozenset({
+    'action_add',
+    'action_remove',
+    'boundary_start',
+    'boundary_target_shown',
+    'boundary_save',
+    'boundary_skip',
+    'boundary_reset',
+    'boundary_restart',
+    'boundary_next_target',
+})
+
+MIXING_END_REASONS = frozenset({
+    'saved_match',
+    'saved_stop',
+    'skipped',
+    'reset',
+    'restart',
+    'abandoned',
+})
+
+PALETTE_COLORS = ('white', 'black', 'red', 'yellow', 'blue')
+
+
+def _utcnow():
+    return datetime.utcnow()
+
+
+def _coerce_int_or_none(value):
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _state_from_gameplay_payload(data):
+    return {
+        'drops': {
+            'white': int(data.get('drop_white', 0) or 0),
+            'black': int(data.get('drop_black', 0) or 0),
+            'red': int(data.get('drop_red', 0) or 0),
+            'yellow': int(data.get('drop_yellow', 0) or 0),
+            'blue': int(data.get('drop_blue', 0) or 0),
+        },
+        'mixed_rgb': [255, 255, 255],  # gameplay payload does not currently send final mixed RGB
+        'delta_e': data.get('delta_e'),
+        'timer_sec': data.get('time_sec', 0),
+    }
+
+
+def _validate_snapshot(snapshot):
+    if not isinstance(snapshot, dict):
+        return False, 'snapshot must be an object'
+
+    drops = snapshot.get('drops')
+    mixed_rgb = snapshot.get('mixed_rgb')
+
+    if not isinstance(drops, dict):
+        return False, 'snapshot.drops is required'
+    for color in PALETTE_COLORS:
+        if color not in drops:
+            return False, f'snapshot.drops.{color} is required'
+        if not isinstance(drops[color], int):
+            return False, f'snapshot.drops.{color} must be int'
+
+    if not (isinstance(mixed_rgb, list) and len(mixed_rgb) == 3 and all(isinstance(v, int) for v in mixed_rgb)):
+        return False, 'snapshot.mixed_rgb must be [r,g,b] ints'
+
+    if 'delta_e' not in snapshot:
+        return False, 'snapshot.delta_e key is required'
+    delta_e = snapshot.get('delta_e')
+    if delta_e is not None and not isinstance(delta_e, (int, float)):
+        return False, 'snapshot.delta_e must be number or null'
+
+    timer_sec = snapshot.get('timer_sec')
+    if not isinstance(timer_sec, (int, float)):
+        return False, 'snapshot.timer_sec must be number'
+
+    return True, None
+
+
+def _canonical_event_payload(event_like):
+    return json.dumps(
+        {
+            'attempt_uuid': event_like['attempt_uuid'],
+            'seq': int(event_like['seq']),
+            'event_type': event_like['event_type'],
+            'action_color': event_like.get('action_color'),
+            'client_ts_ms': int(event_like['client_ts_ms']),
+            'state_before_json': event_like['state_before_json'],
+            'state_after_json': event_like['state_after_json'],
+            'metadata_json': event_like.get('metadata_json'),
+        },
+        sort_keys=True,
+        separators=(',', ':'),
+    )
+
+
+def _normalize_event_payload(raw, attempt_uuid_default=None):
+    if not isinstance(raw, dict):
+        raise ValueError('event must be an object')
+
+    attempt_uuid = raw.get('attempt_uuid') or attempt_uuid_default
+    if not attempt_uuid:
+        raise ValueError('attempt_uuid is required')
+
+    seq = raw.get('seq')
+    if not isinstance(seq, int) or seq <= 0:
+        raise ValueError('seq must be a positive integer')
+
+    event_type = raw.get('event_type')
+    if event_type not in MIXING_EVENT_TYPES:
+        raise ValueError(f'invalid event_type: {event_type}')
+
+    client_ts_ms = raw.get('client_ts_ms')
+    if not isinstance(client_ts_ms, int):
+        raise ValueError('client_ts_ms must be int')
+
+    state_before = raw.get('state_before_json')
+    state_after = raw.get('state_after_json')
+    ok_before, err_before = _validate_snapshot(state_before)
+    if not ok_before:
+        raise ValueError(f'state_before_json invalid: {err_before}')
+    ok_after, err_after = _validate_snapshot(state_after)
+    if not ok_after:
+        raise ValueError(f'state_after_json invalid: {err_after}')
+
+    action_color = raw.get('action_color')
+    if action_color is not None and action_color not in PALETTE_COLORS:
+        raise ValueError('action_color must be one of white|black|red|yellow|blue or null')
+
+    metadata_json = raw.get('metadata_json')
+    if metadata_json is not None and not isinstance(metadata_json, dict):
+        raise ValueError('metadata_json must be an object when provided')
+
+    return {
+        'attempt_uuid': attempt_uuid,
+        'seq': seq,
+        'event_type': event_type,
+        'action_color': action_color,
+        'client_ts_ms': client_ts_ms,
+        'state_before_json': state_before,
+        'state_after_json': state_after,
+        'metadata_json': metadata_json,
+    }
+
+
+def _upsert_attempt_header(payload):
+    attempt_uuid = payload.get('attempt_uuid')
+    if not attempt_uuid:
+        raise ValueError('attempt_uuid is required')
+
+    row = MixingAttempt.query.get(attempt_uuid)
+    created = False
+    if row is None:
+        row = MixingAttempt(attempt_uuid=attempt_uuid, attempt_started_server_ts=_utcnow())
+        db.session.add(row)
+        created = True
+
+    # Start context / immutable-ish fields are only set if empty
+    for attr, key in (
+        ('user_id', 'user_id'),
+        ('target_color_id', 'target_color_id'),
+        ('target_r', 'target_r'),
+        ('target_g', 'target_g'),
+        ('target_b', 'target_b'),
+        ('attempt_started_client_ts_ms', 'attempt_started_client_ts_ms'),
+        ('initial_delta_e', 'initial_delta_e'),
+        ('app_version', 'app_version'),
+    ):
+        val = payload.get(key)
+        if val is not None and getattr(row, attr) is None:
+            setattr(row, attr, val)
+
+    # Initial drops/rgb should reflect baseline state; keep first-write-wins.
+    if created:
+        row.initial_drop_white = int(payload.get('initial_drop_white', 0) or 0)
+        row.initial_drop_black = int(payload.get('initial_drop_black', 0) or 0)
+        row.initial_drop_red = int(payload.get('initial_drop_red', 0) or 0)
+        row.initial_drop_yellow = int(payload.get('initial_drop_yellow', 0) or 0)
+        row.initial_drop_blue = int(payload.get('initial_drop_blue', 0) or 0)
+        row.initial_mixed_r = int(payload.get('initial_mixed_r', 255) or 255)
+        row.initial_mixed_g = int(payload.get('initial_mixed_g', 255) or 255)
+        row.initial_mixed_b = int(payload.get('initial_mixed_b', 255) or 255)
+
+    # first action: earliest client ts + first server ts latch
+    first_action_client = _coerce_int_or_none(payload.get('first_action_client_ts_ms'))
+    if first_action_client is not None:
+        if row.first_action_client_ts_ms is None or first_action_client < row.first_action_client_ts_ms:
+            row.first_action_client_ts_ms = first_action_client
+            if row.first_action_server_ts is None:
+                row.first_action_server_ts = _utcnow()
+
+    end_reason = payload.get('end_reason')
+    if end_reason is not None:
+        if end_reason not in MIXING_END_REASONS:
+            raise ValueError(f'invalid end_reason: {end_reason}')
+        if row.end_reason is None:
+            row.end_reason = end_reason
+        ended_client = _coerce_int_or_none(payload.get('attempt_ended_client_ts_ms'))
+        if ended_client is not None and row.attempt_ended_client_ts_ms is None:
+            row.attempt_ended_client_ts_ms = ended_client
+        if row.attempt_ended_server_ts is None:
+            row.attempt_ended_server_ts = _utcnow()
+
+    return row
+
+
+def _ingest_mixing_events(attempt_uuid, raw_events):
+    if not isinstance(raw_events, list):
+        raise ValueError('events must be an array')
+    if len(raw_events) == 0:
+        return {'inserted': 0, 'duplicates': 0}
+
+    normalized = [_normalize_event_payload(e, attempt_uuid_default=attempt_uuid) for e in raw_events]
+    seqs = [e['seq'] for e in normalized]
+
+    if seqs != sorted(seqs):
+        raise ValueError('events must be sorted by seq ascending')
+    if len(set(seqs)) != len(seqs):
+        raise ValueError('duplicate seq values in payload are not allowed')
+
+    existing_rows = (
+        MixingAttemptEvent.query
+        .filter(
+            MixingAttemptEvent.attempt_uuid == attempt_uuid,
+            MixingAttemptEvent.seq.in_(seqs),
+        )
+        .all()
+    )
+    existing_by_seq = {r.seq: r for r in existing_rows}
+
+    existing_max_seq = (
+        db.session.query(func.max(MixingAttemptEvent.seq))
+        .filter(MixingAttemptEvent.attempt_uuid == attempt_uuid)
+        .scalar()
+    ) or 0
+
+    next_expected_new_seq = existing_max_seq + 1
+    to_insert = []
+    duplicates = 0
+
+    for ev in normalized:
+        current_seq = ev['seq']
+        existing = existing_by_seq.get(current_seq)
+        if existing is not None:
+            existing_payload = _canonical_event_payload({
+                'attempt_uuid': existing.attempt_uuid,
+                'seq': existing.seq,
+                'event_type': existing.event_type,
+                'action_color': existing.action_color,
+                'client_ts_ms': existing.client_ts_ms,
+                'state_before_json': existing.state_before_json,
+                'state_after_json': existing.state_after_json,
+                'metadata_json': existing.metadata_json,
+            })
+            incoming_payload = _canonical_event_payload(ev)
+            if existing_payload != incoming_payload:
+                raise ValueError(f'conflicting duplicate for seq={current_seq}')
+            duplicates += 1
+            continue
+
+        # Disallow introducing non-idempotent past writes.
+        if current_seq <= existing_max_seq:
+            raise ValueError(f'out-of-order seq={current_seq}; existing_max_seq={existing_max_seq}')
+
+        # Disallow gaps in new sequence insertion.
+        if current_seq != next_expected_new_seq:
+            raise ValueError(f'seq gap at seq={current_seq}; expected={next_expected_new_seq}')
+
+        to_insert.append(MixingAttemptEvent(**ev))
+        next_expected_new_seq += 1
+
+    if to_insert:
+        db.session.add_all(to_insert)
+
+    return {'inserted': len(to_insert), 'duplicates': duplicates}
+
+
+def _ensure_terminal_telemetry_from_gameplay(data, end_reason):
+    attempt_uuid = data.get('attempt_uuid')
+    if not attempt_uuid:
+        return
+
+    header_payload = {
+        'attempt_uuid': attempt_uuid,
+        'user_id': data.get('user_id'),
+        'target_color_id': data.get('target_color_id'),
+        'target_r': data.get('target_r'),
+        'target_g': data.get('target_g'),
+        'target_b': data.get('target_b'),
+        'attempt_ended_client_ts_ms': _coerce_int_or_none(data.get('attempt_ended_client_ts_ms')),
+        'end_reason': end_reason,
+    }
+    _upsert_attempt_header(header_payload)
+
+    boundary_type = 'boundary_save' if end_reason in ('saved_match', 'saved_stop') else 'boundary_skip'
+    existing_terminal = (
+        MixingAttemptEvent.query
+        .filter_by(attempt_uuid=attempt_uuid, event_type=boundary_type)
+        .first()
+    )
+    if existing_terminal:
+        return
+
+    max_seq = (
+        db.session.query(func.max(MixingAttemptEvent.seq))
+        .filter(MixingAttemptEvent.attempt_uuid == attempt_uuid)
+        .scalar()
+    ) or 0
+    state = _state_from_gameplay_payload(data)
+    synthetic_event = MixingAttemptEvent(
+        attempt_uuid=attempt_uuid,
+        seq=max_seq + 1,
+        event_type=boundary_type,
+        action_color=None,
+        client_ts_ms=_coerce_int_or_none(data.get('attempt_ended_client_ts_ms')) or 0,
+        state_before_json=state,
+        state_after_json=state,
+        metadata_json={'source': 'server_reconciliation'},
+    )
+    db.session.add(synthetic_event)
+
+
+@main.route('/api/mixing-attempt/start-or-update', methods=['POST'])
+def mixing_attempt_start_or_update():
+    try:
+        data = request.get_json(silent=True) or {}
+        _upsert_attempt_header(data)
+        db.session.commit()
+        return jsonify({'status': 'success'})
+    except ValueError as ve:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(ve)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/mixing-attempt/events', methods=['POST'])
+def mixing_attempt_events():
+    try:
+        data = request.get_json(silent=True) or {}
+        attempt_uuid = data.get('attempt_uuid')
+        if not attempt_uuid:
+            return jsonify({'status': 'error', 'message': 'attempt_uuid required'}), 400
+
+        exists = MixingAttempt.query.get(attempt_uuid)
+        if not exists:
+            return jsonify({'status': 'error', 'message': 'unknown attempt_uuid'}), 404
+
+        result = _ingest_mixing_events(attempt_uuid, data.get('events'))
+        db.session.commit()
+        return jsonify({'status': 'success', **result})
+    except ValueError as ve:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(ve)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/mixing-attempt/ingest', methods=['POST'])
+def mixing_attempt_ingest():
+    try:
+        data = request.get_json(silent=True) or {}
+        header = data.get('attempt') or {}
+        events = data.get('events') or []
+
+        attempt_uuid = header.get('attempt_uuid') or data.get('attempt_uuid')
+        if not attempt_uuid:
+            return jsonify({'status': 'error', 'message': 'attempt_uuid required'}), 400
+
+        header['attempt_uuid'] = attempt_uuid
+        _upsert_attempt_header(header)
+        result = _ingest_mixing_events(attempt_uuid, events)
+        db.session.commit()
+        return jsonify({'status': 'success', **result})
+    except ValueError as ve:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(ve)}), 400
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 # ── Save session (completed attempt) ──────────────────────────────────────
 
 @main.route('/save_session', methods=['POST'])
@@ -270,6 +659,13 @@ def save_session():
             target_color_id=data.get('target_color_id'),
             delta_e=data.get('delta_e'),
         )
+
+        try:
+            delta_for_reason = float(data.get('delta_e'))
+        except (TypeError, ValueError):
+            delta_for_reason = None
+        end_reason = 'saved_match' if (delta_for_reason is not None and delta_for_reason <= MATCH_PERFECT_DELTA_E) else 'saved_stop'
+        _ensure_terminal_telemetry_from_gameplay(data, end_reason=end_reason)
 
         db.session.commit()
 
@@ -346,6 +742,8 @@ def save_skip():
             target_color_id=data.get('target_color_id'),
             delta_e=delta_e,
         )
+
+        _ensure_terminal_telemetry_from_gameplay(data, end_reason='skipped')
 
         db.session.commit()
 
