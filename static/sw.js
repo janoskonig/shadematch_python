@@ -1,4 +1,4 @@
-var CACHE_NAME = 'shadematch-static-v2';
+var CACHE_NAME = 'shadematch-static-v3';
 
 var PRECACHE_URLS = [
   '/static/mixbox.js',
@@ -55,7 +55,23 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // Cache-first for precached static assets
+  // Network-first for the app logic bundle to avoid stale telemetry clients.
+  if (url.pathname === '/static/main.js') {
+    event.respondWith(
+      fetch(event.request).then(function (response) {
+        var clone = response.clone();
+        caches.open(CACHE_NAME).then(function (cache) {
+          cache.put(event.request, clone);
+        });
+        return response;
+      }).catch(function () {
+        return caches.match(event.request);
+      })
+    );
+    return;
+  }
+
+  // Cache-first for other precached static assets
   if (url.pathname.startsWith('/static/')) {
     event.respondWith(
       caches.match(event.request).then(function (cached) {

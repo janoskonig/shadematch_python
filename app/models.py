@@ -88,6 +88,9 @@ class MixingAttempt(db.Model):
     attempt_ended_server_ts = db.Column(db.DateTime, nullable=True)
     end_reason = db.Column(db.String(32), nullable=True)
     app_version = db.Column(db.String(64), nullable=True)
+    final_delta_e = db.Column(db.Float, nullable=True)
+    duration_sec = db.Column(db.Float, nullable=True)
+    num_steps = db.Column(db.Integer, nullable=True)
 
 
 class MixingAttemptEvent(db.Model):
@@ -107,6 +110,18 @@ class MixingAttemptEvent(db.Model):
     state_before_json = db.Column(db.JSON, nullable=False)
     state_after_json = db.Column(db.JSON, nullable=False)
     metadata_json = db.Column(db.JSON, nullable=True)
+    step_index = db.Column(db.Integer, nullable=True)
+    time_since_prev_step_ms = db.Column(db.BigInteger, nullable=True)
+    action_type = db.Column(db.String(16), nullable=True)
+    amount = db.Column(db.Integer, nullable=True)
+    delta_e_before = db.Column(db.Float, nullable=True)
+    delta_e_after = db.Column(db.Float, nullable=True)
+    mix_before_r = db.Column(db.SmallInteger, nullable=True)
+    mix_before_g = db.Column(db.SmallInteger, nullable=True)
+    mix_before_b = db.Column(db.SmallInteger, nullable=True)
+    mix_after_r = db.Column(db.SmallInteger, nullable=True)
+    mix_after_g = db.Column(db.SmallInteger, nullable=True)
+    mix_after_b = db.Column(db.SmallInteger, nullable=True)
 
     __table_args__ = (
         db.UniqueConstraint('attempt_uuid', 'seq', name='uq_mixing_attempt_events_attempt_seq'),
