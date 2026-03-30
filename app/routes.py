@@ -98,6 +98,11 @@ def results_page():
     return render_template('results.html')
 
 
+@main.route('/stat')
+def stat_page():
+    return render_template('stat.html')
+
+
 @main.route('/spectral')
 def spectral():
     wavelengths, x_bar, y_bar, z_bar = load_cie_data()
@@ -257,7 +262,64 @@ def _coerce_int_or_none(value):
         return None
 
 
+def _coerce_float_or_none(value):
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_delta(snapshot):
+    if not isinstance(snapshot, dict):
+        return None
+    return _coerce_float_or_none(snapshot.get('delta_e'))
+
+
+def _extract_rgb(snapshot):
+    if not isinstance(snapshot, dict):
+        return (None, None, None)
+    rgb = snapshot.get('mixed_rgb')
+    if not (isinstance(rgb, list) and len(rgb) == 3):
+        return (None, None, None)
+    vals = [_coerce_int_or_none(v) for v in rgb]
+    if any(v is None for v in vals):
+        return (None, None, None)
+    return tuple(vals)
+
+
+def _derive_action_type(event_type, metadata_json):
+    if event_type == 'action_add':
+        return 'add'
+    if event_type == 'action_remove':
+        return 'remove'
+    if event_type == 'boundary_reset':
+        return 'reset'
+    if event_type == 'boundary_skip':
+        return 'skip'
+    if event_type == 'boundary_save':
+        terminal_reason = (metadata_json or {}).get('terminal_end_reason')
+        if terminal_reason == 'saved_match':
+            return 'success'
+        if terminal_reason == 'saved_stop':
+            return 'stop'
+    return None
+
+
+def _is_decision_event(action_type):
+    return action_type in {'add', 'remove', 'reset', 'stop', 'skip', 'success'}
+
+
 def _state_from_gameplay_payload(data):
+    mr = _coerce_int_or_none(data.get('mixed_r'))
+    mg = _coerce_int_or_none(data.get('mixed_g'))
+    mb = _coerce_int_or_none(data.get('mixed_b'))
+    if mr is not None and mg is not None and mb is not None:
+        mixed_rgb = [mr, mg, mb]
+    else:
+        # Legacy clients: no mixed RGB on save payload — keep drops-consistent analytics via optional mixed_*.
+        mixed_rgb = [255, 255, 255]
     return {
         'drops': {
             'white': int(data.get('drop_white', 0) or 0),
@@ -266,7 +328,7 @@ def _state_from_gameplay_payload(data):
             'yellow': int(data.get('drop_yellow', 0) or 0),
             'blue': int(data.get('drop_blue', 0) or 0),
         },
-        'mixed_rgb': [255, 255, 255],  # gameplay payload does not currently send final mixed RGB
+        'mixed_rgb': mixed_rgb,
         'delta_e': data.get('delta_e'),
         'timer_sec': data.get('time_sec', 0),
     }
@@ -314,6 +376,18 @@ def _canonical_event_payload(event_like):
             'state_before_json': event_like['state_before_json'],
             'state_after_json': event_like['state_after_json'],
             'metadata_json': event_like.get('metadata_json'),
+            'step_index': event_like.get('step_index'),
+            'time_since_prev_step_ms': event_like.get('time_since_prev_step_ms'),
+            'action_type': event_like.get('action_type'),
+            'amount': event_like.get('amount'),
+            'delta_e_before': event_like.get('delta_e_before'),
+            'delta_e_after': event_like.get('delta_e_after'),
+            'mix_before_r': event_like.get('mix_before_r'),
+            'mix_before_g': event_like.get('mix_before_g'),
+            'mix_before_b': event_like.get('mix_before_b'),
+            'mix_after_r': event_like.get('mix_after_r'),
+            'mix_after_g': event_like.get('mix_after_g'),
+            'mix_after_b': event_like.get('mix_after_b'),
         },
         sort_keys=True,
         separators=(',', ':'),
@@ -357,6 +431,42 @@ def _normalize_event_payload(raw, attempt_uuid_default=None):
     if metadata_json is not None and not isinstance(metadata_json, dict):
         raise ValueError('metadata_json must be an object when provided')
 
+    derived_action_type = _derive_action_type(event_type, metadata_json)
+    action_type = raw.get('action_type') or derived_action_type
+    if action_type is not None and action_type not in {'add', 'remove', 'reset', 'stop', 'skip', 'success'}:
+        raise ValueError('action_type must be one of add|remove|reset|stop|skip|success or null')
+
+    amount = _coerce_int_or_none(raw.get('amount'))
+    if amount is None and action_type in {'add', 'remove'}:
+        amount = 1
+
+    step_index = _coerce_int_or_none(raw.get('step_index'))
+    if step_index is not None and step_index <= 0:
+        raise ValueError('step_index must be positive when provided')
+
+    time_since_prev_step_ms = _coerce_int_or_none(raw.get('time_since_prev_step_ms'))
+    if time_since_prev_step_ms is not None and time_since_prev_step_ms < 0:
+        raise ValueError('time_since_prev_step_ms must be >= 0 when provided')
+
+    delta_e_before = _coerce_float_or_none(raw.get('delta_e_before'))
+    if delta_e_before is None:
+        delta_e_before = _extract_delta(state_before)
+    delta_e_after = _coerce_float_or_none(raw.get('delta_e_after'))
+    if delta_e_after is None:
+        delta_e_after = _extract_delta(state_after)
+
+    mix_before_r = _coerce_int_or_none(raw.get('mix_before_r'))
+    mix_before_g = _coerce_int_or_none(raw.get('mix_before_g'))
+    mix_before_b = _coerce_int_or_none(raw.get('mix_before_b'))
+    if mix_before_r is None or mix_before_g is None or mix_before_b is None:
+        mix_before_r, mix_before_g, mix_before_b = _extract_rgb(state_before)
+
+    mix_after_r = _coerce_int_or_none(raw.get('mix_after_r'))
+    mix_after_g = _coerce_int_or_none(raw.get('mix_after_g'))
+    mix_after_b = _coerce_int_or_none(raw.get('mix_after_b'))
+    if mix_after_r is None or mix_after_g is None or mix_after_b is None:
+        mix_after_r, mix_after_g, mix_after_b = _extract_rgb(state_after)
+
     return {
         'attempt_uuid': attempt_uuid,
         'seq': seq,
@@ -366,6 +476,18 @@ def _normalize_event_payload(raw, attempt_uuid_default=None):
         'state_before_json': state_before,
         'state_after_json': state_after,
         'metadata_json': metadata_json,
+        'step_index': step_index,
+        'time_since_prev_step_ms': time_since_prev_step_ms,
+        'action_type': action_type,
+        'amount': amount,
+        'delta_e_before': delta_e_before,
+        'delta_e_after': delta_e_after,
+        'mix_before_r': mix_before_r,
+        'mix_before_g': mix_before_g,
+        'mix_before_b': mix_before_b,
+        'mix_after_r': mix_after_r,
+        'mix_after_g': mix_after_g,
+        'mix_after_b': mix_after_b,
     }
 
 
@@ -396,6 +518,18 @@ def _upsert_attempt_header(payload):
         if val is not None and getattr(row, attr) is None:
             setattr(row, attr, val)
 
+    final_delta_e = _coerce_float_or_none(payload.get('final_delta_e'))
+    if final_delta_e is not None:
+        row.final_delta_e = final_delta_e
+
+    payload_duration_sec = _coerce_float_or_none(payload.get('duration_sec'))
+    if payload_duration_sec is not None:
+        row.duration_sec = max(0.0, payload_duration_sec)
+
+    payload_num_steps = _coerce_int_or_none(payload.get('num_steps'))
+    if payload_num_steps is not None:
+        row.num_steps = max(0, payload_num_steps)
+
     # Initial drops/rgb should reflect baseline state; keep first-write-wins.
     if created:
         row.initial_drop_white = int(payload.get('initial_drop_white', 0) or 0)
@@ -422,12 +556,37 @@ def _upsert_attempt_header(payload):
         if row.end_reason is None:
             row.end_reason = end_reason
         ended_client = _coerce_int_or_none(payload.get('attempt_ended_client_ts_ms'))
-        if ended_client is not None and row.attempt_ended_client_ts_ms is None:
+        if (
+            ended_client is not None
+            and ended_client > 0
+            and row.attempt_ended_client_ts_ms is None
+        ):
             row.attempt_ended_client_ts_ms = ended_client
         if row.attempt_ended_server_ts is None:
             row.attempt_ended_server_ts = _utcnow()
 
+    # Keep summary fields up to date when both timestamps are known.
+    if row.attempt_started_server_ts is not None and row.attempt_ended_server_ts is not None:
+        row.duration_sec = max(
+            0.0,
+            (row.attempt_ended_server_ts - row.attempt_started_server_ts).total_seconds(),
+        )
+
     return row
+
+
+def _refresh_mixing_attempt_num_steps(attempt_uuid):
+    row = MixingAttempt.query.get(attempt_uuid)
+    if row is None:
+        return
+    db.session.flush()
+    max_step = (
+        db.session.query(func.max(MixingAttemptEvent.step_index))
+        .filter(MixingAttemptEvent.attempt_uuid == attempt_uuid)
+        .scalar()
+    )
+    if max_step is not None:
+        row.num_steps = int(max_step)
 
 
 def _ingest_mixing_events(attempt_uuid, raw_events):
@@ -463,6 +622,23 @@ def _ingest_mixing_events(attempt_uuid, raw_events):
     next_expected_new_seq = existing_max_seq + 1
     to_insert = []
     duplicates = 0
+    max_existing_step_index = (
+        db.session.query(func.max(MixingAttemptEvent.step_index))
+        .filter(MixingAttemptEvent.attempt_uuid == attempt_uuid)
+        .scalar()
+    ) or 0
+    last_existing_decision_ts = (
+        db.session.query(MixingAttemptEvent.client_ts_ms)
+        .filter(
+            MixingAttemptEvent.attempt_uuid == attempt_uuid,
+            MixingAttemptEvent.step_index.isnot(None),
+        )
+        .order_by(MixingAttemptEvent.step_index.desc())
+        .limit(1)
+        .scalar()
+    )
+    next_step_index = max_existing_step_index + 1
+    last_decision_client_ts = _coerce_int_or_none(last_existing_decision_ts)
 
     for ev in normalized:
         current_seq = ev['seq']
@@ -477,6 +653,18 @@ def _ingest_mixing_events(attempt_uuid, raw_events):
                 'state_before_json': existing.state_before_json,
                 'state_after_json': existing.state_after_json,
                 'metadata_json': existing.metadata_json,
+                'step_index': existing.step_index,
+                'time_since_prev_step_ms': existing.time_since_prev_step_ms,
+                'action_type': existing.action_type,
+                'amount': existing.amount,
+                'delta_e_before': existing.delta_e_before,
+                'delta_e_after': existing.delta_e_after,
+                'mix_before_r': existing.mix_before_r,
+                'mix_before_g': existing.mix_before_g,
+                'mix_before_b': existing.mix_before_b,
+                'mix_after_r': existing.mix_after_r,
+                'mix_after_g': existing.mix_after_g,
+                'mix_after_b': existing.mix_after_b,
             })
             incoming_payload = _canonical_event_payload(ev)
             if existing_payload != incoming_payload:
@@ -491,6 +679,22 @@ def _ingest_mixing_events(attempt_uuid, raw_events):
         # Disallow gaps in new sequence insertion.
         if current_seq != next_expected_new_seq:
             raise ValueError(f'seq gap at seq={current_seq}; expected={next_expected_new_seq}')
+
+        action_type = ev.get('action_type')
+        is_decision = _is_decision_event(action_type)
+        if is_decision:
+            if ev.get('step_index') is None:
+                ev['step_index'] = next_step_index
+            if ev.get('time_since_prev_step_ms') is None:
+                if last_decision_client_ts is None:
+                    ev['time_since_prev_step_ms'] = None
+                else:
+                    ev['time_since_prev_step_ms'] = max(0, ev['client_ts_ms'] - last_decision_client_ts)
+            next_step_index = max(next_step_index, ev['step_index'] + 1)
+            last_decision_client_ts = ev['client_ts_ms']
+        else:
+            ev['step_index'] = None
+            ev['time_since_prev_step_ms'] = None
 
         to_insert.append(MixingAttemptEvent(**ev))
         next_expected_new_seq += 1
@@ -515,6 +719,7 @@ def _ensure_terminal_telemetry_from_gameplay(data, end_reason):
         'target_b': data.get('target_b'),
         'attempt_ended_client_ts_ms': _coerce_int_or_none(data.get('attempt_ended_client_ts_ms')),
         'end_reason': end_reason,
+        'final_delta_e': _coerce_float_or_none(data.get('delta_e')),
     }
     _upsert_attempt_header(header_payload)
 
@@ -532,18 +737,53 @@ def _ensure_terminal_telemetry_from_gameplay(data, end_reason):
         .filter(MixingAttemptEvent.attempt_uuid == attempt_uuid)
         .scalar()
     ) or 0
+    max_step_index = (
+        db.session.query(func.max(MixingAttemptEvent.step_index))
+        .filter(MixingAttemptEvent.attempt_uuid == attempt_uuid)
+        .scalar()
+    ) or 0
+    prev_decision_ts = (
+        db.session.query(MixingAttemptEvent.client_ts_ms)
+        .filter(
+            MixingAttemptEvent.attempt_uuid == attempt_uuid,
+            MixingAttemptEvent.step_index.isnot(None),
+        )
+        .order_by(MixingAttemptEvent.step_index.desc())
+        .limit(1)
+        .scalar()
+    )
+    end_client_ts = _coerce_int_or_none(data.get('attempt_ended_client_ts_ms'))
+    if end_client_ts is None or end_client_ts <= 0:
+        end_client_ts = int(_utcnow().timestamp() * 1000)
+    mapped_action_type = 'success' if end_reason == 'saved_match' else ('stop' if end_reason == 'saved_stop' else 'skip')
     state = _state_from_gameplay_payload(data)
     synthetic_event = MixingAttemptEvent(
         attempt_uuid=attempt_uuid,
         seq=max_seq + 1,
         event_type=boundary_type,
         action_color=None,
-        client_ts_ms=_coerce_int_or_none(data.get('attempt_ended_client_ts_ms')) or 0,
+        client_ts_ms=end_client_ts,
         state_before_json=state,
         state_after_json=state,
-        metadata_json={'source': 'server_reconciliation'},
+        metadata_json={'source': 'server_reconciliation', 'terminal_end_reason': end_reason},
+        step_index=max_step_index + 1,
+        time_since_prev_step_ms=(
+            max(0, end_client_ts - prev_decision_ts)
+            if _coerce_int_or_none(prev_decision_ts) is not None else None
+        ),
+        action_type=mapped_action_type,
+        amount=None,
+        delta_e_before=_extract_delta(state),
+        delta_e_after=_extract_delta(state),
+        mix_before_r=state['mixed_rgb'][0],
+        mix_before_g=state['mixed_rgb'][1],
+        mix_before_b=state['mixed_rgb'][2],
+        mix_after_r=state['mixed_rgb'][0],
+        mix_after_g=state['mixed_rgb'][1],
+        mix_after_b=state['mixed_rgb'][2],
     )
     db.session.add(synthetic_event)
+    _refresh_mixing_attempt_num_steps(attempt_uuid)
 
 
 @main.route('/api/mixing-attempt/start-or-update', methods=['POST'])
@@ -574,6 +814,7 @@ def mixing_attempt_events():
             return jsonify({'status': 'error', 'message': 'unknown attempt_uuid'}), 404
 
         result = _ingest_mixing_events(attempt_uuid, data.get('events'))
+        _refresh_mixing_attempt_num_steps(attempt_uuid)
         db.session.commit()
         return jsonify({'status': 'success', **result})
     except ValueError as ve:
@@ -596,8 +837,9 @@ def mixing_attempt_ingest():
             return jsonify({'status': 'error', 'message': 'attempt_uuid required'}), 400
 
         header['attempt_uuid'] = attempt_uuid
-        _upsert_attempt_header(header)
+        row = _upsert_attempt_header(header)
         result = _ingest_mixing_events(attempt_uuid, events)
+        _refresh_mixing_attempt_num_steps(attempt_uuid)
         db.session.commit()
         return jsonify({'status': 'success', **result})
     except ValueError as ve:
@@ -1098,6 +1340,535 @@ ALLOWED_EVENTS = frozenset({
     'first_palette_interaction',
     'save_attempt',
 })
+
+
+@main.route('/api/stat/summary', methods=['GET'])
+def stat_summary():
+    """
+    Lightweight research dashboard data from mixing telemetry tables.
+    Public URL by design; no in-app link is exposed.
+    """
+    try:
+        def _fit_linear_model(rows, y_key, x_keys):
+            clean = []
+            for row in rows:
+                y_val = _coerce_float_or_none(row.get(y_key))
+                if y_val is None:
+                    continue
+                x_vals = []
+                valid = True
+                for k in x_keys:
+                    xv = _coerce_float_or_none(row.get(k))
+                    if xv is None:
+                        valid = False
+                        break
+                    x_vals.append(xv)
+                if valid:
+                    clean.append((y_val, x_vals))
+
+            n = len(clean)
+            p = len(x_keys)
+            if n <= p + 1:
+                return {'n': n, 'r2': None, 'coefficients': []}
+
+            y = np.array([r[0] for r in clean], dtype=float)
+            X_raw = np.array([r[1] for r in clean], dtype=float)
+            X = np.column_stack([np.ones(n), X_raw])
+
+            beta, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
+            y_hat = X @ beta
+            ss_res = float(np.sum((y - y_hat) ** 2))
+            ss_tot = float(np.sum((y - np.mean(y)) ** 2))
+            r2 = None if ss_tot <= 0 else max(0.0, 1.0 - (ss_res / ss_tot))
+
+            coef_rows = [{'term': 'intercept', 'beta': float(beta[0])}]
+            for i, key in enumerate(x_keys, start=1):
+                coef_rows.append({'term': key, 'beta': float(beta[i])})
+
+            return {'n': n, 'r2': r2, 'coefficients': coef_rows}
+
+        def _fit_random_intercept_lmm(rows, y_key, x_keys, group_key='user_id', max_iter=8):
+            prepared = []
+            for row in rows:
+                g = row.get(group_key)
+                if not g:
+                    continue
+                y_val = _coerce_float_or_none(row.get(y_key))
+                if y_val is None:
+                    continue
+                x_vals = []
+                ok = True
+                for k in x_keys:
+                    xv = _coerce_float_or_none(row.get(k))
+                    if xv is None:
+                        ok = False
+                        break
+                    x_vals.append(xv)
+                if ok:
+                    prepared.append((g, y_val, x_vals))
+
+            n = len(prepared)
+            p = len(x_keys) + 1  # + intercept
+            if n <= p + 1:
+                return {'n': n, 'groups': 0, 'sigma_u': None, 'sigma_e': None, 'coefficients': []}
+
+            groups = {}
+            for g, yv, xv in prepared:
+                groups.setdefault(g, {'y': [], 'x': []})
+                groups[g]['y'].append(yv)
+                groups[g]['x'].append([1.0] + xv)
+            g_count = len(groups)
+            if g_count < 2:
+                return {'n': n, 'groups': g_count, 'sigma_u': None, 'sigma_e': None, 'coefficients': []}
+
+            # OLS init
+            X_all = np.array([v['x'][i] for v in groups.values() for i in range(len(v['x']))], dtype=float)
+            y_all = np.array([v['y'][i] for v in groups.values() for i in range(len(v['y']))], dtype=float)
+            beta, _, _, _ = np.linalg.lstsq(X_all, y_all, rcond=None)
+            resid = y_all - X_all @ beta
+            sigma_e2 = max(1e-8, float(np.var(resid)))
+            sigma_u2 = max(1e-8, float(np.var([np.mean(v['y']) for v in groups.values()])))
+
+            for _ in range(max_iter):
+                xt_vinv_x = np.zeros((p, p), dtype=float)
+                xt_vinv_y = np.zeros((p,), dtype=float)
+
+                for v in groups.values():
+                    Xg = np.array(v['x'], dtype=float)
+                    yg = np.array(v['y'], dtype=float)
+                    ng = len(yg)
+                    denom = sigma_e2 + ng * sigma_u2
+                    # V^{-1} = (1/sigma_e2)I - [sigma_u2 / (sigma_e2 * (sigma_e2 + n*sigma_u2))] 11'
+                    vinv = (1.0 / sigma_e2) * np.eye(ng) - (
+                        sigma_u2 / (sigma_e2 * denom)
+                    ) * np.ones((ng, ng))
+                    xt_vinv_x += Xg.T @ vinv @ Xg
+                    xt_vinv_y += Xg.T @ vinv @ yg
+
+                beta_new = np.linalg.solve(xt_vinv_x, xt_vinv_y)
+
+                # Update variance components from BLUP residual decomposition
+                u_hats = []
+                eps_sq_sum = 0.0
+                eps_n = 0
+                for v in groups.values():
+                    Xg = np.array(v['x'], dtype=float)
+                    yg = np.array(v['y'], dtype=float)
+                    ng = len(yg)
+                    rg = yg - Xg @ beta_new
+                    u_hat = (sigma_u2 / (sigma_e2 + ng * sigma_u2)) * float(np.sum(rg))
+                    u_hats.append(u_hat)
+                    eg = rg - u_hat
+                    eps_sq_sum += float(np.sum(eg ** 2))
+                    eps_n += ng
+
+                sigma_e2_new = max(1e-8, eps_sq_sum / max(1, eps_n - p))
+                sigma_u2_new = max(1e-8, float(np.var(u_hats)))
+
+                if (
+                    np.max(np.abs(beta_new - beta)) < 1e-8
+                    and abs(sigma_e2_new - sigma_e2) < 1e-8
+                    and abs(sigma_u2_new - sigma_u2) < 1e-8
+                ):
+                    beta = beta_new
+                    sigma_e2 = sigma_e2_new
+                    sigma_u2 = sigma_u2_new
+                    break
+
+                beta = beta_new
+                sigma_e2 = sigma_e2_new
+                sigma_u2 = sigma_u2_new
+
+            coef_rows = [{'term': 'intercept', 'beta': float(beta[0])}]
+            for i, key in enumerate(x_keys, start=1):
+                coef_rows.append({'term': key, 'beta': float(beta[i])})
+
+            return {
+                'n': n,
+                'groups': g_count,
+                'sigma_u': float(np.sqrt(max(0.0, sigma_u2))),
+                'sigma_e': float(np.sqrt(max(0.0, sigma_e2))),
+                'coefficients': coef_rows,
+            }
+
+        overview_row = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COUNT(*)::bigint AS attempts,
+                  COUNT(DISTINCT user_id)::bigint AS users,
+                  AVG(NULLIF(num_steps, 0))::double precision AS avg_num_steps,
+                  AVG(final_delta_e)::double precision AS avg_final_delta_e
+                FROM mixing_attempts
+                """
+            )
+        ).mappings().first()
+
+        trial_rows = db.session.execute(
+            db.text(
+                """
+                WITH attempts_ranked AS (
+                  SELECT
+                    ma.attempt_uuid,
+                    ma.user_id,
+                    ma.num_steps,
+                    ma.attempt_started_server_ts,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY ma.user_id
+                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
+                    ) AS trial_index
+                  FROM mixing_attempts ma
+                  WHERE ma.user_id IS NOT NULL
+                ),
+                step_rows AS (
+                  SELECT
+                    ar.trial_index,
+                    me.delta_e_before,
+                    me.delta_e_after
+                  FROM attempts_ranked ar
+                  JOIN mixing_attempt_events me ON me.attempt_uuid = ar.attempt_uuid
+                  WHERE me.step_index IS NOT NULL
+                    AND me.delta_e_before IS NOT NULL
+                    AND me.delta_e_after IS NOT NULL
+                ),
+                attempt_rows AS (
+                  SELECT trial_index, num_steps
+                  FROM attempts_ranked
+                  WHERE num_steps IS NOT NULL
+                )
+                SELECT
+                  s.trial_index,
+                  COUNT(*)::bigint AS n_steps,
+                  AVG(CASE WHEN s.delta_e_after < s.delta_e_before THEN 1.0 ELSE 0.0 END)::double precision AS improving_rate,
+                  AVG(CASE WHEN s.delta_e_after > s.delta_e_before THEN 1.0 ELSE 0.0 END)::double precision AS worsening_rate,
+                  AVG(s.delta_e_before - s.delta_e_after)::double precision AS mean_step_gain,
+                  (
+                    SELECT AVG(a.num_steps)::double precision
+                    FROM attempt_rows a
+                    WHERE a.trial_index = s.trial_index
+                  ) AS avg_steps_to_completion
+                FROM step_rows s
+                GROUP BY s.trial_index
+                ORDER BY s.trial_index
+                LIMIT 60
+                """
+            )
+        ).mappings().all()
+
+        difficulty_rows = db.session.execute(
+            db.text(
+                """
+                WITH step_rows AS (
+                  SELECT
+                    me.delta_e_before,
+                    me.delta_e_after,
+                    (me.delta_e_before - me.delta_e_after) AS step_gain,
+                    CASE
+                      WHEN me.delta_e_before < 1 THEN '[0,1)'
+                      WHEN me.delta_e_before < 2 THEN '[1,2)'
+                      WHEN me.delta_e_before < 4 THEN '[2,4)'
+                      WHEN me.delta_e_before < 8 THEN '[4,8)'
+                      ELSE '[8,+)'
+                    END AS de_bucket
+                  FROM mixing_attempt_events me
+                  WHERE me.step_index IS NOT NULL
+                    AND me.delta_e_before IS NOT NULL
+                    AND me.delta_e_after IS NOT NULL
+                )
+                SELECT
+                  de_bucket,
+                  COUNT(*)::bigint AS n_steps,
+                  AVG(CASE WHEN delta_e_after < delta_e_before THEN 1.0 ELSE 0.0 END)::double precision AS improving_rate,
+                  AVG(step_gain)::double precision AS mean_step_gain
+                FROM step_rows
+                GROUP BY de_bucket
+                ORDER BY
+                  CASE de_bucket
+                    WHEN '[0,1)' THEN 1
+                    WHEN '[1,2)' THEN 2
+                    WHEN '[2,4)' THEN 3
+                    WHEN '[4,8)' THEN 4
+                    ELSE 5
+                  END
+                """
+            )
+        ).mappings().all()
+
+        random_rows = db.session.execute(
+            db.text(
+                """
+                WITH attempts_ranked AS (
+                  SELECT
+                    ma.attempt_uuid,
+                    ma.user_id,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY ma.user_id
+                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
+                    ) AS trial_index
+                  FROM mixing_attempts ma
+                  WHERE ma.user_id IS NOT NULL
+                ),
+                step_rows AS (
+                  SELECT
+                    ar.trial_index,
+                    (me.delta_e_before - me.delta_e_after) AS step_gain,
+                    CASE WHEN me.delta_e_after < me.delta_e_before THEN 1 ELSE 0 END AS improving
+                  FROM attempts_ranked ar
+                  JOIN mixing_attempt_events me ON me.attempt_uuid = ar.attempt_uuid
+                  WHERE me.step_index IS NOT NULL
+                    AND me.delta_e_before IS NOT NULL
+                    AND me.delta_e_after IS NOT NULL
+                )
+                SELECT
+                  trial_index,
+                  COUNT(*)::bigint AS n_steps,
+                  AVG(improving::double precision)::double precision AS improving_rate,
+                  AVG(step_gain)::double precision AS mean_gain,
+                  STDDEV_POP(step_gain)::double precision AS sd_gain
+                FROM step_rows
+                GROUP BY trial_index
+                ORDER BY trial_index
+                LIMIT 60
+                """
+            )
+        ).mappings().all()
+
+        time_rows = db.session.execute(
+            db.text(
+                """
+                WITH step_rows AS (
+                  SELECT
+                    me.time_since_prev_step_ms,
+                    me.delta_e_before,
+                    me.delta_e_after,
+                    (me.delta_e_before - me.delta_e_after) AS step_gain,
+                    CASE
+                      WHEN me.time_since_prev_step_ms IS NULL THEN 'first_step'
+                      WHEN me.time_since_prev_step_ms < 1000 THEN '<1s'
+                      WHEN me.time_since_prev_step_ms < 3000 THEN '1-3s'
+                      WHEN me.time_since_prev_step_ms < 7000 THEN '3-7s'
+                      ELSE '7s+'
+                    END AS time_bucket
+                  FROM mixing_attempt_events me
+                  WHERE me.step_index IS NOT NULL
+                    AND me.delta_e_before IS NOT NULL
+                    AND me.delta_e_after IS NOT NULL
+                )
+                SELECT
+                  time_bucket,
+                  COUNT(*)::bigint AS n_steps,
+                  AVG(CASE WHEN delta_e_after < delta_e_before THEN 1.0 ELSE 0.0 END)::double precision AS improving_rate,
+                  AVG(step_gain)::double precision AS mean_step_gain
+                FROM step_rows
+                GROUP BY time_bucket
+                ORDER BY
+                  CASE time_bucket
+                    WHEN 'first_step' THEN 1
+                    WHEN '<1s' THEN 2
+                    WHEN '1-3s' THEN 3
+                    WHEN '3-7s' THEN 4
+                    ELSE 5
+                  END
+                """
+            )
+        ).mappings().all()
+
+        stop_rows = db.session.execute(
+            db.text(
+                """
+                WITH ended AS (
+                  SELECT
+                    attempt_uuid,
+                    end_reason,
+                    final_delta_e,
+                    num_steps,
+                    CASE
+                      WHEN final_delta_e IS NULL THEN 'unknown'
+                      WHEN final_delta_e < 1 THEN '[0,1)'
+                      WHEN final_delta_e < 2 THEN '[1,2)'
+                      WHEN final_delta_e < 4 THEN '[2,4)'
+                      WHEN final_delta_e < 8 THEN '[4,8)'
+                      ELSE '[8,+)'
+                    END AS de_bucket
+                  FROM mixing_attempts
+                  WHERE end_reason IS NOT NULL
+                )
+                SELECT
+                  de_bucket,
+                  COUNT(*)::bigint AS n_attempts,
+                  AVG(CASE WHEN end_reason = 'saved_stop' THEN 1.0 ELSE 0.0 END)::double precision AS stop_probability,
+                  AVG(CASE WHEN end_reason = 'saved_match' THEN 1.0 ELSE 0.0 END)::double precision AS success_probability,
+                  AVG(num_steps)::double precision AS avg_num_steps
+                FROM ended
+                GROUP BY de_bucket
+                ORDER BY
+                  CASE de_bucket
+                    WHEN '[0,1)' THEN 1
+                    WHEN '[1,2)' THEN 2
+                    WHEN '[2,4)' THEN 3
+                    WHEN '[4,8)' THEN 4
+                    WHEN '[8,+)' THEN 5
+                    ELSE 6
+                  END
+                """
+            )
+        ).mappings().all()
+
+        stop_dispersion = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COUNT(*)::bigint AS n_stops,
+                  AVG(final_delta_e)::double precision AS mean_stop_delta_e,
+                  STDDEV_POP(final_delta_e)::double precision AS sd_stop_delta_e
+                FROM mixing_attempts
+                WHERE end_reason = 'saved_stop' AND final_delta_e IS NOT NULL
+                """
+            )
+        ).mappings().first()
+
+        multivariate_rows = db.session.execute(
+            db.text(
+                """
+                WITH attempts_ranked AS (
+                  SELECT
+                    ma.attempt_uuid,
+                    ma.user_id,
+                    ma.final_delta_e,
+                    ma.end_reason,
+                    ma.num_steps,
+                    ma.duration_sec,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY ma.user_id
+                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
+                    ) AS trial_index
+                  FROM mixing_attempts ma
+                  WHERE ma.user_id IS NOT NULL
+                )
+                SELECT
+                  ar.attempt_uuid,
+                  ar.user_id,
+                  ar.trial_index,
+                  ar.final_delta_e,
+                  ar.end_reason,
+                  ar.num_steps,
+                  ar.duration_sec,
+                  me.delta_e_before,
+                  me.delta_e_after,
+                  me.time_since_prev_step_ms
+                FROM attempts_ranked ar
+                JOIN mixing_attempt_events me ON me.attempt_uuid = ar.attempt_uuid
+                WHERE me.step_index IS NOT NULL
+                  AND me.delta_e_before IS NOT NULL
+                  AND me.delta_e_after IS NOT NULL
+                LIMIT 250000
+                """
+            )
+        ).mappings().all()
+
+        step_model_rows = []
+        for r in multivariate_rows:
+            user_id = r.get('user_id')
+            trial_index = _coerce_float_or_none(r.get('trial_index'))
+            delta_before = _coerce_float_or_none(r.get('delta_e_before'))
+            delta_after = _coerce_float_or_none(r.get('delta_e_after'))
+            t_ms = _coerce_float_or_none(r.get('time_since_prev_step_ms'))
+            if (not user_id) or trial_index is None or delta_before is None or delta_after is None:
+                continue
+            # log1p stabilizes heavy-tailed decision-time distribution.
+            log_time = np.log1p(max(0.0, t_ms if t_ms is not None else 0.0))
+            step_gain = delta_before - delta_after
+            is_improving = 1.0 if delta_after < delta_before else 0.0
+            step_model_rows.append({
+                'user_id': user_id,
+                'step_gain': step_gain,
+                'is_improving': is_improving,
+                'trial_index': trial_index,
+                'delta_e_before': delta_before,
+                'log_time_since_prev_step': float(log_time),
+            })
+
+        attempt_map = {}
+        for r in multivariate_rows:
+            attempt_uuid = r.get('attempt_uuid')
+            if not attempt_uuid:
+                continue
+            if attempt_uuid in attempt_map:
+                continue
+            trial_index = _coerce_float_or_none(r.get('trial_index'))
+            final_delta_e = _coerce_float_or_none(r.get('final_delta_e'))
+            num_steps = _coerce_float_or_none(r.get('num_steps'))
+            duration_sec = _coerce_float_or_none(r.get('duration_sec'))
+            end_reason = r.get('end_reason')
+            if (not r.get('user_id')) or trial_index is None or final_delta_e is None:
+                continue
+            attempt_map[attempt_uuid] = {
+                'user_id': r.get('user_id'),
+                'trial_index': trial_index,
+                'final_delta_e': final_delta_e,
+                'num_steps': num_steps,
+                'duration_sec': duration_sec,
+                'stop_indicator': 1.0 if end_reason == 'saved_stop' else 0.0,
+            }
+
+        attempt_model_rows = list(attempt_map.values())
+
+        model_step_gain = _fit_linear_model(
+            step_model_rows,
+            y_key='step_gain',
+            x_keys=['trial_index', 'delta_e_before', 'log_time_since_prev_step'],
+        )
+        model_step_gain_ri = _fit_random_intercept_lmm(
+            step_model_rows,
+            y_key='step_gain',
+            x_keys=['trial_index', 'delta_e_before', 'log_time_since_prev_step'],
+            group_key='user_id',
+        )
+        model_improving_lpm = _fit_linear_model(
+            step_model_rows,
+            y_key='is_improving',
+            x_keys=['trial_index', 'delta_e_before', 'log_time_since_prev_step'],
+        )
+        model_improving_lpm_ri = _fit_random_intercept_lmm(
+            step_model_rows,
+            y_key='is_improving',
+            x_keys=['trial_index', 'delta_e_before', 'log_time_since_prev_step'],
+            group_key='user_id',
+        )
+        model_stop_lpm = _fit_linear_model(
+            attempt_model_rows,
+            y_key='stop_indicator',
+            x_keys=['final_delta_e', 'trial_index', 'num_steps'],
+        )
+        model_stop_lpm_ri = _fit_random_intercept_lmm(
+            attempt_model_rows,
+            y_key='stop_indicator',
+            x_keys=['final_delta_e', 'trial_index', 'num_steps'],
+            group_key='user_id',
+        )
+
+        return jsonify({
+            'status': 'success',
+            'overview': dict(overview_row or {}),
+            'h1_learning': [dict(r) for r in trial_rows],
+            'h2_difficulty': [dict(r) for r in difficulty_rows],
+            'h3_random_search_check': [dict(r) for r in random_rows],
+            'h4_time_cost': [dict(r) for r in time_rows],
+            'h5_stopping_rule': {
+                'by_final_delta_e_bucket': [dict(r) for r in stop_rows],
+                'stop_dispersion': dict(stop_dispersion or {}),
+            },
+            'multivariate_models': {
+                'step_gain_ols': model_step_gain,
+                'step_gain_random_intercept': model_step_gain_ri,
+                'improving_lpm': model_improving_lpm,
+                'improving_random_intercept': model_improving_lpm_ri,
+                'stop_lpm': model_stop_lpm,
+                'stop_random_intercept': model_stop_lpm_ri,
+            },
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @main.route('/api/analytics/event', methods=['POST'])

@@ -1,0 +1,591 @@
+{% extends "base.html" %}
+
+{% block title %}ShadeStudy Stats{% endblock %}
+
+{% block extra_css %}
+<style>
+  .stats-wrap {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px 16px 64px;
+  }
+  .stats-head {
+    margin-bottom: 20px;
+  }
+  .stats-head h1 {
+    margin: 0 0 8px;
+    font-size: 1.8rem;
+  }
+  .stats-head p {
+    margin: 0;
+    color: var(--text-secondary);
+  }
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 10px;
+    margin: 16px 0 24px;
+  }
+  .card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 12px;
+  }
+  .card .k {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .card .v {
+    margin-top: 6px;
+    font-size: 1.35rem;
+    font-weight: 800;
+  }
+  .section {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--surface);
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .section h2 {
+    margin: 0 0 8px;
+    font-size: 1.05rem;
+  }
+  .meta {
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+    font-size: 0.88rem;
+  }
+  .hypo {
+    margin: 0 0 10px;
+    padding-left: 16px;
+  }
+  .hypo li {
+    margin-bottom: 5px;
+  }
+  .table-wrap {
+    overflow-x: auto;
+  }
+  .chart-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .chart-card {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #fff;
+    padding: 8px 10px 10px;
+  }
+  .chart-title {
+    margin: 0 0 6px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .chart-canvas {
+    width: 100%;
+    height: 170px;
+    display: block;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  th, td {
+    border-bottom: 1px solid var(--border);
+    padding: 7px 8px;
+    text-align: left;
+    white-space: nowrap;
+  }
+  th {
+    color: var(--text-secondary);
+    font-size: 0.76rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .muted {
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="stats-wrap">
+  <div class="stats-head">
+    <h1>ShadeStudy Step-level Telemetry Stat Page</h1>
+    <p>
+      Kizárólag közvetlen URL-ről elérhető kutatási dashboard a gyakorlás, nehézség, idő- és stop-szabály hipotézisekhez.
+    </p>
+  </div>
+
+  <div class="cards" id="overviewCards"></div>
+
+  <section class="section">
+    <h2>Kutatási kérdés</h2>
+    <p class="meta">
+      Hogyan változik a felhasználók lépésenkénti döntési hatékonysága a gyakorlással egy perceptuális visszacsatolású színillesztési feladatban?
+    </p>
+    <ul class="hypo">
+      <li><strong>Fő oksági állítás:</strong> a gyakorlás (trial index) javítja a döntések minőségét.</li>
+      <li><strong>Alternatívák:</strong> nehézség-vezérelt viselkedés, kvázi-random keresés, időköltség, és stopping rule.</li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <h2>H1 - Tanulási hipotézis (causal learning)</h2>
+    <div class="meta">H0: beta_trial = 0, H1: beta_trial &gt; 0 improving arányra; illetve negatív kapcsolat trial es lepesszam kozott.</div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Improving rate by trial</p>
+        <canvas id="h1ImprovingChart" class="chart-canvas"></canvas>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Avg steps to completion by trial</p>
+        <canvas id="h1StepsChart" class="chart-canvas"></canvas>
+      </div>
+    </div>
+    <div class="table-wrap"><table id="h1Table"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>H2 - Nehézség-vezérelt viselkedés</h2>
+    <div class="meta">H0: beta_deltaE = 0, H1: beta_deltaE &lt; 0 improving valószínűségre.</div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Improving rate by deltaE bucket</p>
+        <canvas id="h2ImprovingChart" class="chart-canvas"></canvas>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Mean gain by deltaE bucket</p>
+        <canvas id="h2GainChart" class="chart-canvas"></canvas>
+      </div>
+    </div>
+    <div class="table-wrap"><table id="h2Table"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>H3 - Random keresés (null-like)</h2>
+    <div class="meta">Ha nincs trend trial szerint improving/gain metrikákban, az H3-at támogatja.</div>
+    <div class="table-wrap"><table id="h3Table"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>H4 - Időköltség alapú döntés</h2>
+    <div class="meta">H0: beta_time = 0, H1: beta_time &gt; 0 improving valószínűségre.</div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Improving rate by decision time</p>
+        <canvas id="h4ImprovingChart" class="chart-canvas"></canvas>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Mean gain by decision time</p>
+        <canvas id="h4GainChart" class="chart-canvas"></canvas>
+      </div>
+    </div>
+    <div class="table-wrap"><table id="h4Table"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>H5 - Stopping rule hipotézis</h2>
+    <div class="meta">Stop valószínűség alakulása final deltaE bucketek mentén és stop-szóródás userek között.</div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Stop vs success probability by final deltaE</p>
+        <canvas id="h5StopChart" class="chart-canvas"></canvas>
+      </div>
+    </div>
+    <div class="table-wrap"><table id="h5Table"></table></div>
+    <p class="muted" id="h5Dispersion"></p>
+  </section>
+
+  <section class="section">
+    <h2>Mathematical modelling (multivariate)</h2>
+    <div class="meta">
+      Adjusted modellek: egyidejuleg kezeli a trial, allapot-nehezseg (deltaE) es ido hatasat. Gyors OLS/LPM becsles dashboard celra.
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Step gain OLS coefficients</p>
+        <div class="table-wrap"><table id="m1Table"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Step gain random-intercept LMM</p>
+        <div class="table-wrap"><table id="m1riTable"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Improving linear probability model</p>
+        <div class="table-wrap"><table id="m2Table"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Improving random-intercept model</p>
+        <div class="table-wrap"><table id="m2riTable"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Stop probability linear model</p>
+        <div class="table-wrap"><table id="m3Table"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Stop random-intercept model</p>
+        <div class="table-wrap"><table id="m3riTable"></table></div>
+      </div>
+    </div>
+    <p class="muted" id="modelNotes"></p>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  function fmtNumber(x, digits) {
+    if (x === null || x === undefined || Number.isNaN(Number(x))) return '-';
+    return Number(x).toFixed(digits);
+  }
+
+  function buildTable(el, columns, rows) {
+    var html = '<thead><tr>' + columns.map(function(c) { return '<th>' + c.label + '</th>'; }).join('') + '</tr></thead>';
+    html += '<tbody>';
+    if (!rows || !rows.length) {
+      html += '<tr><td colspan="' + columns.length + '">No data</td></tr>';
+    } else {
+      rows.forEach(function(row) {
+        html += '<tr>' + columns.map(function(c) {
+          var val = row[c.key];
+          if (c.formatter) val = c.formatter(val);
+          return '<td>' + val + '</td>';
+        }).join('') + '</tr>';
+      });
+    }
+    html += '</tbody>';
+    el.innerHTML = html;
+  }
+
+  function drawAxes(ctx, w, h, pad) {
+    ctx.strokeStyle = '#c7cbd1';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(pad.l, h - pad.b);
+    ctx.lineTo(w - pad.r, h - pad.b);
+    ctx.lineTo(w - pad.r, pad.t);
+    ctx.stroke();
+  }
+
+  function drawLineChart(canvasId, points, opts) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var w = Math.max(280, Math.floor(rect.width || 480));
+    var h = Math.max(160, Math.floor(rect.height || 170));
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (!points || points.length < 1) return;
+
+    var pad = { l: 34, r: 10, t: 12, b: 24 };
+    var ys = points.map(function(p) { return p.y; }).filter(function(v) { return Number.isFinite(v); });
+    if (!ys.length) return;
+    var yMin = Number.isFinite(opts && opts.yMin) ? opts.yMin : Math.min.apply(null, ys);
+    var yMax = Number.isFinite(opts && opts.yMax) ? opts.yMax : Math.max.apply(null, ys);
+    if (yMax === yMin) yMax = yMin + 1;
+    var xMin = 0;
+    var xMax = points.length - 1;
+
+    drawAxes(ctx, w, h, pad);
+
+    function sx(i) {
+      return pad.l + ((i - xMin) / Math.max(1, (xMax - xMin))) * (w - pad.l - pad.r);
+    }
+    function sy(v) {
+      return h - pad.b - ((v - yMin) / (yMax - yMin)) * (h - pad.t - pad.b);
+    }
+
+    ctx.strokeStyle = opts.color || '#2f80ed';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    points.forEach(function(p, i) {
+      var x = sx(i);
+      var y = sy(p.y);
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.stroke();
+
+    ctx.fillStyle = opts.color || '#2f80ed';
+    points.forEach(function(p, i) {
+      var x = sx(i);
+      var y = sy(p.y);
+      ctx.beginPath();
+      ctx.arc(x, y, 2.2, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function drawBarChart(canvasId, labels, series, opts) {
+    var canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    var w = Math.max(280, Math.floor(rect.width || 480));
+    var h = Math.max(160, Math.floor(rect.height || 170));
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    if (!labels || !labels.length || !series || !series.length) return;
+
+    var pad = { l: 30, r: 10, t: 12, b: 24 };
+    drawAxes(ctx, w, h, pad);
+
+    var vals = [];
+    series.forEach(function(s) { s.values.forEach(function(v) { if (Number.isFinite(v)) vals.push(v); }); });
+    if (!vals.length) return;
+    var yMin = Number.isFinite(opts && opts.yMin) ? opts.yMin : Math.min(0, Math.min.apply(null, vals));
+    var yMax = Number.isFinite(opts && opts.yMax) ? opts.yMax : Math.max.apply(null, vals);
+    if (yMax === yMin) yMax = yMin + 1;
+
+    var groupW = (w - pad.l - pad.r) / labels.length;
+    var barW = Math.min(28, (groupW - 6) / series.length);
+
+    function sy(v) {
+      return h - pad.b - ((v - yMin) / (yMax - yMin)) * (h - pad.t - pad.b);
+    }
+    var yZero = sy(0);
+
+    labels.forEach(function(_, i) {
+      series.forEach(function(s, si) {
+        var v = s.values[i];
+        if (!Number.isFinite(v)) return;
+        var x = pad.l + i * groupW + 3 + si * barW;
+        var y = sy(v);
+        var top = Math.min(y, yZero);
+        var hh = Math.max(1, Math.abs(y - yZero));
+        ctx.fillStyle = s.color;
+        ctx.fillRect(x, top, barW - 2, hh);
+      });
+    });
+  }
+
+  function renderOverview(overview) {
+    var cards = [
+      { k: 'Attempts', v: overview.attempts || 0 },
+      { k: 'Users', v: overview.users || 0 },
+      { k: 'Avg steps / attempt', v: fmtNumber(overview.avg_num_steps, 2) },
+      { k: 'Avg final deltaE', v: fmtNumber(overview.avg_final_delta_e, 3) }
+    ];
+    var html = cards.map(function(c) {
+      return '<div class="card"><div class="k">' + c.k + '</div><div class="v">' + c.v + '</div></div>';
+    }).join('');
+    document.getElementById('overviewCards').innerHTML = html;
+  }
+
+  async function loadStats() {
+    var resp = await fetch('/api/stat/summary');
+    var data = await resp.json();
+    if (data.status !== 'success') throw new Error(data.message || 'Failed to load stats');
+
+    renderOverview(data.overview || {});
+
+    buildTable(
+      document.getElementById('h1Table'),
+      [
+        { key: 'trial_index', label: 'Trial' },
+        { key: 'n_steps', label: 'N steps' },
+        { key: 'improving_rate', label: 'Improving rate', formatter: function(v) { return fmtNumber(100 * v, 1) + '%'; } },
+        { key: 'worsening_rate', label: 'Worsening rate', formatter: function(v) { return fmtNumber(100 * v, 1) + '%'; } },
+        { key: 'mean_step_gain', label: 'Mean step gain', formatter: function(v) { return fmtNumber(v, 4); } },
+        { key: 'avg_steps_to_completion', label: 'Avg steps to completion', formatter: function(v) { return fmtNumber(v, 2); } }
+      ],
+      data.h1_learning || []
+    );
+    var h1 = data.h1_learning || [];
+    drawLineChart(
+      'h1ImprovingChart',
+      h1.map(function(r) { return { x: r.trial_index, y: 100 * r.improving_rate }; }),
+      { color: '#1f8a70', yMin: 0, yMax: 100 }
+    );
+    drawLineChart(
+      'h1StepsChart',
+      h1.map(function(r) { return { x: r.trial_index, y: r.avg_steps_to_completion }; }),
+      { color: '#8a2be2' }
+    );
+
+    buildTable(
+      document.getElementById('h2Table'),
+      [
+        { key: 'de_bucket', label: 'deltaE bucket' },
+        { key: 'n_steps', label: 'N steps' },
+        { key: 'improving_rate', label: 'Improving rate', formatter: function(v) { return fmtNumber(100 * v, 1) + '%'; } },
+        { key: 'mean_step_gain', label: 'Mean step gain', formatter: function(v) { return fmtNumber(v, 4); } }
+      ],
+      data.h2_difficulty || []
+    );
+    var h2 = data.h2_difficulty || [];
+    drawBarChart(
+      'h2ImprovingChart',
+      h2.map(function(r) { return r.de_bucket; }),
+      [{ values: h2.map(function(r) { return 100 * r.improving_rate; }), color: '#1f8a70' }],
+      { yMin: 0, yMax: 100 }
+    );
+    drawBarChart(
+      'h2GainChart',
+      h2.map(function(r) { return r.de_bucket; }),
+      [{ values: h2.map(function(r) { return r.mean_step_gain; }), color: '#2f80ed' }],
+      {}
+    );
+
+    buildTable(
+      document.getElementById('h3Table'),
+      [
+        { key: 'trial_index', label: 'Trial' },
+        { key: 'n_steps', label: 'N steps' },
+        { key: 'improving_rate', label: 'Improving rate', formatter: function(v) { return fmtNumber(100 * v, 1) + '%'; } },
+        { key: 'mean_gain', label: 'Mean gain', formatter: function(v) { return fmtNumber(v, 4); } },
+        { key: 'sd_gain', label: 'SD gain', formatter: function(v) { return fmtNumber(v, 4); } }
+      ],
+      data.h3_random_search_check || []
+    );
+
+    buildTable(
+      document.getElementById('h4Table'),
+      [
+        { key: 'time_bucket', label: 'Time bucket' },
+        { key: 'n_steps', label: 'N steps' },
+        { key: 'improving_rate', label: 'Improving rate', formatter: function(v) { return fmtNumber(100 * v, 1) + '%'; } },
+        { key: 'mean_step_gain', label: 'Mean step gain', formatter: function(v) { return fmtNumber(v, 4); } }
+      ],
+      data.h4_time_cost || []
+    );
+    var h4 = data.h4_time_cost || [];
+    drawBarChart(
+      'h4ImprovingChart',
+      h4.map(function(r) { return r.time_bucket; }),
+      [{ values: h4.map(function(r) { return 100 * r.improving_rate; }), color: '#1f8a70' }],
+      { yMin: 0, yMax: 100 }
+    );
+    drawBarChart(
+      'h4GainChart',
+      h4.map(function(r) { return r.time_bucket; }),
+      [{ values: h4.map(function(r) { return r.mean_step_gain; }), color: '#2f80ed' }],
+      {}
+    );
+
+    buildTable(
+      document.getElementById('h5Table'),
+      [
+        { key: 'de_bucket', label: 'Final deltaE bucket' },
+        { key: 'n_attempts', label: 'N attempts' },
+        { key: 'stop_probability', label: 'Stop probability', formatter: function(v) { return fmtNumber(100 * v, 1) + '%'; } },
+        { key: 'success_probability', label: 'Success probability', formatter: function(v) { return fmtNumber(100 * v, 1) + '%'; } },
+        { key: 'avg_num_steps', label: 'Avg steps', formatter: function(v) { return fmtNumber(v, 2); } }
+      ],
+      (data.h5_stopping_rule || {}).by_final_delta_e_bucket || []
+    );
+    var h5 = (data.h5_stopping_rule || {}).by_final_delta_e_bucket || [];
+    drawBarChart(
+      'h5StopChart',
+      h5.map(function(r) { return r.de_bucket; }),
+      [
+        { values: h5.map(function(r) { return 100 * r.stop_probability; }), color: '#e76f51' },
+        { values: h5.map(function(r) { return 100 * r.success_probability; }), color: '#2a9d8f' }
+      ],
+      { yMin: 0, yMax: 100 }
+    );
+
+    var disp = ((data.h5_stopping_rule || {}).stop_dispersion) || {};
+    document.getElementById('h5Dispersion').textContent =
+      'Stop dispersion: n=' + (disp.n_stops || 0) +
+      ', mean final deltaE=' + fmtNumber(disp.mean_stop_delta_e, 4) +
+      ', sd=' + fmtNumber(disp.sd_stop_delta_e, 4);
+
+    var models = data.multivariate_models || {};
+    var m1 = models.step_gain_ols || {};
+    var m1ri = models.step_gain_random_intercept || {};
+    var m2 = models.improving_lpm || {};
+    var m2ri = models.improving_random_intercept || {};
+    var m3 = models.stop_lpm || {};
+    var m3ri = models.stop_random_intercept || {};
+
+    function modelRows(m) {
+      return (m.coefficients || []).map(function(c) {
+        return { term: c.term, beta: c.beta };
+      });
+    }
+
+    buildTable(
+      document.getElementById('m1Table'),
+      [
+        { key: 'term', label: 'Term' },
+        { key: 'beta', label: 'Beta', formatter: function(v) { return fmtNumber(v, 6); } }
+      ],
+      modelRows(m1)
+    );
+    buildTable(
+      document.getElementById('m2Table'),
+      [
+        { key: 'term', label: 'Term' },
+        { key: 'beta', label: 'Beta', formatter: function(v) { return fmtNumber(v, 6); } }
+      ],
+      modelRows(m2)
+    );
+    buildTable(
+      document.getElementById('m1riTable'),
+      [
+        { key: 'term', label: 'Term' },
+        { key: 'beta', label: 'Beta', formatter: function(v) { return fmtNumber(v, 6); } }
+      ],
+      modelRows(m1ri)
+    );
+    buildTable(
+      document.getElementById('m2riTable'),
+      [
+        { key: 'term', label: 'Term' },
+        { key: 'beta', label: 'Beta', formatter: function(v) { return fmtNumber(v, 6); } }
+      ],
+      modelRows(m2ri)
+    );
+    buildTable(
+      document.getElementById('m3Table'),
+      [
+        { key: 'term', label: 'Term' },
+        { key: 'beta', label: 'Beta', formatter: function(v) { return fmtNumber(v, 6); } }
+      ],
+      modelRows(m3)
+    );
+    buildTable(
+      document.getElementById('m3riTable'),
+      [
+        { key: 'term', label: 'Term' },
+        { key: 'beta', label: 'Beta', formatter: function(v) { return fmtNumber(v, 6); } }
+      ],
+      modelRows(m3ri)
+    );
+
+    document.getElementById('modelNotes').textContent =
+      'Model fit: step_gain_ols (n=' + (m1.n || 0) + ', R2=' + fmtNumber(m1.r2, 4) + '), ' +
+      'improving_lpm (n=' + (m2.n || 0) + ', R2=' + fmtNumber(m2.r2, 4) + '), ' +
+      'stop_lpm (n=' + (m3.n || 0) + ', R2=' + fmtNumber(m3.r2, 4) + '). ' +
+      'Random intercept SDs: step_gain sigma_u=' + fmtNumber(m1ri.sigma_u, 4) +
+      ', improving sigma_u=' + fmtNumber(m2ri.sigma_u, 4) +
+      ', stop sigma_u=' + fmtNumber(m3ri.sigma_u, 4) + '.';
+  }
+
+  loadStats().catch(function(err) {
+    document.getElementById('overviewCards').innerHTML = '<div class="card"><div class="k">Error</div><div class="v" style="font-size:0.95rem;">' + err.message + '</div></div>';
+  });
+
+  window.addEventListener('resize', function() {
+    loadStats().catch(function() {});
+  });
+</script>
+{% endblock %}
