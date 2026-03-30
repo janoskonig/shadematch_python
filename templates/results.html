@@ -428,6 +428,9 @@
       if (key.startsWith('quota_milestone_')) return 'award-badge--quota-major';
       if (key.startsWith('coverage_') && meta && meta.threshold === 150) return 'award-badge--quota-major';
       if (key.startsWith('daily_champion')) return 'award-badge--daily';
+      if (key.startsWith('daily_mission_')) return 'award-badge--daily';
+      if (key === 'daily_fastest_match') return 'award-badge--daily';
+      if (key === 'daily_fewest_steps') return 'award-badge--daily';
       if (key.startsWith('streak_')) return 'award-badge--streak';
       if (key.startsWith('level_')) return 'award-badge--level';
       if (key.startsWith('coverage_')) return 'award-badge--coverage';
@@ -439,6 +442,12 @@
       if (key.startsWith('quota_milestone_')) return '🏆';
       if (key.startsWith('coverage_') && meta && meta.threshold === 150) return '✅';
       if (key.startsWith('daily_champion')) return '🏆';
+      if (key === 'daily_fastest_match') return '⚡';
+      if (key === 'daily_fewest_steps') return '🪄';
+      if (key.startsWith('daily_mission_precision_hit')) return '🎯';
+      if (key.startsWith('daily_mission_fast_finish')) return '⚡';
+      if (key.startsWith('daily_mission_efficient_mixer')) return '🧪';
+      if (key.startsWith('daily_mission_')) return '📆';
       if (key.startsWith('streak_')) return '🔥';
       if (key.startsWith('level_')) return '⬆️';
       if (key.startsWith('coverage_')) return '🎨';
@@ -453,6 +462,11 @@
         return pct + '% Coverage Milestone';
       }
       if (key.startsWith('daily_champion')) return 'Daily Champion' + (meta && meta.date ? ' ' + meta.date : '');
+      if (key === 'daily_fastest_match') return 'Fastest Color Match of the Day';
+      if (key === 'daily_fewest_steps') return 'Fewest Steps of the Day';
+      if (key === 'daily_mission_precision_hit') return 'Daily Mission: Precision Hit';
+      if (key === 'daily_mission_fast_finish') return 'Daily Mission: Fast Finish';
+      if (key === 'daily_mission_efficient_mixer') return 'Daily Mission: Efficient Mixer';
       if (key.startsWith('streak_')) return (meta && meta.days ? meta.days : '?') + '-Day Streak';
       if (key.startsWith('level_')) return 'Level ' + (meta && meta.level ? meta.level : '?');
       if (key.startsWith('coverage_')) {

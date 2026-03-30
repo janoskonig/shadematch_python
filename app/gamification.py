@@ -7,12 +7,16 @@ Quota-first design:
   - XP/streaks are retained as secondary reinforcement, never as completion.
   - Awards are split: quota_major (per-color 150, global %, final) vs reinforcement.
 """
-from datetime import date, datetime, timedelta
-from .models import UserProgress, UserAward, UserTargetColorStats, TargetColor
+from datetime import date, datetime, timedelta, time
+from .models import UserProgress, UserAward, UserTargetColorStats, TargetColor, MixingSession, MixingAttempt
 from . import db
 
 COVERAGE_QUOTA = 150
 STREAK_FREEZE_CAP = 3
+
+# Nonlinear level starts for quota coverage ratio (levels 1..9).
+# Level 10 still requires is_maxed_out=True (all colors at quota).
+LEVEL_START_THRESHOLDS = [0.00, 0.03, 0.08, 0.15, 0.24, 0.36, 0.50, 0.66, 0.83]
 
 XP_TABLE = {
     'perfect': 100,
@@ -59,7 +63,14 @@ def compute_level_from_quota(coverage_ratio: float, is_maxed_out: bool) -> int:
     """
     if is_maxed_out:
         return 10
-    return min(9, int(coverage_ratio * 9) + 1)
+    ratio = min(1.0, max(0.0, coverage_ratio))
+    level = 1
+    for idx, threshold in enumerate(LEVEL_START_THRESHOLDS[1:], start=2):
+        if ratio >= threshold:
+            level = idx
+        else:
+            break
+    return min(9, level)
 
 
 def compute_level_progress_pct_from_quota(coverage_ratio: float, is_maxed_out: bool) -> float:
@@ -67,13 +78,38 @@ def compute_level_progress_pct_from_quota(coverage_ratio: float, is_maxed_out: b
     if is_maxed_out:
         return 100.0
     level = compute_level_from_quota(coverage_ratio, is_maxed_out)
-    level_start = (level - 1) / 9.0
-    level_end = level / 9.0
-    span = level_end - level_start  # always 1/9
+    level_start = LEVEL_START_THRESHOLDS[level - 1]
+    level_end = 1.0 if level >= 9 else LEVEL_START_THRESHOLDS[level]
+    span = level_end - level_start
     if span <= 0:
         return 100.0
     pct = (coverage_ratio - level_start) / span * 100.0
     return round(min(100.0, max(0.0, pct)), 2)
+
+
+DAILY_MISSIONS = [
+    {
+        'id': 'precision_hit',
+        'label': 'Precision Hit',
+        'description': 'Get at least one perfect match today.',
+        'award_name': 'Daily Precision Hit',
+        'icon': '🎯',
+    },
+    {
+        'id': 'fast_finish',
+        'label': 'Fast Finish',
+        'description': 'Complete one color in 25 seconds or less.',
+        'award_name': 'Daily Fast Finish',
+        'icon': '⚡',
+    },
+    {
+        'id': 'efficient_mixer',
+        'label': 'Efficient Mixer',
+        'description': 'Complete one color in 12 steps or fewer.',
+        'award_name': 'Daily Efficient Mixer',
+        'icon': '🧪',
+    },
+]
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +177,179 @@ def _grant_award(user_id, award_key, award_scope='lifetime', award_scope_key='li
     )
     db.session.add(award)
     return award, True
+
+
+def _day_window(day: date):
+    start_dt = datetime.combine(day, time.min)
+    end_dt = start_dt + timedelta(days=1)
+    return start_dt, end_dt
+
+
+def _build_day_session_step_map(sessions):
+    uuids = [s.attempt_uuid for s in sessions if s.attempt_uuid]
+    if not uuids:
+        return {}
+    rows = MixingAttempt.query.filter(MixingAttempt.attempt_uuid.in_(uuids)).all()
+    return {r.attempt_uuid: r.num_steps for r in rows}
+
+
+def _effective_steps_for_session(session, step_map):
+    tracked_steps = step_map.get(session.attempt_uuid)
+    if tracked_steps is not None and tracked_steps >= 0:
+        return tracked_steps
+    # Fallback for older rows lacking telemetry step count.
+    return (
+        (session.drop_white or 0)
+        + (session.drop_black or 0)
+        + (session.drop_red or 0)
+        + (session.drop_yellow or 0)
+        + (session.drop_blue or 0)
+    )
+
+
+def build_daily_missions(user_id: str, day: date = None):
+    """Return today's mission board with completion flags."""
+    if not user_id:
+        return {'date': (day or date.today()).isoformat(), 'missions': []}
+    day = day or date.today()
+    start_dt, end_dt = _day_window(day)
+    sessions = (
+        MixingSession.query
+        .filter(MixingSession.user_id == user_id)
+        .filter(MixingSession.timestamp >= start_dt, MixingSession.timestamp < end_dt)
+        .all()
+    )
+    step_map = _build_day_session_step_map(sessions)
+    completed_ids = set()
+
+    for s in sessions:
+        if s.match_category == 'perfect':
+            completed_ids.add('precision_hit')
+        if (not s.skipped) and s.time_sec is not None and s.time_sec <= 25:
+            completed_ids.add('fast_finish')
+        if not s.skipped:
+            steps = _effective_steps_for_session(s, step_map)
+            if steps <= 12:
+                completed_ids.add('efficient_mixer')
+
+    missions = []
+    for m in DAILY_MISSIONS:
+        missions.append({
+            'id': m['id'],
+            'label': m['label'],
+            'description': m['description'],
+            'completed': m['id'] in completed_ids,
+            'icon': m['icon'],
+        })
+    return {'date': day.isoformat(), 'missions': missions}
+
+
+def grant_daily_mission_awards(user_id: str, day: date = None):
+    """
+    Grant mission completion awards for the given day.
+    Idempotent via (award_key, daily scope, day key).
+    """
+    day = day or date.today()
+    mission_state = build_daily_missions(user_id, day=day)
+    new_awards = []
+
+    mission_map = {m['id']: m for m in DAILY_MISSIONS}
+    for item in mission_state['missions']:
+        if not item.get('completed'):
+            continue
+        mission_id = item['id']
+        mission_def = mission_map[mission_id]
+        award_key = f'daily_mission_{mission_id}'
+        _, is_new = _grant_award(
+            user_id,
+            award_key,
+            award_scope='daily',
+            award_scope_key=mission_state['date'],
+            metadata={'date': mission_state['date'], 'mission_id': mission_id},
+        )
+        if is_new:
+            new_awards.append({
+                'key': award_key,
+                'name': mission_def['award_name'],
+                'type': 'daily_mission',
+                'award_class': 'daily',
+                'icon': mission_def['icon'],
+                'date': mission_state['date'],
+            })
+    return new_awards
+
+
+def grant_daily_performance_awards(day: date):
+    """
+    Resolve daily performance awards across all users for a date:
+      - Fastest completed match
+      - Fewest steps completed match
+    Returns a list of newly granted awards with winner user IDs.
+    """
+    start_dt, end_dt = _day_window(day)
+    sessions = (
+        MixingSession.query
+        .filter(MixingSession.timestamp >= start_dt, MixingSession.timestamp < end_dt)
+        .filter(MixingSession.skipped.is_(False))
+        .all()
+    )
+    if not sessions:
+        return []
+
+    new_awards = []
+
+    fastest_candidates = [s for s in sessions if s.time_sec is not None]
+    if fastest_candidates:
+        fastest = min(
+            fastest_candidates,
+            key=lambda s: (s.time_sec, s.timestamp or datetime.max),
+        )
+        _, is_new = _grant_award(
+            fastest.user_id,
+            'daily_fastest_match',
+            award_scope='daily',
+            award_scope_key=day.isoformat(),
+            metadata={'date': day.isoformat(), 'time_sec': fastest.time_sec},
+        )
+        if is_new:
+            new_awards.append({
+                'user_id': fastest.user_id,
+                'key': 'daily_fastest_match',
+                'name': 'Fastest Color Match of the Day',
+                'type': 'daily_performance',
+                'award_class': 'daily',
+                'icon': '⚡',
+                'date': day.isoformat(),
+            })
+
+    step_map = _build_day_session_step_map(sessions)
+    step_candidates = []
+    for s in sessions:
+        steps = _effective_steps_for_session(s, step_map)
+        step_candidates.append((steps, s.timestamp or datetime.max, s))
+
+    if step_candidates:
+        _, _, best_steps_session = min(step_candidates, key=lambda t: (t[0], t[1]))
+        best_steps = _effective_steps_for_session(best_steps_session, step_map)
+        _, is_new = _grant_award(
+            best_steps_session.user_id,
+            'daily_fewest_steps',
+            award_scope='daily',
+            award_scope_key=day.isoformat(),
+            metadata={'date': day.isoformat(), 'steps': best_steps},
+        )
+        if is_new:
+            new_awards.append({
+                'user_id': best_steps_session.user_id,
+                'key': 'daily_fewest_steps',
+                'name': 'Fewest Steps of the Day',
+                'type': 'daily_performance',
+                'award_class': 'daily',
+                'icon': '🪄',
+                'date': day.isoformat(),
+            })
+
+    return new_awards
 
 
 # ---------------------------------------------------------------------------

@@ -22,6 +22,9 @@ from .gamification import (
     build_progress_response,
     get_quota_ordered_catalog,
     grant_daily_champion,
+    grant_daily_mission_awards,
+    grant_daily_performance_awards,
+    build_daily_missions,
     get_user_profile,
     compute_quota_progress,
     compute_level_from_quota,
@@ -874,6 +877,7 @@ def save_session():
                     'progress': build_progress_response(user_id, up),
                     'new_awards': [],
                     'xp_earned': 0,
+                    'daily_missions': build_daily_missions(user_id),
                 })
 
         skipped = data.get('skipped', False)
@@ -901,6 +905,7 @@ def save_session():
             target_color_id=data.get('target_color_id'),
             delta_e=data.get('delta_e'),
         )
+        new_awards.extend(grant_daily_mission_awards(user_id))
 
         try:
             delta_for_reason = float(data.get('delta_e'))
@@ -919,6 +924,7 @@ def save_session():
             'streak_event': streak_event,
             'level_up': level_up,
             'progress': build_progress_response(user_id, up),
+            'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
         })
 
@@ -951,6 +957,7 @@ def save_skip():
                     'progress': build_progress_response(user_id, up),
                     'new_awards': [],
                     'xp_earned': 0,
+                    'daily_missions': build_daily_missions(user_id),
                 })
 
         delta_e = data.get('delta_e')
@@ -984,6 +991,7 @@ def save_skip():
             target_color_id=data.get('target_color_id'),
             delta_e=delta_e,
         )
+        new_awards.extend(grant_daily_mission_awards(user_id))
 
         _ensure_terminal_telemetry_from_gameplay(data, end_reason='skipped')
 
@@ -997,6 +1005,7 @@ def save_skip():
             'streak_event': streak_event,
             'level_up': level_up,
             'progress': build_progress_response(user_id, up),
+            'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
         })
 
@@ -1019,6 +1028,7 @@ def get_user_progress_route():
         return jsonify({
             'status': 'success',
             'progress': build_progress_response(user_id, up),
+            'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
         })
     except Exception as e:
@@ -1039,6 +1049,7 @@ def get_user_profile_route():
             'awards': awards,
             'color_stats': color_stats,
             'coverage_quota': COVERAGE_QUOTA,
+            'daily_missions': build_daily_missions(user_id),
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
@@ -1135,6 +1146,7 @@ def daily_challenge_today():
         )
         already_submitted = final_run is not None
         next_action_data = build_next_action(user_id)
+        next_action_data['daily_missions'] = build_daily_missions(user_id)
 
     return jsonify({
         'status': 'success',
@@ -1229,9 +1241,15 @@ def daily_challenge_resolve():
         db.session.add(winner)
 
         new_awards = grant_daily_champion(best.user_id, resolve_date_str)
+        daily_perf_awards = grant_daily_performance_awards(resolve_date)
         db.session.commit()
 
-        return jsonify({'status': 'success', 'winner_user_id': best.user_id, 'new_awards': new_awards})
+        return jsonify({
+            'status': 'success',
+            'winner_user_id': best.user_id,
+            'new_awards': new_awards,
+            'daily_performance_awards': daily_perf_awards,
+        })
 
     except Exception as e:
         db.session.rollback()

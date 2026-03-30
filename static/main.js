@@ -397,6 +397,7 @@ async function loadAndRenderProgress() {
     if (data.status === 'success') {
       renderProgressStrip(data.progress);
       if (data.next_action) renderNextAction(data.next_action);
+      if (data.daily_missions) renderDailyMissions(data.daily_missions);
     }
   } catch { /* silent */ }
 }
@@ -509,6 +510,9 @@ async function handleProgressionResponse(data) {
   if (data.next_action) {
     renderNextAction(data.next_action);
   }
+  if (data.daily_missions) {
+    renderDailyMissions(data.daily_missions);
+  }
 }
 
 // ── Next-action renderer ──────────────────────────────────────────────────
@@ -544,6 +548,34 @@ function renderNextAction(na) {
   `;
   el.dataset.actionId = p.id;
   el.dataset.route = (p.payload && p.payload.route) || '';
+  el.style.display = 'flex';
+}
+
+function renderDailyMissions(dm) {
+  if (!dm || !Array.isArray(dm.missions)) return;
+  let el = document.getElementById('dailyMissions');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'dailyMissions';
+    el.className = 'next-action-cta';
+    const anchor = document.getElementById('nextActionCta') || document.getElementById('progressStrip');
+    if (anchor && anchor.parentNode) {
+      anchor.parentNode.insertBefore(el, anchor.nextSibling);
+    } else {
+      document.body.appendChild(el);
+    }
+  }
+  const completed = dm.missions.filter(m => m.completed).length;
+  const total = dm.missions.length;
+  const chips = dm.missions.map((m) => {
+    const state = m.completed ? '✅' : '⬜';
+    return `<span class="na-label">${state} ${m.icon || '🎯'} ${m.label}</span>`;
+  }).join('');
+  el.innerHTML = `
+    <span class="na-icon">📆</span>
+    <span class="na-label">Daily missions ${completed}/${total}</span>
+    <span class="na-reason">${chips}</span>
+  `;
   el.style.display = 'flex';
 }
 
