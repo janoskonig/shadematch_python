@@ -75,6 +75,34 @@ function buildMixSnapshot({ mixedRgbOverride, deltaEOverride, timerSecOverride }
   };
 }
 
+function actionTypeFromEventType(eventType, metadata = null) {
+  if (eventType === 'action_add') return 'add';
+  if (eventType === 'action_remove') return 'remove';
+  if (eventType === 'boundary_reset') return 'reset';
+  if (eventType === 'boundary_skip') return 'skip';
+  if (eventType === 'boundary_save') {
+    const reason = metadata?.terminal_end_reason || null;
+    if (reason === 'saved_match') return 'success';
+    if (reason === 'saved_stop') return 'stop';
+  }
+  return null;
+}
+
+function isDecisionAction(actionType) {
+  return ['add', 'remove', 'reset', 'stop', 'skip', 'success'].includes(actionType);
+}
+
+function rgbFields(snapshot, prefix) {
+  const rgb = Array.isArray(snapshot?.mixed_rgb) && snapshot.mixed_rgb.length === 3
+    ? snapshot.mixed_rgb
+    : [null, null, null];
+  return {
+    [`${prefix}_r`]: Number.isFinite(rgb[0]) ? rgb[0] : null,
+    [`${prefix}_g`]: Number.isFinite(rgb[1]) ? rgb[1] : null,
+    [`${prefix}_b`]: Number.isFinite(rgb[2]) ? rgb[2] : null,
+  };
+}
+
 function serializeAttemptHeader(attempt) {
   return {
     attempt_uuid: attempt.attempt_uuid,
@@ -96,6 +124,8 @@ function serializeAttemptHeader(attempt) {
     first_action_client_ts_ms: attempt.first_action_client_ts_ms,
     attempt_ended_client_ts_ms: attempt.attempt_ended_client_ts_ms,
     end_reason: attempt.end_reason,
+    final_delta_e: normalizeDelta(window.lastMixDeltaE),
+    num_steps: attempt.decisionStepIndex,
     app_version: APP_VERSION,
   };
 }
@@ -116,6 +146,19 @@ async function postAttemptHeaderUpdate() {
 
 function enqueueTelemetryEvent({ event_type, action_color = null, state_before_json, state_after_json, client_ts_ms, metadata_json = null }) {
   if (!telemetryAttempt) return null;
+  const action_type = actionTypeFromEventType(event_type, metadata_json);
+  const decisionEvent = isDecisionAction(action_type);
+  let step_index = null;
+  let time_since_prev_step_ms = null;
+  if (decisionEvent) {
+    telemetryAttempt.decisionStepIndex += 1;
+    step_index = telemetryAttempt.decisionStepIndex;
+    if (telemetryAttempt.lastDecisionClientTsMs != null) {
+      time_since_prev_step_ms = Math.max(0, client_ts_ms - telemetryAttempt.lastDecisionClientTsMs);
+    }
+    telemetryAttempt.lastDecisionClientTsMs = client_ts_ms;
+  }
+
   telemetryAttempt.seq += 1;
   const event = {
     attempt_uuid: telemetryAttempt.attempt_uuid,
@@ -126,6 +169,14 @@ function enqueueTelemetryEvent({ event_type, action_color = null, state_before_j
     state_before_json,
     state_after_json,
     metadata_json,
+    step_index,
+    time_since_prev_step_ms,
+    action_type,
+    amount: (action_type === 'add' || action_type === 'remove') ? 1 : null,
+    delta_e_before: normalizeDelta(state_before_json?.delta_e),
+    delta_e_after: normalizeDelta(state_after_json?.delta_e),
+    ...rgbFields(state_before_json, 'mix_before'),
+    ...rgbFields(state_after_json, 'mix_after'),
   };
   telemetryEventBuffer.push(event);
   return event;
@@ -136,6 +187,7 @@ function updateBufferedEventDelta(stepId, deltaE) {
     const ev = telemetryEventBuffer[i];
     if (ev?.metadata_json?.step_id === stepId && ev.state_after_json?.delta_e == null) {
       ev.state_after_json.delta_e = deltaE;
+      ev.delta_e_after = normalizeDelta(deltaE);
       break;
     }
   }
@@ -160,6 +212,8 @@ function beginAttemptForCurrentTarget() {
     attempt_ended_client_ts_ms: null,
     end_reason: null,
     initial_snapshot: initialSnapshot,
+    lastDecisionClientTsMs: null,
+    decisionStepIndex: 0,
   };
   telemetryEventBuffer = [];
 
@@ -224,8 +278,17 @@ async function flushTelemetry({ finalize = false, endReason = null, terminalBoun
       if (telemetryAttempt.end_reason) {
         telemetryAttempt = null;
       }
+    } else {
+      let errText = '';
+      try {
+        errText = await res.text();
+      } catch {
+        errText = '';
+      }
+      console.warn('Telemetry ingest failed', res.status, errText);
     }
-  } catch {
+  } catch (err) {
+    console.warn('Telemetry ingest request error', err);
     // Keep buffer for next flush retry.
   }
 }
@@ -666,6 +729,9 @@ async function saveSessionToServer(session) {
 
   let sessionData;
   if (session.target && session.drops) {
+    const mix = Array.isArray(session.mixed_rgb) && session.mixed_rgb.length === 3
+      ? session.mixed_rgb
+      : currentMixedRgb;
     sessionData = {
       attempt_uuid: session.attempt_uuid || generateUUID(),
       user_id: window.currentUserId,
@@ -673,6 +739,7 @@ async function saveSessionToServer(session) {
       target_r: session.target[0], target_g: session.target[1], target_b: session.target[2],
       drop_white: session.drops.white, drop_black: session.drops.black,
       drop_red: session.drops.red, drop_yellow: session.drops.yellow, drop_blue: session.drops.blue,
+      mixed_r: mix[0], mixed_g: mix[1], mixed_b: mix[2],
       delta_e: session.deltaE, time_sec: session.time,
       timestamp: session.timestamp, skipped: session.skipped || false,
       attempt_ended_client_ts_ms: session.attempt_ended_client_ts_ms ?? null,
@@ -689,6 +756,12 @@ async function saveSessionToServer(session) {
       timestamp: session.timestamp, skipped: session.skipped || false,
       attempt_ended_client_ts_ms: session.attempt_ended_client_ts_ms ?? null,
     };
+    const mix = Array.isArray(session.mixed_rgb) && session.mixed_rgb.length === 3
+      ? session.mixed_rgb
+      : currentMixedRgb;
+    sessionData.mixed_r = mix[0];
+    sessionData.mixed_g = mix[1];
+    sessionData.mixed_b = mix[2];
   }
 
   trackEvent('save_attempt', { skipped: sessionData.skipped || false });
@@ -740,80 +813,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   // app_ready: catalog loaded, user context available, ready to play
   trackEvent('app_ready');
 
-  function weightedRandomSelection(items, weights, count) {
-    const n = Math.min(count, items.length);
-    if (n <= 0) return [];
-
-    // Proper weighted sampling without replacement.
-    const pool = items.map((item, i) => ({
-      item,
-      weight: Number.isFinite(weights[i]) && weights[i] > 0 ? weights[i] : 1,
-    }));
-
-    const selected = [];
-    while (selected.length < n && pool.length > 0) {
-      const total = pool.reduce((s, e) => s + e.weight, 0);
-      let r = Math.random() * total;
-      let pickIdx = pool.length - 1;
-      for (let i = 0; i < pool.length; i++) {
-        r -= pool[i].weight;
-        if (r <= 0) {
-          pickIdx = i;
-          break;
-        }
-      }
-      selected.push(pool[pickIdx].item);
-      pool.splice(pickIdx, 1);
-    }
-    return selected;
-  }
-
   function generateRandomizedColors() {
     const sorted = [...fullCatalog].sort((a, b) => a.catalog_order - b.catalog_order);
 
-    // Server annotates `unlocked` (level_required <= user level) and `under_quota`
-    // when a user_id is provided. Fall back to all colors when not logged in.
-    const hasLevelData = sorted.some(c => 'unlocked' in c);
-    const unlocked = hasLevelData ? sorted.filter(c => c.unlocked) : sorted;
-
-    // Prevent early-game repetition: if too few unlocked colors exist,
-    // blend in a few nearest locked colors so rounds stay varied/motivating.
-    let pool = unlocked.length > 0 ? [...unlocked] : [...sorted];
-    if (hasLevelData && unlocked.length < 8) {
-      const locked = sorted
-        .filter(c => !c.unlocked)
-        .sort((a, b) => {
-          const la = a.level_required ?? 999;
-          const lb = b.level_required ?? 999;
-          if (la !== lb) return la - lb;
-          return a.catalog_order - b.catalog_order;
-        });
-      const needed = Math.min(8 - unlocked.length, locked.length);
-      pool.push(...locked.slice(0, needed));
+    // Requirement: every session should include every target color exactly once,
+    // only the order should be randomized.
+    const shuffled = [...sorted];
+    for (let i = shuffled.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
-
-    const poolBasic = pool.filter(c => c.type === 'basic');
-    const poolSkin = pool.filter(c => c.type === 'skin');
-
-    const hasQuota = sorted.some(c => 'under_quota' in c);
-
-    // Within the eligible pool, prefer under-quota colors (weighted by inverse
-    // attempt_count). If all are at quota, use the full eligible pool uniformly.
-    function buildWeightedPool(items) {
-      if (!hasQuota) return { pool: items, weights: items.map(() => 1) };
-      const underQuota = items.filter(c => c.under_quota);
-      const activePool = underQuota.length > 0 ? underQuota : items;
-      const weights = activePool.map(c => 1 / ((c.attempt_count || 0) + 1));
-      return { pool: activePool, weights };
-    }
-
-    const basic = buildWeightedPool(poolBasic);
-    const skin = buildWeightedPool(poolSkin);
-
-    const selectedBasic = weightedRandomSelection(basic.pool, basic.weights, Math.min(6, basic.pool.length));
-    const selectedSkin = weightedRandomSelection(skin.pool, skin.weights, Math.min(5, skin.pool.length));
-
-    return [...selectedBasic, ...selectedSkin];
+    return shuffled;
   }
 
   const targetColors = generateRandomizedColors();
@@ -886,7 +896,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       body: JSON.stringify({ target: targetColor, mixed: currentMixedRgb }),
     })
       .then(res => res.json())
-      .then((data) => {
+      .then(async (data) => {
         if (_calcColorGen !== _myGen) return;  // response belongs to a previous color — discard
         if (data.error) return console.error('Server error:', data.error);
         window.lastMixDeltaE = data.delta_e;
@@ -901,6 +911,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             target: targetColor,
             target_color_id: currentTargetColor.id,
             drops: { ...dropCounts },
+            mixed_rgb: [...currentMixedRgb],
             deltaE: data.delta_e,
             time: parseFloat(document.getElementById('timer').textContent),
             timestamp: new Date().toISOString(),
@@ -910,7 +921,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           currentSessionSaved = true;
           window.currentSessionSaved = true;
           sessionLogs.push(session);
-          flushTelemetry({
+          await flushTelemetry({
             finalize: true,
             endReason: 'saved_match',
             terminalBoundaryType: 'boundary_save',
@@ -975,6 +986,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
         drop_white: dropCounts.white || 0, drop_black: dropCounts.black || 0,
         drop_red: dropCounts.red || 0, drop_yellow: dropCounts.yellow || 0, drop_blue: dropCounts.blue || 0,
+        mixed_r: currentMixedRgb[0],
+        mixed_g: currentMixedRgb[1],
+        mixed_b: currentMixedRgb[2],
         time_sec: parseFloat(document.getElementById('timer').textContent),
         timestamp: new Date().toISOString(),
         delta_e: currentDeltaE,
@@ -1106,7 +1120,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     beginAttemptForCurrentTarget();
   });
 
-  document.getElementById('retryBtn').addEventListener('click', () => {
+  document.getElementById('retryBtn').addEventListener('click', async () => {
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     if (!isNaN(currentDeltaE)) {
       const session = {
@@ -1115,6 +1129,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         target: targetColor,
         target_color_id: currentTargetColor.id,
         drops: { ...dropCounts },
+        mixed_rgb: [...currentMixedRgb],
         deltaE: currentDeltaE,
         time: parseFloat(document.getElementById('timer').textContent),
         timestamp: new Date().toISOString(),
@@ -1122,7 +1137,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         attempt_ended_client_ts_ms: nowClientTsMs(),
       };
       sessionLogs.push(session);
-      flushTelemetry({
+      await flushTelemetry({
         finalize: true,
         endReason: 'reset',
         terminalBoundaryType: 'boundary_reset',
