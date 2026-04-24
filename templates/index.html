@@ -143,6 +143,16 @@
             <div id="birthdateError" style="display:none; color:var(--accent-danger); margin-top:var(--space-xs); font-size:var(--font-size-sm);"></div>
           </div>
           <div class="form-group">
+            <label for="userEmail" class="form-label">Email (for reminders and ID recovery)</label>
+            <input type="email" id="userEmail" class="form-input" required placeholder="you@example.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="emailOptIn">
+              <input type="checkbox" id="emailOptIn" checked>
+              I want daily reminder emails
+            </label>
+          </div>
+          <div class="form-group">
             <label class="form-label">Gender</label>
             <div class="toggle-group">
               <input type="radio" name="gender" id="genderFemale" value="female" class="sr-only">
@@ -174,6 +184,15 @@
             <input type="text" id="loginId" class="form-input form-input-mono" maxlength="6" minlength="6" required placeholder="ABC123" style="text-transform:uppercase">
           </div>
           <button type="submit" class="btn btn-primary btn-full btn-lg">Log in</button>
+        </form>
+        <div class="modal-divider"></div>
+        <p class="modal-alt-text">Forgot your ID?</p>
+        <form id="recoverIdForm" class="form-stack">
+          <div class="form-group">
+            <label for="recoverEmail" class="form-label">Email used at registration</label>
+            <input type="email" id="recoverEmail" class="form-input" placeholder="you@example.com" required>
+          </div>
+          <button type="submit" class="btn btn-secondary btn-full">Email me my ID</button>
         </form>
         <div class="modal-divider"></div>
         <p class="modal-alt-text">New user? <button id="showRegisterBtn" type="button" class="btn-link">Register</button></p>
@@ -338,6 +357,12 @@
               title="Get notified when the daily challenge starts">
         🔔 Enable daily reminders
       </button>
+      <div id="emailVerifyNotice" class="next-action-cta" style="display:none;">
+        <span class="na-icon">✉️</span>
+        <span class="na-label">Email not verified</span>
+        <span class="na-reason">Please verify your email to receive reminder emails.</span>
+        <button id="resendVerifyBtn" class="btn btn-secondary" type="button">Resend verification email</button>
+      </div>
 
       <!-- Next-action CTA (populated by renderNextAction after saves/progress load) -->
       <div id="nextActionCta" class="next-action-cta" style="display:none;"></div>
@@ -575,6 +600,8 @@
     document.getElementById('registerForm').onsubmit = function(e) {
       e.preventDefault();
       var birthdate = document.getElementById('userBirthdate').value;
+      var email = document.getElementById('userEmail').value;
+      var emailOptIn = document.getElementById('emailOptIn').checked;
       var gender = document.getElementById('userGender').value;
       if (!gender) {
         var checked = document.querySelector('input[name="gender"]:checked');
@@ -595,13 +622,21 @@
 
       fetch('/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ birthdate: birthdate, gender: gender })
+        body: JSON.stringify({
+          birthdate: birthdate,
+          gender: gender,
+          email: email,
+          email_opt_in_reminders: emailOptIn
+        })
       })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.status === 'success') {
           localStorage.setItem('userBirthdate', birthdate);
           localStorage.setItem('userGender', gender);
+          localStorage.setItem('userEmail', email);
+          localStorage.setItem('userEmailVerified', data.email_verification_pending ? '0' : '1');
+          localStorage.setItem('emailOptInReminders', emailOptIn ? '1' : '0');
           localStorage.setItem('userId', data.userId);
           window.currentUserId = data.userId;
           // Show push opt-in step before continuing — requires a user gesture (just registered)
@@ -624,6 +659,27 @@
         if (ed) { ed.textContent = 'An error occurred. Please try again.'; ed.style.display = 'block'; }
       });
     };
+
+    var recoverForm = document.getElementById('recoverIdForm');
+    if (recoverForm) {
+      recoverForm.onsubmit = function(e) {
+        e.preventDefault();
+        var recoverEmail = document.getElementById('recoverEmail').value;
+        fetch('/email/recover-id', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: recoverEmail })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          if (data.status === 'success') {
+            alert('If the email exists, we sent an ID recovery email.');
+          } else {
+            alert(data.message || 'Could not send recovery email.');
+          }
+        }).catch(function() {
+          alert('Could not send recovery email.');
+        });
+      };
+    }
 
     calculateMixedColor();
 
@@ -678,6 +734,33 @@
         pushBtn.style.display = 'flex';
       }
     }).catch(function() {});
+
+    var emailVerifyNotice = document.getElementById('emailVerifyNotice');
+    var uid = localStorage.getItem('userId');
+    var email = localStorage.getItem('userEmail');
+    var verified = localStorage.getItem('userEmailVerified') === '1';
+    var optedIn = localStorage.getItem('emailOptInReminders') === '1';
+    if (emailVerifyNotice && uid && email && optedIn && !verified) {
+      emailVerifyNotice.style.display = 'flex';
+    }
+    var resendBtn = document.getElementById('resendVerifyBtn');
+    if (resendBtn) {
+      resendBtn.onclick = function() {
+        fetch('/email/verification/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: uid })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          if (data.status === 'success') {
+            alert('Verification email sent.');
+          } else {
+            alert(data.message || 'Could not send verification email.');
+          }
+        }).catch(function() {
+          alert('Could not send verification email.');
+        });
+      };
+    }
   });
 
   function calculateMixedColor() {

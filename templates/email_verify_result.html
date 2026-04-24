@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+
+{% block title %}Email Action - ShadeMatch{% endblock %}
+
+{% block content %}
+<div style="max-width:640px;margin:40px auto;padding:24px;border:1px solid var(--border);border-radius:12px;background:var(--surface);">
+  <h1 style="margin-top:0;">{% if success %}Done{% else %}Could not complete action{% endif %}</h1>
+  <p>{{ message }}</p>
+  <p><a href="/" class="btn btn-primary">Back to ShadeMatch</a></p>
+</div>
+{% endblock %}

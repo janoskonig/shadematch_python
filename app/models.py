@@ -8,6 +8,9 @@ class User(db.Model):
     id = db.Column(db.String(6), primary_key=True)
     birthdate = db.Column(db.Date, nullable=False)
     gender = db.Column(db.String(20), nullable=False)
+    email = db.Column(db.String(255), nullable=True, unique=True, index=True)
+    email_verified_at = db.Column(db.DateTime, nullable=True)
+    email_opt_in_reminders = db.Column(db.Boolean, nullable=False, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -219,6 +222,18 @@ class PushSubscription(db.Model):
     p256dh = db.Column(db.Text, nullable=False)
     auth = db.Column(db.Text, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class EmailVerificationToken(db.Model):
+    __tablename__ = 'email_verification_tokens'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(6), db.ForeignKey('users.id'), nullable=False, index=True)
+    purpose = db.Column(db.String(32), nullable=False, default='verify_email')
+    token_hash = db.Column(db.String(64), nullable=False, unique=True, index=True)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    used_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class AnalyticsEvent(db.Model):

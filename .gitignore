@@ -3,3 +3,15 @@ node_modules/
 taf_dataapp_example.py
 spectraljs_package_readme.py
 spectral_by_wijnen.js
+
+# Local IDE/workspace artifacts
+.cursor/
+.obsidian/
+
+# Python caches
+__pycache__/
+app/__pycache__/
+
+# Local analysis scratch files
+notes/
+factor2-pigmentek.csv
