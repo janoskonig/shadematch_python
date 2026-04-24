@@ -1,0 +1,148 @@
+{% extends "base.html" %}
+
+{% block title %}Mix lab — ShadeMatch{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+<style>
+.lab-wrap { max-width: 520px; margin: 0 auto; padding: 16px 16px 48px; }
+.lab-header {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin-bottom: 20px; flex-wrap: wrap;
+}
+.lab-header h1 { font-size: 1.25rem; margin: 0; font-weight: 800; }
+.lab-swatch {
+  width: 100%; aspect-ratio: 1.6; border-radius: var(--radius-lg, 12px);
+  border: 2px solid var(--border); box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.06));
+  background: rgb(255,255,255); margin-bottom: 16px;
+}
+.lab-rgb-panel {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px); padding: 12px 14px; margin-bottom: 20px;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88rem;
+  line-height: 1.4; white-space: nowrap; overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.lab-rgb-panel #labColorCodesLine { display: block; min-width: min-content; }
+.lab-save-row { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
+.lab-save-row input[type="text"] {
+  width: 100%; padding: 10px 12px; border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border); font-size: 0.95rem; background: var(--bg);
+}
+.lab-hint { font-size: 0.8rem; color: var(--text-secondary); margin-top: 8px; }
+
+/* One horizontal row (overrides main.css .palette flex-wrap) */
+#labPalette.palette {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 8px;
+  overflow-x: auto;
+  overflow-y: visible;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  margin: var(--space-md) 0;
+  padding: var(--space-sm) 4px var(--space-xs);
+}
+#labPalette .color-control {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+#labPalette .color-circle {
+  width: 56px;
+  height: 56px;
+  border-width: 2px;
+}
+#labPalette .minus-button {
+  min-width: 40px;
+  min-height: 40px;
+  font-size: 1.15rem;
+}
+#labPalette .color-name {
+  font-size: 0.68rem;
+  white-space: nowrap;
+  max-width: 72px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+@media (min-width: 480px) {
+  #labPalette .color-circle { width: 64px; height: 64px; }
+  #labPalette .color-name { max-width: none; font-size: var(--font-size-sm, 0.8rem); }
+}
+@media (min-width: 640px) {
+  #labPalette.palette { gap: 12px; }
+  #labPalette .color-circle { width: 72px; height: 72px; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lab-wrap">
+  <header class="lab-header">
+    <h1>Mix lab</h1>
+    <a href="/" class="btn btn-secondary">← Main app</a>
+  </header>
+
+  <p class="lab-hint" style="margin-top:0;margin-bottom:16px;">
+    Same pigment mixing as the game (Mixbox). RGB updates live; you can save the mix into the server <code>target_colors</code> catalog.
+  </p>
+
+  <div id="labCurrentMix" class="lab-swatch" role="img" aria-label="Current mixed color"></div>
+
+  <div class="lab-rgb-panel" aria-live="polite">
+    <span id="labColorCodesLine">rgb(255, 255, 255) · R255 G255 B255 · #FFFFFF</span>
+  </div>
+
+  <div id="labPalette" class="palette">
+    <div class="color-control">
+      <span class="drop-badge" data-badge-for="white">0</span>
+      <button class="color-circle" data-color="white" style="background:white;" type="button" aria-label="Add white drop">0</button>
+      <button class="minus-button" data-color="white" type="button" aria-label="Remove white drop">−</button>
+      <span class="color-name">White</span>
+    </div>
+    <div class="color-control">
+      <span class="drop-badge" data-badge-for="black">0</span>
+      <button class="color-circle" data-color="black" style="background:black;color:#fff;" type="button" aria-label="Add black drop">0</button>
+      <button class="minus-button" data-color="black" type="button" aria-label="Remove black drop">−</button>
+      <span class="color-name">Black</span>
+    </div>
+    <div class="color-control">
+      <span class="drop-badge" data-badge-for="red">0</span>
+      <button class="color-circle" data-color="red" style="background:red;" type="button" aria-label="Add red drop">0</button>
+      <button class="minus-button" data-color="red" type="button" aria-label="Remove red drop">−</button>
+      <span class="color-name">Red</span>
+    </div>
+    <div class="color-control">
+      <span class="drop-badge" data-badge-for="yellow">0</span>
+      <button class="color-circle" data-color="yellow" style="background:yellow;" type="button" aria-label="Add yellow drop">0</button>
+      <button class="minus-button" data-color="yellow" type="button" aria-label="Remove yellow drop">−</button>
+      <span class="color-name">Yellow</span>
+    </div>
+    <div class="color-control">
+      <span class="drop-badge" data-badge-for="blue">0</span>
+      <button class="color-circle" data-color="blue" style="background:blue;" type="button" aria-label="Add blue drop">0</button>
+      <button class="minus-button" data-color="blue" type="button" aria-label="Remove blue drop">−</button>
+      <span class="color-name">Blue</span>
+    </div>
+  </div>
+
+  <div class="controls-bar" style="margin-top:16px;flex-wrap:wrap;">
+    <button type="button" id="labResetBtn" class="btn btn-secondary btn-lg">Reset mix</button>
+    <button type="button" id="labSaveBtn" class="btn btn-primary btn-lg">Save to target colors</button>
+  </div>
+
+  <div class="lab-save-row">
+    <label for="labColorName" class="form-label" style="margin:0;">Optional name (saved in catalog)</label>
+    <input type="text" id="labColorName" maxlength="128" placeholder="e.g. Warm grey prototype" autocomplete="off">
+  </div>
+
+  <p id="labSaveStatus" class="lab-hint" style="min-height:1.25em;" role="status"></p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
+<script src="{{ url_for('static', filename='lab.js') }}?v=20260424c"></script>
+{% endblock %}
