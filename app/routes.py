@@ -1,13 +1,17 @@
-from flask import Blueprint, render_template, request, jsonify, send_from_directory
+from flask import Blueprint, render_template, request, jsonify, send_from_directory, Response
 from datetime import datetime, date, timedelta
 import hashlib
 import random as _random
+import secrets
+import re
+import smtplib
+from email.message import EmailMessage
 from . import db
 from .models import (
     User, MixingSession, TargetColor,
     UserProgress, UserTargetColorStats, UserAward,
     DailyChallengeRun, DailyChallengeWinner, PushSubscription,
-    AnalyticsEvent, MixingAttempt, MixingAttemptEvent,
+    AnalyticsEvent, MixingAttempt, MixingAttemptEvent, EmailVerificationToken,
 )
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb, reverse_engineer_recipe
@@ -16,6 +20,7 @@ import os
 import numpy as np
 import json
 from sqlalchemy import func
+from dotenv import dotenv_values
 
 from .gamification import (
     process_progression,
@@ -32,10 +37,15 @@ from .gamification import (
     STREAK_FREEZE_CAP,
 )
 from .next_action import build_next_action
+from .stat_eda import ALLOWED_PLOT_IDS, build_strategy_summary_by_target, get_plot_png
 
 main = Blueprint('main', __name__)
 
 MATCH_PERFECT_DELTA_E = 0.01
+EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+EMAIL_VERIFY_TTL_HOURS = 24
+EMAIL_RECOVERY_TTL_MINUTES = 20
+_RATE_LIMIT_BUCKETS = {}
 
 
 def derive_match_category(delta_e, skipped, skip_perception=None):
@@ -71,6 +81,112 @@ def generate_user_id():
     return ''.join(_random.choices(string.ascii_uppercase + string.digits, k=6))
 
 
+def _normalize_email(raw_email):
+    if not raw_email:
+        return None
+    email = str(raw_email).strip().lower()
+    if not email:
+        return None
+    if len(email) > 255 or not EMAIL_REGEX.match(email):
+        return None
+    return email
+
+
+def _sha256(text):
+    return hashlib.sha256(text.encode('utf-8')).hexdigest()
+
+
+def _rate_limit_allow(key, max_hits=5, window_sec=600):
+    now = datetime.utcnow().timestamp()
+    bucket = _RATE_LIMIT_BUCKETS.setdefault(key, [])
+    bucket[:] = [ts for ts in bucket if now - ts < window_sec]
+    if len(bucket) >= max_hits:
+        return False
+    bucket.append(now)
+    return True
+
+
+def _resolve_email_settings():
+    settings = {
+        'host': os.environ.get('SMTP_HOST', '').strip(),
+        'port': int(os.environ.get('SMTP_PORT', '587') or '587'),
+        'user': os.environ.get('SMTP_USER', '').strip(),
+        'password': (
+            os.environ.get('SMTP_PASSWORD', '').strip()
+            or os.environ.get('SMTP_PASS', '').strip()
+        ),
+        'sender': (
+            os.environ.get('SMTP_SENDER_EMAIL', '').strip()
+            or os.environ.get('SMTP_FROM', '').strip()
+        ),
+        'use_tls': (os.environ.get('SMTP_USE_TLS', 'true').strip().lower() != 'false'),
+        'use_ssl': (os.environ.get('SMTP_USE_SSL', 'false').strip().lower() == 'true'),
+    }
+    if all([settings['host'], settings['user'], settings['password'], settings['sender']]):
+        return settings
+
+    # Fallback: import config values from neighboring maxillofacialisrehabilitacio .env
+    candidate_paths = [
+        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'maxillofacialisrehabilitacio', '.env')),
+        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'maxillofacialisrehabilitacio', '.env')),
+    ]
+    for candidate in candidate_paths:
+        if not os.path.exists(candidate):
+            continue
+        values = dotenv_values(candidate)
+        settings['host'] = settings['host'] or (values.get('SMTP_HOST') or '').strip()
+        settings['port'] = settings['port'] if settings['port'] else int(values.get('SMTP_PORT') or 587)
+        settings['user'] = settings['user'] or (values.get('SMTP_USER') or '').strip()
+        settings['password'] = settings['password'] or (
+            (values.get('SMTP_PASSWORD') or '').strip()
+            or (values.get('SMTP_PASS') or '').strip()
+        )
+        settings['sender'] = settings['sender'] or (
+            (values.get('SMTP_SENDER_EMAIL') or '').strip()
+            or (values.get('SMTP_FROM') or '').strip()
+            or (values.get('SMTP_USER') or '').strip()
+        )
+        if values.get('SMTP_USE_TLS') is not None:
+            settings['use_tls'] = str(values.get('SMTP_USE_TLS')).strip().lower() != 'false'
+        if values.get('SMTP_USE_SSL') is not None:
+            settings['use_ssl'] = str(values.get('SMTP_USE_SSL')).strip().lower() == 'true'
+        break
+    return settings
+
+
+def _send_email_message(to_email, subject, plain_text):
+    settings = _resolve_email_settings()
+    if not all([settings['host'], settings['user'], settings['password'], settings['sender']]):
+        raise RuntimeError('Email sender is not configured')
+
+    message = EmailMessage()
+    message['Subject'] = subject
+    message['From'] = settings['sender']
+    message['To'] = to_email
+    message.set_content(plain_text)
+
+    smtp_cls = smtplib.SMTP_SSL if settings['use_ssl'] else smtplib.SMTP
+    with smtp_cls(settings['host'], settings['port'], timeout=15) as server:
+        if settings['use_tls'] and not settings['use_ssl']:
+            server.starttls()
+        server.login(settings['user'], settings['password'])
+        server.send_message(message)
+
+
+def _issue_email_token(user_id, purpose, ttl_minutes):
+    token_plain = secrets.token_urlsafe(32)
+    token_hash = _sha256(token_plain)
+    expiry = datetime.utcnow() + timedelta(minutes=ttl_minutes)
+    token_row = EmailVerificationToken(
+        user_id=user_id,
+        purpose=purpose,
+        token_hash=token_hash,
+        expires_at=expiry,
+    )
+    db.session.add(token_row)
+    return token_plain, expiry
+
+
 def refresh_db_connection():
     try:
         db.session.execute(db.text('SELECT 1'))
@@ -104,6 +220,31 @@ def results_page():
 @main.route('/stat')
 def stat_page():
     return render_template('stat.html')
+
+
+@main.route('/api/stat/plot/<string:plot_id>', methods=['GET'])
+def stat_plot(plot_id: str):
+    """PNG figures from pandas/matplotlib (server-side EDA)."""
+    pid = plot_id[:-4] if plot_id.lower().endswith('.png') else plot_id
+    if pid not in ALLOWED_PLOT_IDS:
+        return jsonify({'status': 'error', 'message': 'unknown plot id'}), 404
+    plot_options = None
+    if pid == 'fw_attempt_network':
+        plot_options = {}
+        au = request.args.get('attempt_uuid')
+        if au and str(au).strip():
+            plot_options['attempt_uuid'] = str(au).strip()
+        tid = request.args.get('target_color_id', type=int)
+        if tid is not None:
+            plot_options['target_color_id'] = tid
+    try:
+        png = get_plot_png(pid, plot_options=plot_options)
+    except Exception as e:
+        print(f'stat_plot error ({pid}): {e}')
+        if not refresh_db_connection():
+            pass
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    return Response(png, mimetype='image/png')
 
 
 @main.route('/spectral')
@@ -155,32 +296,76 @@ def spectral():
 
 @main.route('/register', methods=['POST'])
 def register():
-    data = request.get_json()
+    data = request.get_json() or {}
     birthdate = datetime.strptime(data['birthdate'], '%Y-%m-%d').date()
     gender = data['gender']
+    email = _normalize_email(data.get('email'))
+    email_opt_in_reminders = bool(data.get('email_opt_in_reminders', False))
 
     if birthdate.year >= 2015:
         return jsonify({'status': 'error', 'message': 'You must be born before 2015 to participate.'}), 400
+    if data.get('email') and not email:
+        return jsonify({'status': 'error', 'message': 'Invalid email format'}), 400
+    if email and User.query.filter_by(email=email).first():
+        return jsonify({'status': 'error', 'message': 'This email is already in use'}), 409
 
     user_id = generate_user_id()
     while User.query.get(user_id) is not None:
         user_id = generate_user_id()
 
-    user = User(id=user_id, birthdate=birthdate, gender=gender)
+    user = User(
+        id=user_id,
+        birthdate=birthdate,
+        gender=gender,
+        email=email,
+        email_opt_in_reminders=email_opt_in_reminders,
+    )
     db.session.add(user)
     db.session.commit()
 
-    return jsonify({'status': 'success', 'userId': user_id})
+    if email:
+        try:
+            token_plain, _ = _issue_email_token(
+                user_id=user.id,
+                purpose='verify_email',
+                ttl_minutes=EMAIL_VERIFY_TTL_HOURS * 60,
+            )
+            verify_url = request.url_root.rstrip('/') + f"/email/verify?token={token_plain}"
+            _send_email_message(
+                to_email=email,
+                subject='Verify your ShadeMatch email',
+                plain_text=(
+                    "Thanks for joining ShadeMatch.\n\n"
+                    "To enable email reminders, verify your email here:\n"
+                    f"{verify_url}\n\n"
+                    "If you did not request this, you can ignore this email."
+                ),
+            )
+            db.session.commit()
+        except Exception as exc:
+            db.session.rollback()
+            print(f'email verify send failed for user {user.id}: {exc}')
+
+    return jsonify({'status': 'success', 'userId': user_id, 'email_verification_pending': bool(email)})
 
 
 @main.route('/login', methods=['POST'])
 def login():
-    data = request.get_json()
-    user_id = data['userId']
+    data = request.get_json() or {}
+    user_id = (data.get('userId') or '').strip().upper()
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'userId is required'}), 400
     try:
         user = User.query.get(user_id)
         if user:
-            return jsonify({'status': 'success', 'birthdate': user.birthdate.isoformat(), 'gender': user.gender})
+            return jsonify({
+                'status': 'success',
+                'birthdate': user.birthdate.isoformat(),
+                'gender': user.gender,
+                'email': user.email,
+                'email_verified': bool(user.email_verified_at),
+                'email_opt_in_reminders': bool(user.email_opt_in_reminders),
+            })
 
         session = MixingSession.query.filter_by(user_id=user_id).first()
         if session:
@@ -189,6 +374,169 @@ def login():
         return jsonify({'status': 'error', 'message': 'Invalid user ID'}), 404
     except Exception as e:
         return jsonify({'status': 'error', 'message': 'Database error'}), 500
+
+
+@main.route('/email/verification/request', methods=['POST'])
+def email_verification_request():
+    data = request.get_json() or {}
+    user_id = (data.get('user_id') or '').strip().upper()
+    email = _normalize_email(data.get('email'))
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
+    if data.get('email') and not email:
+        return jsonify({'status': 'error', 'message': 'Invalid email format'}), 400
+    if not _rate_limit_allow(f'verify:{request.remote_addr}:{user_id}', max_hits=5, window_sec=3600):
+        return jsonify({'status': 'error', 'message': 'Too many verification requests'}), 429
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+    if email and user.email and user.email != email:
+        return jsonify({'status': 'error', 'message': 'Email mismatch for this user'}), 409
+    if email and not user.email:
+        if User.query.filter_by(email=email).first():
+            return jsonify({'status': 'error', 'message': 'This email is already in use'}), 409
+        user.email = email
+    if not user.email:
+        return jsonify({'status': 'error', 'message': 'No email on record'}), 400
+
+    token_plain, _ = _issue_email_token(
+        user_id=user.id,
+        purpose='verify_email',
+        ttl_minutes=EMAIL_VERIFY_TTL_HOURS * 60,
+    )
+    verify_url = request.url_root.rstrip('/') + f"/email/verify?token={token_plain}"
+    try:
+        _send_email_message(
+            to_email=user.email,
+            subject='Verify your ShadeMatch email',
+            plain_text=(
+                "Please verify your email to receive ShadeMatch reminders.\n\n"
+                f"Verify link: {verify_url}\n\n"
+                "If you did not request this, please ignore this email."
+            ),
+        )
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f'Failed to send verification email: {exc}'}), 500
+    return jsonify({'status': 'success'})
+
+
+@main.route('/email/verify', methods=['GET'])
+def email_verify():
+    token_plain = (request.args.get('token') or '').strip()
+    if not token_plain:
+        return render_template('email_verify_result.html', success=False, message='Missing verification token.')
+    token_hash = _sha256(token_plain)
+    token_row = EmailVerificationToken.query.filter_by(token_hash=token_hash, purpose='verify_email').first()
+    if not token_row:
+        return render_template('email_verify_result.html', success=False, message='Invalid verification token.')
+    if token_row.used_at is not None:
+        return render_template('email_verify_result.html', success=False, message='Verification token already used.')
+    if token_row.expires_at < datetime.utcnow():
+        return render_template('email_verify_result.html', success=False, message='Verification token has expired.')
+
+    user = User.query.get(token_row.user_id)
+    if not user:
+        return render_template('email_verify_result.html', success=False, message='User not found for token.')
+    user.email_verified_at = datetime.utcnow()
+    token_row.used_at = datetime.utcnow()
+    db.session.commit()
+    return render_template('email_verify_result.html', success=True, message='Email verified successfully. You can return to ShadeMatch.')
+
+
+@main.route('/email/recover-id', methods=['POST'])
+def email_recover_id():
+    data = request.get_json() or {}
+    email = _normalize_email(data.get('email'))
+    if not email:
+        return jsonify({'status': 'error', 'message': 'Invalid email format'}), 400
+    if not _rate_limit_allow(f'recover:{request.remote_addr}:{email}', max_hits=4, window_sec=1800):
+        return jsonify({'status': 'error', 'message': 'Too many recovery requests'}), 429
+
+    user = User.query.filter_by(email=email).first()
+    # Return success even when no user exists to avoid user enumeration.
+    if not user:
+        return jsonify({'status': 'success'})
+
+    token_plain, _ = _issue_email_token(
+        user_id=user.id,
+        purpose='recover_id',
+        ttl_minutes=EMAIL_RECOVERY_TTL_MINUTES,
+    )
+    verify_url = request.url_root.rstrip('/') + f"/email/recover-id/confirm?token={token_plain}"
+    try:
+        _send_email_message(
+            to_email=user.email,
+            subject='ShadeMatch ID recovery',
+            plain_text=(
+                "We received an ID recovery request.\n\n"
+                f"Open this link to view your ShadeMatch ID: {verify_url}\n\n"
+                f"This link expires in {EMAIL_RECOVERY_TTL_MINUTES} minutes."
+            ),
+        )
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': f'Failed to send recovery email: {exc}'}), 500
+    return jsonify({'status': 'success'})
+
+
+@main.route('/email/recover-id/confirm', methods=['GET'])
+def email_recover_id_confirm():
+    token_plain = (request.args.get('token') or '').strip()
+    if not token_plain:
+        return render_template('email_verify_result.html', success=False, message='Missing recovery token.')
+    token_hash = _sha256(token_plain)
+    token_row = EmailVerificationToken.query.filter_by(token_hash=token_hash, purpose='recover_id').first()
+    if not token_row:
+        return render_template('email_verify_result.html', success=False, message='Invalid recovery token.')
+    if token_row.used_at is not None:
+        return render_template('email_verify_result.html', success=False, message='Recovery token already used.')
+    if token_row.expires_at < datetime.utcnow():
+        return render_template('email_verify_result.html', success=False, message='Recovery token has expired.')
+    user = User.query.get(token_row.user_id)
+    if not user:
+        return render_template('email_verify_result.html', success=False, message='User not found for token.')
+    token_row.used_at = datetime.utcnow()
+    db.session.commit()
+    return render_template(
+        'email_verify_result.html',
+        success=True,
+        message=f'Your ShadeMatch ID is: {user.id}',
+    )
+
+
+@main.route('/api/user/email-settings', methods=['POST'])
+def user_email_settings():
+    data = request.get_json() or {}
+    user_id = (data.get('user_id') or '').strip().upper()
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+
+    if 'email_opt_in_reminders' in data:
+        user.email_opt_in_reminders = bool(data.get('email_opt_in_reminders'))
+    if 'email' in data:
+        email = _normalize_email(data.get('email'))
+        if data.get('email') and not email:
+            return jsonify({'status': 'error', 'message': 'Invalid email format'}), 400
+        if email and user.email != email and User.query.filter_by(email=email).first():
+            return jsonify({'status': 'error', 'message': 'This email is already in use'}), 409
+        if user.email != email:
+            user.email = email
+            user.email_verified_at = None
+    db.session.commit()
+
+    return jsonify({
+        'status': 'success',
+        'email': user.email,
+        'email_verified': bool(user.email_verified_at),
+        'email_opt_in_reminders': bool(user.email_opt_in_reminders),
+    })
 
 
 # ── Target colors ──────────────────────────────────────────────────────────
@@ -1363,164 +1711,276 @@ ALLOWED_EVENTS = frozenset({
 @main.route('/api/stat/summary', methods=['GET'])
 def stat_summary():
     """
-    Lightweight research dashboard data from mixing telemetry tables.
-    Public URL by design; no in-app link is exposed.
+    Exploratory summaries from mixing telemetry (EDA only — no fitted models).
     """
     try:
-        def _fit_linear_model(rows, y_key, x_keys):
-            clean = []
-            for row in rows:
-                y_val = _coerce_float_or_none(row.get(y_key))
-                if y_val is None:
-                    continue
-                x_vals = []
-                valid = True
-                for k in x_keys:
-                    xv = _coerce_float_or_none(row.get(k))
-                    if xv is None:
-                        valid = False
-                        break
-                    x_vals.append(xv)
-                if valid:
-                    clean.append((y_val, x_vals))
-
-            n = len(clean)
-            p = len(x_keys)
-            if n <= p + 1:
-                return {'n': n, 'r2': None, 'coefficients': []}
-
-            y = np.array([r[0] for r in clean], dtype=float)
-            X_raw = np.array([r[1] for r in clean], dtype=float)
-            X = np.column_stack([np.ones(n), X_raw])
-
-            beta, _, _, _ = np.linalg.lstsq(X, y, rcond=None)
-            y_hat = X @ beta
-            ss_res = float(np.sum((y - y_hat) ** 2))
-            ss_tot = float(np.sum((y - np.mean(y)) ** 2))
-            r2 = None if ss_tot <= 0 else max(0.0, 1.0 - (ss_res / ss_tot))
-
-            coef_rows = [{'term': 'intercept', 'beta': float(beta[0])}]
-            for i, key in enumerate(x_keys, start=1):
-                coef_rows.append({'term': key, 'beta': float(beta[i])})
-
-            return {'n': n, 'r2': r2, 'coefficients': coef_rows}
-
-        def _fit_random_intercept_lmm(rows, y_key, x_keys, group_key='user_id', max_iter=8):
-            prepared = []
-            for row in rows:
-                g = row.get(group_key)
-                if not g:
-                    continue
-                y_val = _coerce_float_or_none(row.get(y_key))
-                if y_val is None:
-                    continue
-                x_vals = []
-                ok = True
-                for k in x_keys:
-                    xv = _coerce_float_or_none(row.get(k))
-                    if xv is None:
-                        ok = False
-                        break
-                    x_vals.append(xv)
-                if ok:
-                    prepared.append((g, y_val, x_vals))
-
-            n = len(prepared)
-            p = len(x_keys) + 1  # + intercept
-            if n <= p + 1:
-                return {'n': n, 'groups': 0, 'sigma_u': None, 'sigma_e': None, 'coefficients': []}
-
-            groups = {}
-            for g, yv, xv in prepared:
-                groups.setdefault(g, {'y': [], 'x': []})
-                groups[g]['y'].append(yv)
-                groups[g]['x'].append([1.0] + xv)
-            g_count = len(groups)
-            if g_count < 2:
-                return {'n': n, 'groups': g_count, 'sigma_u': None, 'sigma_e': None, 'coefficients': []}
-
-            # OLS init
-            X_all = np.array([v['x'][i] for v in groups.values() for i in range(len(v['x']))], dtype=float)
-            y_all = np.array([v['y'][i] for v in groups.values() for i in range(len(v['y']))], dtype=float)
-            beta, _, _, _ = np.linalg.lstsq(X_all, y_all, rcond=None)
-            resid = y_all - X_all @ beta
-            sigma_e2 = max(1e-8, float(np.var(resid)))
-            sigma_u2 = max(1e-8, float(np.var([np.mean(v['y']) for v in groups.values()])))
-
-            for _ in range(max_iter):
-                xt_vinv_x = np.zeros((p, p), dtype=float)
-                xt_vinv_y = np.zeros((p,), dtype=float)
-
-                for v in groups.values():
-                    Xg = np.array(v['x'], dtype=float)
-                    yg = np.array(v['y'], dtype=float)
-                    ng = len(yg)
-                    denom = sigma_e2 + ng * sigma_u2
-                    # V^{-1} = (1/sigma_e2)I - [sigma_u2 / (sigma_e2 * (sigma_e2 + n*sigma_u2))] 11'
-                    vinv = (1.0 / sigma_e2) * np.eye(ng) - (
-                        sigma_u2 / (sigma_e2 * denom)
-                    ) * np.ones((ng, ng))
-                    xt_vinv_x += Xg.T @ vinv @ Xg
-                    xt_vinv_y += Xg.T @ vinv @ yg
-
-                beta_new = np.linalg.solve(xt_vinv_x, xt_vinv_y)
-
-                # Update variance components from BLUP residual decomposition
-                u_hats = []
-                eps_sq_sum = 0.0
-                eps_n = 0
-                for v in groups.values():
-                    Xg = np.array(v['x'], dtype=float)
-                    yg = np.array(v['y'], dtype=float)
-                    ng = len(yg)
-                    rg = yg - Xg @ beta_new
-                    u_hat = (sigma_u2 / (sigma_e2 + ng * sigma_u2)) * float(np.sum(rg))
-                    u_hats.append(u_hat)
-                    eg = rg - u_hat
-                    eps_sq_sum += float(np.sum(eg ** 2))
-                    eps_n += ng
-
-                sigma_e2_new = max(1e-8, eps_sq_sum / max(1, eps_n - p))
-                sigma_u2_new = max(1e-8, float(np.var(u_hats)))
-
-                if (
-                    np.max(np.abs(beta_new - beta)) < 1e-8
-                    and abs(sigma_e2_new - sigma_e2) < 1e-8
-                    and abs(sigma_u2_new - sigma_u2) < 1e-8
-                ):
-                    beta = beta_new
-                    sigma_e2 = sigma_e2_new
-                    sigma_u2 = sigma_u2_new
-                    break
-
-                beta = beta_new
-                sigma_e2 = sigma_e2_new
-                sigma_u2 = sigma_u2_new
-
-            coef_rows = [{'term': 'intercept', 'beta': float(beta[0])}]
-            for i, key in enumerate(x_keys, start=1):
-                coef_rows.append({'term': key, 'beta': float(beta[i])})
-
-            return {
-                'n': n,
-                'groups': g_count,
-                'sigma_u': float(np.sqrt(max(0.0, sigma_u2))),
-                'sigma_e': float(np.sqrt(max(0.0, sigma_e2))),
-                'coefficients': coef_rows,
-            }
-
         overview_row = db.session.execute(
             db.text(
                 """
                 SELECT
                   COUNT(*)::bigint AS attempts,
-                  COUNT(DISTINCT user_id)::bigint AS users,
+                  COUNT(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL)::bigint AS users,
+                  COUNT(*) FILTER (WHERE user_id IS NULL)::bigint AS attempts_without_user,
                   AVG(NULLIF(num_steps, 0))::double precision AS avg_num_steps,
-                  AVG(final_delta_e)::double precision AS avg_final_delta_e
+                  AVG(final_delta_e)::double precision AS avg_final_delta_e,
+                  MIN(attempt_started_server_ts)::text AS first_attempt_server_ts,
+                  MAX(attempt_started_server_ts)::text AS last_attempt_server_ts
                 FROM mixing_attempts
                 """
             )
         ).mappings().first()
+
+        events_overview = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COUNT(*)::bigint AS events_total,
+                  COUNT(*) FILTER (WHERE step_index IS NOT NULL)::bigint AS decision_rows,
+                  COUNT(*) FILTER (WHERE step_index IS NULL)::bigint AS non_decision_rows,
+                  AVG(step_index) FILTER (WHERE step_index IS NOT NULL)::double precision AS avg_step_index
+                FROM mixing_attempt_events
+                """
+            )
+        ).mappings().first()
+
+        missingness_row = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COUNT(*)::bigint AS n_attempts,
+                  AVG((user_id IS NULL)::int)::double precision AS pct_missing_user_id,
+                  AVG((final_delta_e IS NULL)::int)::double precision AS pct_missing_final_delta_e,
+                  AVG((num_steps IS NULL)::int)::double precision AS pct_missing_num_steps,
+                  AVG((duration_sec IS NULL)::int)::double precision AS pct_missing_duration_sec,
+                  AVG((end_reason IS NULL)::int)::double precision AS pct_missing_end_reason
+                FROM mixing_attempts
+                """
+            )
+        ).mappings().first()
+
+        event_missingness_row = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COUNT(*)::bigint AS n_events,
+                  AVG((step_index IS NULL)::int)::double precision AS pct_null_step_index,
+                  AVG((delta_e_before IS NULL)::int)::double precision AS pct_null_delta_e_before,
+                  AVG((delta_e_after IS NULL)::int)::double precision AS pct_null_delta_e_after,
+                  AVG(
+                    CASE
+                      WHEN step_index IS NOT NULL AND time_since_prev_step_ms IS NULL THEN 1.0
+                      ELSE 0.0
+                    END
+                  )::double precision AS pct_null_time_among_decisions
+                FROM mixing_attempt_events
+                """
+            )
+        ).mappings().first()
+
+        end_reason_rows = db.session.execute(
+            db.text(
+                """
+                SELECT end_reason, COUNT(*)::bigint AS n
+                FROM mixing_attempts
+                WHERE end_reason IS NOT NULL
+                GROUP BY end_reason
+                ORDER BY n DESC
+                """
+            )
+        ).mappings().all()
+
+        attempt_percentiles = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  (SELECT COUNT(*)::bigint FROM mixing_attempts WHERE final_delta_e IS NOT NULL) AS n_final_de,
+                  (SELECT percentile_cont(0.05) WITHIN GROUP (ORDER BY final_delta_e)
+                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL)::double precision AS final_de_p05,
+                  (SELECT percentile_cont(0.25) WITHIN GROUP (ORDER BY final_delta_e)
+                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL)::double precision AS final_de_p25,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)
+                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL)::double precision AS final_de_p50,
+                  (SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY final_delta_e)
+                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL)::double precision AS final_de_p75,
+                  (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY final_delta_e)
+                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL)::double precision AS final_de_p95,
+                  (SELECT COUNT(*)::bigint FROM mixing_attempts
+                   WHERE num_steps IS NOT NULL AND num_steps > 0) AS n_num_steps,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY num_steps)
+                   FROM mixing_attempts WHERE num_steps IS NOT NULL AND num_steps > 0)::double precision AS num_steps_p50,
+                  (SELECT percentile_cont(0.90) WITHIN GROUP (ORDER BY num_steps)
+                   FROM mixing_attempts WHERE num_steps IS NOT NULL AND num_steps > 0)::double precision AS num_steps_p90,
+                  (SELECT COUNT(*)::bigint FROM mixing_attempts WHERE duration_sec IS NOT NULL) AS n_duration,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec)
+                   FROM mixing_attempts WHERE duration_sec IS NOT NULL)::double precision AS duration_p50,
+                  (SELECT percentile_cont(0.90) WITHIN GROUP (ORDER BY duration_sec)
+                   FROM mixing_attempts WHERE duration_sec IS NOT NULL)::double precision AS duration_p90
+                """
+            )
+        ).mappings().first()
+
+        step_percentiles = db.session.execute(
+            db.text(
+                """
+                WITH d AS (
+                  SELECT
+                    (delta_e_before - delta_e_after) AS step_gain,
+                    delta_e_before,
+                    time_since_prev_step_ms
+                  FROM mixing_attempt_events
+                  WHERE step_index IS NOT NULL
+                    AND delta_e_before IS NOT NULL
+                    AND delta_e_after IS NOT NULL
+                )
+                SELECT
+                  COUNT(*)::bigint AS n_steps,
+                  AVG(CASE WHEN step_gain > 0 THEN 1.0 ELSE 0.0 END)::double precision AS pct_improving,
+                  AVG(CASE WHEN step_gain < 0 THEN 1.0 ELSE 0.0 END)::double precision AS pct_worsening,
+                  AVG(CASE WHEN step_gain = 0 THEN 1.0 ELSE 0.0 END)::double precision AS pct_flat,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY step_gain)::double precision AS gain_p50,
+                  percentile_cont(0.90) WITHIN GROUP (ORDER BY step_gain)::double precision AS gain_p90,
+                  percentile_cont(0.10) WITHIN GROUP (ORDER BY step_gain)::double precision AS gain_p10,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY delta_e_before)::double precision AS de_before_p50,
+                  (SELECT percentile_cont(0.90) WITHIN GROUP (ORDER BY time_since_prev_step_ms)
+                   FROM mixing_attempt_events
+                   WHERE step_index IS NOT NULL
+                     AND time_since_prev_step_ms IS NOT NULL)::double precision AS interstep_ms_p90
+                FROM d
+                """
+            )
+        ).mappings().first()
+
+        daily_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  date_trunc('day', attempt_started_server_ts)::date::text AS day,
+                  COUNT(*)::bigint AS n_attempts
+                FROM mixing_attempts
+                WHERE attempt_started_server_ts IS NOT NULL
+                GROUP BY 1
+                ORDER BY 1 DESC
+                LIMIT 120
+                """
+            )
+        ).mappings().all()
+
+        user_bucket_rows = db.session.execute(
+            db.text(
+                """
+                WITH per_user AS (
+                  SELECT user_id, COUNT(*)::bigint AS n
+                  FROM mixing_attempts
+                  WHERE user_id IS NOT NULL
+                  GROUP BY user_id
+                )
+                SELECT
+                  CASE
+                    WHEN n = 1 THEN '1'
+                    WHEN n BETWEEN 2 AND 5 THEN '2-5'
+                    WHEN n BETWEEN 6 AND 10 THEN '6-10'
+                    WHEN n BETWEEN 11 AND 25 THEN '11-25'
+                    ELSE '26+'
+                  END AS attempt_count_bucket,
+                  COUNT(*)::bigint AS n_users
+                FROM per_user
+                GROUP BY 1
+                ORDER BY MIN(
+                  CASE
+                    WHEN n = 1 THEN 1
+                    WHEN n BETWEEN 2 AND 5 THEN 2
+                    WHEN n BETWEEN 6 AND 10 THEN 3
+                    WHEN n BETWEEN 11 AND 25 THEN 4
+                    ELSE 5
+                  END
+                )
+                """
+            )
+        ).mappings().all()
+
+        top_targets_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  ma.target_color_id,
+                  tc.name AS target_name,
+                  COUNT(*)::bigint AS n_attempts
+                FROM mixing_attempts ma
+                LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
+                WHERE ma.target_color_id IS NOT NULL
+                GROUP BY ma.target_color_id, tc.name
+                ORDER BY n_attempts DESC
+                LIMIT 25
+                """
+            )
+        ).mappings().all()
+
+        event_type_rows = db.session.execute(
+            db.text(
+                """
+                SELECT event_type, COUNT(*)::bigint AS n
+                FROM mixing_attempt_events
+                GROUP BY event_type
+                ORDER BY n DESC
+                """
+            )
+        ).mappings().all()
+
+        action_type_rows = db.session.execute(
+            db.text(
+                """
+                SELECT action_type, COUNT(*)::bigint AS n
+                FROM mixing_attempt_events
+                WHERE step_index IS NOT NULL
+                GROUP BY action_type
+                ORDER BY n DESC NULLS LAST
+                """
+            )
+        ).mappings().all()
+
+        corr_row = db.session.execute(
+            db.text(
+                """
+                WITH attempts_ranked AS (
+                  SELECT
+                    ma.attempt_uuid,
+                    ma.num_steps,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY ma.user_id
+                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
+                    ) AS trial_index
+                  FROM mixing_attempts ma
+                  WHERE ma.user_id IS NOT NULL
+                    AND ma.num_steps IS NOT NULL
+                    AND ma.num_steps > 0
+                )
+                SELECT
+                  corr(ar.trial_index::double precision, ar.num_steps::double precision)
+                    AS corr_trial_index_num_steps
+                FROM attempts_ranked ar
+                """
+            )
+        ).mappings().first()
+
+        corr_step_row = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  corr(
+                    me.time_since_prev_step_ms::double precision,
+                    (me.delta_e_before - me.delta_e_after)::double precision
+                  ) AS corr_interstep_ms_step_gain
+                FROM mixing_attempt_events me
+                WHERE me.step_index IS NOT NULL
+                  AND me.time_since_prev_step_ms IS NOT NULL
+                  AND me.delta_e_before IS NOT NULL
+                  AND me.delta_e_after IS NOT NULL
+                """
+            )
+        ).mappings().first()
+
+        overview = dict(overview_row or {})
+        overview.update(dict(events_overview or {}))
 
         trial_rows = db.session.execute(
             db.text(
@@ -1745,129 +2205,700 @@ def stat_summary():
             )
         ).mappings().first()
 
-        multivariate_rows = db.session.execute(
+        perfect_threshold = float(MATCH_PERFECT_DELTA_E)
+
+        attempt_outcome_flags = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  AVG(
+                    CASE
+                      WHEN final_delta_e IS NOT NULL AND final_delta_e <= :perfect_t THEN 1.0
+                      ELSE 0.0
+                    END
+                  )::double precision AS rate_perfect,
+                  AVG(
+                    CASE
+                      WHEN final_delta_e IS NOT NULL AND final_delta_e <= 1.0 THEN 1.0
+                      ELSE 0.0
+                    END
+                  )::double precision AS rate_near_delta_e_le_1,
+                  AVG(
+                    CASE
+                      WHEN initial_delta_e IS NOT NULL AND final_delta_e IS NOT NULL
+                        AND num_steps IS NOT NULL AND num_steps > 0
+                      THEN (initial_delta_e - final_delta_e) / num_steps::double precision
+                    END
+                  )::double precision AS avg_delta_e_improvement_per_step,
+                  AVG(
+                    CASE
+                      WHEN initial_delta_e IS NOT NULL AND final_delta_e IS NOT NULL
+                        AND duration_sec IS NOT NULL AND duration_sec > 0
+                      THEN (initial_delta_e - final_delta_e) / duration_sec::double precision
+                    END
+                  )::double precision AS avg_delta_e_improvement_per_sec,
+                  AVG(
+                    CASE
+                      WHEN first_action_client_ts_ms IS NOT NULL
+                        AND attempt_started_client_ts_ms IS NOT NULL
+                      THEN (first_action_client_ts_ms - attempt_started_client_ts_ms) / 1000.0
+                    END
+                  )::double precision AS avg_first_action_latency_sec
+                FROM mixing_attempts
+                """
+            ),
+            {'perfect_t': perfect_threshold},
+        ).mappings().first()
+
+        hist_final_de_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  CASE
+                    WHEN final_delta_e <= :perfect_t THEN 'a_perfect_le_match_threshold'
+                    WHEN final_delta_e <= 0.1 THEN 'b_(perfect,0.1]'
+                    WHEN final_delta_e <= 0.5 THEN 'c_(0.1,0.5]'
+                    WHEN final_delta_e <= 1.0 THEN 'd_(0.5,1]'
+                    WHEN final_delta_e <= 2.0 THEN 'e_(1,2]'
+                    WHEN final_delta_e <= 4.0 THEN 'f_(2,4]'
+                    WHEN final_delta_e <= 8.0 THEN 'g_(4,8]'
+                    ELSE 'h_(8,+]'
+                  END AS bin_key,
+                  COUNT(*)::bigint AS n,
+                  MIN(final_delta_e)::double precision AS bin_min,
+                  MAX(final_delta_e)::double precision AS bin_max
+                FROM mixing_attempts
+                WHERE final_delta_e IS NOT NULL
+                GROUP BY 1
+                ORDER BY MIN(final_delta_e)
+                """
+            ),
+            {'perfect_t': perfect_threshold},
+        ).mappings().all()
+
+        hist_log_final_de_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  CASE
+                    WHEN final_delta_e <= 0 THEN 'non_positive'
+                    WHEN ln(final_delta_e + 1e-9) < -2 THEN 'ln<-2'
+                    WHEN ln(final_delta_e + 1e-9) < 0 THEN 'ln[-2,0)'
+                    WHEN ln(final_delta_e + 1e-9) < 2 THEN 'ln[0,2)'
+                    WHEN ln(final_delta_e + 1e-9) < 4 THEN 'ln[2,4)'
+                    ELSE 'ln>=4'
+                  END AS log_bin,
+                  COUNT(*)::bigint AS n
+                FROM mixing_attempts
+                WHERE final_delta_e IS NOT NULL
+                GROUP BY 1
+                ORDER BY MIN(ln(GREATEST(final_delta_e, 1e-9)))
+                """
+            )
+        ).mappings().all()
+
+        hist_duration_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  CASE
+                    WHEN duration_sec IS NULL THEN 'missing'
+                    WHEN duration_sec < 0 THEN 'negative'
+                    WHEN duration_sec <= 5 THEN '0-5s'
+                    WHEN duration_sec <= 15 THEN '5-15s'
+                    WHEN duration_sec <= 30 THEN '15-30s'
+                    WHEN duration_sec <= 60 THEN '30-60s'
+                    WHEN duration_sec <= 120 THEN '60-120s'
+                    WHEN duration_sec <= 300 THEN '120-300s'
+                    ELSE '300s+'
+                  END AS dur_bin,
+                  COUNT(*)::bigint AS n
+                FROM mixing_attempts
+                GROUP BY 1
+                ORDER BY MIN(CASE
+                  WHEN duration_sec IS NULL THEN -1
+                  WHEN duration_sec < 0 THEN -0.5
+                  ELSE duration_sec
+                END)
+                """
+            )
+        ).mappings().all()
+
+        duration_by_perfect_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  CASE
+                    WHEN final_delta_e IS NULL THEN 'unknown_de'
+                    WHEN final_delta_e <= :perfect_t THEN 'perfect'
+                    ELSE 'non_perfect'
+                  END AS outcome_band,
+                  COUNT(*)::bigint AS n,
+                  AVG(duration_sec)::double precision AS mean_duration_sec
+                FROM mixing_attempts
+                GROUP BY 1
+                ORDER BY 1
+                """
+            ),
+            {'perfect_t': perfect_threshold},
+        ).mappings().all()
+
+        joint_corr_attempts = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  corr(final_delta_e::double precision, duration_sec::double precision)
+                    AS corr_final_de_duration,
+                  corr(final_delta_e::double precision, num_steps::double precision)
+                    AS corr_final_de_num_steps,
+                  corr(duration_sec::double precision, num_steps::double precision)
+                    AS corr_duration_num_steps
+                FROM mixing_attempts
+                WHERE final_delta_e IS NOT NULL
+                  AND duration_sec IS NOT NULL
+                  AND num_steps IS NOT NULL
+                  AND num_steps > 0
+                """
+            )
+        ).mappings().first()
+
+        trial_outcome_curves = db.session.execute(
             db.text(
                 """
                 WITH attempts_ranked AS (
                   SELECT
                     ma.attempt_uuid,
-                    ma.user_id,
                     ma.final_delta_e,
-                    ma.end_reason,
-                    ma.num_steps,
                     ma.duration_sec,
+                    ma.end_reason,
                     ROW_NUMBER() OVER (
                       PARTITION BY ma.user_id
                       ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
                     ) AS trial_index
                   FROM mixing_attempts ma
                   WHERE ma.user_id IS NOT NULL
+                ),
+                idx AS (
+                  SELECT trial_index FROM attempts_ranked GROUP BY trial_index
                 )
                 SELECT
-                  ar.attempt_uuid,
-                  ar.user_id,
-                  ar.trial_index,
-                  ar.final_delta_e,
-                  ar.end_reason,
-                  ar.num_steps,
-                  ar.duration_sec,
-                  me.delta_e_before,
-                  me.delta_e_after,
-                  me.time_since_prev_step_ms
-                FROM attempts_ranked ar
-                JOIN mixing_attempt_events me ON me.attempt_uuid = ar.attempt_uuid
+                  idx.trial_index,
+                  (SELECT COUNT(*)::bigint FROM attempts_ranked a WHERE a.trial_index = idx.trial_index)
+                    AS n_attempts,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)
+                   FROM attempts_ranked a
+                   WHERE a.trial_index = idx.trial_index AND a.final_delta_e IS NOT NULL)::double precision
+                    AS median_final_delta_e,
+                  (SELECT AVG(
+                    CASE
+                      WHEN a.final_delta_e IS NOT NULL AND a.final_delta_e <= :perfect_t THEN 1.0
+                      WHEN a.end_reason = 'saved_match' THEN 1.0
+                      ELSE 0.0
+                    END
+                  )::double precision
+                   FROM attempts_ranked a WHERE a.trial_index = idx.trial_index
+                  ) AS success_rate,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec)
+                   FROM attempts_ranked a
+                   WHERE a.trial_index = idx.trial_index AND a.duration_sec IS NOT NULL)::double precision
+                    AS median_duration_sec
+                FROM idx
+                ORDER BY idx.trial_index
+                LIMIT 60
+                """
+            ),
+            {'perfect_t': perfect_threshold},
+        ).mappings().all()
+
+        target_difficulty_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  ma.target_color_id,
+                  tc.name AS target_name,
+                  tc.color_type,
+                  tc.classification,
+                  COUNT(*)::bigint AS n_attempts,
+                  AVG(ma.final_delta_e)::double precision AS mean_final_delta_e,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY ma.final_delta_e)::double precision
+                    AS median_final_delta_e,
+                  AVG(ma.duration_sec)::double precision AS mean_duration_sec,
+                  AVG(
+                    CASE
+                      WHEN ma.final_delta_e IS NOT NULL AND ma.final_delta_e <= :perfect_t THEN 1.0
+                      WHEN ma.end_reason = 'saved_match' THEN 1.0
+                      ELSE 0.0
+                    END
+                  )::double precision AS success_rate
+                FROM mixing_attempts ma
+                LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
+                WHERE ma.target_color_id IS NOT NULL
+                  AND ma.final_delta_e IS NOT NULL
+                GROUP BY ma.target_color_id, tc.name, tc.color_type, tc.classification
+                HAVING COUNT(*) >= 3
+                ORDER BY mean_final_delta_e DESC NULLS LAST
+                LIMIT 60
+                """
+            ),
+            {'perfect_t': perfect_threshold},
+        ).mappings().all()
+
+        action_effectiveness_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COALESCE(action_color, '(null)') AS action_color,
+                  COALESCE(action_type, '(null)') AS action_type,
+                  COUNT(*)::bigint AS n,
+                  AVG(me.delta_e_before - me.delta_e_after)::double precision AS mean_delta_e_gain,
+                  AVG(ABS(me.delta_e_before - me.delta_e_after))::double precision AS mean_abs_delta_e_change
+                FROM mixing_attempt_events me
                 WHERE me.step_index IS NOT NULL
                   AND me.delta_e_before IS NOT NULL
                   AND me.delta_e_after IS NOT NULL
-                LIMIT 250000
+                  AND me.action_type IN ('add', 'remove')
+                GROUP BY me.action_color, me.action_type
+                ORDER BY n DESC
+                LIMIT 40
                 """
             )
         ).mappings().all()
 
-        step_model_rows = []
-        for r in multivariate_rows:
-            user_id = r.get('user_id')
-            trial_index = _coerce_float_or_none(r.get('trial_index'))
-            delta_before = _coerce_float_or_none(r.get('delta_e_before'))
-            delta_after = _coerce_float_or_none(r.get('delta_e_after'))
-            t_ms = _coerce_float_or_none(r.get('time_since_prev_step_ms'))
-            if (not user_id) or trial_index is None or delta_before is None or delta_after is None:
-                continue
-            # log1p stabilizes heavy-tailed decision-time distribution.
-            log_time = np.log1p(max(0.0, t_ms if t_ms is not None else 0.0))
-            step_gain = delta_before - delta_after
-            is_improving = 1.0 if delta_after < delta_before else 0.0
-            step_model_rows.append({
-                'user_id': user_id,
-                'step_gain': step_gain,
-                'is_improving': is_improving,
-                'trial_index': trial_index,
-                'delta_e_before': delta_before,
-                'log_time_since_prev_step': float(log_time),
-            })
+        step_gain_by_action_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COALESCE(action_type, '(null)') AS action_type,
+                  COUNT(*)::bigint AS n,
+                  AVG(me.delta_e_before - me.delta_e_after)::double precision AS mean_gain,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY (me.delta_e_before - me.delta_e_after))::double precision AS median_gain
+                FROM mixing_attempt_events me
+                WHERE me.step_index IS NOT NULL
+                  AND me.delta_e_before IS NOT NULL
+                  AND me.delta_e_after IS NOT NULL
+                GROUP BY me.action_type
+                ORDER BY n DESC NULLS LAST
+                """
+            )
+        ).mappings().all()
 
-        attempt_map = {}
-        for r in multivariate_rows:
-            attempt_uuid = r.get('attempt_uuid')
-            if not attempt_uuid:
-                continue
-            if attempt_uuid in attempt_map:
-                continue
-            trial_index = _coerce_float_or_none(r.get('trial_index'))
-            final_delta_e = _coerce_float_or_none(r.get('final_delta_e'))
-            num_steps = _coerce_float_or_none(r.get('num_steps'))
-            duration_sec = _coerce_float_or_none(r.get('duration_sec'))
-            end_reason = r.get('end_reason')
-            if (not r.get('user_id')) or trial_index is None or final_delta_e is None:
-                continue
-            attempt_map[attempt_uuid] = {
-                'user_id': r.get('user_id'),
-                'trial_index': trial_index,
-                'final_delta_e': final_delta_e,
-                'num_steps': num_steps,
-                'duration_sec': duration_sec,
-                'stop_indicator': 1.0 if end_reason == 'saved_stop' else 0.0,
-            }
+        phase_behavior_rows = db.session.execute(
+            db.text(
+                """
+                WITH scored AS (
+                  SELECT
+                    NTILE(3) OVER (PARTITION BY attempt_uuid ORDER BY step_index) AS phase,
+                    (delta_e_before - delta_e_after) AS gain,
+                    ABS(delta_e_before - delta_e_after) AS abs_gain,
+                    CASE WHEN delta_e_after < delta_e_before THEN 1.0 ELSE 0.0 END AS improving
+                  FROM mixing_attempt_events
+                  WHERE step_index IS NOT NULL
+                    AND delta_e_before IS NOT NULL
+                    AND delta_e_after IS NOT NULL
+                )
+                SELECT
+                  phase,
+                  COUNT(*)::bigint AS n_steps,
+                  AVG(abs_gain)::double precision AS mean_abs_gain,
+                  STDDEV_POP(gain)::double precision AS sd_gain,
+                  AVG(improving)::double precision AS improving_rate
+                FROM scored
+                GROUP BY phase
+                ORDER BY phase
+                """
+            )
+        ).mappings().all()
 
-        attempt_model_rows = list(attempt_map.values())
+        oscillation_summary = db.session.execute(
+            db.text(
+                """
+                WITH step_gains AS (
+                  SELECT
+                    attempt_uuid,
+                    seq,
+                    (delta_e_before - delta_e_after) AS g,
+                    LAG(delta_e_before - delta_e_after) OVER (
+                      PARTITION BY attempt_uuid ORDER BY seq
+                    ) AS g_prev
+                  FROM mixing_attempt_events
+                  WHERE step_index IS NOT NULL
+                    AND delta_e_before IS NOT NULL
+                    AND delta_e_after IS NOT NULL
+                ),
+                per_attempt AS (
+                  SELECT
+                    attempt_uuid,
+                    SUM(
+                      CASE
+                        WHEN g_prev IS NOT NULL AND g IS NOT NULL
+                          AND g_prev <> 0 AND g <> 0
+                          AND (
+                            (g_prev > 0 AND g < 0) OR (g_prev < 0 AND g > 0)
+                          )
+                        THEN 1
+                        ELSE 0
+                      END
+                    )::bigint AS sign_changes
+                  FROM step_gains
+                  GROUP BY attempt_uuid
+                )
+                SELECT
+                  COUNT(*)::bigint AS n_attempts,
+                  AVG(sign_changes)::double precision AS mean_sign_changes,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY sign_changes)::double precision AS median_sign_changes,
+                  percentile_cont(0.90) WITHIN GROUP (ORDER BY sign_changes)::double precision AS p90_sign_changes
+                FROM per_attempt
+                """
+            )
+        ).mappings().first()
 
-        model_step_gain = _fit_linear_model(
-            step_model_rows,
-            y_key='step_gain',
-            x_keys=['trial_index', 'delta_e_before', 'log_time_since_prev_step'],
-        )
-        model_step_gain_ri = _fit_random_intercept_lmm(
-            step_model_rows,
-            y_key='step_gain',
-            x_keys=['trial_index', 'delta_e_before', 'log_time_since_prev_step'],
-            group_key='user_id',
-        )
-        model_improving_lpm = _fit_linear_model(
-            step_model_rows,
-            y_key='is_improving',
-            x_keys=['trial_index', 'delta_e_before', 'log_time_since_prev_step'],
-        )
-        model_improving_lpm_ri = _fit_random_intercept_lmm(
-            step_model_rows,
-            y_key='is_improving',
-            x_keys=['trial_index', 'delta_e_before', 'log_time_since_prev_step'],
-            group_key='user_id',
-        )
-        model_stop_lpm = _fit_linear_model(
-            attempt_model_rows,
-            y_key='stop_indicator',
-            x_keys=['final_delta_e', 'trial_index', 'num_steps'],
-        )
-        model_stop_lpm_ri = _fit_random_intercept_lmm(
-            attempt_model_rows,
-            y_key='stop_indicator',
-            x_keys=['final_delta_e', 'trial_index', 'num_steps'],
-            group_key='user_id',
-        )
+        hist_oscillation_rows = db.session.execute(
+            db.text(
+                """
+                WITH step_gains AS (
+                  SELECT
+                    attempt_uuid,
+                    seq,
+                    (delta_e_before - delta_e_after) AS g,
+                    LAG(delta_e_before - delta_e_after) OVER (
+                      PARTITION BY attempt_uuid ORDER BY seq
+                    ) AS g_prev
+                  FROM mixing_attempt_events
+                  WHERE step_index IS NOT NULL
+                    AND delta_e_before IS NOT NULL
+                    AND delta_e_after IS NOT NULL
+                ),
+                per_attempt AS (
+                  SELECT
+                    attempt_uuid,
+                    SUM(
+                      CASE
+                        WHEN g_prev IS NOT NULL AND g IS NOT NULL
+                          AND g_prev <> 0 AND g <> 0
+                          AND (
+                            (g_prev > 0 AND g < 0) OR (g_prev < 0 AND g > 0)
+                          )
+                        THEN 1
+                        ELSE 0
+                      END
+                    )::bigint AS sign_changes
+                  FROM step_gains
+                  GROUP BY attempt_uuid
+                )
+                SELECT
+                  LEAST(sign_changes, 15)::int AS sign_changes_capped,
+                  COUNT(*)::bigint AS n_attempts
+                FROM per_attempt
+                GROUP BY 1
+                ORDER BY 1
+                """
+            )
+        ).mappings().all()
+
+        trajectory_shape_rows = db.session.execute(
+            db.text(
+                """
+                WITH bounds AS (
+                  SELECT attempt_uuid, MAX(step_index)::double precision AS max_s
+                  FROM mixing_attempt_events
+                  WHERE step_index IS NOT NULL
+                  GROUP BY attempt_uuid
+                  HAVING MAX(step_index) > 0
+                ),
+                pts AS (
+                  SELECT
+                    me.attempt_uuid,
+                    me.step_index::double precision / b.max_s AS t_norm,
+                    me.delta_e_after
+                  FROM mixing_attempt_events me
+                  JOIN bounds b ON b.attempt_uuid = me.attempt_uuid
+                  WHERE me.step_index IS NOT NULL
+                    AND me.delta_e_after IS NOT NULL
+                )
+                SELECT
+                  WIDTH_BUCKET(t_norm::numeric, 0::numeric, 1::numeric, 10) AS position_decile,
+                  COUNT(*)::bigint AS n_points,
+                  AVG(delta_e_after)::double precision AS mean_delta_e_after
+                FROM pts
+                WHERE t_norm >= 0 AND t_norm <= 1
+                GROUP BY 1
+                ORDER BY 1
+                """
+            )
+        ).mappings().all()
+
+        archetype_feature_percentiles = db.session.execute(
+            db.text(
+                """
+                WITH step_gains AS (
+                  SELECT
+                    attempt_uuid,
+                    seq,
+                    (delta_e_before - delta_e_after) AS g,
+                    LAG(delta_e_before - delta_e_after) OVER (
+                      PARTITION BY attempt_uuid ORDER BY seq
+                    ) AS g_prev
+                  FROM mixing_attempt_events
+                  WHERE step_index IS NOT NULL
+                    AND delta_e_before IS NOT NULL
+                    AND delta_e_after IS NOT NULL
+                ),
+                osc AS (
+                  SELECT
+                    attempt_uuid,
+                    SUM(
+                      CASE
+                        WHEN g_prev IS NOT NULL AND g IS NOT NULL
+                          AND g_prev <> 0 AND g <> 0
+                          AND (
+                            (g_prev > 0 AND g < 0) OR (g_prev < 0 AND g > 0)
+                          )
+                        THEN 1
+                        ELSE 0
+                      END
+                    )::bigint AS sign_changes
+                  FROM step_gains
+                  GROUP BY attempt_uuid
+                ),
+                step_avg AS (
+                  SELECT
+                    attempt_uuid,
+                    AVG(ABS(delta_e_before - delta_e_after))::double precision AS mean_abs_step_change
+                  FROM mixing_attempt_events
+                  WHERE step_index IS NOT NULL
+                    AND delta_e_before IS NOT NULL
+                    AND delta_e_after IS NOT NULL
+                  GROUP BY attempt_uuid
+                ),
+                feat AS (
+                  SELECT
+                    ma.attempt_uuid,
+                    ma.num_steps,
+                    ma.duration_sec,
+                    ma.final_delta_e,
+                    COALESCE(o.sign_changes, 0)::double precision AS sign_changes,
+                    s.mean_abs_step_change,
+                    CASE
+                      WHEN ma.duration_sec IS NOT NULL AND ma.duration_sec > 0
+                        AND ma.num_steps IS NOT NULL AND ma.num_steps > 0
+                      THEN ma.duration_sec / ma.num_steps::double precision
+                    END AS sec_per_step
+                  FROM mixing_attempts ma
+                  LEFT JOIN osc o ON o.attempt_uuid = ma.attempt_uuid
+                  LEFT JOIN step_avg s ON s.attempt_uuid = ma.attempt_uuid
+                  WHERE ma.num_steps IS NOT NULL AND ma.num_steps > 0
+                )
+                SELECT
+                  (SELECT percentile_cont(0.10) WITHIN GROUP (ORDER BY num_steps) FROM feat)::double precision
+                    AS num_steps_p10,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY num_steps) FROM feat)::double precision
+                    AS num_steps_p50,
+                  (SELECT percentile_cont(0.90) WITHIN GROUP (ORDER BY num_steps) FROM feat)::double precision
+                    AS num_steps_p90,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY mean_abs_step_change) FROM feat
+                   WHERE mean_abs_step_change IS NOT NULL)::double precision AS mean_abs_step_p50,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY sign_changes) FROM feat)::double precision
+                    AS oscillation_p50,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY sec_per_step) FROM feat
+                   WHERE sec_per_step IS NOT NULL)::double precision AS sec_per_step_p50
+                """
+            )
+        ).mappings().first()
+
+        mixing_sessions_overview = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COUNT(*)::bigint AS n_sessions,
+                  AVG(CASE WHEN skipped THEN 1.0 ELSE 0.0 END)::double precision AS skip_rate,
+                  AVG(delta_e)::double precision AS mean_delta_e,
+                  AVG(time_sec)::double precision AS mean_time_sec
+                FROM mixing_sessions
+                """
+            )
+        ).mappings().first()
+
+        skip_by_target_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  ms.target_color_id,
+                  tc.name AS target_name,
+                  COUNT(*)::bigint AS n,
+                  AVG(CASE WHEN ms.skipped THEN 1.0 ELSE 0.0 END)::double precision AS skip_rate,
+                  AVG(ms.delta_e)::double precision AS mean_delta_e
+                FROM mixing_sessions ms
+                LEFT JOIN target_colors tc ON tc.id = ms.target_color_id
+                WHERE ms.target_color_id IS NOT NULL
+                GROUP BY ms.target_color_id, tc.name
+                HAVING COUNT(*) >= 5
+                ORDER BY skip_rate DESC NULLS LAST
+                LIMIT 40
+                """
+            )
+        ).mappings().all()
+
+        skip_perception_rows = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COALESCE(skip_perception, '(null)') AS skip_perception,
+                  COUNT(*)::bigint AS n,
+                  AVG(delta_e)::double precision AS mean_delta_e_at_skip
+                FROM mixing_sessions
+                WHERE skipped
+                GROUP BY skip_perception
+                ORDER BY n DESC
+                """
+            )
+        ).mappings().all()
+
+        user_skill_distribution = db.session.execute(
+            db.text(
+                """
+                WITH u AS (
+                  SELECT
+                    user_id,
+                    COUNT(*)::bigint AS n_attempts,
+                    AVG(final_delta_e)::double precision AS mean_final_de,
+                    MIN(final_delta_e)::double precision AS best_final_de,
+                    STDDEV_POP(final_delta_e)::double precision AS sd_final_de
+                  FROM mixing_attempts
+                  WHERE user_id IS NOT NULL AND final_delta_e IS NOT NULL
+                  GROUP BY user_id
+                  HAVING COUNT(*) >= 3
+                )
+                SELECT
+                  COUNT(*)::bigint AS n_users,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY mean_final_de)::double precision AS median_user_mean_de,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY best_final_de)::double precision AS median_user_best_de,
+                  percentile_cont(0.90) WITHIN GROUP (ORDER BY mean_final_de)::double precision AS p90_user_mean_de
+                FROM u
+                """
+            )
+        ).mappings().first()
+
+        data_integrity_row = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COUNT(*) FILTER (WHERE duration_sec IS NOT NULL AND duration_sec < 0)::bigint AS n_negative_duration,
+                  COUNT(*) FILTER (WHERE num_steps IS NOT NULL AND num_steps < 0)::bigint AS n_negative_num_steps,
+                  COUNT(*) FILTER (
+                    WHERE final_delta_e IS NOT NULL AND initial_delta_e IS NOT NULL
+                      AND final_delta_e > initial_delta_e + 0.0001
+                  )::bigint AS n_final_gt_initial_worse_match
+                FROM mixing_attempts
+                """
+            )
+        ).mappings().first()
+
+        seq_gap_row = db.session.execute(
+            db.text(
+                """
+                WITH o AS (
+                  SELECT
+                    attempt_uuid,
+                    seq,
+                    seq - LAG(seq) OVER (PARTITION BY attempt_uuid ORDER BY seq) AS gap
+                  FROM mixing_attempt_events
+                )
+                SELECT
+                  COUNT(*) FILTER (WHERE gap IS NOT NULL AND gap > 1)::bigint AS n_seq_gaps,
+                  COUNT(*)::bigint AS n_events_with_prev
+                FROM o
+                """
+            )
+        ).mappings().first()
+
+        client_server_offset_row = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY (
+                    (client_ts_ms::double precision / 1000.0)
+                    - EXTRACT(EPOCH FROM server_ts)
+                  ))::double precision AS median_client_minus_server_sec
+                FROM mixing_attempt_events
+                """
+            )
+        ).mappings().first()
+
+        def _f_corr(key, row):
+            if not row or row.get(key) is None:
+                return None
+            return float(row[key])
+
+        correlations = {
+            'corr_trial_index_num_steps': _f_corr('corr_trial_index_num_steps', corr_row),
+            'corr_interstep_ms_step_gain': _f_corr('corr_interstep_ms_step_gain', corr_step_row),
+            'corr_final_delta_e_duration_sec': _f_corr('corr_final_de_duration', joint_corr_attempts),
+            'corr_final_delta_e_num_steps': _f_corr('corr_final_de_num_steps', joint_corr_attempts),
+            'corr_duration_sec_num_steps': _f_corr('corr_duration_num_steps', joint_corr_attempts),
+        }
+
+        strategy_by_target = build_strategy_summary_by_target()
+
+        eda_framework = {
+            'data_model': {
+                'outcome_tables': ['mixing_attempts', 'mixing_sessions'],
+                'process_table': 'mixing_attempt_events',
+                'user_tables': ['users', 'user_progress', 'user_target_color_stats'],
+                'join_spine': 'attempt_uuid  (attempts.events.sessions)',
+            },
+            'attempt_derived': dict(attempt_outcome_flags or {}),
+            'histogram_final_delta_e': [dict(r) for r in hist_final_de_rows],
+            'histogram_log_final_delta_e': [dict(r) for r in hist_log_final_de_rows],
+            'histogram_duration_sec': [dict(r) for r in hist_duration_rows],
+            'duration_by_perfect_band': [dict(r) for r in duration_by_perfect_rows],
+            'trial_outcome_curves': [dict(r) for r in trial_outcome_curves],
+            'target_difficulty_ranking': [dict(r) for r in target_difficulty_rows],
+            'action_effectiveness_matrix': [dict(r) for r in action_effectiveness_rows],
+            'step_gain_by_action_type': [dict(r) for r in step_gain_by_action_rows],
+            'early_mid_late_step_behavior': [dict(r) for r in phase_behavior_rows],
+            'reversal_oscillation': {
+                'summary': dict(oscillation_summary or {}),
+                'histogram_sign_changes_capped': [dict(r) for r in hist_oscillation_rows],
+            },
+            'trajectory_shape_mean_delta_e': [dict(r) for r in trajectory_shape_rows],
+            'archetype_feature_percentiles': dict(archetype_feature_percentiles or {}),
+            'mixing_sessions': {
+                'overview': dict(mixing_sessions_overview or {}),
+                'skip_by_target': [dict(r) for r in skip_by_target_rows],
+                'skip_perception_calibration': [dict(r) for r in skip_perception_rows],
+            },
+            'user_heterogeneity': dict(user_skill_distribution or {}),
+            'system_validation': {
+                'counts': dict(data_integrity_row or {}),
+                'sequence_gaps': dict(seq_gap_row or {}),
+                'median_client_minus_server_sec': (client_server_offset_row or {}).get(
+                    'median_client_minus_server_sec'
+                ),
+            },
+        }
 
         return jsonify({
             'status': 'success',
-            'overview': dict(overview_row or {}),
+            'overview': overview,
+            'eda': {
+                'missingness': {
+                    'attempts': dict(missingness_row or {}),
+                    'events': dict(event_missingness_row or {}),
+                },
+                'percentiles': {
+                    'attempts': dict(attempt_percentiles or {}),
+                    'decision_steps': dict(step_percentiles or {}),
+                },
+                'end_reasons': [dict(r) for r in end_reason_rows],
+                'daily_attempt_volume': list(reversed([dict(r) for r in daily_rows])),
+                'user_attempt_histogram': [dict(r) for r in user_bucket_rows],
+                'top_target_colors': [dict(r) for r in top_targets_rows],
+                'event_type_counts': [dict(r) for r in event_type_rows],
+                'action_type_counts': [dict(r) for r in action_type_rows],
+                'pairwise_correlations': correlations,
+                'strategy_by_target': strategy_by_target,
+                'framework': eda_framework,
+            },
             'h1_learning': [dict(r) for r in trial_rows],
             'h2_difficulty': [dict(r) for r in difficulty_rows],
             'h3_random_search_check': [dict(r) for r in random_rows],
@@ -1875,14 +2906,6 @@ def stat_summary():
             'h5_stopping_rule': {
                 'by_final_delta_e_bucket': [dict(r) for r in stop_rows],
                 'stop_dispersion': dict(stop_dispersion or {}),
-            },
-            'multivariate_models': {
-                'step_gain_ols': model_step_gain,
-                'step_gain_random_intercept': model_step_gain_ri,
-                'improving_lpm': model_improving_lpm,
-                'improving_random_intercept': model_improving_lpm_ri,
-                'stop_lpm': model_stop_lpm,
-                'stop_random_intercept': model_stop_lpm_ri,
             },
         })
     except Exception as e:
@@ -1988,6 +3011,9 @@ def push_send_daily():
     sent = 0
     failed = 0
     dead_endpoints = []
+    email_sent = 0
+    email_failed = 0
+    email_skipped_unverified = 0
 
     def _build_push_payload(user_id):
         """Return personalized push payload dict for this user."""
@@ -2066,11 +3092,39 @@ def push_send_daily():
         except Exception:
             failed += 1
 
+    reminder_users = User.query.filter(
+        User.email.isnot(None),
+        User.email_opt_in_reminders.is_(True),
+    ).all()
+    for user in reminder_users:
+        if not user.email_verified_at:
+            email_skipped_unverified += 1
+            continue
+        payload_dict = _build_push_payload(user.id)
+        try:
+            _send_email_message(
+                to_email=user.email,
+                subject=payload_dict.get('title') or 'ShadeMatch Daily Challenge',
+                plain_text=(payload_dict.get('body') or "Today's daily challenge is live!") + "\n\nhttps://shadematch.app/",
+            )
+            email_sent += 1
+        except Exception as exc:
+            print(f'email reminder send failed for user {user.id}: {exc}')
+            email_failed += 1
+
     if dead_endpoints:
         PushSubscription.query.filter(PushSubscription.endpoint.in_(dead_endpoints)).delete(synchronize_session=False)
         db.session.commit()
 
-    return jsonify({'status': 'success', 'sent': sent, 'failed': failed, 'cleaned': len(dead_endpoints)})
+    return jsonify({
+        'status': 'success',
+        'sent': sent,
+        'failed': failed,
+        'cleaned': len(dead_endpoints),
+        'email_sent': email_sent,
+        'email_failed': email_failed,
+        'email_skipped_unverified': email_skipped_unverified,
+    })
 
 
 @main.route('/push/vapid-public-key', methods=['GET'])
