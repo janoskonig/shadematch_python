@@ -24,7 +24,13 @@ Guest (no user_id): returns {'next_action': None}
 """
 from datetime import date, datetime, timedelta, timezone
 from .models import UserProgress, UserTargetColorStats, DailyChallengeRun, TargetColor
-from .gamification import COVERAGE_QUOTA, compute_quota_progress, compute_level_from_quota
+from .gamification import (
+    COVERAGE_QUOTA,
+    compute_quota_progress,
+    MIN_SUM_DROP_BAND,
+    target_color_sum_drop,
+    _effective_sum_cap,
+)
 
 POLICY_VERSION = 'v2'
 
@@ -50,24 +56,26 @@ def _streak_at_risk(up: UserProgress, today: date) -> bool:
     return salvageable
 
 
-def _nearest_deficit_unlocked_target(user_id: str, user_level: int):
+def _nearest_deficit_unlocked_target(user_id: str):
     """
     Return the TargetColor with the smallest positive remaining quota attempts
-    among colors that are unlocked (level_required <= user_level).
+    among colors with a full recipe and sum_drop in the user's current tier band.
 
     Tie-break: lowest catalog_order (iterated first).
-    Returns None when all unlocked colors are at or above quota.
+    Returns None when all eligible colors are at or above quota.
     """
     stats_map = {
         s.target_color_id: s.attempt_count
         for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
     }
-    candidates = (
-        TargetColor.query
-        .filter(TargetColor.level_required <= user_level)
-        .order_by(TargetColor.catalog_order.asc())
-        .all()
-    )
+    up = UserProgress.query.filter_by(user_id=user_id).first()
+    cap = int(up.max_sum_drop_unlocked) if up else 4
+    eff = _effective_sum_cap(cap)
+    candidates = [
+        tc for tc in TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
+        if (s := target_color_sum_drop(tc)) is not None
+        and MIN_SUM_DROP_BAND <= s <= eff
+    ]
     best = None
     best_remaining = None
     for tc in candidates:
@@ -106,7 +114,6 @@ def build_next_action(user_id: str, today: date = None):
 
     # Quota state (one canonical query)
     quota = compute_quota_progress(user_id)
-    user_level = compute_level_from_quota(quota['coverage_ratio'], quota['is_maxed_out'])
     is_maxed_out = quota['is_maxed_out']
 
     # Secondary is always a non-coercive escape hatch
@@ -137,7 +144,7 @@ def build_next_action(user_id: str, today: date = None):
 
     # ── 2. Streak at risk ─────────────────────────────────────────────────
     if primary is None and _streak_at_risk(up, today):
-        tc, remaining = _nearest_deficit_unlocked_target(user_id, user_level)
+        tc, remaining = _nearest_deficit_unlocked_target(user_id)
         primary = {
             'id': 'streak_at_risk',
             'type': 'practice',
@@ -154,7 +161,7 @@ def build_next_action(user_id: str, today: date = None):
 
     # ── 3. Nearest unlocked quota deficit ────────────────────────────────
     if primary is None and not is_maxed_out:
-        tc, remaining = _nearest_deficit_unlocked_target(user_id, user_level)
+        tc, remaining = _nearest_deficit_unlocked_target(user_id)
         if tc:
             never_qualified = up is None or up.last_activity_date is None
             if never_qualified:
@@ -187,8 +194,8 @@ def build_next_action(user_id: str, today: date = None):
                 'type': 'practice',
                 'label': 'Build your coverage',
                 'reason': (
-                    f'Level up to unlock more colors — {quota["remaining_attempts_total"]:,} '
-                    f'attempts remaining across all colors'
+                    f'Complete your current sum-drop tier to unlock harder shades — '
+                    f'{quota["remaining_attempts_total"]:,} attempts left in this tier'
                 ),
                 'payload': {'route': 'free_play', 'target_color_id': None},
             }

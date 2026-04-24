@@ -14,6 +14,11 @@ from . import db
 COVERAGE_QUOTA = 150
 STREAK_FREEZE_CAP = 3
 
+# Sum-drop tier: quota and games only count colors with a full recipe and
+# MIN_SUM_DROP_BAND <= sum(drops) <= user's max_sum_drop_unlocked (capped).
+MIN_SUM_DROP_BAND = 2
+MAX_SUM_DROP_CATALOG_CAP = 28
+
 # Nonlinear level starts for quota coverage ratio (levels 1..9).
 # Level 10 still requires is_maxed_out=True (all colors at quota).
 LEVEL_START_THRESHOLDS = [0.00, 0.03, 0.08, 0.15, 0.24, 0.36, 0.50, 0.66, 0.83]
@@ -353,6 +358,73 @@ def grant_daily_performance_awards(day: date):
 
 
 # ---------------------------------------------------------------------------
+# Sum-drop helpers
+# ---------------------------------------------------------------------------
+
+def target_color_sum_drop(tc) -> int | None:
+    """Total recipe drops, or None if any channel is unset (incomplete recipe)."""
+    vals = [tc.drop_white, tc.drop_black, tc.drop_red, tc.drop_yellow, tc.drop_blue]
+    if any(v is None for v in vals):
+        return None
+    return int(sum(int(v or 0) for v in vals))
+
+
+def _catalog_recipe_max_sum() -> int:
+    m = 0
+    for tc in TargetColor.query.all():
+        s = target_color_sum_drop(tc)
+        if s is not None:
+            m = max(m, s)
+    return m
+
+
+def _effective_sum_cap(max_sum_drop_unlocked: int) -> int:
+    """User cap clamped to catalog content and global ceiling."""
+    catalog_max = _catalog_recipe_max_sum()
+    top = catalog_max if catalog_max > 0 else MAX_SUM_DROP_CATALOG_CAP
+    return min(int(max_sum_drop_unlocked), MAX_SUM_DROP_CATALOG_CAP, max(top, MIN_SUM_DROP_BAND))
+
+
+def _eligible_target_colors(max_sum_drop_unlocked: int) -> list:
+    """Colors with complete recipe and sum in [MIN_SUM_DROP_BAND, effective_cap]."""
+    cap = _effective_sum_cap(max_sum_drop_unlocked)
+    out = []
+    for tc in TargetColor.query.order_by(TargetColor.catalog_order.asc()).all():
+        s = target_color_sum_drop(tc)
+        if s is None:
+            continue
+        if MIN_SUM_DROP_BAND <= s <= cap:
+            out.append(tc)
+    return out
+
+
+def advance_max_sum_drop_unlocked(user_id: str) -> int:
+    """
+    While every eligible color (for current cap) is at quota, raise cap by 1.
+    Returns number of steps the cap advanced (0 or more).
+    """
+    up = UserProgress.query.filter_by(user_id=user_id).first()
+    if not up:
+        return 0
+    steps = 0
+    stats_map = {
+        s.target_color_id: s.attempt_count
+        for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
+    }
+    catalog_max = _catalog_recipe_max_sum()
+    ceiling = min(MAX_SUM_DROP_CATALOG_CAP, catalog_max) if catalog_max > 0 else MAX_SUM_DROP_CATALOG_CAP
+    while up.max_sum_drop_unlocked < ceiling:
+        eligible = _eligible_target_colors(up.max_sum_drop_unlocked)
+        if not eligible:
+            break
+        if not all(stats_map.get(tc.id, 0) >= COVERAGE_QUOTA for tc in eligible):
+            break
+        up.max_sum_drop_unlocked += 1
+        steps += 1
+    return steps
+
+
+# ---------------------------------------------------------------------------
 # Canonical quota helpers
 # ---------------------------------------------------------------------------
 
@@ -368,22 +440,34 @@ def compute_quota_progress(user_id: str) -> dict:
     """
     Canonical quota progress contract. All downstream consumers must read this.
 
+    Tier-only quota: only colors with a complete recipe and
+    MIN_SUM_DROP_BAND <= sum_drop <= effective_cap(max_sum_drop_unlocked) count.
+
     Returns:
-      tracked_color_ids        – all catalog color IDs (deterministic)
-      completed_attempt_units  – sum(min(attempt_count, 150)) across all tracked
-      required_attempt_units   – total_tracked_colors * 150
-      completed_colors         – count with attempt_count >= 150
-      total_tracked_colors     – len(tracked)
+      tracked_color_ids        – eligible color IDs only (same order as catalog)
+      eligible_color_ids       – same as tracked_color_ids (explicit alias)
+      completed_attempt_units  – sum(min(attempt_count, 150)) across eligible
+      required_attempt_units   – len(eligible) * 150
+      completed_colors         – eligible count with attempt_count >= 150
+      total_tracked_colors     – len(eligible)
+      max_sum_drop_unlocked    – user's current cap (default 4 if no row)
       remaining_attempts_total – required - completed
       coverage_ratio           – completed / required  (0.0 if required == 0)
       catalog_coverage_pct     – coverage_ratio * 100 rounded to 1 dp
-      is_maxed_out             – completed_colors == total_tracked_colors (and > 0)
-      nearest_deficit_color_id – smallest positive remaining, tiebreak: lowest catalog_order
+      is_maxed_out             – all recipe colors at quota AND cap fully opened
+      nearest_deficit_color_id – among eligible only
       nearest_deficit_remaining
-      color_quota_map          – {color_id: {attempt_count, quota_contribution, remaining}}
+      color_quota_map          – all catalog IDs; ineligible have remaining 0 contribution
     """
-    tracked = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
-    tracked_color_ids = [tc.id for tc in tracked]
+    max_sum_unlocked = 4  # default tier cap when no user_progress row
+    if user_id:
+        up = UserProgress.query.filter_by(user_id=user_id).first()
+        if up is not None:
+            max_sum_unlocked = int(up.max_sum_drop_unlocked)
+
+    eligible = _eligible_target_colors(max_sum_unlocked)
+    tracked_color_ids = [tc.id for tc in eligible]
+    eligible_ids = set(tracked_color_ids)
     total_tracked_colors = len(tracked_color_ids)
 
     stats_map = {}
@@ -393,26 +477,36 @@ def compute_quota_progress(user_id: str) -> dict:
             for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
         }
 
+    all_tracked = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
+    color_quota_map = {}
+    for tc in all_tracked:
+        attempt_count = stats_map.get(tc.id, 0)
+        in_eligible = tc.id in eligible_ids
+        if in_eligible:
+            quota_contribution = min(attempt_count, COVERAGE_QUOTA)
+            remaining = max(0, COVERAGE_QUOTA - attempt_count)
+        else:
+            quota_contribution = 0
+            remaining = 0
+        color_quota_map[tc.id] = {
+            'attempt_count': attempt_count,
+            'quota_contribution': quota_contribution,
+            'remaining': remaining,
+        }
+
     required_attempt_units = total_tracked_colors * COVERAGE_QUOTA
     completed_attempt_units = 0
     completed_colors = 0
-    color_quota_map = {}
     nearest_deficit_color_id = None
     nearest_deficit_remaining = None
 
-    for tc in tracked:
+    for tc in eligible:
         attempt_count = stats_map.get(tc.id, 0)
         quota_contribution = min(attempt_count, COVERAGE_QUOTA)
         remaining = max(0, COVERAGE_QUOTA - attempt_count)
         completed_attempt_units += quota_contribution
         if attempt_count >= COVERAGE_QUOTA:
             completed_colors += 1
-        color_quota_map[tc.id] = {
-            'attempt_count': attempt_count,
-            'quota_contribution': quota_contribution,
-            'remaining': remaining,
-        }
-        # Nearest deficit: smallest positive remaining; tiebreak: lowest catalog_order (natural sort)
         if remaining > 0:
             if nearest_deficit_color_id is None or remaining < nearest_deficit_remaining:
                 nearest_deficit_color_id = tc.id
@@ -424,15 +518,29 @@ def compute_quota_progress(user_id: str) -> dict:
         coverage_ratio = 0.0
 
     catalog_coverage_pct = round(coverage_ratio * 100, 1)
-    is_maxed_out = (completed_colors == total_tracked_colors and total_tracked_colors > 0)
+
+    recipe_colors = [tc for tc in all_tracked if target_color_sum_drop(tc) is not None]
+    all_recipe_at_quota = (
+        len(recipe_colors) > 0
+        and all(stats_map.get(tc.id, 0) >= COVERAGE_QUOTA for tc in recipe_colors)
+    )
+    catalog_max = _catalog_recipe_max_sum()
+    cap_fully_open = (
+        catalog_max <= 0
+        or max_sum_unlocked >= min(MAX_SUM_DROP_CATALOG_CAP, catalog_max)
+    )
+    is_maxed_out = bool(all_recipe_at_quota and cap_fully_open and len(recipe_colors) > 0)
+
     remaining_attempts_total = required_attempt_units - completed_attempt_units
 
     return {
         'tracked_color_ids': tracked_color_ids,
+        'eligible_color_ids': tracked_color_ids,
         'completed_attempt_units': completed_attempt_units,
         'required_attempt_units': required_attempt_units,
         'completed_colors': completed_colors,
         'total_tracked_colors': total_tracked_colors,
+        'max_sum_drop_unlocked': max_sum_unlocked,
         'remaining_attempts_total': remaining_attempts_total,
         'coverage_ratio': coverage_ratio,
         'catalog_coverage_pct': catalog_coverage_pct,
@@ -458,7 +566,9 @@ def build_progress_response(user_id: str, user_progress, _catalog_size_ignored=N
     xp = up.xp if up else 0
 
     quota = compute_quota_progress(user_id)
-    level = compute_level_from_quota(quota['coverage_ratio'], quota['is_maxed_out'])
+    computed_lv = compute_level_from_quota(quota['coverage_ratio'], quota['is_maxed_out'])
+    peak_lv = up.level if up else 1
+    level = max(peak_lv, computed_lv)
     level_progress_pct = compute_level_progress_pct_from_quota(quota['coverage_ratio'], quota['is_maxed_out'])
     rank, rank_color = compute_rank(level)
 
@@ -479,6 +589,7 @@ def build_progress_response(user_id: str, user_progress, _catalog_size_ignored=N
         'is_maxed_out': quota['is_maxed_out'],
         'nearest_deficit_color_id': quota['nearest_deficit_color_id'],
         'nearest_deficit_remaining': quota['nearest_deficit_remaining'],
+        'max_sum_drop_unlocked': quota['max_sum_drop_unlocked'],
         # ── Streak / freeze ─────────────────────────────────────────
         'current_streak': up.current_streak if up else 0,
         'longest_streak': up.longest_streak if up else 0,
@@ -527,8 +638,11 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
         up = UserProgress(
             user_id=user_id, xp=0, level=old_level,
             current_streak=0, longest_streak=0, streak_freeze_available=0,
+            max_sum_drop_unlocked=4,
         )
         db.session.add(up)
+
+    old_display_level = up.level
 
     # ── XP (secondary; kept for reinforcement toasts) ────────────────────
     xp_earned = XP_TABLE.get(match_category, 5)
@@ -588,7 +702,6 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             })
 
     # ── Color stats + quota awards ────────────────────────────────────────
-    delta_quota_units = 0
     color_crossed_quota = False
 
     if target_color_id is not None:
@@ -610,10 +723,6 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             stats.best_delta_e = delta_e
         stats.last_attempt_at = datetime.utcnow()
 
-        # Quota delta (capped contribution)
-        old_contrib = min(old_count, COVERAGE_QUOTA)
-        new_contrib = min(stats.attempt_count, COVERAGE_QUOTA)
-        delta_quota_units = new_contrib - old_contrib
         color_crossed_quota = (old_count < COVERAGE_QUOTA <= stats.attempt_count)
 
         # Per-color reinforcement milestones (incremental chunks before quota completion)
@@ -649,18 +758,16 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
                     'threshold': COVERAGE_QUOTA,
                 })
 
-    # ── Compute new quota state from delta (no second DB query) ──────────
-    old_ratio = old_quota['coverage_ratio']
-    old_completed_units = old_quota['completed_attempt_units']
-    old_required_units = old_quota['required_attempt_units']
-    old_completed_colors = old_quota['completed_colors']
-    total_tc = old_quota['total_tracked_colors']
+    db.session.flush()
+    advance_max_sum_drop_unlocked(user_id)
+    new_quota = compute_quota_progress(user_id)
 
-    new_completed_units = old_completed_units + delta_quota_units
-    new_completed_colors = old_completed_colors + (1 if color_crossed_quota else 0)
-    new_ratio = new_completed_units / old_required_units if old_required_units > 0 else 0.0
-    new_is_maxed = (new_completed_colors == total_tc and total_tc > 0)
-    new_level = compute_level_from_quota(new_ratio, new_is_maxed)
+    old_ratio = old_quota['coverage_ratio']
+    new_ratio = new_quota['coverage_ratio']
+    new_is_maxed = new_quota['is_maxed_out']
+
+    computed_new = compute_level_from_quota(new_ratio, new_is_maxed)
+    final_level = max(up.level, computed_new)
 
     # ── Global quota milestone awards (quota_major) ───────────────────────
     for milestone_pct in QUOTA_GLOBAL_MILESTONE_PCTS:
@@ -691,10 +798,10 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
                 'icon': '🎊',
             })
 
-    # ── Quota-based level-up ──────────────────────────────────────────────
-    if new_level > old_level:
-        level_up = {'from': old_level, 'to': new_level}
-        for lvl in range(old_level + 1, new_level + 1):
+    # ── Quota-based level-up (monotonic display level) ────────────────────
+    if final_level > old_display_level:
+        level_up = {'from': old_display_level, 'to': final_level}
+        for lvl in range(old_display_level + 1, final_level + 1):
             _, is_new = _grant_award(user_id, f'level_{lvl}', metadata={'level': lvl})
             if is_new:
                 new_awards.append({
@@ -704,7 +811,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
                     'award_class': 'reinforcement',
                     'icon': '⬆️',
                 })
-        up.level = new_level
+    up.level = final_level
 
     return xp_earned, new_awards, streak_event, level_up
 
@@ -748,7 +855,7 @@ def get_quota_ordered_catalog(user_id, full_catalog):
     Annotate each catalog entry with:
       - attempt_count  : per-user plays (from UserTargetColorStats)
       - under_quota    : attempt_count < COVERAGE_QUOTA
-      - unlocked       : user's quota level >= color's level_required
+      - unlocked       : full recipe and MIN_SUM_DROP_BAND <= sum <= effective user cap
     """
     if not user_id:
         return full_catalog
@@ -758,28 +865,49 @@ def get_quota_ordered_catalog(user_id, full_catalog):
         for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
     }
 
-    # Compute quota-based level without a second UserProgress query
-    total_tc = len(full_catalog)
-    if total_tc > 0:
-        required_units = total_tc * COVERAGE_QUOTA
-        completed_units = sum(min(stats_map.get(c['id'], 0), COVERAGE_QUOTA) for c in full_catalog)
-        cov_ratio = completed_units / required_units
-        completed_cols = sum(1 for c in full_catalog if stats_map.get(c['id'], 0) >= COVERAGE_QUOTA)
-        is_maxed = (completed_cols == total_tc)
-    else:
-        cov_ratio = 0.0
-        is_maxed = False
-
-    user_level = compute_level_from_quota(cov_ratio, is_maxed)
+    quota = compute_quota_progress(user_id)
+    cap = int(quota['max_sum_drop_unlocked'])
+    effective = _effective_sum_cap(cap)
 
     result = []
     for c in full_catalog:
         c_copy = dict(c)
         c_copy['attempt_count'] = stats_map.get(c['id'], 0)
         c_copy['under_quota'] = c_copy['attempt_count'] < COVERAGE_QUOTA
-        c_copy['unlocked'] = user_level >= c.get('level_required', 1)
+        s = c.get('sum_drop_count')
+        c_copy['unlocked'] = (
+            s is not None
+            and MIN_SUM_DROP_BAND <= int(s) <= effective
+        )
         result.append(c_copy)
     return result
+
+
+def sample_game_target_colors(user_id: str | None = None, count: int = 7, seed=None, max_sum_cap: int | None = None):
+    """
+    Random subset of eligible colors for one game (without replacement).
+    If max_sum_cap is set, it overrides the user's tier cap (e.g. guest play).
+    If user_id is None and max_sum_cap is None, uses MAX_SUM_DROP_CATALOG_CAP.
+    Returns list of TargetColor ORMs in shuffled order.
+    """
+    import random
+
+    if max_sum_cap is not None:
+        cap = int(max_sum_cap)
+    elif user_id:
+        up = UserProgress.query.filter_by(user_id=user_id).first()
+        cap = int(up.max_sum_drop_unlocked) if up else 4
+    else:
+        cap = MAX_SUM_DROP_CATALOG_CAP
+    eligible = _eligible_target_colors(cap)
+    if not eligible:
+        return []
+    rng = random.Random(seed) if seed is not None else random
+    pool = list(eligible)
+    rng.shuffle(pool)
+    if len(pool) <= count:
+        return pool
+    return pool[:count]
 
 
 # ---------------------------------------------------------------------------

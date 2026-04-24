@@ -19,7 +19,8 @@ import pandas as pd
 import os
 import numpy as np
 import json
-from sqlalchemy import func
+from sqlalchemy import func, text
+from sqlalchemy.exc import IntegrityError
 from dotenv import dotenv_values
 
 from .gamification import (
@@ -32,9 +33,13 @@ from .gamification import (
     build_daily_missions,
     get_user_profile,
     compute_quota_progress,
-    compute_level_from_quota,
     COVERAGE_QUOTA,
     STREAK_FREEZE_CAP,
+    MIN_SUM_DROP_BAND,
+    MAX_SUM_DROP_CATALOG_CAP,
+    target_color_sum_drop,
+    _effective_sum_cap,
+    sample_game_target_colors,
 )
 from .next_action import build_next_action
 from .stat_eda import ALLOWED_PLOT_IDS, build_strategy_summary_by_target, get_plot_png
@@ -218,6 +223,11 @@ def _catalog_size():
 @main.route('/')
 def index():
     return render_template('index.html')
+
+
+@main.route('/lab')
+def lab_page():
+    return render_template('lab.html')
 
 
 @main.route('/results')
@@ -549,23 +559,30 @@ def user_email_settings():
 
 # ── Target colors ──────────────────────────────────────────────────────────
 
+def _target_color_public_dict(tc):
+    """Shape for /api/target-colors and /api/game-targets."""
+    entry = {
+        'id': tc.id,
+        'name': tc.name,
+        'type': tc.color_type,
+        'classification': tc.classification,
+        'rgb': [tc.r, tc.g, tc.b],
+        'catalog_order': tc.catalog_order,
+    }
+    s = target_color_sum_drop(tc)
+    if s is not None:
+        entry['sum_drop_count'] = s
+    drops = _target_color_drops_for_api(tc)
+    if drops is not None:
+        entry['drops'] = drops
+    return entry
+
+
 @main.route('/api/target-colors', methods=['GET'])
 def get_target_colors():
     user_id = request.args.get('user_id')
     rows = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
-    colors = [
-        {
-            'id': tc.id,
-            'name': tc.name,
-            'type': tc.color_type,
-            'classification': tc.classification,
-            'rgb': [tc.r, tc.g, tc.b],
-            'frequency': tc.frequency,
-            'catalog_order': tc.catalog_order,
-            'level_required': tc.level_required,
-        }
-        for tc in rows
-    ]
+    colors = [_target_color_public_dict(tc) for tc in rows]
 
     next_action_data = {}
     if user_id:
@@ -573,6 +590,173 @@ def get_target_colors():
         next_action_data = build_next_action(user_id)
 
     return jsonify({'status': 'success', 'colors': colors, **next_action_data})
+
+
+@main.route('/api/game-targets', methods=['GET'])
+def get_game_targets():
+    """
+    Seven colors for one game, sampled from the user's current sum-drop tier.
+    Without user_id: guest sample from full recipe palette (cap MAX_SUM_DROP_CATALOG_CAP).
+    Optional ?seed=int for deterministic shuffle (testing).
+    """
+    user_id = (request.args.get('user_id') or '').strip()
+    raw_seed = request.args.get('seed')
+    seed_int = None
+    if raw_seed is not None and str(raw_seed).isdigit():
+        seed_int = int(raw_seed)
+    if user_id:
+        selected = sample_game_target_colors(user_id, count=7, seed=seed_int)
+    else:
+        selected = sample_game_target_colors(
+            None, count=7, seed=seed_int, max_sum_cap=MAX_SUM_DROP_CATALOG_CAP,
+        )
+    if not selected:
+        return jsonify({
+            'status': 'error',
+            'message': (
+                'No eligible colors in your current tier (need full drop_* recipes '
+                'and sum within your unlocked range). Backfill catalog recipes or save from Lab.'
+            ),
+        }), 409
+    colors = [_target_color_public_dict(tc) for tc in selected]
+    return jsonify({'status': 'success', 'colors': colors})
+
+
+def _target_color_drops_for_api(tc):
+    """Lab recipe if present; otherwise omit from API shape."""
+    raw = (
+        tc.drop_white,
+        tc.drop_black,
+        tc.drop_red,
+        tc.drop_yellow,
+        tc.drop_blue,
+    )
+    if all(v is None for v in raw):
+        return None
+    keys = ('white', 'black', 'red', 'yellow', 'blue')
+    return {keys[i]: (raw[i] if raw[i] is not None else 0) for i in range(5)}
+
+
+def _parse_lab_drops_payload(data):
+    """
+    Accept drops: { white, black, red, yellow, blue } (integers).
+    Returns tuple of five ints, or None if key absent (store SQL NULLs).
+    """
+    raw = data.get('drops')
+    if not isinstance(raw, dict):
+        raw = data.get('drop_counts')
+    if not isinstance(raw, dict):
+        return None
+
+    def _one(key):
+        v = _coerce_int_or_none(raw.get(key))
+        if v is None:
+            return 0
+        return max(0, min(v, 50_000))
+
+    return (
+        _one('white'),
+        _one('black'),
+        _one('red'),
+        _one('yellow'),
+        _one('blue'),
+    )
+
+
+def _sync_target_colors_id_sequence_postgresql():
+    """
+    If rows were inserted with explicit ids (migrations, COPY), the SERIAL/IDENTITY
+    sequence can lag behind MAX(id) and the next INSERT reuses an existing id.
+    """
+    if db.engine.dialect.name != 'postgresql':
+        return
+    db.session.execute(
+        text(
+            "SELECT setval("
+            "pg_get_serial_sequence('target_colors', 'id'), "
+            "COALESCE((SELECT MAX(id) FROM target_colors), 0)"
+            ")"
+        )
+    )
+
+
+@main.route('/api/lab/save-target-color', methods=['POST'])
+def lab_save_target_color():
+    """
+    Append the current mixed RGB as a new catalog row (for experiments / custom targets).
+    Rate-limited per IP to reduce abuse of open writes.
+    """
+    ip = (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip() or (request.remote_addr or 'unknown')
+    if not _rate_limit_allow(f'lab_save_target:{ip}', max_hits=40, window_sec=3600):
+        return jsonify({'status': 'error', 'message': 'Too many saves from this address. Try again later.'}), 429
+
+    data = request.get_json() or {}
+    r = _coerce_int_or_none(data.get('r'))
+    g = _coerce_int_or_none(data.get('g'))
+    b = _coerce_int_or_none(data.get('b'))
+    if r is None or g is None or b is None:
+        return jsonify({'status': 'error', 'message': 'Integer fields r, g, b are required.'}), 400
+
+    r = max(0, min(255, r))
+    g = max(0, min(255, g))
+    b = max(0, min(255, b))
+
+    name_raw = (data.get('name') or '').strip()
+    if not name_raw:
+        name = f'Lab RGB({r},{g},{b})'
+    else:
+        name = name_raw[:128]
+
+    max_order = db.session.query(func.max(TargetColor.catalog_order)).scalar()
+    next_order = (int(max_order) if max_order is not None else -1) + 1
+
+    drops_tuple = _parse_lab_drops_payload(data)
+
+    def _build_row():
+        kwargs = dict(
+            name=name,
+            color_type='lab',
+            classification='custom',
+            r=r,
+            g=g,
+            b=b,
+            catalog_order=next_order,
+        )
+        if drops_tuple is not None:
+            dw, dbn, dr, dy, dbl = drops_tuple
+            kwargs['drop_white'] = dw
+            kwargs['drop_black'] = dbn
+            kwargs['drop_red'] = dr
+            kwargs['drop_yellow'] = dy
+            kwargs['drop_blue'] = dbl
+        return TargetColor(**kwargs)
+
+    _sync_target_colors_id_sequence_postgresql()
+    tc = _build_row()
+    db.session.add(tc)
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        _sync_target_colors_id_sequence_postgresql()
+        tc = _build_row()
+        db.session.add(tc)
+        db.session.commit()
+
+    out = {
+        'id': tc.id,
+        'name': tc.name,
+        'rgb': [r, g, b],
+        'catalog_order': tc.catalog_order,
+    }
+    d = _target_color_drops_for_api(tc)
+    if d is not None:
+        out['drops'] = d
+
+    return jsonify({
+        'status': 'success',
+        'target_color': out,
+    })
 
 
 # ── Calculate ──────────────────────────────────────────────────────────────
@@ -3034,15 +3218,16 @@ def push_send_daily():
                     'url': '/',
                     'icon': '/static/icons/icon-192.png',
                 }
-            # Find nearest actionable (unlocked) deficit color
-            user_level = compute_level_from_quota(quota['coverage_ratio'], quota['is_maxed_out'])
+            # Find nearest actionable deficit among sum-drop-eligible colors
             color_map = quota['color_quota_map']
-            tc_rows = (
-                TargetColor.query
-                .filter(TargetColor.level_required <= user_level)
-                .order_by(TargetColor.catalog_order.asc())
-                .all()
-            )
+            up = UserProgress.query.filter_by(user_id=user_id).first()
+            cap = int(up.max_sum_drop_unlocked) if up else 4
+            eff = _effective_sum_cap(cap)
+            tc_rows = [
+                tc for tc in TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
+                if (s := target_color_sum_drop(tc)) is not None
+                and MIN_SUM_DROP_BAND <= s <= eff
+            ]
             best_tc = None
             best_rem = None
             for tc in tc_rows:

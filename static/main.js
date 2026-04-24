@@ -826,6 +826,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   let fullCatalog = [];
+  const targetColors = [];
+
+  async function fetchGameTargets() {
+    const uid = window.currentUserId || localStorage.getItem('userId') || '';
+    const params = new URLSearchParams();
+    if (uid) params.set('user_id', uid);
+    const res = await fetch(`/api/game-targets?${params}`);
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      return null;
+    }
+    if (data.status === 'success' && Array.isArray(data.colors) && data.colors.length > 0) {
+      return data.colors;
+    }
+    return null;
+  }
+
   try {
     const uid = window.currentUserId || localStorage.getItem('userId') || '';
     const url = uid ? `/api/target-colors?user_id=${encodeURIComponent(uid)}` : '/api/target-colors';
@@ -842,23 +861,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
+  const initialGame = await fetchGameTargets();
+  if (!initialGame) {
+    alert(
+      'Could not load a 7-color game. Catalog colors need drop recipes (sum_drop_count). '
+      + 'Use Lab to save recipes or see scripts/BACKFILL_TARGET_COLOR_DROPS.md'
+    );
+    return;
+  }
+  targetColors.push(...initialGame);
+
   // app_ready: catalog loaded, user context available, ready to play
   trackEvent('app_ready');
-
-  function generateRandomizedColors() {
-    const sorted = [...fullCatalog].sort((a, b) => a.catalog_order - b.catalog_order);
-
-    // Requirement: every session should include every target color exactly once,
-    // only the order should be randomized.
-    const shuffled = [...sorted];
-    for (let i = shuffled.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-    }
-    return shuffled;
-  }
-
-  const targetColors = generateRandomizedColors();
   let currentTargetIndex = 0;
   currentTargetColor = targetColors[0];
   targetColor = currentTargetColor.rgb;
@@ -976,7 +990,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     refreshDatabaseConnection();
-    // Re-fetch catalog with updated coverage stats
     try {
       const uid = window.currentUserId || localStorage.getItem('userId') || '';
       const url = uid ? `/api/target-colors?user_id=${encodeURIComponent(uid)}` : '/api/target-colors';
@@ -985,7 +998,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (d.status === 'success' && d.colors.length > 0) fullCatalog = d.colors;
     } catch { /* use existing */ }
 
-    const newTargetColors = generateRandomizedColors();
+    const newTargetColors = await fetchGameTargets();
+    if (!newTargetColors) {
+      alert('Could not start a new game — no eligible colors in your tier (see Lab / backfill docs).');
+      return;
+    }
     targetColors.length = 0;
     targetColors.push(...newTargetColors);
 
@@ -1134,7 +1151,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     refreshDatabaseConnection();
-    const newTargetColors = generateRandomizedColors();
+    const newTargetColors = await fetchGameTargets();
+    if (!newTargetColors) {
+      alert('Could not load game colors. Check catalog drop recipes.');
+      return;
+    }
     targetColors.length = 0;
     targetColors.push(...newTargetColors);
 

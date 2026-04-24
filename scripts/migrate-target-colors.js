@@ -16,59 +16,6 @@ function normalizeDatabaseUrl(url) {
   return url;
 }
 
-const COLOR_FREQUENCY_DATA = {
-  '#FFB3BC': 145,
-  '#FFE4AF': 108,
-  '#6F7A66': 102,
-  '#71703E': 101,
-  '#547A7A': 96,
-  '#FF8352': 90,
-  '#679DAE': 68,
-  '#9DD267': 66,
-  '#D1AE90': 48,
-  '#BE8870': 39,
-  '#AE967E': 22,
-  '#C3A28F': 17,
-  '#A97367': 16,
-  '#CB9781': 11,
-  '#E8B7BA': 10,
-  '#A58F5E': 18,
-  '#B5866A': 20,
-  '#DE958F': 1,
-  '#99856A': 5,
-  '#A8856F': 23,
-  '#A07E63': 4,
-  '#80685C': 3,
-  '#584B42': 13,
-  '#7B5749': 14,
-  '#543B34': 9,
-  '#583E2D': 2,
-  '#A76662': 21,
-  '#A28074': 7,
-  '#8F7868': 8,
-  '#9F7954': 1,
-  '#392D1D': 19,
-  '#9D7248': 12,
-  '#58482F': 24,
-};
-
-function rgbToHex(r, g, b) {
-  return (
-    '#' +
-    [r, g, b]
-      .map((x) => {
-        const h = x.toString(16);
-        return h.length === 1 ? '0' + h : h;
-      })
-      .join('')
-      .toUpperCase()
-  );
-}
-
-function frequencyForRgb(r, g, b) {
-  return COLOR_FREQUENCY_DATA[rgbToHex(r, g, b)] || 1;
-}
-
 /** Same palette order as legacy static/main.js allTargetColors */
 const SEED_DEFINITIONS = [
   { catalog_order: 0, name: 'Orange', color_type: 'basic', classification: null, r: 255, g: 102, b: 30 },
@@ -124,6 +71,11 @@ async function main() {
   try {
     await client.connect();
 
+    // Strip legacy columns so INSERT below matches schema (fresh + upgraded DBs).
+    await client.query('DROP INDEX IF EXISTS idx_target_colors_level_required').catch(() => {});
+    await client.query('ALTER TABLE target_colors DROP COLUMN IF EXISTS level_required').catch(() => {});
+    await client.query('ALTER TABLE target_colors DROP COLUMN IF EXISTS frequency').catch(() => {});
+
     await client.query(`
       CREATE TABLE IF NOT EXISTS target_colors (
         id SERIAL PRIMARY KEY,
@@ -133,7 +85,6 @@ async function main() {
         r SMALLINT NOT NULL,
         g SMALLINT NOT NULL,
         b SMALLINT NOT NULL,
-        frequency INTEGER NOT NULL DEFAULT 1,
         catalog_order INTEGER NOT NULL
       )
     `);
@@ -144,19 +95,17 @@ async function main() {
     `);
 
     for (const row of SEED_DEFINITIONS) {
-      const frequency = frequencyForRgb(row.r, row.g, row.b);
       await client.query(
         `
-        INSERT INTO target_colors (name, color_type, classification, r, g, b, frequency, catalog_order)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO target_colors (name, color_type, classification, r, g, b, catalog_order)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
         ON CONFLICT (catalog_order) DO UPDATE SET
           name = EXCLUDED.name,
           color_type = EXCLUDED.color_type,
           classification = EXCLUDED.classification,
           r = EXCLUDED.r,
           g = EXCLUDED.g,
-          b = EXCLUDED.b,
-          frequency = EXCLUDED.frequency
+          b = EXCLUDED.b
         `,
         [
           row.name,
@@ -165,7 +114,6 @@ async function main() {
           row.r,
           row.g,
           row.b,
-          frequency,
           row.catalog_order,
         ]
       );

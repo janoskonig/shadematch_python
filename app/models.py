@@ -34,9 +34,13 @@ class TargetColor(db.Model):
     r = db.Column(db.Integer, nullable=False)
     g = db.Column(db.Integer, nullable=False)
     b = db.Column(db.Integer, nullable=False)
-    frequency = db.Column(db.Integer, nullable=False, default=1)
     catalog_order = db.Column(db.Integer, nullable=False, unique=True)
-    level_required = db.Column(db.Integer, nullable=False, default=1)
+    # Optional recipe from lab saves (null for seeded catalog colors).
+    drop_white = db.Column(db.Integer, nullable=True)
+    drop_black = db.Column(db.Integer, nullable=True)
+    drop_red = db.Column(db.Integer, nullable=True)
+    drop_yellow = db.Column(db.Integer, nullable=True)
+    drop_blue = db.Column(db.Integer, nullable=True)
 
 
 class MixingSession(db.Model):
@@ -144,6 +148,7 @@ class UserProgress(db.Model):
     longest_streak = db.Column(db.Integer, nullable=False, default=0)
     last_activity_date = db.Column(db.Date, nullable=True)
     streak_freeze_available = db.Column(db.Integer, nullable=False, default=0)
+    max_sum_drop_unlocked = db.Column(db.Integer, nullable=False, default=4)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
