@@ -1,4 +1,4 @@
-var CACHE_NAME = 'shadematch-static-v3';
+var CACHE_NAME = 'shadematch-static-v4';
 
 var PRECACHE_URLS = [
   '/static/mixbox.js',
@@ -9,6 +9,7 @@ var PRECACHE_URLS = [
   '/static/manifest.webmanifest',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',
+  '/static/icons/icon-512-maskable.png',
 ];
 
 self.addEventListener('install', function (event) {
