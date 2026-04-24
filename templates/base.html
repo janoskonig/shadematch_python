@@ -20,6 +20,29 @@
     {% block extra_head %}{% endblock %}
 </head>
 <body>
+    <script>
+    (function () {
+      var CURRENT = {{ client_storage_version|tojson }};
+      var KEY = 'sm_client_storage_version';
+      function clearAllCookies() {
+        var secure = location.protocol === 'https:' ? ';Secure' : '';
+        var raw = document.cookie ? document.cookie.split(';') : [];
+        for (var i = 0; i < raw.length; i++) {
+          var name = raw[i].split('=')[0].trim();
+          if (!name) continue;
+          document.cookie = name + '=;Max-Age=0;path=/;SameSite=Lax' + secure;
+        }
+      }
+      try {
+        if (localStorage.getItem(KEY) !== String(CURRENT)) {
+          try { sessionStorage.clear(); } catch (e1) {}
+          try { localStorage.clear(); } catch (e2) {}
+          clearAllCookies();
+          localStorage.setItem(KEY, String(CURRENT));
+        }
+      } catch (e) { /* private mode / blocked storage */ }
+    })();
+    </script>
     {% block content %}{% endblock %}
 
     <script src="{{ url_for('static', filename='cookie-consent.js') }}"></script>

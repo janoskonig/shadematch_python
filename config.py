@@ -18,3 +18,5 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Set the application's secret key, defaulting to 'dev' if not provided
     SECRET_KEY = os.getenv('SECRET_KEY', 'dev')
+    # Change this (or set env CLIENT_STORAGE_VERSION) to force a full client reset on next visit.
+    CLIENT_STORAGE_VERSION = os.getenv('CLIENT_STORAGE_VERSION', '2')

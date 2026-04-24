@@ -302,14 +302,33 @@
       try {
         const bd = localStorage.getItem('userBirthdate');
         const g = localStorage.getItem('userGender');
+        const email = localStorage.getItem('userEmail');
+        const emailOptIn = localStorage.getItem('emailOptInReminders') === '1';
         if (!bd || !g) return;
-        const r = await fetch('/register', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({birthdate:bd,gender:g}) });
+        if (!email) {
+          const rm = document.getElementById('resultMessage');
+          rm.innerHTML += '<br><br><p style="color:var(--accent-danger);font-weight:700;">Use the home page to register with your email first.</p>';
+          return;
+        }
+        const r = await fetch('/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            birthdate: bd,
+            gender: g,
+            email,
+            email_opt_in_reminders: emailOptIn,
+          }),
+        });
         const d = await r.json();
         if (d.status === 'success') {
           localStorage.setItem('userId', d.userId);
           displayUserID(d.userId);
           const cb = document.querySelector('.continue-btn');
           if (cb) { cb.textContent = 'Continue to Color Mixing'; }
+        } else if (d.message) {
+          const rm = document.getElementById('resultMessage');
+          rm.innerHTML += '<br><br><p style="color:var(--accent-danger);">' + d.message + '</p>';
         }
       } catch (err) { console.error(err); }
     }

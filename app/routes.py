@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, send_from_directory, Response
+from flask import Blueprint, render_template, request, jsonify, send_from_directory, Response, current_app
 from datetime import datetime, date, timedelta
 import hashlib
 import random as _random
@@ -40,6 +40,14 @@ from .next_action import build_next_action
 from .stat_eda import ALLOWED_PLOT_IDS, build_strategy_summary_by_target, get_plot_png
 
 main = Blueprint('main', __name__)
+
+
+@main.app_context_processor
+def inject_client_storage_version():
+    return {
+        'client_storage_version': current_app.config.get('CLIENT_STORAGE_VERSION', '1'),
+    }
+
 
 MATCH_PERFECT_DELTA_E = 0.01
 EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
@@ -304,8 +312,8 @@ def register():
 
     if birthdate.year >= 2015:
         return jsonify({'status': 'error', 'message': 'You must be born before 2015 to participate.'}), 400
-    if data.get('email') and not email:
-        return jsonify({'status': 'error', 'message': 'Invalid email format'}), 400
+    if not email:
+        return jsonify({'status': 'error', 'message': 'A valid email is required to register.'}), 400
     if email and User.query.filter_by(email=email).first():
         return jsonify({'status': 'error', 'message': 'This email is already in use'}), 409
 

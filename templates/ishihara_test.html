@@ -334,14 +334,33 @@
             try {
                 const birthdate = localStorage.getItem('userBirthdate');
                 const gender = localStorage.getItem('userGender');
+                const email = localStorage.getItem('userEmail');
+                const emailOptIn = localStorage.getItem('emailOptInReminders') === '1';
                 if (!birthdate || !gender) return;
                 const existingUserId = localStorage.getItem('userId');
                 if (existingUserId) { displayUserID(existingUserId); return; }
-                const response = await fetch('/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ birthdate, gender }) });
+                if (!email) {
+                    const rm = document.getElementById('resultMessage');
+                    rm.innerHTML += '<br><br><p style="color:var(--accent-danger);font-weight:700;">Please go back to the home page and complete registration with your email, then take this test again.</p>';
+                    return;
+                }
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        birthdate,
+                        gender,
+                        email,
+                        email_opt_in_reminders: emailOptIn,
+                    }),
+                });
                 const data = await response.json();
                 if (data.status === 'success') {
                     localStorage.setItem('userId', data.userId);
                     displayUserID(data.userId);
+                } else if (data.message) {
+                    const rm = document.getElementById('resultMessage');
+                    rm.innerHTML += '<br><br><p style="color:var(--accent-danger);">' + data.message + '</p>';
                 }
             } catch (error) { console.error('Error registering user:', error); }
         }
