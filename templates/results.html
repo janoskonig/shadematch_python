@@ -40,20 +40,6 @@
   .user-input-section button:hover { background: #3a7bc8; }
   .welcome-message { font-weight: 700; font-size: var(--font-size-lg); color: var(--text-primary); }
 
-  @media (max-width: 600px) {
-    body { padding: var(--space-sm); }
-    .user-input-section { padding: var(--space-md); }
-    #user-input-form { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-sm); }
-    .user-input-section input { margin-right: 0; width: 100%; }
-    .user-input-section button { width: 100%; }
-    .results-summary { padding: var(--space-md) var(--space-sm); }
-    .summary-number { font-size: 1.8em; }
-    .ps-stat { min-width: 52px; padding: var(--space-xs) var(--space-sm); }
-    .ps-stat-val { font-size: 1.3rem; }
-    .results-section { padding: var(--space-md); }
-    .back-link { margin-bottom: var(--space-md); }
-  }
-
   /* ── Mastered banner ────────────────────────────────────── */
   .mastered-banner {
     background: linear-gradient(135deg, #00b894, #00cec9);
@@ -76,20 +62,32 @@
   .progress-card-title {
     font-size: var(--font-size-sm); font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em;
-    color: var(--text-secondary); margin-bottom: var(--space-md);
+    color: var(--text-secondary); margin: 0 0 var(--space-md);
   }
   .progress-stats {
-    display: flex; flex-wrap: wrap; gap: var(--space-md);
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+    gap: var(--space-md);
     margin-bottom: var(--space-md);
   }
   .ps-stat {
-    flex: 1; min-width: 80px; text-align: center;
+    min-width: 0;
+    text-align: center;
     background: var(--bg-primary); border-radius: var(--radius-md);
     padding: var(--space-sm) var(--space-md);
   }
   .ps-stat--primary { border: 2px solid var(--accent-primary); }
-  .ps-stat-val { font-size: 1.6rem; font-weight: 900; }
-  .ps-stat-lbl { font-size: 0.7rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+  .ps-stat-val {
+    font-size: 1.6rem; font-weight: 900;
+    overflow-wrap: anywhere;
+    line-height: 1.15;
+  }
+  .ps-stat-lbl {
+    font-size: 0.7rem; color: var(--text-secondary); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    white-space: normal;
+    line-height: 1.25;
+  }
 
   /* Quota progress bar (primary) */
   .quota-bar-wrap {
@@ -252,19 +250,39 @@
     }
     .result-card-meta strong { color: var(--text-primary); }
     .summary-item { margin: 0 var(--space-sm); }
-    .progress-stats { gap: var(--space-sm); }
-    .ps-stat { min-width: 60px; }
+    .progress-stats {
+      gap: var(--space-sm);
+      grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+    }
+    .ps-stat { padding: var(--space-xs) var(--space-sm); }
+    .ps-stat-val { font-size: 1.35rem; }
+    .ps-stat-lbl { font-size: 0.65rem; letter-spacing: 0.02em; }
+  }
+
+  @media (max-width: 600px) {
+    body { padding: var(--space-sm); }
+    .user-input-section { padding: var(--space-md); }
+    #user-input-form { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-sm); }
+    .user-input-section input { margin-right: 0; width: 100%; }
+    .user-input-section button { width: 100%; }
+    .results-summary { padding: var(--space-md) var(--space-sm); }
+    .summary-number { font-size: 1.8em; }
+    .progress-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .ps-stat { padding: var(--space-xs) var(--space-sm); }
+    .ps-stat-val { font-size: 1.25rem; }
+    .results-section { padding: var(--space-md); }
+    .back-link { margin-bottom: var(--space-md); }
   }
 </style>
 {% endblock %}
 
 {% block content %}
-  <div class="results-container">
+  <main class="results-container" id="results-main">
 
     <a href="/" class="back-link">← Back to Color Mixing</a>
 
     <!-- User input / welcome -->
-    <div class="user-input-section">
+    <section class="user-input-section" aria-label="Account and user ID">
       <div id="stored-user-info" style="display:none;">
         <p id="welcome-message" class="welcome-message">Welcome back! Loading your results…</p>
         <button onclick="clearUserAndReload()" type="button" style="margin-top:var(--space-sm);">Switch User</button>
@@ -274,7 +292,7 @@
         <input type="text" id="userIdInput" placeholder="e.g., ABC123" maxlength="6">
         <button onclick="loadUserResults()" type="button">View Results</button>
       </div>
-    </div>
+    </section>
 
     <!-- Gamification profile card (injected by JS) -->
     <div id="profileSection" style="display:none;">
@@ -284,8 +302,8 @@
       </div>
 
       <!-- Progress card -->
-      <div class="progress-card" id="progressCard">
-        <div class="progress-card-title">Your Progress</div>
+      <section class="progress-card" id="progressCard" aria-labelledby="progressHeading">
+        <h2 id="progressHeading" class="progress-card-title">Your Progress</h2>
         <div class="progress-stats" id="progressStats"></div>
 
         <!-- Primary: quota progress bar -->
@@ -295,28 +313,29 @@
         <!-- Secondary: XP progress bar -->
         <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xpBarFill"></div></div>
         <div class="xp-bar-label" id="xpBarLabel"></div>
-      </div>
+      </section>
 
       <!-- Awards -->
-      <div class="awards-section" id="awardsSection" style="display:none;">
-        <div class="awards-title">Badges &amp; Awards</div>
+      <section class="awards-section" id="awardsSection" style="display:none;" aria-labelledby="awardsHeading">
+        <h2 id="awardsHeading" class="awards-title">Badges &amp; Awards</h2>
         <div class="awards-grid" id="awardsGrid"></div>
-      </div>
+      </section>
 
       <!-- Per-color coverage bars -->
-      <div class="color-stats-section" id="colorStatsSection" style="display:none;">
-        <div class="awards-title">Color Coverage (attempts / 150)</div>
+      <section class="color-stats-section" id="colorStatsSection" style="display:none;" aria-labelledby="coverageHeading">
+        <h2 id="coverageHeading" class="awards-title">Color Coverage (attempts / 150)</h2>
         <div id="colorStatsList"></div>
-      </div>
+      </section>
     </div>
 
     <!-- Session history -->
-    <div class="results-section">
+    <section class="results-section" aria-labelledby="sessionsHeading">
+      <h2 id="sessionsHeading" class="sr-only">Session history</h2>
       <div id="results-content">
         <div class="loading">Enter your user ID above to view your results</div>
       </div>
-    </div>
-  </div>
+    </section>
+  </main>
 
   <script>
     window.addEventListener('DOMContentLoaded', function () {
