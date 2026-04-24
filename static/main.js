@@ -1286,6 +1286,9 @@ document.addEventListener('DOMContentLoaded', function () {
           localStorage.setItem('userId', userId);
           localStorage.setItem('userBirthdate', data.birthdate);
           localStorage.setItem('userGender', data.gender);
+          if (data.email) localStorage.setItem('userEmail', data.email);
+          localStorage.setItem('userEmailVerified', data.email_verified ? '1' : '0');
+          localStorage.setItem('emailOptInReminders', data.email_opt_in_reminders ? '1' : '0');
           window.currentUserId = userId;
           document.getElementById('userModal').style.display = 'none';
           resetMix();
@@ -1293,6 +1296,9 @@ document.addEventListener('DOMContentLoaded', function () {
           disableColorMixing();
           displayUserId();
           loadAndRenderProgress();
+          if (window.location && typeof window.location.reload === 'function') {
+            window.location.reload();
+          }
         } else {
           alert('Invalid user ID. Please try again.');
         }

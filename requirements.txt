@@ -21,6 +21,7 @@ pandas==1.5.3
 matplotlib==3.7.2
 openpyxl==3.1.2
 plotly==5.17.0
+networkx==3.3
 
 # Database
 mysql-connector-python==8.0.33
