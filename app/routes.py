@@ -2039,6 +2039,29 @@ def stat_summary():
 
         archetypes = build_attempt_archetypes()
 
+        _skip_delta_e_sql = """
+                SELECT
+                  COUNT(*)::bigint AS n,
+                  AVG(ms.delta_e)::double precision AS mean_delta_e,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY ms.delta_e)::double precision AS median_delta_e
+                FROM mixing_sessions ms
+                WHERE ms.skipped IS TRUE
+                  AND ms.skip_perception = :perception
+                  AND ms.delta_e IS NOT NULL
+                """
+        skip_identical_row = db.session.execute(
+            db.text(_skip_delta_e_sql), {'perception': 'identical'}
+        ).mappings().first()
+        skip_acceptable_row = db.session.execute(
+            db.text(_skip_delta_e_sql), {'perception': 'acceptable'}
+        ).mappings().first()
+        skip_unacceptable_row = db.session.execute(
+            db.text(_skip_delta_e_sql), {'perception': 'unacceptable'}
+        ).mappings().first()
+        skipped_identical_delta_e = dict(skip_identical_row or {})
+        skipped_acceptable_delta_e = dict(skip_acceptable_row or {})
+        skipped_unacceptable_delta_e = dict(skip_unacceptable_row or {})
+
         return jsonify(
             {
                 'status': 'success',
@@ -2050,6 +2073,9 @@ def stat_summary():
                 'elapsed_per_color': [dict(r) for r in elapsed_per_color],
                 'controlled_by_attempt': [dict(r) for r in controlled_by_attempt],
                 'archetypes': archetypes,
+                'skipped_identical_delta_e': skipped_identical_delta_e,
+                'skipped_acceptable_delta_e': skipped_acceptable_delta_e,
+                'skipped_unacceptable_delta_e': skipped_unacceptable_delta_e,
             }
         )
     except Exception as e:

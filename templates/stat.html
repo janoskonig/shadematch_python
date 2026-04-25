@@ -110,6 +110,31 @@
   <div class="cards" id="overviewCards"></div>
 
   <section class="section">
+    <h2>Skipped: perception vs DeltaE</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      DeltaE at skip time from <code>mixing_sessions</code> when the user picked a skip perception (stored as <code>skip_perception</code>).
+    </p>
+    <p style="margin:0 0 14px;color:var(--text-secondary);font-size:0.88rem;">
+      CIELAB/CIEDE2000 perceptibility and acceptability thresholds for light specimens were 1.1/0.7 and 3.0/2.1, respectively. Corresponding values for dark specimens were 1.6/1.2 and 4.4/3.1, respectively.
+    </p>
+    <h3 style="font-size:0.95rem;margin:0 0 6px;">No difference</h3>
+    <p style="margin:0 0 8px;color:var(--text-secondary);font-size:0.88rem;">
+      UI: “No difference” → <code>skip_perception = 'identical'</code>.
+    </p>
+    <div class="cards" id="skipIdenticalDeltaECards" style="margin-top:0;margin-bottom:14px;"></div>
+    <h3 style="font-size:0.95rem;margin:0 0 6px;">Small difference — acceptable</h3>
+    <p style="margin:0 0 8px;color:var(--text-secondary);font-size:0.88rem;">
+      UI: “Small difference — acceptable” → <code>skip_perception = 'acceptable'</code>.
+    </p>
+    <div class="cards" id="skipAcceptableDeltaECards" style="margin-top:0;margin-bottom:14px;"></div>
+    <h3 style="font-size:0.95rem;margin:0 0 6px;">Difference — not acceptable</h3>
+    <p style="margin:0 0 8px;color:var(--text-secondary);font-size:0.88rem;">
+      UI: “Difference — not acceptable” → <code>skip_perception = 'unacceptable'</code>.
+    </p>
+    <div class="cards" id="skipUnacceptableDeltaECards" style="margin-top:0;margin-bottom:0;"></div>
+  </section>
+
+  <section class="section">
     <h2>1) Registered users and age pyramid</h2>
     <div class="chart-grid">
       <div class="chart-card">
@@ -311,12 +336,29 @@
     }).join('');
   }
 
+  function renderSkipPerceptionDeltaE(elId, row) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    var n = row && row.n != null ? Number(row.n) : 0;
+    var cards = [
+      { k: 'Skips with rating (n)', v: n },
+      { k: 'Mean DeltaE', v: n ? fmtNumber(row.mean_delta_e, 3) : '—' },
+      { k: 'Median DeltaE', v: n ? fmtNumber(row.median_delta_e, 3) : '—' }
+    ];
+    el.innerHTML = cards.map(function(c) {
+      return '<div class="card"><div class="k">' + c.k + '</div><div class="v">' + c.v + '</div></div>';
+    }).join('');
+  }
+
   async function loadStats() {
     var resp = await fetch('/api/stat/summary');
     var data = await resp.json();
     if (data.status !== 'success') throw new Error(data.message || 'Failed to load stats');
 
     renderOverview(data.overview || {});
+    renderSkipPerceptionDeltaE('skipIdenticalDeltaECards', data.skipped_identical_delta_e || {});
+    renderSkipPerceptionDeltaE('skipAcceptableDeltaECards', data.skipped_acceptable_delta_e || {});
+    renderSkipPerceptionDeltaE('skipUnacceptableDeltaECards', data.skipped_unacceptable_delta_e || {});
 
     buildTable(
       document.getElementById('agePyramidTable'),
