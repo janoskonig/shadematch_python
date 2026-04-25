@@ -377,6 +377,14 @@ def login():
     try:
         user = User.query.get(user_id)
         if user:
+            if not user.email_verified_at:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Please verify your email before logging in.',
+                    'code': 'EMAIL_NOT_VERIFIED',
+                    'user_id': user.id,
+                    'email': user.email,
+                }), 403
             return jsonify({
                 'status': 'success',
                 'birthdate': user.birthdate.isoformat(),

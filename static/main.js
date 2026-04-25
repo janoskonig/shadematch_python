@@ -1296,6 +1296,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         const data = await response.json();
         if (data.status === 'success') {
+          localStorage.removeItem('pendingVerifyUserId');
           localStorage.setItem('userId', userId);
           localStorage.setItem('userBirthdate', data.birthdate);
           localStorage.setItem('userGender', data.gender);
@@ -1312,8 +1313,27 @@ document.addEventListener('DOMContentLoaded', function () {
           if (window.location && typeof window.location.reload === 'function') {
             window.location.reload();
           }
+        } else if (data.code === 'EMAIL_NOT_VERIFIED') {
+          const resend = confirm('Your email is not verified yet. Resend verification email now?');
+          if (resend) {
+            try {
+              const resendResp = await fetch('/email/verification/request', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId }),
+              });
+              const resendData = await resendResp.json();
+              if (resendData.status === 'success') {
+                alert('Verification email sent. Please verify first, then log in.');
+              } else {
+                alert(resendData.message || 'Could not send verification email.');
+              }
+            } catch {
+              alert('Could not send verification email.');
+            }
+          }
         } else {
-          alert('Invalid user ID. Please try again.');
+          alert(data.message || 'Invalid user ID. Please try again.');
         }
       } catch {
         alert('Invalid user ID. Please try again.');

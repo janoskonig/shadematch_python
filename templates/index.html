@@ -580,8 +580,12 @@
     };
 
       document.getElementById('continueBtn').onclick = function() {
-      document.getElementById('userModal').style.display = 'none';
-      disableColorMixing();
+      showSection('login');
+      var loginInput = document.getElementById('loginId');
+      var pendingId = localStorage.getItem('pendingVerifyUserId');
+      if (loginInput && pendingId) {
+        loginInput.value = pendingId;
+      }
     };
 
     /* Post-register push opt-in — reuses the same subscribe logic */
@@ -632,23 +636,11 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.status === 'success') {
-          localStorage.setItem('userBirthdate', birthdate);
-          localStorage.setItem('userGender', gender);
-          localStorage.setItem('userEmail', email);
-          localStorage.setItem('userEmailVerified', data.email_verification_pending ? '0' : '1');
-          localStorage.setItem('emailOptInReminders', emailOptIn ? '1' : '0');
-          localStorage.setItem('userId', data.userId);
-          window.currentUserId = data.userId;
-          // Show push opt-in step before continuing — requires a user gesture (just registered)
-          var pushSection = document.getElementById('postRegisterSection');
-          if (pushSection && 'Notification' in window && 'serviceWorker' in navigator
-              && Notification.permission !== 'granted'
-              && !localStorage.getItem('pushSubscribed')
-              && Notification.permission !== 'denied') {
-            showSection('postRegister');
-          } else {
-            window.location.href = '/ishihara-test';
-          }
+          localStorage.setItem('pendingVerifyUserId', data.userId);
+          var idEl = document.getElementById('generatedId');
+          if (idEl) idEl.textContent = data.userId;
+          showSection('idDisplay');
+          alert('Registration successful. Please verify your email before logging in.');
         } else {
           var ed = document.getElementById('birthdateError');
           if (ed) { ed.textContent = data.message; ed.style.display = 'block'; }
