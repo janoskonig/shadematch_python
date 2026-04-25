@@ -789,6 +789,456 @@ def plot_h5_stop_success(att: pd.DataFrame, _: pd.DataFrame) -> bytes:
     return _fig_to_png(fig)
 
 
+def _dashboard_attempts_df() -> pd.DataFrame:
+    sql = text(
+        """
+        SELECT
+          ma.user_id,
+          ma.attempt_uuid,
+          ma.target_color_id,
+          COALESCE(tc.name, '(unknown)') AS target_name,
+          ma.final_delta_e,
+          ma.duration_sec,
+          ma.attempt_started_server_ts
+        FROM mixing_attempts ma
+        LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
+        """
+    )
+    with db.engine.connect() as conn:
+        df = pd.read_sql(sql, conn)
+    if 'attempt_started_server_ts' in df.columns:
+        df['attempt_started_server_ts'] = pd.to_datetime(df['attempt_started_server_ts'], utc=True)
+    return df
+
+
+def _dashboard_attempts_with_attempt_no() -> pd.DataFrame:
+    df = _dashboard_attempts_df()
+    if len(df) == 0:
+        df['attempt_no'] = pd.Series(dtype='int64')
+        return df
+    out = df[df['user_id'].notna()].copy()
+    if len(out) == 0:
+        out['attempt_no'] = pd.Series(dtype='int64')
+        return out
+    out = out.sort_values(
+        ['user_id', 'target_name', 'attempt_started_server_ts', 'attempt_uuid'],
+        na_position='last',
+    )
+    out['attempt_no'] = out.groupby(['user_id', 'target_name'], sort=False).cumcount() + 1
+    return out
+
+
+def plot_age_pyramid(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 5))
+    sql = text(
+        """
+        WITH u AS (
+          SELECT
+            CASE
+              WHEN lower(coalesce(gender, 'unknown')) LIKE 'm%' THEN 'male'
+              WHEN lower(coalesce(gender, 'unknown')) LIKE 'f%' THEN 'female'
+              ELSE 'other'
+            END AS gender_group,
+            EXTRACT(YEAR FROM age(CURRENT_DATE, birthdate))::int AS age_years
+          FROM users
+          WHERE birthdate IS NOT NULL
+        )
+        SELECT
+          CASE
+            WHEN age_years < 18 THEN '<18'
+            WHEN age_years <= 24 THEN '18-24'
+            WHEN age_years <= 34 THEN '25-34'
+            WHEN age_years <= 44 THEN '35-44'
+            WHEN age_years <= 54 THEN '45-54'
+            WHEN age_years <= 64 THEN '55-64'
+            ELSE '65+'
+          END AS age_bucket,
+          gender_group,
+          COUNT(*)::bigint AS n_users
+        FROM u
+        WHERE age_years IS NOT NULL AND age_years >= 0
+        GROUP BY age_bucket, gender_group
+        """
+    )
+    with db.engine.connect() as conn:
+        df = pd.read_sql(sql, conn)
+    if len(df) == 0:
+        ax.text(0.5, 0.5, 'No user demographics data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    order = ['<18', '18-24', '25-34', '35-44', '45-54', '55-64', '65+']
+    pivot = (
+        df.pivot_table(index='age_bucket', columns='gender_group', values='n_users', aggfunc='sum')
+        .reindex(order)
+        .fillna(0)
+    )
+    male = -pivot.get('male', pd.Series(0, index=order))
+    female = pivot.get('female', pd.Series(0, index=order))
+    other = pivot.get('other', pd.Series(0, index=order))
+
+    y = np.arange(len(order))
+    ax.barh(y, male.values, color='#2563eb', label='Male')
+    ax.barh(y, female.values, color='#dc2626', label='Female')
+    if other.sum() > 0:
+        ax.barh(y, other.values, color='#6b7280', label='Other')
+
+    max_abs = max(abs(male.min()), abs(female.max()), abs(other.max()), 1)
+    ax.set_xlim(-max_abs * 1.2, max_abs * 1.2)
+    ax.set_yticks(y)
+    ax.set_yticklabels(order)
+    ax.set_xlabel('Users')
+    ax.set_title('Age pyramid by gender')
+    ax.legend(loc='upper right', fontsize=8)
+    ticks = ax.get_xticks()
+    ax.set_xticklabels([str(int(abs(t))) for t in ticks])
+    return _fig_to_png(fig)
+
+
+def plot_plays_per_user(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    att = _dashboard_attempts_df()
+    if len(att) == 0:
+        ax.text(0.5, 0.5, 'No plays available', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    per_user = att[att['user_id'].notna()].groupby('user_id', dropna=True).size().sort_values(ascending=False)
+    if len(per_user) == 0:
+        ax.text(0.5, 0.5, 'No user-linked plays', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    top = per_user.head(30)
+    ax.bar(np.arange(len(top)), top.values, color='#4b5563')
+    ax.set_xticks(np.arange(len(top)))
+    ax.set_xticklabels(top.index.astype(str), rotation=70, fontsize=7)
+    ax.set_ylabel('Plays')
+    ax.set_title('Top users by number of plays')
+    return _fig_to_png(fig)
+
+
+def plot_attempts_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    att = _dashboard_attempts_df()
+    if len(att) == 0:
+        ax.text(0.5, 0.5, 'No attempts data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    g = att.groupby('target_name', dropna=False).size().sort_values(ascending=False).head(20)
+    ax.bar(np.arange(len(g)), g.values, color='#0f766e')
+    ax.set_xticks(np.arange(len(g)))
+    ax.set_xticklabels(g.index.astype(str), rotation=55, ha='right', fontsize=8)
+    ax.set_ylabel('Attempts')
+    ax.set_title('Attempts per color (top 20)')
+    return _fig_to_png(fig)
+
+
+def plot_deltae_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    att = _dashboard_attempts_df()
+    att = att[att['final_delta_e'].notna()]
+    if len(att) == 0:
+        ax.text(0.5, 0.5, 'No ΔE data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    g = (
+        att.groupby('target_name', dropna=False)['final_delta_e']
+        .mean()
+        .sort_values(ascending=False)
+        .head(20)
+    )
+    ax.bar(np.arange(len(g)), g.values, color='#7c3aed')
+    ax.set_xticks(np.arange(len(g)))
+    ax.set_xticklabels(g.index.astype(str), rotation=55, ha='right', fontsize=8)
+    ax.set_ylabel('Mean final ΔE')
+    ax.set_title('Mean final ΔE per color (top 20 by volume)')
+    return _fig_to_png(fig)
+
+
+def plot_elapsed_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    att = _dashboard_attempts_df()
+    att = att[att['duration_sec'].notna() & (att['duration_sec'] <= 300)]
+    if len(att) == 0:
+        ax.text(0.5, 0.5, 'No elapsed-time data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    g = (
+        att.groupby('target_name', dropna=False)['duration_sec']
+        .mean()
+        .sort_values(ascending=False)
+        .head(20)
+    )
+    ax.bar(np.arange(len(g)), g.values, color='#b45309')
+    ax.set_xticks(np.arange(len(g)))
+    ax.set_xticklabels(g.index.astype(str), rotation=55, ha='right', fontsize=8)
+    ax.set_ylabel('Mean elapsed time (s)')
+    ax.set_title('Mean elapsed time per color (<=300s, top 20 by volume)')
+    return _fig_to_png(fig)
+
+
+def plot_controlled_deltae_by_attempt(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    att = _dashboard_attempts_with_attempt_no()
+    att = att[(att['attempt_no'] <= 10) & att['final_delta_e'].notna()]
+    if len(att) == 0:
+        ax.text(0.5, 0.5, 'No controlled ΔE data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    top_colors = (
+        att.groupby('target_name', dropna=False)
+        .size()
+        .sort_values(ascending=False)
+        .head(8)
+        .index
+    )
+    palette = plt.cm.get_cmap('tab10', len(top_colors))
+    x_ticks = set()
+    for i, target_name in enumerate(top_colors):
+        part = att[att['target_name'] == target_name]
+        g = part.groupby('attempt_no', sort=True)['final_delta_e'].mean()
+        if len(g) == 0:
+            continue
+        x = g.index.to_numpy()
+        y = g.values
+        ys = pd.Series(y, index=g.index).rolling(window=3, center=True, min_periods=1).mean()
+        ax.plot(x, ys.values, marker='o', linewidth=2, color=palette(i), label=str(target_name))
+        x_ticks.update(g.index.tolist())
+    if x_ticks:
+        ax.set_xticks(sorted(list(x_ticks)))
+    ax.set_xlabel('Attempt number within user x color')
+    ax.set_ylabel('Mean final ΔE')
+    ax.set_title('Controlled final ΔE by attempt number (per target color, smoothed)')
+    ax.legend(fontsize=7, ncol=2)
+    return _fig_to_png(fig)
+
+
+def plot_controlled_elapsed_by_attempt(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    att = _dashboard_attempts_with_attempt_no()
+    att = att[(att['attempt_no'] <= 10) & att['duration_sec'].notna() & (att['duration_sec'] <= 300)]
+    if len(att) == 0:
+        ax.text(0.5, 0.5, 'No controlled elapsed-time data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    top_colors = (
+        att.groupby('target_name', dropna=False)
+        .size()
+        .sort_values(ascending=False)
+        .head(8)
+        .index
+    )
+    palette = plt.cm.get_cmap('tab10', len(top_colors))
+    x_ticks = set()
+    for i, target_name in enumerate(top_colors):
+        part = att[att['target_name'] == target_name]
+        g = part.groupby('attempt_no', sort=True)['duration_sec'].mean()
+        if len(g) == 0:
+            continue
+        x = g.index.to_numpy()
+        y = g.values
+        ys = pd.Series(y, index=g.index).rolling(window=3, center=True, min_periods=1).mean()
+        ax.plot(x, ys.values, marker='o', linewidth=2, color=palette(i), label=str(target_name))
+        x_ticks.update(g.index.tolist())
+    if x_ticks:
+        ax.set_xticks(sorted(list(x_ticks)))
+    ax.set_xlabel('Attempt number within user x color')
+    ax.set_ylabel('Mean elapsed time (s)')
+    ax.set_title('Controlled elapsed time by attempt number (<=300s, per target color, smoothed)')
+    ax.legend(fontsize=7, ncol=2)
+    return _fig_to_png(fig)
+
+
+def plot_deltae_elapsed_scatter(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 5))
+    att = _dashboard_attempts_df()
+    att = att[
+        att['final_delta_e'].notna()
+        & att['duration_sec'].notna()
+        & (att['duration_sec'] <= 300)
+    ]
+    if len(att) == 0:
+        ax.text(0.5, 0.5, 'No DeltaE/time data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    # Reduce overplotting for dense datasets.
+    if len(att) > 8000:
+        att = att.sample(8000, random_state=42)
+
+    ax.scatter(
+        att['duration_sec'].values,
+        att['final_delta_e'].values,
+        s=10,
+        alpha=0.35,
+        color='#1d4ed8',
+        edgecolors='none',
+    )
+    ax.set_xlabel('Elapsed time (s, <=300)')
+    ax.set_ylabel('Final DeltaE')
+    ax.set_title('Scatter: Final DeltaE vs elapsed time')
+    return _fig_to_png(fig)
+
+
+def plot_attempt_deltae_timeline(
+    att: pd.DataFrame,
+    ev: pd.DataFrame,
+    *,
+    attempt_uuid: Optional[str] = None,
+    target_color_id: Optional[int] = None,
+) -> bytes:
+    fig, ax = plt.subplots(figsize=(11, 5.5))
+    au_in = (attempt_uuid or '').strip()
+    if au_in:
+        resolved, err = _resolve_network_attempt_uuid(att, ev, au_in, None)
+        if resolved is None:
+            msg = {
+                'unknown_attempt_uuid': 'Unknown attempt_uuid (no events in sample)',
+            }.get(err, err or 'No attempt to show')
+            ax.text(0.5, 0.5, msg, ha='center', va='center', fontsize=11)
+            ax.axis('off')
+            return _fig_to_png(fig)
+        attempt_ids = [resolved]
+        mode_title = f'Attempt DeltaE trajectory (…{resolved[-8:]})'
+        line_alpha = 0.9
+        point_alpha = 0.95
+    elif target_color_id is not None:
+        candidates = (
+            att.loc[att['target_color_id'] == target_color_id, 'attempt_uuid']
+            .dropna()
+            .astype(str)
+            .tolist()
+        )
+        if len(candidates) == 0:
+            ax.text(0.5, 0.5, 'No attempts for this target_color_id', ha='center', va='center', fontsize=11)
+            ax.axis('off')
+            return _fig_to_png(fig)
+        attempt_ids = candidates
+        mode_title = f'Attempt DeltaE trajectories (all attempts, target_id={target_color_id})'
+        line_alpha = 0.12
+        point_alpha = 0.18
+    else:
+        # Fall back to all attempts in-sample when no explicit filter is provided.
+        attempt_ids = ev['attempt_uuid'].dropna().astype(str).unique().tolist()
+        if len(attempt_ids) == 0:
+            ax.text(0.5, 0.5, 'No attempts to show', ha='center', va='center', fontsize=11)
+            ax.axis('off')
+            return _fig_to_png(fig)
+        mode_title = 'Attempt DeltaE trajectories (all attempts in sample)'
+        line_alpha = 0.06
+        point_alpha = 0.10
+
+    rows = ev[ev['attempt_uuid'].astype(str).isin(set(attempt_ids))].copy()
+    rows = rows[rows['step_index'].notna()].copy()
+    rows = rows.sort_values(['attempt_uuid', 'seq', 'step_index'])
+    rows['delta_e_after'] = pd.to_numeric(rows['delta_e_after'], errors='coerce')
+    rows = rows[rows['delta_e_after'].notna()]
+    if len(rows) == 0:
+        ax.text(0.5, 0.5, 'No DeltaE step rows for selected attempts', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    y_min = float(rows['delta_e_after'].min())
+    y_max = float(rows['delta_e_after'].max())
+    x_max = 0
+    is_single = len(attempt_ids) == 1
+    for aid, part in rows.groupby('attempt_uuid', sort=False):
+        p = part.sort_values(['seq', 'step_index'])
+        x = np.arange(1, len(p) + 1)
+        y = p['delta_e_after'].to_numpy(dtype=float)
+        x_max = max(x_max, len(x))
+        if is_single:
+            action_type = p['action_type'].fillna('').astype(str).str.lower()
+            c = np.where(action_type.eq('remove'), '#ef4444', '#2563eb')
+            ax.plot(x, y, color='#334155', linewidth=1.8, alpha=line_alpha, zorder=1)
+            ax.scatter(x, y, c=c, s=28, alpha=point_alpha, zorder=2)
+        else:
+            ax.plot(x, y, color='#334155', linewidth=1.1, alpha=line_alpha, zorder=1)
+            ax.scatter(x, y, color='#1d4ed8', s=8, alpha=point_alpha, zorder=2)
+
+    ax.axhline(0.0, color='#16a34a', linestyle='--', linewidth=1.2, alpha=0.8)
+    pad = max(0.08 * (y_max - y_min), 0.25)
+    ax.set_ylim(bottom=max(-0.05, y_min - pad), top=y_max + pad)
+    ax.set_xlim(0.5, max(1.5, x_max + 0.5))
+    ax.set_xlabel('Action timeline (ordered step rows per attempt)')
+    ax.set_ylabel('DeltaE after action')
+    ax.set_title(mode_title)
+
+    if is_single:
+        from matplotlib.lines import Line2D
+        legend_items = [
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='#2563eb', markersize=7, label='add / other'),
+            Line2D([0], [0], marker='o', color='w', markerfacecolor='#ef4444', markersize=7, label='remove'),
+            Line2D([0], [0], color='#16a34a', linestyle='--', linewidth=1.2, label='DeltaE = 0'),
+        ]
+        ax.legend(handles=legend_items, fontsize=8, loc='upper right')
+    return _fig_to_png(fig)
+
+
+def plot_archetype_share_by_attempt_no(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    """Stacked share of archetypes at each successive attempt_no (user × target_name)."""
+    fig, ax = plt.subplots(figsize=(10, 5))
+    data = build_attempt_archetypes()
+    rows = data.get('archetype_by_attempt_no') or []
+    if not rows:
+        ax.text(0.5, 0.5, 'No archetype-by-attempt data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    dfp = pd.DataFrame(rows)
+    pivot = dfp.pivot_table(
+        index='attempt_no', columns='archetype', values='share_within_attempt_no', aggfunc='sum'
+    ).fillna(0.0)
+    if pivot.empty:
+        ax.text(0.5, 0.5, 'No pivot data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    pivot.plot(kind='bar', stacked=True, ax=ax, width=0.82, colormap='tab20', legend=True)
+    ax.set_xlabel('Attempt number (within user × target color)')
+    ax.set_ylabel('Share of tagged attempts')
+    ax.set_title('Archetype mix by successive attempt number')
+    ax.legend(title='archetype', bbox_to_anchor=(1.02, 1), loc='upper left', fontsize=7)
+    ax.tick_params(axis='x', rotation=0)
+    fig.tight_layout()
+    return _fig_to_png(fig)
+
+
+def plot_archetype_transition_heatmap(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    """Heatmap: from archetype (attempt k) → to archetype (attempt k+1), consecutive attempt_no only."""
+    fig, ax = plt.subplots(figsize=(9, 7))
+    data = build_attempt_archetypes()
+    rows = data.get('archetype_transitions') or []
+    if not rows:
+        ax.text(0.5, 0.5, 'No transition pairs (need consecutive tagged attempts)', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    dfp = pd.DataFrame(rows)
+    mat = dfp.pivot_table(
+        index='from_archetype', columns='to_archetype', values='n', aggfunc='sum', fill_value=0
+    )
+    if mat.empty:
+        ax.text(0.5, 0.5, 'Empty transition matrix', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    arr = mat.values.astype(float)
+    im = ax.imshow(arr, aspect='auto', cmap='Blues')
+    ax.set_xticks(np.arange(mat.shape[1]))
+    ax.set_yticks(np.arange(mat.shape[0]))
+    ax.set_xticklabels(list(mat.columns), rotation=45, ha='right', fontsize=8)
+    ax.set_yticklabels(list(mat.index), fontsize=8)
+    ax.set_xlabel('To archetype (next attempt)')
+    ax.set_ylabel('From archetype (current attempt)')
+    ax.set_title('Archetype transitions (consecutive attempt_no, same user × target)')
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04)
+    thr = max(arr.max() * 0.15, 1.0)
+    for i in range(arr.shape[0]):
+        for j in range(arr.shape[1]):
+            v = arr[i, j]
+            if v <= 0:
+                continue
+            ax.text(j, i, int(v), ha='center', va='center', color='white' if v > thr else 'black', fontsize=7)
+    fig.tight_layout()
+    return _fig_to_png(fig)
+
+
 def _json_float(x: Any) -> Optional[float]:
     if x is None:
         return None
@@ -944,6 +1394,325 @@ def build_strategy_summary_by_target() -> List[Dict[str, Any]]:
     return out
 
 
+def build_attempt_archetypes(
+    *,
+    per_attempt_limit: int = 2000,
+) -> Dict[str, Any]:
+    """
+    Rule-based archetype tagging from action-path metrics.
+    Returns:
+      - per_attempt_tags: one row per attempt (possibly truncated)
+      - distribution_by_color: archetype counts/shares per target color
+    """
+    att, ev = get_dataframes()
+    m = build_attempt_level_strategy_metrics(att, ev)
+    if len(m) == 0:
+        return {
+            'per_attempt_total': 0,
+            'per_attempt_truncated': False,
+            'per_attempt_tags': [],
+            'distribution_by_color': [],
+            'archetype_by_attempt_no': [],
+            'archetype_transitions': [],
+            'archetype_transition_same_rate': None,
+            'archetype_sequence_samples': [],
+        }
+
+    with db.engine.connect() as conn:
+        tc = pd.read_sql(text('SELECT id, name FROM target_colors'), conn)
+    tc_names = {int(r['id']): str(r['name']) for _, r in tc.iterrows()}
+
+    df = m.copy()
+    df['target_name'] = df['target_color_id'].map(
+        lambda x: tc_names.get(int(x), '(unknown)') if pd.notna(x) else '(unknown)'
+    )
+    df['final_delta_e'] = pd.to_numeric(df['final_delta_e'], errors='coerce')
+    df['best_delta_e_along_path'] = pd.to_numeric(df['best_delta_e_along_path'], errors='coerce')
+    df['n_actions'] = pd.to_numeric(df['n_actions'], errors='coerce').fillna(0)
+    df['n_improving'] = pd.to_numeric(df['n_improving'], errors='coerce').fillna(0)
+    df['n_gain_sign_reversals'] = pd.to_numeric(df['n_gain_sign_reversals'], errors='coerce').fillna(0)
+    df['n_state_revisits'] = pd.to_numeric(df['n_state_revisits'], errors='coerce').fillna(0)
+
+    def classify(row: pd.Series) -> str:
+        n_actions = max(float(row.get('n_actions', 0) or 0), 0.0)
+        if n_actions < 3:
+            return 'short_run'
+        n_improving = float(row.get('n_improving', 0) or 0)
+        sign_rev = float(row.get('n_gain_sign_reversals', 0) or 0)
+        revisits = float(row.get('n_state_revisits', 0) or 0)
+        final_de = row.get('final_delta_e')
+        best_de = row.get('best_delta_e_along_path')
+
+        improve_rate = n_improving / max(n_actions, 1.0)
+        reversal_rate = sign_rev / max(n_actions - 1.0, 1.0)
+        revisit_rate = revisits / max(n_actions, 1.0)
+        best_gap = np.nan
+        if pd.notna(final_de) and pd.notna(best_de):
+            best_gap = float(final_de) - float(best_de)
+
+        if pd.notna(final_de) and float(final_de) <= 1.0 and improve_rate >= 0.75 and reversal_rate < 0.15:
+            return 'direct_converger'
+        if reversal_rate >= 0.45:
+            return 'oscillator'
+        if improve_rate < 0.45 and revisit_rate >= 0.20:
+            return 'random_searcher'
+        if pd.notna(best_gap) and best_gap > 1.0:
+            return 'backslider'
+        if improve_rate >= 0.55 and reversal_rate < 0.25 and n_actions >= 12:
+            return 'slow_and_steady'
+        return 'coarse_then_fine'
+
+    # Additional indicators requested for per-attempt profiling.
+    df['improve_rate'] = df['n_improving'] / df['n_actions'].replace(0, np.nan)
+    df['reversal_rate'] = df['n_gain_sign_reversals'] / (df['n_actions'] - 1).replace(0, np.nan)
+
+    # Compute step-level indicators directly from events for robust per-attempt metrics.
+    ev_steps = ev[ev['step_index'].notna()].copy()
+    ev_steps['delta_e_before'] = pd.to_numeric(ev_steps['delta_e_before'], errors='coerce')
+    ev_steps['delta_e_after'] = pd.to_numeric(ev_steps['delta_e_after'], errors='coerce')
+    ev_steps = ev_steps[
+        ev_steps['attempt_uuid'].notna()
+        & ev_steps['delta_e_before'].notna()
+        & ev_steps['delta_e_after'].notna()
+    ].copy()
+    ev_steps = ev_steps.sort_values(['attempt_uuid', 'seq', 'step_index'], na_position='last')
+    ev_steps['gain'] = ev_steps['delta_e_before'] - ev_steps['delta_e_after']
+
+    # Volatility: SD of step gain.
+    vol = ev_steps.groupby('attempt_uuid', sort=False)['gain'].std(ddof=0).rename('volatility_sd_gain')
+
+    # Convergence slope: compare early vs late local slopes (first/last 30%).
+    conv_rows: List[Dict[str, Any]] = []
+    for au, part in ev_steps.groupby('attempt_uuid', sort=False):
+        p = part.reset_index(drop=True)
+        n = len(p)
+        if n < 4:
+            conv_rows.append(
+                {
+                    'attempt_uuid': str(au),
+                    'slope_first30': np.nan,
+                    'slope_last30': np.nan,
+                    'convergence_slope_delta': np.nan,
+                }
+            )
+            continue
+        k = max(int(np.ceil(0.30 * n)), 2)
+        first = p.iloc[:k]
+        last = p.iloc[n - k:]
+        x1 = np.arange(1, len(first) + 1, dtype=float)
+        y1 = first['delta_e_after'].to_numpy(dtype=float)
+        x2 = np.arange(1, len(last) + 1, dtype=float)
+        y2 = last['delta_e_after'].to_numpy(dtype=float)
+        slope1 = float(np.polyfit(x1, y1, 1)[0]) if len(first) >= 2 else np.nan
+        slope2 = float(np.polyfit(x2, y2, 1)[0]) if len(last) >= 2 else np.nan
+        conv_rows.append(
+            {
+                'attempt_uuid': str(au),
+                'slope_first30': slope1,
+                'slope_last30': slope2,
+                'convergence_slope_delta': (slope2 - slope1) if (np.isfinite(slope1) and np.isfinite(slope2)) else np.nan,
+            }
+        )
+    conv_df = pd.DataFrame(conv_rows)
+
+    # Efficiency: DeltaE reduction per action / per second.
+    # Ensure initial_delta_e/duration are available by merging from attempts table.
+    att_cols = (
+        att[['attempt_uuid', 'initial_delta_e', 'duration_sec']].copy()
+        if len(att)
+        else pd.DataFrame(columns=['attempt_uuid', 'initial_delta_e', 'duration_sec'])
+    )
+    att_cols = att_cols.rename(columns={'initial_delta_e': 'initial_delta_e_attempt', 'duration_sec': 'duration_sec_attempt'})
+    att_cols['attempt_uuid'] = att_cols['attempt_uuid'].astype(str)
+    df['attempt_uuid'] = df['attempt_uuid'].astype(str)
+    df = df.merge(att_cols, on='attempt_uuid', how='left')
+    df['initial_delta_e'] = pd.to_numeric(df['initial_delta_e_attempt'], errors='coerce')
+    df['duration_sec'] = pd.to_numeric(df['duration_sec_attempt'], errors='coerce')
+    df['deltae_reduction'] = df['initial_delta_e'] - df['final_delta_e']
+    df['efficiency_per_action'] = df['deltae_reduction'] / df['n_actions'].replace(0, np.nan)
+    df['efficiency_per_sec'] = df['deltae_reduction'] / df['duration_sec'].replace(0, np.nan)
+
+    # Stopping quality: final DeltaE vs expected median for same target and attempt_no.
+    attempts_no = _dashboard_attempts_with_attempt_no()
+    expected = pd.DataFrame(columns=['target_name', 'attempt_no', 'expected_final_delta_e'])
+    attempt_no_map = pd.DataFrame(columns=['attempt_uuid', 'attempt_no'])
+    if len(attempts_no):
+        attempts_no = attempts_no.copy()
+        attempts_no['attempt_uuid'] = attempts_no['attempt_uuid'].astype(str)
+        attempts_no['final_delta_e'] = pd.to_numeric(attempts_no['final_delta_e'], errors='coerce')
+        expected = (
+            attempts_no[attempts_no['final_delta_e'].notna()]
+            .groupby(['target_name', 'attempt_no'], dropna=False)['final_delta_e']
+            .median()
+            .reset_index()
+            .rename(columns={'final_delta_e': 'expected_final_delta_e'})
+        )
+        attempt_no_map = attempts_no[['attempt_uuid', 'attempt_no']].drop_duplicates(subset=['attempt_uuid'], keep='last')
+
+    df = df.merge(attempt_no_map, on='attempt_uuid', how='left')
+    df = df.merge(expected, on=['target_name', 'attempt_no'], how='left')
+    df['stopping_quality_deltae_vs_expected'] = df['final_delta_e'] - df['expected_final_delta_e']
+
+    df = df.merge(vol.reset_index().rename(columns={'attempt_uuid': 'attempt_uuid'}), on='attempt_uuid', how='left')
+    if len(conv_df):
+        df = df.merge(conv_df, on='attempt_uuid', how='left')
+
+    # Archetype decision can now leverage richer indicators.
+    df['archetype'] = df.apply(classify, axis=1)
+
+    # user_id for successive-attempt analysis (same partition as attempt_no: user × target_name)
+    uid = (
+        att[['attempt_uuid', 'user_id']].drop_duplicates(subset=['attempt_uuid']).copy()
+        if len(att)
+        else pd.DataFrame(columns=['attempt_uuid', 'user_id'])
+    )
+    uid['attempt_uuid'] = uid['attempt_uuid'].astype(str)
+    df = df.merge(uid, on='attempt_uuid', how='left')
+
+    archetype_by_attempt_no: List[Dict[str, Any]] = []
+    archetype_transitions: List[Dict[str, Any]] = []
+    same_rate: Optional[float] = None
+    sequence_samples: List[Dict[str, Any]] = []
+
+    seq = df[df['user_id'].notna() & df['attempt_no'].notna()].copy()
+    if len(seq):
+        seq['attempt_no'] = pd.to_numeric(seq['attempt_no'], errors='coerce')
+        seq = seq[seq['attempt_no'].notna() & (seq['attempt_no'] >= 1) & (seq['attempt_no'] <= 15)]
+        if len(seq):
+            tot_by_no = seq.groupby('attempt_no', sort=True).size().rename('total').reset_index()
+            by_no = (
+                seq.groupby(['attempt_no', 'archetype'], sort=False)
+                .size()
+                .reset_index(name='n')
+                .merge(tot_by_no, on='attempt_no', how='left')
+            )
+            by_no['share_within_attempt_no'] = by_no['n'] / by_no['total'].replace(0, np.nan)
+            by_no = by_no.sort_values(['attempt_no', 'n'], ascending=[True, False])
+            for _, r in by_no.iterrows():
+                archetype_by_attempt_no.append(
+                    {
+                        'attempt_no': int(r['attempt_no']),
+                        'archetype': str(r['archetype']),
+                        'n': int(r['n']),
+                        'total_at_attempt_no': int(r['total']),
+                        'share_within_attempt_no': _json_float(r['share_within_attempt_no']),
+                    }
+                )
+
+        trans_rows: List[Tuple[str, str]] = []
+        for (_, _), g in seq.groupby(['user_id', 'target_name'], sort=False):
+            g2 = g.sort_values(['attempt_no', 'attempt_uuid']).drop_duplicates(subset=['attempt_no'], keep='last')
+            if len(g2) < 2:
+                continue
+            an = g2['attempt_no'].to_numpy()
+            ap = g2['archetype'].astype(str).to_numpy()
+            for i in range(1, len(g2)):
+                if an[i] == an[i - 1] + 1:
+                    trans_rows.append((ap[i - 1], ap[i]))
+        if trans_rows:
+            tr = pd.DataFrame(trans_rows, columns=['from_archetype', 'to_archetype'])
+            tcnts = tr.groupby(['from_archetype', 'to_archetype'], sort=False).size().reset_index(name='n')
+            tcnts = tcnts.sort_values('n', ascending=False)
+            for _, r in tcnts.iterrows():
+                archetype_transitions.append(
+                    {
+                        'from_archetype': str(r['from_archetype']),
+                        'to_archetype': str(r['to_archetype']),
+                        'n': int(r['n']),
+                    }
+                )
+            same_rate = float((tr['from_archetype'] == tr['to_archetype']).mean())
+
+        # Example sequences: longest chains per (user, target), cap 12 samples
+        samples: List[Dict[str, Any]] = []
+        for (u, tn), g in seq.groupby(['user_id', 'target_name'], sort=False):
+            g2 = g.sort_values('attempt_no').drop_duplicates(subset=['attempt_no'], keep='last')
+            if len(g2) < 2:
+                continue
+            parts = [f"{int(r['attempt_no'])}:{r['archetype']}" for _, r in g2.iterrows()]
+            samples.append(
+                {
+                    'user_id': str(u),
+                    'target_name': str(tn),
+                    'n_steps': len(g2),
+                    'sequence': ' → '.join(parts),
+                }
+            )
+        samples.sort(key=lambda s: -s['n_steps'])
+        sequence_samples = samples[:12]
+
+    per_attempt_total = int(len(df))
+    df_sorted = df.sort_values(['target_name', 'attempt_uuid'], ascending=[True, True])
+    truncated = len(df_sorted) > int(per_attempt_limit)
+    if truncated:
+        df_sorted = df_sorted.head(int(per_attempt_limit))
+
+    per_attempt_tags = []
+    for _, r in df_sorted.iterrows():
+        per_attempt_tags.append(
+            {
+                'attempt_uuid': str(r.get('attempt_uuid') or ''),
+                'target_color_id': int(r['target_color_id']) if pd.notna(r.get('target_color_id')) else None,
+                'target_name': str(r.get('target_name') or '(unknown)'),
+                'attempt_no': int(r['attempt_no']) if pd.notna(r.get('attempt_no')) else None,
+                'n_actions': int(r['n_actions']) if pd.notna(r.get('n_actions')) else None,
+                'final_delta_e': _json_float(r.get('final_delta_e')),
+                'slope_first30': _json_float(r.get('slope_first30')),
+                'slope_last30': _json_float(r.get('slope_last30')),
+                'convergence_slope_delta': _json_float(r.get('convergence_slope_delta')),
+                'improve_rate': _json_float(r.get('improve_rate')),
+                'volatility_sd_gain': _json_float(r.get('volatility_sd_gain')),
+                'oscillation_count': int(r['n_gain_sign_reversals']) if pd.notna(r.get('n_gain_sign_reversals')) else None,
+                'reversal_rate': _json_float(r.get('reversal_rate')),
+                'efficiency_per_action': _json_float(r.get('efficiency_per_action')),
+                'efficiency_per_sec': _json_float(r.get('efficiency_per_sec')),
+                'expected_final_delta_e': _json_float(r.get('expected_final_delta_e')),
+                'stopping_quality_deltae_vs_expected': _json_float(r.get('stopping_quality_deltae_vs_expected')),
+                'archetype': str(r.get('archetype') or ''),
+            }
+        )
+
+    by_color = (
+        df.groupby(['target_name', 'archetype'], dropna=False)
+        .size()
+        .reset_index(name='n_attempts')
+    )
+    color_totals = (
+        by_color.groupby('target_name', dropna=False)['n_attempts']
+        .sum()
+        .rename('total_attempts_for_color')
+        .reset_index()
+    )
+    by_color = by_color.merge(color_totals, on='target_name', how='left')
+    by_color['share_within_color'] = by_color['n_attempts'] / by_color['total_attempts_for_color'].replace(0, np.nan)
+    by_color = by_color.sort_values(
+        ['total_attempts_for_color', 'target_name', 'n_attempts'],
+        ascending=[False, True, False],
+    )
+    distribution_by_color = []
+    for _, r in by_color.iterrows():
+        distribution_by_color.append(
+            {
+                'target_name': str(r.get('target_name') or '(unknown)'),
+                'archetype': str(r.get('archetype') or ''),
+                'n_attempts': int(r.get('n_attempts') or 0),
+                'total_attempts_for_color': int(r.get('total_attempts_for_color') or 0),
+                'share_within_color': _json_float(r.get('share_within_color')),
+            }
+        )
+
+    return {
+        'per_attempt_total': per_attempt_total,
+        'per_attempt_truncated': bool(truncated),
+        'per_attempt_tags': per_attempt_tags,
+        'distribution_by_color': distribution_by_color,
+        'archetype_by_attempt_no': archetype_by_attempt_no,
+        'archetype_transitions': archetype_transitions,
+        'archetype_transition_same_rate': _json_float(same_rate),
+        'archetype_sequence_samples': sequence_samples,
+    }
+
+
 PLOT_BUILDERS: Dict[str, Callable[[pd.DataFrame, pd.DataFrame], bytes]] = {
     'fw_hist_final_de': plot_fw_hist_final_de,
     'fw_hist_log_de': plot_fw_hist_log_de,
@@ -962,6 +1731,17 @@ PLOT_BUILDERS: Dict[str, Callable[[pd.DataFrame, pd.DataFrame], bytes]] = {
     'h4_improving': plot_h4_improving,
     'h4_gain': plot_h4_gain,
     'h5_stop_success': plot_h5_stop_success,
+    'age_pyramid': plot_age_pyramid,
+    'plays_per_user': plot_plays_per_user,
+    'attempts_per_color': plot_attempts_per_color,
+    'deltae_per_color': plot_deltae_per_color,
+    'elapsed_per_color': plot_elapsed_per_color,
+    'controlled_deltae_by_attempt': plot_controlled_deltae_by_attempt,
+    'controlled_elapsed_by_attempt': plot_controlled_elapsed_by_attempt,
+    'deltae_elapsed_scatter': plot_deltae_elapsed_scatter,
+    'attempt_deltae_timeline': plot_attempt_deltae_timeline,
+    'archetype_share_by_attempt_no': plot_archetype_share_by_attempt_no,
+    'archetype_transition_heatmap': plot_archetype_transition_heatmap,
 }
 
 ALLOWED_PLOT_IDS = frozenset(list(PLOT_BUILDERS.keys()) + ['fw_attempt_network'])
@@ -971,9 +1751,16 @@ def get_plot_png(plot_id: str, plot_options: Optional[Dict[str, Any]] = None) ->
     if plot_id not in ALLOWED_PLOT_IDS:
         raise ValueError(f'unknown plot: {plot_id}')
     att, ev = get_dataframes()
-    if plot_id == 'fw_attempt_network':
+    if plot_id in ('fw_attempt_network', 'attempt_deltae_timeline'):
         opts = plot_options or {}
-        return plot_fw_attempt_network(
+        if plot_id == 'fw_attempt_network':
+            return plot_fw_attempt_network(
+                att,
+                ev,
+                attempt_uuid=opts.get('attempt_uuid'),
+                target_color_id=opts.get('target_color_id'),
+            )
+        return plot_attempt_deltae_timeline(
             att,
             ev,
             attempt_uuid=opts.get('attempt_uuid'),

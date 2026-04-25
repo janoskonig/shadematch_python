@@ -1,25 +1,24 @@
 {% extends "base.html" %}
 
-{% block title %}ShadeStudy — telemetry EDA{% endblock %}
+{% block title %}ShadeStudy - Stats Dashboard{% endblock %}
 
 {% block extra_css %}
 <style>
   .stats-wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; }
-  .stats-head { margin-bottom: 20px; }
   .stats-head h1 { margin: 0 0 8px; font-size: 1.8rem; }
   .stats-head p { margin: 0; color: var(--text-secondary); }
   .cards {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 10px;
     margin: 16px 0 24px;
   }
-  .card {
+  .card, .section {
     border: 1px solid var(--border);
     border-radius: 10px;
     background: var(--surface);
-    padding: 12px;
   }
+  .card { padding: 12px; }
   .card .k {
     color: var(--text-secondary);
     font-size: 0.72rem;
@@ -27,21 +26,12 @@
     letter-spacing: 0.04em;
   }
   .card .v { margin-top: 6px; font-size: 1.2rem; font-weight: 800; }
-  .section {
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    background: var(--surface);
-    padding: 14px;
-    margin-bottom: 14px;
-  }
+  .section { padding: 14px; margin-bottom: 14px; }
   .section h2 { margin: 0 0 8px; font-size: 1.05rem; }
-  .meta { color: var(--text-secondary); margin-bottom: 10px; font-size: 0.88rem; }
-  .table-wrap { overflow-x: auto; }
   .chart-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 10px;
-    margin-bottom: 10px;
   }
   .chart-card {
     border: 1px solid var(--border);
@@ -63,11 +53,7 @@
     min-height: 140px;
     background: var(--surface-elevated, #f6f7f8);
   }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 0.88rem;
-  }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
   th, td {
     border-bottom: 1px solid var(--border);
     padding: 7px 8px;
@@ -80,244 +66,181 @@
     text-transform: uppercase;
     letter-spacing: 0.03em;
   }
-  .muted { color: var(--text-secondary); font-size: 0.84rem; }
-  .two-col { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 12px; }
-  .network-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end; margin-bottom: 10px; }
-  .network-controls label { display: flex; flex-direction: column; gap: 4px; font-size: 0.82rem; color: var(--text-secondary); }
-  .network-controls input, .network-controls select { min-width: 12rem; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: inherit; }
-  .network-controls button { padding: 7px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-elevated, #eee); cursor: pointer; font-size: 0.85rem; }
+  .table-wrap { overflow-x: auto; }
+  .trajectory-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: flex-end;
+    margin-bottom: 10px;
+  }
+  .trajectory-controls label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.82rem;
+    color: var(--text-secondary);
+  }
+  .trajectory-controls input, .trajectory-controls select {
+    min-width: 12rem;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: inherit;
+  }
+  .trajectory-controls button {
+    padding: 7px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-elevated, #eee);
+    cursor: pointer;
+    font-size: 0.85rem;
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="stats-wrap">
   <div class="stats-head">
-    <h1>Mixing telemetry — exploratory data analysis</h1>
-    <p>
-      Közvetlen URL-ről elérhető összefoglaló: adatminőség, eloszlások, volumen, eseménystruktúra és stratifikációk.
-      Nem tartalmaz illesztett prediktív vagy inferenciális modelleket.
-    </p>
+    <h1>Stats dashboard</h1>
+    <p>Focused telemetry view with attempt-controlled color metrics.</p>
   </div>
 
   <div class="cards" id="overviewCards"></div>
 
   <section class="section">
-    <h2>Framework — három analitikai réteg</h2>
-    <p class="meta">
-      Outcome: <code>mixing_attempts</code>, <code>mixing_sessions</code> ·
-      Process: <code>mixing_attempt_events</code> ·
-      User: <code>users</code>, <code>user_progress</code>, <code>user_target_color_stats</code>.
-      Illesztési tengely: <code>attempt_uuid</code>.
+    <h2>1) Registered users and age pyramid</h2>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Age pyramid (male blue, female red)</p>
+        <img class="stat-plot-img stat-plot" data-plot="age_pyramid" alt="Age pyramid" loading="lazy" />
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-top:10px;"><table id="agePyramidTable"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>2) Number of all plays per user</h2>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Top users by play count</p>
+        <img class="stat-plot-img stat-plot" data-plot="plays_per_user" alt="Plays per user" loading="lazy" />
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-top:10px;"><table id="playsPerUserTable"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>3) Attempts per color</h2>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Attempts by target color</p>
+        <img class="stat-plot-img stat-plot" data-plot="attempts_per_color" alt="Attempts per color" loading="lazy" />
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-top:10px;"><table id="attemptsPerColorTable"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>4) DeltaE of each color mix</h2>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Mean final DeltaE by color</p>
+        <img class="stat-plot-img stat-plot" data-plot="deltae_per_color" alt="DeltaE per color" loading="lazy" />
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-top:10px;"><table id="deltaETable"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>5) Elapsed time of each color mix</h2>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Mean elapsed time by color</p>
+        <img class="stat-plot-img stat-plot" data-plot="elapsed_per_color" alt="Elapsed time per color" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Scatter: DeltaE vs elapsed time</p>
+        <img class="stat-plot-img stat-plot" data-plot="deltae_elapsed_scatter" alt="DeltaE vs elapsed scatter" loading="lazy" />
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-top:10px;"><table id="elapsedTable"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>6) Attempt-controlled metrics</h2>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Controlled DeltaE by attempt number</p>
+        <img class="stat-plot-img stat-plot" data-plot="controlled_deltae_by_attempt" alt="Controlled DeltaE" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Controlled elapsed time by attempt number</p>
+        <img class="stat-plot-img stat-plot" data-plot="controlled_elapsed_by_attempt" alt="Controlled elapsed time" loading="lazy" />
+      </div>
+    </div>
+    <div class="table-wrap" style="margin-top:10px;"><table id="controlledTable"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>7) Action-level DeltaE trajectory (per attempt)</h2>
+    <div class="trajectory-controls">
+      <label>Target color
+        <select id="trajectoryTargetId" aria-label="Filter attempt trajectory by target color"></select>
+      </label>
+      <label>Attempt UUID (optional)
+        <input type="text" id="trajectoryAttemptUuid" placeholder="explicit attempt UUID" autocomplete="off" />
+      </label>
+      <button type="button" id="trajectoryApplyBtn">Render trajectory</button>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">x: action timeline, y: DeltaE after action</p>
+        <img id="attemptTimelineImg" class="stat-plot-img" alt="Attempt DeltaE trajectory" loading="lazy" />
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>8) Mixing strategy archetypes (rule-based)</h2>
+    <p id="archetypeMeta" style="margin:0 0 8px;color:var(--text-secondary);font-size:0.88rem;"></p>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Per-attempt archetype tags</p>
+        <div class="table-wrap"><table id="archetypePerAttemptTable"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Archetype distribution by color</p>
+        <div class="table-wrap"><table id="archetypeByColorTable"></table></div>
+      </div>
+    </div>
+    <h3 style="font-size:0.95rem;margin:16px 0 8px;">Archetype across successive attempts</h3>
+    <p class="muted" style="margin:0 0 10px;color:var(--text-secondary);font-size:0.86rem;">
+      Transitions only count when the same user plays the same target again with consecutive attempt numbers (1→2, 2→3, …).
+      Tagged attempts are those with reconstructable action paths.
     </p>
-    <p class="muted" id="fwDataModelJson"></p>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Attempt szintű deriváltak (1 sor / próba jellegű metrikák)</h3>
-    <div class="table-wrap"><table id="fwAttemptDerivedTable"></table></div>
-    <h3 style="font-size:0.95rem;margin:16px 0 6px;">Outcome eloszlások — histogramok</h3>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">final_delta_e</p>
-        <img class="stat-plot-img stat-plot" data-plot="fw_hist_final_de" alt="Histogram: final ΔE" loading="lazy" />
+        <p class="chart-title">Share of archetypes by attempt number</p>
+        <img class="stat-plot-img stat-plot" data-plot="archetype_share_by_attempt_no" alt="Archetype share by attempt no" loading="lazy" />
       </div>
       <div class="chart-card">
-        <p class="chart-title">ln(final_delta_e + ε)</p>
-        <img class="stat-plot-img stat-plot" data-plot="fw_hist_log_de" alt="Histogram: log final ΔE" loading="lazy" />
+        <p class="chart-title">Transition heatmap (k → k+1)</p>
+        <img class="stat-plot-img stat-plot" data-plot="archetype_transition_heatmap" alt="Archetype transition heatmap" loading="lazy" />
       </div>
-      <div class="chart-card">
-        <p class="chart-title">duration_sec</p>
-        <img class="stat-plot-img stat-plot" data-plot="fw_hist_duration" alt="Histogram: duration" loading="lazy" />
-      </div>
-    </div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Időtartam perfect vs nem perfect szerint</h3>
-    <div class="table-wrap"><table id="fwDurationPerfectTable"></table></div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Tanulási görbe (trial index → kimenet)</h3>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <p class="chart-title">Median final ΔE by trial</p>
-        <img class="stat-plot-img stat-plot" data-plot="fw_trial_median_de" alt="Median final ΔE by trial" loading="lazy" />
-      </div>
-      <div class="chart-card">
-        <p class="chart-title">Success rate by trial</p>
-        <img class="stat-plot-img stat-plot" data-plot="fw_trial_success" alt="Success rate by trial" loading="lazy" />
-      </div>
-      <div class="chart-card">
-        <p class="chart-title">Median duration by trial</p>
-        <img class="stat-plot-img stat-plot" data-plot="fw_trial_dur" alt="Median duration by trial" loading="lazy" />
-      </div>
-    </div>
-    <div class="table-wrap"><table id="fwTrialOutcomeTable"></table></div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Célszín nehézség (difficulty_v1 ranking)</h3>
-    <div class="table-wrap"><table id="fwTargetDifficultyTable"></table></div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Akció-hatékonyság (action_color × action_type)</h3>
-    <div class="table-wrap"><table id="fwActionMatrixTable"></table></div>
-    <div class="table-wrap"><table id="fwStepGainByActionTable"></table></div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Early / mid / late lépések (NTILE 3)</h3>
-    <div class="table-wrap"><table id="fwPhaseTable"></table></div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Reverzálás / oszcilláció (előjelváltások száma / próba)</h3>
-    <p class="muted" id="fwOscSummary"></p>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <p class="chart-title">Histogram (sign changes capped at 15)</p>
-        <img class="stat-plot-img stat-plot" data-plot="fw_oscillation" alt="Oscillation histogram" loading="lazy" />
-      </div>
-    </div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Átlagos pálya alak (ΔE_after vs normalizált pozíció a próbán belül)</h3>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <p class="chart-title">Mean ΔE after by path decile</p>
-        <img class="stat-plot-img stat-plot" data-plot="fw_trajectory" alt="Trajectory shape" loading="lazy" />
-      </div>
-    </div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Egy próbálkozás állapot-hálója (pigment drop state network)</h3>
-    <p class="muted">Csomó = keverék (R,Y,W,B,K dropok). Él = egy <code>action_add</code> / <code>action_remove</code>. Szűrés: célszín alatt a legtöbb akciós próba; vagy adj meg <code>attempt_uuid</code>-ot (explicit felülírja a célszín szűrőt).</p>
-    <div class="network-controls">
-      <label>célszín (top lista) <select id="netTargetId" aria-label="Filter network by target color"></select></label>
-      <label>attempt UUID <input type="text" id="netAttemptUuid" placeholder="opcionális" autocomplete="off" /></label>
-      <button type="button" id="netApplyBtn">Háló frissítése</button>
     </div>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">One attempt: directed state transitions (+/- pigment actions)</p>
-        <img id="imgAttemptNetwork" class="stat-plot-img" alt="One attempt state network" width="800" height="400" />
-      </div>
-    </div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Stratégiai összefoglaló célszín szerint (csak rekonstruálható pigment-lépéses próbák)</h3>
-    <p class="muted">Soronként egy célszín: átlagos „keresési” viselkedés a pigment-térben (visszalátogatások, +/- ugyanarra a pigmentre, javuló / rontó lépések).</p>
-    <div class="table-wrap"><table id="strategyByTargetTable"></table></div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">„Archetype” jellemzők percentilisei (klaszterezés nélkül)</h3>
-    <div class="table-wrap"><table id="fwArchetypeTable"></table></div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;"><code>mixing_sessions</code> — skip viselkedés</h3>
-    <div class="table-wrap"><table id="fwSessionsOverviewTable"></table></div>
-    <div class="table-wrap"><table id="fwSkipByTargetTable"></table></div>
-    <div class="table-wrap"><table id="fwSkipPerceptionTable"></table></div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">User heterogenitás (≥3 próbás userek)</h3>
-    <div class="table-wrap"><table id="fwUserHetTable"></table></div>
-    <h3 style="font-size:0.95rem;margin:12px 0 6px;">Rendszer-validáció &amp; időzítés</h3>
-    <p class="muted" id="fwValidationNote"></p>
-    <div class="table-wrap"><table id="fwValidationTable"></table></div>
-  </section>
-
-  <section class="section">
-    <h2>1. Adatminőség és hiányosságok</h2>
-    <p class="meta">Arányok 0–1 között (pl. 0.12 = 12% hiányzik), kivéve ahol darabszám.</p>
-    <div class="two-col">
-      <div class="table-wrap"><table id="missAttemptsTable"></table></div>
-      <div class="table-wrap"><table id="missEventsTable"></table></div>
-    </div>
-  </section>
-
-  <section class="section">
-    <h2>2. Eloszlások — percentilisek</h2>
-    <div class="two-col">
-      <div class="table-wrap"><table id="pctAttemptsTable"></table></div>
-      <div class="table-wrap"><table id="pctStepsTable"></table></div>
-    </div>
-  </section>
-
-  <section class="section">
-    <h2>3. Próbák lezárása (<code>end_reason</code>)</h2>
-    <div class="table-wrap"><table id="endReasonTable"></table></div>
-  </section>
-
-  <section class="section">
-    <h2>4. Napi próbavolumen</h2>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <p class="chart-title">Attempts per calendar day (server start time)</p>
-        <img class="stat-plot-img stat-plot" data-plot="daily_volume" alt="Daily attempt volume" loading="lazy" />
-      </div>
-    </div>
-  </section>
-
-  <section class="section">
-    <h2>5. Felhasználói aktivitás (próbák / user)</h2>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <p class="chart-title">Users by lifetime attempt count bucket</p>
-        <img class="stat-plot-img stat-plot" data-plot="user_bucket" alt="Users by attempt count" loading="lazy" />
-      </div>
-    </div>
-    <div class="table-wrap"><table id="userBucketTable"></table></div>
-  </section>
-
-  <section class="section">
-    <h2>6. Leggyakoribb célszínek</h2>
-    <div class="table-wrap"><table id="targetsTable"></table></div>
-  </section>
-
-  <section class="section">
-    <h2>7. Eseménytípusok és döntés-<code>action_type</code></h2>
-    <div class="two-col">
-      <div class="table-wrap"><table id="eventTypeTable"></table></div>
-      <div class="table-wrap"><table id="actionTypeTable"></table></div>
-    </div>
-  </section>
-
-  <section class="section">
-    <h2>8. Páronkénti korrelációk (PostgreSQL <code>corr</code>)</h2>
-    <p class="muted" id="corrNote"></p>
-  </section>
-
-  <section class="section">
-    <h2>9. Stratifikáció — user trial index és lépések</h2>
-    <p class="meta">Trial = felhasználón belüli sorszám (<code>attempt_started_server_ts</code> szerint).</p>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <p class="chart-title">Improving rate by trial index</p>
-        <img class="stat-plot-img stat-plot" data-plot="h1_improving" alt="Improving rate by trial" loading="lazy" />
+        <p class="chart-title">Archetype × attempt number (table)</p>
+        <div class="table-wrap"><table id="archetypeByAttemptNoTable"></table></div>
       </div>
       <div class="chart-card">
-        <p class="chart-title">Avg steps to completion by trial index</p>
-        <img class="stat-plot-img stat-plot" data-plot="h1_steps" alt="Avg steps by trial" loading="lazy" />
+        <p class="chart-title">Transition counts</p>
+        <div class="table-wrap"><table id="archetypeTransitionsTable"></table></div>
       </div>
     </div>
-    <div class="table-wrap"><table id="h1Table"></table></div>
-  </section>
-
-  <section class="section">
-    <h2>10. Stratifikáció — <code>delta_e_before</code> sávok</h2>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <p class="chart-title">Improving rate</p>
-        <img class="stat-plot-img stat-plot" data-plot="h2_improving" alt="Improving rate by ΔE before" loading="lazy" />
-      </div>
-      <div class="chart-card">
-        <p class="chart-title">Mean step gain (ΔE_before − ΔE_after)</p>
-        <img class="stat-plot-img stat-plot" data-plot="h2_gain" alt="Mean step gain by ΔE before" loading="lazy" />
-      </div>
-    </div>
-    <div class="table-wrap"><table id="h2Table"></table></div>
-  </section>
-
-  <section class="section">
-    <h2>11. Lépésnyereség szórása trial index szerint</h2>
-    <div class="table-wrap"><table id="h3Table"></table></div>
-  </section>
-
-  <section class="section">
-    <h2>12. Stratifikáció — döntési idő (<code>time_since_prev_step_ms</code>)</h2>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <p class="chart-title">Improving rate</p>
-        <img class="stat-plot-img stat-plot" data-plot="h4_improving" alt="Improving rate by inter-step time" loading="lazy" />
-      </div>
-      <div class="chart-card">
-        <p class="chart-title">Mean step gain</p>
-        <img class="stat-plot-img stat-plot" data-plot="h4_gain" alt="Mean gain by inter-step time" loading="lazy" />
-      </div>
-    </div>
-    <div class="table-wrap"><table id="h4Table"></table></div>
-  </section>
-
-  <section class="section">
-    <h2>13. Kimenetek final ΔE sávok szerint</h2>
-    <div class="chart-grid">
-      <div class="chart-card">
-        <p class="chart-title">Share of saved_stop vs saved_match by final ΔE bucket</p>
-        <img class="stat-plot-img stat-plot" data-plot="h5_stop_success" alt="Stop vs match by final ΔE" loading="lazy" />
-      </div>
-    </div>
-    <div class="table-wrap"><table id="h5Table"></table></div>
-    <p class="muted" id="h5Dispersion"></p>
+    <div class="table-wrap" style="margin-top:10px;"><table id="archetypeSequenceSamplesTable"></table></div>
   </section>
 </div>
 {% endblock %}
@@ -352,7 +275,7 @@
     el.innerHTML = html;
   }
 
-  function refreshStatPlots() {
+  function refreshPlots() {
     var t = Date.now();
     document.querySelectorAll('img.stat-plot').forEach(function(img) {
       var pid = img.getAttribute('data-plot');
@@ -361,186 +284,31 @@
     });
   }
 
-  function refreshAttemptNetworkPlot() {
-    var img = document.getElementById('imgAttemptNetwork');
+  function refreshAttemptTimelinePlot() {
+    var img = document.getElementById('attemptTimelineImg');
     if (!img) return;
-    var attemptEl = document.getElementById('netAttemptUuid');
-    var tidEl = document.getElementById('netTargetId');
     var q = '?t=' + Date.now();
-    if (attemptEl && attemptEl.value.trim()) {
-      q += '&attempt_uuid=' + encodeURIComponent(attemptEl.value.trim());
-    } else if (tidEl && tidEl.value) {
-      q += '&target_color_id=' + encodeURIComponent(tidEl.value);
+    var au = document.getElementById('trajectoryAttemptUuid');
+    var tid = document.getElementById('trajectoryTargetId');
+    if (au && au.value.trim()) {
+      q += '&attempt_uuid=' + encodeURIComponent(au.value.trim());
+    } else if (tid && tid.value) {
+      q += '&target_color_id=' + encodeURIComponent(tid.value);
     }
-    img.src = '/api/stat/plot/fw_attempt_network.png' + q;
+    img.src = '/api/stat/plot/attempt_deltae_timeline.png' + q;
   }
 
-  function renderOverview(o) {
+  function renderOverview(overview) {
     var cards = [
-      { k: 'Attempts', v: o.attempts || 0 },
-      { k: 'Users (with id)', v: o.users || 0 },
-      { k: 'Attempts w/o user', v: o.attempts_without_user || 0 },
-      { k: 'Events total', v: o.events_total || 0 },
-      { k: 'Decision rows', v: o.decision_rows || 0 },
-      { k: 'Non-decision rows', v: o.non_decision_rows || 0 },
-      { k: 'Avg steps / attempt', v: fmtNumber(o.avg_num_steps, 2) },
-      { k: 'Avg final ΔE', v: fmtNumber(o.avg_final_delta_e, 3) },
-      { k: 'First attempt (UTC)', v: o.first_attempt_server_ts || '—' },
-      { k: 'Last attempt (UTC)', v: o.last_attempt_server_ts || '—' }
+      { k: 'Registered users', v: overview.registered_users || 0 },
+      { k: 'Total plays', v: overview.total_plays || 0 },
+      { k: 'Users with plays', v: overview.users_with_plays || 0 },
+      { k: 'First play (UTC)', v: overview.first_play_ts || '—' },
+      { k: 'Last play (UTC)', v: overview.last_play_ts || '—' }
     ];
     document.getElementById('overviewCards').innerHTML = cards.map(function(c) {
       return '<div class="card"><div class="k">' + c.k + '</div><div class="v">' + c.v + '</div></div>';
     }).join('');
-  }
-
-  function objToRows(obj) {
-    return Object.keys(obj || {}).map(function(k) {
-      return { key: k, value: obj[k] };
-    });
-  }
-
-  function renderFramework(fw) {
-    fw = fw || {};
-    var dm = fw.data_model || {};
-    var elMeta = document.getElementById('fwDataModelJson');
-    if (elMeta) {
-      elMeta.textContent =
-        'Join spine: ' + (dm.join_spine || '—') +
-        ' · Outcome tables: ' + (dm.outcome_tables || []).join(', ') +
-        ' · Process: ' + (dm.process_table || '—') +
-        ' · User tables: ' + (dm.user_tables || []).join(', ');
-    }
-
-    buildTable(document.getElementById('fwAttemptDerivedTable'),
-      [
-        { key: 'key', label: 'Metric' },
-        { key: 'value', label: 'Value', formatter: function(v) { return typeof v === 'number' ? fmtNumber(v, 6) : String(v); } }
-      ],
-      objToRows(fw.attempt_derived || {}).map(function(r) { return { key: r.key, value: r.value }; }));
-
-    buildTable(document.getElementById('fwDurationPerfectTable'),
-      [
-        { key: 'outcome_band', label: 'Outcome' },
-        { key: 'n', label: 'n' },
-        { key: 'mean_duration_sec', label: 'Mean duration (s)', formatter: function(v) { return fmtNumber(v, 2); } }
-      ],
-      fw.duration_by_perfect_band || []);
-
-    var toc = fw.trial_outcome_curves || [];
-
-    buildTable(document.getElementById('fwTrialOutcomeTable'),
-      [
-        { key: 'trial_index', label: 'Trial' },
-        { key: 'n_attempts', label: 'Attempts' },
-        { key: 'median_final_delta_e', label: 'Median ΔE', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'success_rate', label: 'P(success)', formatter: pctFmt },
-        { key: 'median_duration_sec', label: 'Median dur (s)', formatter: function(v) { return fmtNumber(v, 2); } }
-      ],
-      toc);
-
-    buildTable(document.getElementById('fwTargetDifficultyTable'),
-      [
-        { key: 'target_color_id', label: 'id' },
-        { key: 'target_name', label: 'name' },
-        { key: 'color_type', label: 'type' },
-        { key: 'n_attempts', label: 'n' },
-        { key: 'mean_final_delta_e', label: 'mean ΔE', formatter: function(v) { return fmtNumber(v, 3); } },
-        { key: 'median_final_delta_e', label: 'median ΔE', formatter: function(v) { return fmtNumber(v, 3); } },
-        { key: 'mean_duration_sec', label: 'mean dur', formatter: function(v) { return fmtNumber(v, 2); } },
-        { key: 'success_rate', label: 'success', formatter: pctFmt }
-      ],
-      fw.target_difficulty_ranking || []);
-
-    buildTable(document.getElementById('fwActionMatrixTable'),
-      [
-        { key: 'action_color', label: 'color' },
-        { key: 'action_type', label: 'type' },
-        { key: 'n', label: 'n' },
-        { key: 'mean_delta_e_gain', label: 'mean gain', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'mean_abs_delta_e_change', label: 'mean |Δ|', formatter: function(v) { return fmtNumber(v, 4); } }
-      ],
-      fw.action_effectiveness_matrix || []);
-
-    buildTable(document.getElementById('fwStepGainByActionTable'),
-      [
-        { key: 'action_type', label: 'action_type' },
-        { key: 'n', label: 'n' },
-        { key: 'mean_gain', label: 'mean gain', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'median_gain', label: 'median gain', formatter: function(v) { return fmtNumber(v, 4); } }
-      ],
-      fw.step_gain_by_action_type || []);
-
-    buildTable(document.getElementById('fwPhaseTable'),
-      [
-        { key: 'phase', label: 'phase (NTILE)' },
-        { key: 'n_steps', label: 'n steps' },
-        { key: 'mean_abs_gain', label: 'mean |ΔE|' },
-        { key: 'sd_gain', label: 'SD gain' },
-        { key: 'improving_rate', label: 'improving', formatter: pctFmt }
-      ],
-      fw.early_mid_late_step_behavior || []);
-
-    var osc = fw.reversal_oscillation || {};
-    var osum = osc.summary || {};
-    var elOsc = document.getElementById('fwOscSummary');
-    if (elOsc) {
-      elOsc.textContent =
-        'Attempts: ' + (osum.n_attempts || 0) +
-        ', mean sign-changes: ' + fmtNumber(osum.mean_sign_changes, 3) +
-        ', median: ' + fmtNumber(osum.median_sign_changes, 2) +
-        ', p90: ' + fmtNumber(osum.p90_sign_changes, 2);
-    }
-    buildTable(document.getElementById('fwArchetypeTable'),
-      [
-        { key: 'key', label: 'Percentile' },
-        { key: 'value', label: 'Value', formatter: function(v) { return fmtNumber(v, 4); } }
-      ],
-      objToRows(fw.archetype_feature_percentiles || {}).map(function(r) { return { key: r.key, value: r.value }; }));
-
-    var ms = fw.mixing_sessions || {};
-    buildTable(document.getElementById('fwSessionsOverviewTable'),
-      [
-        { key: 'key', label: 'Field' },
-        { key: 'value', label: 'Value', formatter: function(v) { return typeof v === 'number' ? fmtNumber(v, 4) : v; } }
-      ],
-      objToRows(ms.overview || {}).map(function(r) { return { key: r.key, value: r.value }; }));
-    buildTable(document.getElementById('fwSkipByTargetTable'),
-      [
-        { key: 'target_color_id', label: 'target' },
-        { key: 'target_name', label: 'name' },
-        { key: 'n', label: 'n sessions' },
-        { key: 'skip_rate', label: 'skip rate', formatter: pctFmt },
-        { key: 'mean_delta_e', label: 'mean ΔE', formatter: function(v) { return fmtNumber(v, 3); } }
-      ],
-      ms.skip_by_target || []);
-    buildTable(document.getElementById('fwSkipPerceptionTable'),
-      [
-        { key: 'skip_perception', label: 'perception' },
-        { key: 'n', label: 'n' },
-        { key: 'mean_delta_e_at_skip', label: 'mean ΔE', formatter: function(v) { return fmtNumber(v, 3); } }
-      ],
-      ms.skip_perception_calibration || []);
-
-    buildTable(document.getElementById('fwUserHetTable'),
-      [
-        { key: 'key', label: 'Metric' },
-        { key: 'value', label: 'Value', formatter: function(v) { return fmtNumber(v, 4); } }
-      ],
-      objToRows(fw.user_heterogeneity || {}).map(function(r) { return { key: r.key, value: r.value }; }));
-
-    var val = fw.system_validation || {};
-    var valRows = []
-      .concat(objToRows(val.counts || {}).map(function(r) { return { k: r.key, v: r.value }; }))
-      .concat(objToRows(val.sequence_gaps || {}).map(function(r) { return { k: 'seq_' + r.key, v: r.value }; }));
-    buildTable(document.getElementById('fwValidationTable'),
-      [{ key: 'k', label: 'Check' }, { key: 'v', label: 'Value' }],
-      valRows);
-    var elVn = document.getElementById('fwValidationNote');
-    if (elVn) {
-      elVn.textContent =
-        'Median (client_ts − server_ts) offset seconds (exploratory clock comparison): ' +
-        fmtNumber(val.median_client_minus_server_sec, 3);
-    }
   }
 
   async function loadStats() {
@@ -550,151 +318,167 @@
 
     renderOverview(data.overview || {});
 
-    var eda = data.eda || {};
-    renderFramework(eda.framework || {});
-    var ma = (eda.missingness && eda.missingness.attempts) || {};
-    var me = (eda.missingness && eda.missingness.events) || {};
-
-    buildTable(document.getElementById('missAttemptsTable'),
-      [{ key: 'key', label: 'Field' }, { key: 'value', label: 'Value', formatter: function(v) { return typeof v === 'number' && String(v).indexOf('e') === -1 ? fmtNumber(v, 4) : v; } }],
-      objToRows(ma).map(function(r) { return { key: r.key, value: r.value }; }));
-    buildTable(document.getElementById('missEventsTable'),
-      [{ key: 'key', label: 'Field' }, { key: 'value', label: 'Value', formatter: function(v) { return typeof v === 'number' && String(v).indexOf('e') === -1 ? fmtNumber(v, 4) : v; } }],
-      objToRows(me).map(function(r) { return { key: r.key, value: r.value }; }));
-
-    var pa = (eda.percentiles && eda.percentiles.attempts) || {};
-    var ps = (eda.percentiles && eda.percentiles.decision_steps) || {};
-    buildTable(document.getElementById('pctAttemptsTable'),
-      [{ key: 'key', label: 'Metric' }, { key: 'value', label: 'Value', formatter: function(v) { return fmtNumber(v, 4); } }],
-      objToRows(pa).map(function(r) { return { key: r.key, value: r.value }; }));
-    buildTable(document.getElementById('pctStepsTable'),
-      [{ key: 'key', label: 'Metric' }, { key: 'value', label: 'Value', formatter: function(v) { return fmtNumber(v, 4); } }],
-      objToRows(ps).map(function(r) { return { key: r.key, value: r.value }; }));
-
-    buildTable(document.getElementById('endReasonTable'),
-      [{ key: 'end_reason', label: 'end_reason' }, { key: 'n', label: 'Count' }],
-      eda.end_reasons || []);
-
-    buildTable(document.getElementById('userBucketTable'),
-      [{ key: 'attempt_count_bucket', label: 'Bucket' }, { key: 'n_users', label: 'Users' }],
-      eda.user_attempt_histogram || []);
-
-    buildTable(document.getElementById('targetsTable'),
+    buildTable(
+      document.getElementById('agePyramidTable'),
       [
-        { key: 'target_color_id', label: 'target_id' },
-        { key: 'target_name', label: 'name' },
+        { key: 'age_bucket', label: 'Age bucket' },
+        { key: 'gender_group', label: 'Gender' },
+        { key: 'n_users', label: 'Users' }
+      ],
+      data.age_pyramid || []
+    );
+
+    buildTable(
+      document.getElementById('playsPerUserTable'),
+      [
+        { key: 'user_id', label: 'User' },
+        { key: 'n_plays', label: 'Plays' }
+      ],
+      data.plays_per_user || []
+    );
+
+    buildTable(
+      document.getElementById('attemptsPerColorTable'),
+      [
+        { key: 'target_color_id', label: 'Target ID' },
+        { key: 'target_name', label: 'Color' },
         { key: 'n_attempts', label: 'Attempts' }
       ],
-      eda.top_target_colors || []);
+      data.attempts_per_color || []
+    );
 
-    buildTable(document.getElementById('eventTypeTable'),
-      [{ key: 'event_type', label: 'event_type' }, { key: 'n', label: 'n' }],
-      eda.event_type_counts || []);
-    buildTable(document.getElementById('actionTypeTable'),
-      [{ key: 'action_type', label: 'action_type' }, { key: 'n', label: 'n' }],
-      eda.action_type_counts || []);
-
-    var cor = eda.pairwise_correlations || {};
-    document.getElementById('corrNote').textContent =
-      'Pearson (exploratory): trial×num_steps = ' + fmtNumber(cor.corr_trial_index_num_steps, 4) +
-      ' · interstep×gain = ' + fmtNumber(cor.corr_interstep_ms_step_gain, 4) +
-      ' · finalΔE×duration = ' + fmtNumber(cor.corr_final_delta_e_duration_sec, 4) +
-      ' · finalΔE×steps = ' + fmtNumber(cor.corr_final_delta_e_num_steps, 4) +
-      ' · duration×steps = ' + fmtNumber(cor.corr_duration_sec_num_steps, 4) + '.';
-
-    buildTable(document.getElementById('h1Table'),
+    buildTable(
+      document.getElementById('deltaETable'),
       [
-        { key: 'trial_index', label: 'Trial' },
-        { key: 'n_steps', label: 'N steps' },
-        { key: 'improving_rate', label: 'Improving', formatter: pctFmt },
-        { key: 'worsening_rate', label: 'Worsening', formatter: pctFmt },
-        { key: 'mean_step_gain', label: 'Mean gain', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'avg_steps_to_completion', label: 'Avg steps / attempt', formatter: function(v) { return fmtNumber(v, 2); } }
+        { key: 'target_name', label: 'Color' },
+        { key: 'n_attempts', label: 'Attempts' },
+        { key: 'mean_delta_e', label: 'Mean DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
+        { key: 'median_delta_e', label: 'Median DeltaE', formatter: function(v) { return fmtNumber(v, 3); } }
       ],
-      data.h1_learning || []);
+      data.delta_e_per_color || []
+    );
 
-    buildTable(document.getElementById('h2Table'),
+    buildTable(
+      document.getElementById('elapsedTable'),
       [
-        { key: 'de_bucket', label: 'ΔE before' },
-        { key: 'n_steps', label: 'N' },
-        { key: 'improving_rate', label: 'Improving', formatter: pctFmt },
-        { key: 'mean_step_gain', label: 'Mean gain', formatter: function(v) { return fmtNumber(v, 4); } }
+        { key: 'target_name', label: 'Color' },
+        { key: 'n_attempts', label: 'Attempts' },
+        { key: 'mean_elapsed_sec', label: 'Mean elapsed (s)', formatter: function(v) { return fmtNumber(v, 2); } },
+        { key: 'median_elapsed_sec', label: 'Median elapsed (s)', formatter: function(v) { return fmtNumber(v, 2); } }
       ],
-      data.h2_difficulty || []);
+      data.elapsed_per_color || []
+    );
 
-    buildTable(document.getElementById('h3Table'),
+    buildTable(
+      document.getElementById('controlledTable'),
       [
-        { key: 'trial_index', label: 'Trial' },
-        { key: 'n_steps', label: 'N' },
-        { key: 'improving_rate', label: 'Improving', formatter: pctFmt },
-        { key: 'mean_gain', label: 'Mean gain', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'sd_gain', label: 'SD gain', formatter: function(v) { return fmtNumber(v, 4); } }
-      ],
-      data.h3_random_search_check || []);
-
-    buildTable(document.getElementById('h4Table'),
-      [
-        { key: 'time_bucket', label: 'Time bucket' },
-        { key: 'n_steps', label: 'N' },
-        { key: 'improving_rate', label: 'Improving', formatter: pctFmt },
-        { key: 'mean_step_gain', label: 'Mean gain', formatter: function(v) { return fmtNumber(v, 4); } }
-      ],
-      data.h4_time_cost || []);
-
-    buildTable(document.getElementById('h5Table'),
-      [
-        { key: 'de_bucket', label: 'Final ΔE' },
+        { key: 'target_name', label: 'Color' },
+        { key: 'attempt_no', label: 'Attempt no' },
         { key: 'n_attempts', label: 'N' },
-        { key: 'stop_probability', label: 'saved_stop', formatter: pctFmt },
-        { key: 'success_probability', label: 'saved_match', formatter: pctFmt },
-        { key: 'avg_num_steps', label: 'Avg steps', formatter: function(v) { return fmtNumber(v, 2); } }
+        { key: 'mean_delta_e', label: 'Mean DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
+        { key: 'median_delta_e', label: 'Median DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
+        { key: 'mean_elapsed_sec', label: 'Mean elapsed (s)', formatter: function(v) { return fmtNumber(v, 2); } },
+        { key: 'median_elapsed_sec', label: 'Median elapsed (s)', formatter: function(v) { return fmtNumber(v, 2); } }
       ],
-      (data.h5_stopping_rule || {}).by_final_delta_e_bucket || []);
+      data.controlled_by_attempt || []
+    );
 
-    var disp = ((data.h5_stopping_rule || {}).stop_dispersion) || {};
-    document.getElementById('h5Dispersion').textContent =
-      'saved_stop rows: n=' + (disp.n_stops || 0) +
-      ', mean final ΔE=' + fmtNumber(disp.mean_stop_delta_e, 4) +
-      ', SD=' + fmtNumber(disp.sd_stop_delta_e, 4);
+    var arch = data.archetypes || {};
+    var meta = document.getElementById('archetypeMeta');
+    if (meta) {
+      var total = arch.per_attempt_total || 0;
+      var truncated = !!arch.per_attempt_truncated;
+      var same = arch.archetype_transition_same_rate;
+      var sameStr = (same === null || same === undefined || Number.isNaN(Number(same))) ? '' : (' P(same archetype k→k+1)=' + pctFmt(same) + '.');
+      meta.textContent = (truncated
+        ? ('Showing first ' + ((arch.per_attempt_tags || []).length) + ' tagged attempts out of ' + total + '.')
+        : ('Tagged attempts: ' + total + '.')) + sameStr;
+    }
+    buildTable(
+      document.getElementById('archetypePerAttemptTable'),
+      [
+        { key: 'attempt_uuid', label: 'Attempt UUID' },
+        { key: 'target_name', label: 'Color' },
+        { key: 'attempt_no', label: 'Attempt no' },
+        { key: 'n_actions', label: 'Actions' },
+        { key: 'final_delta_e', label: 'Final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
+        { key: 'slope_first30', label: 'Slope first 30%', formatter: function(v) { return fmtNumber(v, 4); } },
+        { key: 'slope_last30', label: 'Slope last 30%', formatter: function(v) { return fmtNumber(v, 4); } },
+        { key: 'convergence_slope_delta', label: 'Convergence delta', formatter: function(v) { return fmtNumber(v, 4); } },
+        { key: 'improve_rate', label: 'Improve rate', formatter: pctFmt },
+        { key: 'volatility_sd_gain', label: 'Volatility SD(gain)', formatter: function(v) { return fmtNumber(v, 4); } },
+        { key: 'oscillation_count', label: 'Oscillation count' },
+        { key: 'reversal_rate', label: 'Reversal rate', formatter: pctFmt },
+        { key: 'efficiency_per_action', label: 'Efficiency / action', formatter: function(v) { return fmtNumber(v, 4); } },
+        { key: 'efficiency_per_sec', label: 'Efficiency / sec', formatter: function(v) { return fmtNumber(v, 4); } },
+        { key: 'expected_final_delta_e', label: 'Expected final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
+        { key: 'stopping_quality_deltae_vs_expected', label: 'Stopping quality (vs exp)', formatter: function(v) { return fmtNumber(v, 3); } },
+        { key: 'archetype', label: 'Archetype' }
+      ],
+      arch.per_attempt_tags || []
+    );
+    buildTable(
+      document.getElementById('archetypeByColorTable'),
+      [
+        { key: 'target_name', label: 'Color' },
+        { key: 'archetype', label: 'Archetype' },
+        { key: 'n_attempts', label: 'N attempts' },
+        { key: 'total_attempts_for_color', label: 'Total for color' },
+        { key: 'share_within_color', label: 'Share', formatter: pctFmt }
+      ],
+      arch.distribution_by_color || []
+    );
+    buildTable(
+      document.getElementById('archetypeByAttemptNoTable'),
+      [
+        { key: 'attempt_no', label: 'Attempt no' },
+        { key: 'archetype', label: 'Archetype' },
+        { key: 'n', label: 'N' },
+        { key: 'total_at_attempt_no', label: 'Total at step' },
+        { key: 'share_within_attempt_no', label: 'Share', formatter: pctFmt }
+      ],
+      arch.archetype_by_attempt_no || []
+    );
+    buildTable(
+      document.getElementById('archetypeTransitionsTable'),
+      [
+        { key: 'from_archetype', label: 'From (k)' },
+        { key: 'to_archetype', label: 'To (k+1)' },
+        { key: 'n', label: 'Count' }
+      ],
+      arch.archetype_transitions || []
+    );
+    buildTable(
+      document.getElementById('archetypeSequenceSamplesTable'),
+      [
+        { key: 'user_id', label: 'User' },
+        { key: 'target_name', label: 'Color' },
+        { key: 'n_steps', label: 'Steps' },
+        { key: 'sequence', label: 'attempt_no:archetype chain' }
+      ],
+      arch.archetype_sequence_samples || []
+    );
 
-    var netSel = document.getElementById('netTargetId');
-    if (netSel) {
-      var tops = eda.top_target_colors || [];
-      netSel.innerHTML = '<option value="">(auto — legtöbb lépés)</option>' +
-        tops.map(function(t) {
-          var nm = t.target_name || '';
-          return '<option value="' + t.target_color_id + '">' + nm + ' · id ' + t.target_color_id + '</option>';
+    var targetSel = document.getElementById('trajectoryTargetId');
+    if (targetSel) {
+      var rows = data.attempts_per_color || [];
+      targetSel.innerHTML = '<option value="">(auto)</option>' + rows
+        .filter(function(r) { return r.target_color_id !== null && r.target_color_id !== undefined; })
+        .map(function(r) {
+          return '<option value="' + r.target_color_id + '">' + r.target_name + ' · id ' + r.target_color_id + '</option>';
         }).join('');
     }
-    buildTable(document.getElementById('strategyByTargetTable'),
-      [
-        { key: 'target_color_id', label: 'target id' },
-        { key: 'target_name', label: 'name' },
-        { key: 'n_attempts_path', label: 'n attempts', formatter: function(v) { return v == null ? '—' : String(v); } },
-        { key: 'median_final_delta_e', label: 'median final ΔE', formatter: function(v) { return fmtNumber(v, 3); } },
-        { key: 'median_best_path_delta_e', label: 'median best path ΔE', formatter: function(v) { return fmtNumber(v, 3); } },
-        { key: 'mean_n_actions', label: 'mean actions', formatter: function(v) { return fmtNumber(v, 2); } },
-        { key: 'mean_revisits_per_action', label: 'revisits/action', formatter: function(v) { return fmtNumber(v, 3); } },
-        { key: 'mean_pigment_reversals_per_action', label: '±pigment rev/action', formatter: function(v) { return fmtNumber(v, 3); } },
-        { key: 'mean_improving_step_rate', label: 'P(improve)', formatter: pctFmt },
-        { key: 'mean_worsening_step_rate', label: 'P(worse)', formatter: pctFmt },
-        { key: 'median_first_seq_lt_5', label: 'median 1st seq ΔE&lt;5', formatter: function(v) { return fmtNumber(v, 1); } },
-        { key: 'median_first_seq_lt_2', label: 'median 1st seq ΔE&lt;2', formatter: function(v) { return fmtNumber(v, 1); } },
-        { key: 'median_first_seq_lt_1', label: 'median 1st seq ΔE&lt;1', formatter: function(v) { return fmtNumber(v, 1); } }
-      ],
-      eda.strategy_by_target || []);
 
-    refreshStatPlots();
-    refreshAttemptNetworkPlot();
+    refreshPlots();
+    refreshAttemptTimelinePlot();
   }
 
-  var netBtn = document.getElementById('netApplyBtn');
-  if (netBtn) netBtn.addEventListener('click', refreshAttemptNetworkPlot);
+  var trajectoryBtn = document.getElementById('trajectoryApplyBtn');
+  if (trajectoryBtn) trajectoryBtn.addEventListener('click', refreshAttemptTimelinePlot);
 
   loadStats().catch(function(err) {
-    document.getElementById('overviewCards').innerHTML = '<div class="card"><div class="k">Error</div><div class="v" style="font-size:0.95rem;">' + err.message + '</div></div>';
+    document.getElementById('overviewCards').innerHTML =
+      '<div class="card"><div class="k">Error</div><div class="v" style="font-size:0.95rem;">' + err.message + '</div></div>';
   });
 </script>
 {% endblock %}
-
-

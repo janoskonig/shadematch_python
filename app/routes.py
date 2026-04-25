@@ -42,7 +42,7 @@ from .gamification import (
     sample_game_target_colors,
 )
 from .next_action import build_next_action
-from .stat_eda import ALLOWED_PLOT_IDS, build_strategy_summary_by_target, get_plot_png
+from .stat_eda import ALLOWED_PLOT_IDS, build_attempt_archetypes, get_plot_png
 
 main = Blueprint('main', __name__)
 
@@ -247,7 +247,7 @@ def stat_plot(plot_id: str):
     if pid not in ALLOWED_PLOT_IDS:
         return jsonify({'status': 'error', 'message': 'unknown plot id'}), 404
     plot_options = None
-    if pid == 'fw_attempt_network':
+    if pid in ('fw_attempt_network', 'attempt_deltae_timeline'):
         plot_options = {}
         au = request.args.get('attempt_uuid')
         if au and str(au).strip():
@@ -1902,1204 +1902,188 @@ ALLOWED_EVENTS = frozenset({
 
 @main.route('/api/stat/summary', methods=['GET'])
 def stat_summary():
-    """
-    Exploratory summaries from mixing telemetry (EDA only — no fitted models).
-    """
+    """Focused dashboard summary for /stat."""
     try:
-        overview_row = db.session.execute(
+        overview = db.session.execute(
             db.text(
                 """
                 SELECT
-                  COUNT(*)::bigint AS attempts,
-                  COUNT(DISTINCT user_id) FILTER (WHERE user_id IS NOT NULL)::bigint AS users,
-                  COUNT(*) FILTER (WHERE user_id IS NULL)::bigint AS attempts_without_user,
-                  AVG(NULLIF(num_steps, 0))::double precision AS avg_num_steps,
-                  AVG(final_delta_e)::double precision AS avg_final_delta_e,
-                  MIN(attempt_started_server_ts)::text AS first_attempt_server_ts,
-                  MAX(attempt_started_server_ts)::text AS last_attempt_server_ts
-                FROM mixing_attempts
+                  (SELECT COUNT(*)::bigint FROM users) AS registered_users,
+                  (SELECT COUNT(*)::bigint FROM mixing_attempts) AS total_plays,
+                  (SELECT COUNT(DISTINCT user_id)::bigint FROM mixing_attempts WHERE user_id IS NOT NULL) AS users_with_plays,
+                  (SELECT MIN(attempt_started_server_ts)::text FROM mixing_attempts) AS first_play_ts,
+                  (SELECT MAX(attempt_started_server_ts)::text FROM mixing_attempts) AS last_play_ts
                 """
             )
         ).mappings().first()
 
-        events_overview = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  COUNT(*)::bigint AS events_total,
-                  COUNT(*) FILTER (WHERE step_index IS NOT NULL)::bigint AS decision_rows,
-                  COUNT(*) FILTER (WHERE step_index IS NULL)::bigint AS non_decision_rows,
-                  AVG(step_index) FILTER (WHERE step_index IS NOT NULL)::double precision AS avg_step_index
-                FROM mixing_attempt_events
-                """
-            )
-        ).mappings().first()
-
-        missingness_row = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  COUNT(*)::bigint AS n_attempts,
-                  AVG((user_id IS NULL)::int)::double precision AS pct_missing_user_id,
-                  AVG((final_delta_e IS NULL)::int)::double precision AS pct_missing_final_delta_e,
-                  AVG((num_steps IS NULL)::int)::double precision AS pct_missing_num_steps,
-                  AVG((duration_sec IS NULL)::int)::double precision AS pct_missing_duration_sec,
-                  AVG((end_reason IS NULL)::int)::double precision AS pct_missing_end_reason
-                FROM mixing_attempts
-                """
-            )
-        ).mappings().first()
-
-        event_missingness_row = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  COUNT(*)::bigint AS n_events,
-                  AVG((step_index IS NULL)::int)::double precision AS pct_null_step_index,
-                  AVG((delta_e_before IS NULL)::int)::double precision AS pct_null_delta_e_before,
-                  AVG((delta_e_after IS NULL)::int)::double precision AS pct_null_delta_e_after,
-                  AVG(
-                    CASE
-                      WHEN step_index IS NOT NULL AND time_since_prev_step_ms IS NULL THEN 1.0
-                      ELSE 0.0
-                    END
-                  )::double precision AS pct_null_time_among_decisions
-                FROM mixing_attempt_events
-                """
-            )
-        ).mappings().first()
-
-        end_reason_rows = db.session.execute(
-            db.text(
-                """
-                SELECT end_reason, COUNT(*)::bigint AS n
-                FROM mixing_attempts
-                WHERE end_reason IS NOT NULL
-                GROUP BY end_reason
-                ORDER BY n DESC
-                """
-            )
-        ).mappings().all()
-
-        attempt_percentiles = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  (SELECT COUNT(*)::bigint FROM mixing_attempts WHERE final_delta_e IS NOT NULL) AS n_final_de,
-                  (SELECT percentile_cont(0.05) WITHIN GROUP (ORDER BY final_delta_e)
-                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL)::double precision AS final_de_p05,
-                  (SELECT percentile_cont(0.25) WITHIN GROUP (ORDER BY final_delta_e)
-                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL)::double precision AS final_de_p25,
-                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)
-                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL)::double precision AS final_de_p50,
-                  (SELECT percentile_cont(0.75) WITHIN GROUP (ORDER BY final_delta_e)
-                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL)::double precision AS final_de_p75,
-                  (SELECT percentile_cont(0.95) WITHIN GROUP (ORDER BY final_delta_e)
-                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL)::double precision AS final_de_p95,
-                  (SELECT COUNT(*)::bigint FROM mixing_attempts
-                   WHERE num_steps IS NOT NULL AND num_steps > 0) AS n_num_steps,
-                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY num_steps)
-                   FROM mixing_attempts WHERE num_steps IS NOT NULL AND num_steps > 0)::double precision AS num_steps_p50,
-                  (SELECT percentile_cont(0.90) WITHIN GROUP (ORDER BY num_steps)
-                   FROM mixing_attempts WHERE num_steps IS NOT NULL AND num_steps > 0)::double precision AS num_steps_p90,
-                  (SELECT COUNT(*)::bigint FROM mixing_attempts WHERE duration_sec IS NOT NULL) AS n_duration,
-                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec)
-                   FROM mixing_attempts WHERE duration_sec IS NOT NULL)::double precision AS duration_p50,
-                  (SELECT percentile_cont(0.90) WITHIN GROUP (ORDER BY duration_sec)
-                   FROM mixing_attempts WHERE duration_sec IS NOT NULL)::double precision AS duration_p90
-                """
-            )
-        ).mappings().first()
-
-        step_percentiles = db.session.execute(
-            db.text(
-                """
-                WITH d AS (
-                  SELECT
-                    (delta_e_before - delta_e_after) AS step_gain,
-                    delta_e_before,
-                    time_since_prev_step_ms
-                  FROM mixing_attempt_events
-                  WHERE step_index IS NOT NULL
-                    AND delta_e_before IS NOT NULL
-                    AND delta_e_after IS NOT NULL
-                )
-                SELECT
-                  COUNT(*)::bigint AS n_steps,
-                  AVG(CASE WHEN step_gain > 0 THEN 1.0 ELSE 0.0 END)::double precision AS pct_improving,
-                  AVG(CASE WHEN step_gain < 0 THEN 1.0 ELSE 0.0 END)::double precision AS pct_worsening,
-                  AVG(CASE WHEN step_gain = 0 THEN 1.0 ELSE 0.0 END)::double precision AS pct_flat,
-                  percentile_cont(0.50) WITHIN GROUP (ORDER BY step_gain)::double precision AS gain_p50,
-                  percentile_cont(0.90) WITHIN GROUP (ORDER BY step_gain)::double precision AS gain_p90,
-                  percentile_cont(0.10) WITHIN GROUP (ORDER BY step_gain)::double precision AS gain_p10,
-                  percentile_cont(0.50) WITHIN GROUP (ORDER BY delta_e_before)::double precision AS de_before_p50,
-                  (SELECT percentile_cont(0.90) WITHIN GROUP (ORDER BY time_since_prev_step_ms)
-                   FROM mixing_attempt_events
-                   WHERE step_index IS NOT NULL
-                     AND time_since_prev_step_ms IS NOT NULL)::double precision AS interstep_ms_p90
-                FROM d
-                """
-            )
-        ).mappings().first()
-
-        daily_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  date_trunc('day', attempt_started_server_ts)::date::text AS day,
-                  COUNT(*)::bigint AS n_attempts
-                FROM mixing_attempts
-                WHERE attempt_started_server_ts IS NOT NULL
-                GROUP BY 1
-                ORDER BY 1 DESC
-                LIMIT 120
-                """
-            )
-        ).mappings().all()
-
-        user_bucket_rows = db.session.execute(
-            db.text(
-                """
-                WITH per_user AS (
-                  SELECT user_id, COUNT(*)::bigint AS n
-                  FROM mixing_attempts
-                  WHERE user_id IS NOT NULL
-                  GROUP BY user_id
-                )
-                SELECT
-                  CASE
-                    WHEN n = 1 THEN '1'
-                    WHEN n BETWEEN 2 AND 5 THEN '2-5'
-                    WHEN n BETWEEN 6 AND 10 THEN '6-10'
-                    WHEN n BETWEEN 11 AND 25 THEN '11-25'
-                    ELSE '26+'
-                  END AS attempt_count_bucket,
-                  COUNT(*)::bigint AS n_users
-                FROM per_user
-                GROUP BY 1
-                ORDER BY MIN(
-                  CASE
-                    WHEN n = 1 THEN 1
-                    WHEN n BETWEEN 2 AND 5 THEN 2
-                    WHEN n BETWEEN 6 AND 10 THEN 3
-                    WHEN n BETWEEN 11 AND 25 THEN 4
-                    ELSE 5
-                  END
-                )
-                """
-            )
-        ).mappings().all()
-
-        top_targets_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  ma.target_color_id,
-                  tc.name AS target_name,
-                  COUNT(*)::bigint AS n_attempts
-                FROM mixing_attempts ma
-                LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
-                WHERE ma.target_color_id IS NOT NULL
-                GROUP BY ma.target_color_id, tc.name
-                ORDER BY n_attempts DESC
-                LIMIT 25
-                """
-            )
-        ).mappings().all()
-
-        event_type_rows = db.session.execute(
-            db.text(
-                """
-                SELECT event_type, COUNT(*)::bigint AS n
-                FROM mixing_attempt_events
-                GROUP BY event_type
-                ORDER BY n DESC
-                """
-            )
-        ).mappings().all()
-
-        action_type_rows = db.session.execute(
-            db.text(
-                """
-                SELECT action_type, COUNT(*)::bigint AS n
-                FROM mixing_attempt_events
-                WHERE step_index IS NOT NULL
-                GROUP BY action_type
-                ORDER BY n DESC NULLS LAST
-                """
-            )
-        ).mappings().all()
-
-        corr_row = db.session.execute(
-            db.text(
-                """
-                WITH attempts_ranked AS (
-                  SELECT
-                    ma.attempt_uuid,
-                    ma.num_steps,
-                    ROW_NUMBER() OVER (
-                      PARTITION BY ma.user_id
-                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
-                    ) AS trial_index
-                  FROM mixing_attempts ma
-                  WHERE ma.user_id IS NOT NULL
-                    AND ma.num_steps IS NOT NULL
-                    AND ma.num_steps > 0
-                )
-                SELECT
-                  corr(ar.trial_index::double precision, ar.num_steps::double precision)
-                    AS corr_trial_index_num_steps
-                FROM attempts_ranked ar
-                """
-            )
-        ).mappings().first()
-
-        corr_step_row = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  corr(
-                    me.time_since_prev_step_ms::double precision,
-                    (me.delta_e_before - me.delta_e_after)::double precision
-                  ) AS corr_interstep_ms_step_gain
-                FROM mixing_attempt_events me
-                WHERE me.step_index IS NOT NULL
-                  AND me.time_since_prev_step_ms IS NOT NULL
-                  AND me.delta_e_before IS NOT NULL
-                  AND me.delta_e_after IS NOT NULL
-                """
-            )
-        ).mappings().first()
-
-        overview = dict(overview_row or {})
-        overview.update(dict(events_overview or {}))
-
-        trial_rows = db.session.execute(
-            db.text(
-                """
-                WITH attempts_ranked AS (
-                  SELECT
-                    ma.attempt_uuid,
-                    ma.user_id,
-                    ma.num_steps,
-                    ma.attempt_started_server_ts,
-                    ROW_NUMBER() OVER (
-                      PARTITION BY ma.user_id
-                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
-                    ) AS trial_index
-                  FROM mixing_attempts ma
-                  WHERE ma.user_id IS NOT NULL
-                ),
-                step_rows AS (
-                  SELECT
-                    ar.trial_index,
-                    me.delta_e_before,
-                    me.delta_e_after
-                  FROM attempts_ranked ar
-                  JOIN mixing_attempt_events me ON me.attempt_uuid = ar.attempt_uuid
-                  WHERE me.step_index IS NOT NULL
-                    AND me.delta_e_before IS NOT NULL
-                    AND me.delta_e_after IS NOT NULL
-                ),
-                attempt_rows AS (
-                  SELECT trial_index, num_steps
-                  FROM attempts_ranked
-                  WHERE num_steps IS NOT NULL
-                )
-                SELECT
-                  s.trial_index,
-                  COUNT(*)::bigint AS n_steps,
-                  AVG(CASE WHEN s.delta_e_after < s.delta_e_before THEN 1.0 ELSE 0.0 END)::double precision AS improving_rate,
-                  AVG(CASE WHEN s.delta_e_after > s.delta_e_before THEN 1.0 ELSE 0.0 END)::double precision AS worsening_rate,
-                  AVG(s.delta_e_before - s.delta_e_after)::double precision AS mean_step_gain,
-                  (
-                    SELECT AVG(a.num_steps)::double precision
-                    FROM attempt_rows a
-                    WHERE a.trial_index = s.trial_index
-                  ) AS avg_steps_to_completion
-                FROM step_rows s
-                GROUP BY s.trial_index
-                ORDER BY s.trial_index
-                LIMIT 60
-                """
-            )
-        ).mappings().all()
-
-        difficulty_rows = db.session.execute(
-            db.text(
-                """
-                WITH step_rows AS (
-                  SELECT
-                    me.delta_e_before,
-                    me.delta_e_after,
-                    (me.delta_e_before - me.delta_e_after) AS step_gain,
-                    CASE
-                      WHEN me.delta_e_before < 1 THEN '[0,1)'
-                      WHEN me.delta_e_before < 2 THEN '[1,2)'
-                      WHEN me.delta_e_before < 4 THEN '[2,4)'
-                      WHEN me.delta_e_before < 8 THEN '[4,8)'
-                      ELSE '[8,+)'
-                    END AS de_bucket
-                  FROM mixing_attempt_events me
-                  WHERE me.step_index IS NOT NULL
-                    AND me.delta_e_before IS NOT NULL
-                    AND me.delta_e_after IS NOT NULL
-                )
-                SELECT
-                  de_bucket,
-                  COUNT(*)::bigint AS n_steps,
-                  AVG(CASE WHEN delta_e_after < delta_e_before THEN 1.0 ELSE 0.0 END)::double precision AS improving_rate,
-                  AVG(step_gain)::double precision AS mean_step_gain
-                FROM step_rows
-                GROUP BY de_bucket
-                ORDER BY
-                  CASE de_bucket
-                    WHEN '[0,1)' THEN 1
-                    WHEN '[1,2)' THEN 2
-                    WHEN '[2,4)' THEN 3
-                    WHEN '[4,8)' THEN 4
-                    ELSE 5
-                  END
-                """
-            )
-        ).mappings().all()
-
-        random_rows = db.session.execute(
-            db.text(
-                """
-                WITH attempts_ranked AS (
-                  SELECT
-                    ma.attempt_uuid,
-                    ma.user_id,
-                    ROW_NUMBER() OVER (
-                      PARTITION BY ma.user_id
-                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
-                    ) AS trial_index
-                  FROM mixing_attempts ma
-                  WHERE ma.user_id IS NOT NULL
-                ),
-                step_rows AS (
-                  SELECT
-                    ar.trial_index,
-                    (me.delta_e_before - me.delta_e_after) AS step_gain,
-                    CASE WHEN me.delta_e_after < me.delta_e_before THEN 1 ELSE 0 END AS improving
-                  FROM attempts_ranked ar
-                  JOIN mixing_attempt_events me ON me.attempt_uuid = ar.attempt_uuid
-                  WHERE me.step_index IS NOT NULL
-                    AND me.delta_e_before IS NOT NULL
-                    AND me.delta_e_after IS NOT NULL
-                )
-                SELECT
-                  trial_index,
-                  COUNT(*)::bigint AS n_steps,
-                  AVG(improving::double precision)::double precision AS improving_rate,
-                  AVG(step_gain)::double precision AS mean_gain,
-                  STDDEV_POP(step_gain)::double precision AS sd_gain
-                FROM step_rows
-                GROUP BY trial_index
-                ORDER BY trial_index
-                LIMIT 60
-                """
-            )
-        ).mappings().all()
-
-        time_rows = db.session.execute(
-            db.text(
-                """
-                WITH step_rows AS (
-                  SELECT
-                    me.time_since_prev_step_ms,
-                    me.delta_e_before,
-                    me.delta_e_after,
-                    (me.delta_e_before - me.delta_e_after) AS step_gain,
-                    CASE
-                      WHEN me.time_since_prev_step_ms IS NULL THEN 'first_step'
-                      WHEN me.time_since_prev_step_ms < 1000 THEN '<1s'
-                      WHEN me.time_since_prev_step_ms < 3000 THEN '1-3s'
-                      WHEN me.time_since_prev_step_ms < 7000 THEN '3-7s'
-                      ELSE '7s+'
-                    END AS time_bucket
-                  FROM mixing_attempt_events me
-                  WHERE me.step_index IS NOT NULL
-                    AND me.delta_e_before IS NOT NULL
-                    AND me.delta_e_after IS NOT NULL
-                )
-                SELECT
-                  time_bucket,
-                  COUNT(*)::bigint AS n_steps,
-                  AVG(CASE WHEN delta_e_after < delta_e_before THEN 1.0 ELSE 0.0 END)::double precision AS improving_rate,
-                  AVG(step_gain)::double precision AS mean_step_gain
-                FROM step_rows
-                GROUP BY time_bucket
-                ORDER BY
-                  CASE time_bucket
-                    WHEN 'first_step' THEN 1
-                    WHEN '<1s' THEN 2
-                    WHEN '1-3s' THEN 3
-                    WHEN '3-7s' THEN 4
-                    ELSE 5
-                  END
-                """
-            )
-        ).mappings().all()
-
-        stop_rows = db.session.execute(
-            db.text(
-                """
-                WITH ended AS (
-                  SELECT
-                    attempt_uuid,
-                    end_reason,
-                    final_delta_e,
-                    num_steps,
-                    CASE
-                      WHEN final_delta_e IS NULL THEN 'unknown'
-                      WHEN final_delta_e < 1 THEN '[0,1)'
-                      WHEN final_delta_e < 2 THEN '[1,2)'
-                      WHEN final_delta_e < 4 THEN '[2,4)'
-                      WHEN final_delta_e < 8 THEN '[4,8)'
-                      ELSE '[8,+)'
-                    END AS de_bucket
-                  FROM mixing_attempts
-                  WHERE end_reason IS NOT NULL
-                )
-                SELECT
-                  de_bucket,
-                  COUNT(*)::bigint AS n_attempts,
-                  AVG(CASE WHEN end_reason = 'saved_stop' THEN 1.0 ELSE 0.0 END)::double precision AS stop_probability,
-                  AVG(CASE WHEN end_reason = 'saved_match' THEN 1.0 ELSE 0.0 END)::double precision AS success_probability,
-                  AVG(num_steps)::double precision AS avg_num_steps
-                FROM ended
-                GROUP BY de_bucket
-                ORDER BY
-                  CASE de_bucket
-                    WHEN '[0,1)' THEN 1
-                    WHEN '[1,2)' THEN 2
-                    WHEN '[2,4)' THEN 3
-                    WHEN '[4,8)' THEN 4
-                    WHEN '[8,+)' THEN 5
-                    ELSE 6
-                  END
-                """
-            )
-        ).mappings().all()
-
-        stop_dispersion = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  COUNT(*)::bigint AS n_stops,
-                  AVG(final_delta_e)::double precision AS mean_stop_delta_e,
-                  STDDEV_POP(final_delta_e)::double precision AS sd_stop_delta_e
-                FROM mixing_attempts
-                WHERE end_reason = 'saved_stop' AND final_delta_e IS NOT NULL
-                """
-            )
-        ).mappings().first()
-
-        perfect_threshold = float(MATCH_PERFECT_DELTA_E)
-
-        attempt_outcome_flags = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  AVG(
-                    CASE
-                      WHEN final_delta_e IS NOT NULL AND final_delta_e <= :perfect_t THEN 1.0
-                      ELSE 0.0
-                    END
-                  )::double precision AS rate_perfect,
-                  AVG(
-                    CASE
-                      WHEN final_delta_e IS NOT NULL AND final_delta_e <= 1.0 THEN 1.0
-                      ELSE 0.0
-                    END
-                  )::double precision AS rate_near_delta_e_le_1,
-                  AVG(
-                    CASE
-                      WHEN initial_delta_e IS NOT NULL AND final_delta_e IS NOT NULL
-                        AND num_steps IS NOT NULL AND num_steps > 0
-                      THEN (initial_delta_e - final_delta_e) / num_steps::double precision
-                    END
-                  )::double precision AS avg_delta_e_improvement_per_step,
-                  AVG(
-                    CASE
-                      WHEN initial_delta_e IS NOT NULL AND final_delta_e IS NOT NULL
-                        AND duration_sec IS NOT NULL AND duration_sec > 0
-                      THEN (initial_delta_e - final_delta_e) / duration_sec::double precision
-                    END
-                  )::double precision AS avg_delta_e_improvement_per_sec,
-                  AVG(
-                    CASE
-                      WHEN first_action_client_ts_ms IS NOT NULL
-                        AND attempt_started_client_ts_ms IS NOT NULL
-                      THEN (first_action_client_ts_ms - attempt_started_client_ts_ms) / 1000.0
-                    END
-                  )::double precision AS avg_first_action_latency_sec
-                FROM mixing_attempts
-                """
-            ),
-            {'perfect_t': perfect_threshold},
-        ).mappings().first()
-
-        hist_final_de_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  CASE
-                    WHEN final_delta_e <= :perfect_t THEN 'a_perfect_le_match_threshold'
-                    WHEN final_delta_e <= 0.1 THEN 'b_(perfect,0.1]'
-                    WHEN final_delta_e <= 0.5 THEN 'c_(0.1,0.5]'
-                    WHEN final_delta_e <= 1.0 THEN 'd_(0.5,1]'
-                    WHEN final_delta_e <= 2.0 THEN 'e_(1,2]'
-                    WHEN final_delta_e <= 4.0 THEN 'f_(2,4]'
-                    WHEN final_delta_e <= 8.0 THEN 'g_(4,8]'
-                    ELSE 'h_(8,+]'
-                  END AS bin_key,
-                  COUNT(*)::bigint AS n,
-                  MIN(final_delta_e)::double precision AS bin_min,
-                  MAX(final_delta_e)::double precision AS bin_max
-                FROM mixing_attempts
-                WHERE final_delta_e IS NOT NULL
-                GROUP BY 1
-                ORDER BY MIN(final_delta_e)
-                """
-            ),
-            {'perfect_t': perfect_threshold},
-        ).mappings().all()
-
-        hist_log_final_de_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  CASE
-                    WHEN final_delta_e <= 0 THEN 'non_positive'
-                    WHEN ln(final_delta_e + 1e-9) < -2 THEN 'ln<-2'
-                    WHEN ln(final_delta_e + 1e-9) < 0 THEN 'ln[-2,0)'
-                    WHEN ln(final_delta_e + 1e-9) < 2 THEN 'ln[0,2)'
-                    WHEN ln(final_delta_e + 1e-9) < 4 THEN 'ln[2,4)'
-                    ELSE 'ln>=4'
-                  END AS log_bin,
-                  COUNT(*)::bigint AS n
-                FROM mixing_attempts
-                WHERE final_delta_e IS NOT NULL
-                GROUP BY 1
-                ORDER BY MIN(ln(GREATEST(final_delta_e, 1e-9)))
-                """
-            )
-        ).mappings().all()
-
-        hist_duration_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  CASE
-                    WHEN duration_sec IS NULL THEN 'missing'
-                    WHEN duration_sec < 0 THEN 'negative'
-                    WHEN duration_sec <= 5 THEN '0-5s'
-                    WHEN duration_sec <= 15 THEN '5-15s'
-                    WHEN duration_sec <= 30 THEN '15-30s'
-                    WHEN duration_sec <= 60 THEN '30-60s'
-                    WHEN duration_sec <= 120 THEN '60-120s'
-                    WHEN duration_sec <= 300 THEN '120-300s'
-                    ELSE '300s+'
-                  END AS dur_bin,
-                  COUNT(*)::bigint AS n
-                FROM mixing_attempts
-                GROUP BY 1
-                ORDER BY MIN(CASE
-                  WHEN duration_sec IS NULL THEN -1
-                  WHEN duration_sec < 0 THEN -0.5
-                  ELSE duration_sec
-                END)
-                """
-            )
-        ).mappings().all()
-
-        duration_by_perfect_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  CASE
-                    WHEN final_delta_e IS NULL THEN 'unknown_de'
-                    WHEN final_delta_e <= :perfect_t THEN 'perfect'
-                    ELSE 'non_perfect'
-                  END AS outcome_band,
-                  COUNT(*)::bigint AS n,
-                  AVG(duration_sec)::double precision AS mean_duration_sec
-                FROM mixing_attempts
-                GROUP BY 1
-                ORDER BY 1
-                """
-            ),
-            {'perfect_t': perfect_threshold},
-        ).mappings().all()
-
-        joint_corr_attempts = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  corr(final_delta_e::double precision, duration_sec::double precision)
-                    AS corr_final_de_duration,
-                  corr(final_delta_e::double precision, num_steps::double precision)
-                    AS corr_final_de_num_steps,
-                  corr(duration_sec::double precision, num_steps::double precision)
-                    AS corr_duration_num_steps
-                FROM mixing_attempts
-                WHERE final_delta_e IS NOT NULL
-                  AND duration_sec IS NOT NULL
-                  AND num_steps IS NOT NULL
-                  AND num_steps > 0
-                """
-            )
-        ).mappings().first()
-
-        trial_outcome_curves = db.session.execute(
-            db.text(
-                """
-                WITH attempts_ranked AS (
-                  SELECT
-                    ma.attempt_uuid,
-                    ma.final_delta_e,
-                    ma.duration_sec,
-                    ma.end_reason,
-                    ROW_NUMBER() OVER (
-                      PARTITION BY ma.user_id
-                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
-                    ) AS trial_index
-                  FROM mixing_attempts ma
-                  WHERE ma.user_id IS NOT NULL
-                ),
-                idx AS (
-                  SELECT trial_index FROM attempts_ranked GROUP BY trial_index
-                )
-                SELECT
-                  idx.trial_index,
-                  (SELECT COUNT(*)::bigint FROM attempts_ranked a WHERE a.trial_index = idx.trial_index)
-                    AS n_attempts,
-                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)
-                   FROM attempts_ranked a
-                   WHERE a.trial_index = idx.trial_index AND a.final_delta_e IS NOT NULL)::double precision
-                    AS median_final_delta_e,
-                  (SELECT AVG(
-                    CASE
-                      WHEN a.final_delta_e IS NOT NULL AND a.final_delta_e <= :perfect_t THEN 1.0
-                      WHEN a.end_reason = 'saved_match' THEN 1.0
-                      ELSE 0.0
-                    END
-                  )::double precision
-                   FROM attempts_ranked a WHERE a.trial_index = idx.trial_index
-                  ) AS success_rate,
-                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec)
-                   FROM attempts_ranked a
-                   WHERE a.trial_index = idx.trial_index AND a.duration_sec IS NOT NULL)::double precision
-                    AS median_duration_sec
-                FROM idx
-                ORDER BY idx.trial_index
-                LIMIT 60
-                """
-            ),
-            {'perfect_t': perfect_threshold},
-        ).mappings().all()
-
-        target_difficulty_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  ma.target_color_id,
-                  tc.name AS target_name,
-                  tc.color_type,
-                  tc.classification,
-                  COUNT(*)::bigint AS n_attempts,
-                  AVG(ma.final_delta_e)::double precision AS mean_final_delta_e,
-                  percentile_cont(0.50) WITHIN GROUP (ORDER BY ma.final_delta_e)::double precision
-                    AS median_final_delta_e,
-                  AVG(ma.duration_sec)::double precision AS mean_duration_sec,
-                  AVG(
-                    CASE
-                      WHEN ma.final_delta_e IS NOT NULL AND ma.final_delta_e <= :perfect_t THEN 1.0
-                      WHEN ma.end_reason = 'saved_match' THEN 1.0
-                      ELSE 0.0
-                    END
-                  )::double precision AS success_rate
-                FROM mixing_attempts ma
-                LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
-                WHERE ma.target_color_id IS NOT NULL
-                  AND ma.final_delta_e IS NOT NULL
-                GROUP BY ma.target_color_id, tc.name, tc.color_type, tc.classification
-                HAVING COUNT(*) >= 3
-                ORDER BY mean_final_delta_e DESC NULLS LAST
-                LIMIT 60
-                """
-            ),
-            {'perfect_t': perfect_threshold},
-        ).mappings().all()
-
-        action_effectiveness_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  COALESCE(action_color, '(null)') AS action_color,
-                  COALESCE(action_type, '(null)') AS action_type,
-                  COUNT(*)::bigint AS n,
-                  AVG(me.delta_e_before - me.delta_e_after)::double precision AS mean_delta_e_gain,
-                  AVG(ABS(me.delta_e_before - me.delta_e_after))::double precision AS mean_abs_delta_e_change
-                FROM mixing_attempt_events me
-                WHERE me.step_index IS NOT NULL
-                  AND me.delta_e_before IS NOT NULL
-                  AND me.delta_e_after IS NOT NULL
-                  AND me.action_type IN ('add', 'remove')
-                GROUP BY me.action_color, me.action_type
-                ORDER BY n DESC
-                LIMIT 40
-                """
-            )
-        ).mappings().all()
-
-        step_gain_by_action_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  COALESCE(action_type, '(null)') AS action_type,
-                  COUNT(*)::bigint AS n,
-                  AVG(me.delta_e_before - me.delta_e_after)::double precision AS mean_gain,
-                  percentile_cont(0.50) WITHIN GROUP (ORDER BY (me.delta_e_before - me.delta_e_after))::double precision AS median_gain
-                FROM mixing_attempt_events me
-                WHERE me.step_index IS NOT NULL
-                  AND me.delta_e_before IS NOT NULL
-                  AND me.delta_e_after IS NOT NULL
-                GROUP BY me.action_type
-                ORDER BY n DESC NULLS LAST
-                """
-            )
-        ).mappings().all()
-
-        phase_behavior_rows = db.session.execute(
-            db.text(
-                """
-                WITH scored AS (
-                  SELECT
-                    NTILE(3) OVER (PARTITION BY attempt_uuid ORDER BY step_index) AS phase,
-                    (delta_e_before - delta_e_after) AS gain,
-                    ABS(delta_e_before - delta_e_after) AS abs_gain,
-                    CASE WHEN delta_e_after < delta_e_before THEN 1.0 ELSE 0.0 END AS improving
-                  FROM mixing_attempt_events
-                  WHERE step_index IS NOT NULL
-                    AND delta_e_before IS NOT NULL
-                    AND delta_e_after IS NOT NULL
-                )
-                SELECT
-                  phase,
-                  COUNT(*)::bigint AS n_steps,
-                  AVG(abs_gain)::double precision AS mean_abs_gain,
-                  STDDEV_POP(gain)::double precision AS sd_gain,
-                  AVG(improving)::double precision AS improving_rate
-                FROM scored
-                GROUP BY phase
-                ORDER BY phase
-                """
-            )
-        ).mappings().all()
-
-        oscillation_summary = db.session.execute(
-            db.text(
-                """
-                WITH step_gains AS (
-                  SELECT
-                    attempt_uuid,
-                    seq,
-                    (delta_e_before - delta_e_after) AS g,
-                    LAG(delta_e_before - delta_e_after) OVER (
-                      PARTITION BY attempt_uuid ORDER BY seq
-                    ) AS g_prev
-                  FROM mixing_attempt_events
-                  WHERE step_index IS NOT NULL
-                    AND delta_e_before IS NOT NULL
-                    AND delta_e_after IS NOT NULL
-                ),
-                per_attempt AS (
-                  SELECT
-                    attempt_uuid,
-                    SUM(
-                      CASE
-                        WHEN g_prev IS NOT NULL AND g IS NOT NULL
-                          AND g_prev <> 0 AND g <> 0
-                          AND (
-                            (g_prev > 0 AND g < 0) OR (g_prev < 0 AND g > 0)
-                          )
-                        THEN 1
-                        ELSE 0
-                      END
-                    )::bigint AS sign_changes
-                  FROM step_gains
-                  GROUP BY attempt_uuid
-                )
-                SELECT
-                  COUNT(*)::bigint AS n_attempts,
-                  AVG(sign_changes)::double precision AS mean_sign_changes,
-                  percentile_cont(0.50) WITHIN GROUP (ORDER BY sign_changes)::double precision AS median_sign_changes,
-                  percentile_cont(0.90) WITHIN GROUP (ORDER BY sign_changes)::double precision AS p90_sign_changes
-                FROM per_attempt
-                """
-            )
-        ).mappings().first()
-
-        hist_oscillation_rows = db.session.execute(
-            db.text(
-                """
-                WITH step_gains AS (
-                  SELECT
-                    attempt_uuid,
-                    seq,
-                    (delta_e_before - delta_e_after) AS g,
-                    LAG(delta_e_before - delta_e_after) OVER (
-                      PARTITION BY attempt_uuid ORDER BY seq
-                    ) AS g_prev
-                  FROM mixing_attempt_events
-                  WHERE step_index IS NOT NULL
-                    AND delta_e_before IS NOT NULL
-                    AND delta_e_after IS NOT NULL
-                ),
-                per_attempt AS (
-                  SELECT
-                    attempt_uuid,
-                    SUM(
-                      CASE
-                        WHEN g_prev IS NOT NULL AND g IS NOT NULL
-                          AND g_prev <> 0 AND g <> 0
-                          AND (
-                            (g_prev > 0 AND g < 0) OR (g_prev < 0 AND g > 0)
-                          )
-                        THEN 1
-                        ELSE 0
-                      END
-                    )::bigint AS sign_changes
-                  FROM step_gains
-                  GROUP BY attempt_uuid
-                )
-                SELECT
-                  LEAST(sign_changes, 15)::int AS sign_changes_capped,
-                  COUNT(*)::bigint AS n_attempts
-                FROM per_attempt
-                GROUP BY 1
-                ORDER BY 1
-                """
-            )
-        ).mappings().all()
-
-        trajectory_shape_rows = db.session.execute(
-            db.text(
-                """
-                WITH bounds AS (
-                  SELECT attempt_uuid, MAX(step_index)::double precision AS max_s
-                  FROM mixing_attempt_events
-                  WHERE step_index IS NOT NULL
-                  GROUP BY attempt_uuid
-                  HAVING MAX(step_index) > 0
-                ),
-                pts AS (
-                  SELECT
-                    me.attempt_uuid,
-                    me.step_index::double precision / b.max_s AS t_norm,
-                    me.delta_e_after
-                  FROM mixing_attempt_events me
-                  JOIN bounds b ON b.attempt_uuid = me.attempt_uuid
-                  WHERE me.step_index IS NOT NULL
-                    AND me.delta_e_after IS NOT NULL
-                )
-                SELECT
-                  WIDTH_BUCKET(t_norm::numeric, 0::numeric, 1::numeric, 10) AS position_decile,
-                  COUNT(*)::bigint AS n_points,
-                  AVG(delta_e_after)::double precision AS mean_delta_e_after
-                FROM pts
-                WHERE t_norm >= 0 AND t_norm <= 1
-                GROUP BY 1
-                ORDER BY 1
-                """
-            )
-        ).mappings().all()
-
-        archetype_feature_percentiles = db.session.execute(
-            db.text(
-                """
-                WITH step_gains AS (
-                  SELECT
-                    attempt_uuid,
-                    seq,
-                    (delta_e_before - delta_e_after) AS g,
-                    LAG(delta_e_before - delta_e_after) OVER (
-                      PARTITION BY attempt_uuid ORDER BY seq
-                    ) AS g_prev
-                  FROM mixing_attempt_events
-                  WHERE step_index IS NOT NULL
-                    AND delta_e_before IS NOT NULL
-                    AND delta_e_after IS NOT NULL
-                ),
-                osc AS (
-                  SELECT
-                    attempt_uuid,
-                    SUM(
-                      CASE
-                        WHEN g_prev IS NOT NULL AND g IS NOT NULL
-                          AND g_prev <> 0 AND g <> 0
-                          AND (
-                            (g_prev > 0 AND g < 0) OR (g_prev < 0 AND g > 0)
-                          )
-                        THEN 1
-                        ELSE 0
-                      END
-                    )::bigint AS sign_changes
-                  FROM step_gains
-                  GROUP BY attempt_uuid
-                ),
-                step_avg AS (
-                  SELECT
-                    attempt_uuid,
-                    AVG(ABS(delta_e_before - delta_e_after))::double precision AS mean_abs_step_change
-                  FROM mixing_attempt_events
-                  WHERE step_index IS NOT NULL
-                    AND delta_e_before IS NOT NULL
-                    AND delta_e_after IS NOT NULL
-                  GROUP BY attempt_uuid
-                ),
-                feat AS (
-                  SELECT
-                    ma.attempt_uuid,
-                    ma.num_steps,
-                    ma.duration_sec,
-                    ma.final_delta_e,
-                    COALESCE(o.sign_changes, 0)::double precision AS sign_changes,
-                    s.mean_abs_step_change,
-                    CASE
-                      WHEN ma.duration_sec IS NOT NULL AND ma.duration_sec > 0
-                        AND ma.num_steps IS NOT NULL AND ma.num_steps > 0
-                      THEN ma.duration_sec / ma.num_steps::double precision
-                    END AS sec_per_step
-                  FROM mixing_attempts ma
-                  LEFT JOIN osc o ON o.attempt_uuid = ma.attempt_uuid
-                  LEFT JOIN step_avg s ON s.attempt_uuid = ma.attempt_uuid
-                  WHERE ma.num_steps IS NOT NULL AND ma.num_steps > 0
-                )
-                SELECT
-                  (SELECT percentile_cont(0.10) WITHIN GROUP (ORDER BY num_steps) FROM feat)::double precision
-                    AS num_steps_p10,
-                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY num_steps) FROM feat)::double precision
-                    AS num_steps_p50,
-                  (SELECT percentile_cont(0.90) WITHIN GROUP (ORDER BY num_steps) FROM feat)::double precision
-                    AS num_steps_p90,
-                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY mean_abs_step_change) FROM feat
-                   WHERE mean_abs_step_change IS NOT NULL)::double precision AS mean_abs_step_p50,
-                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY sign_changes) FROM feat)::double precision
-                    AS oscillation_p50,
-                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY sec_per_step) FROM feat
-                   WHERE sec_per_step IS NOT NULL)::double precision AS sec_per_step_p50
-                """
-            )
-        ).mappings().first()
-
-        mixing_sessions_overview = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  COUNT(*)::bigint AS n_sessions,
-                  AVG(CASE WHEN skipped THEN 1.0 ELSE 0.0 END)::double precision AS skip_rate,
-                  AVG(delta_e)::double precision AS mean_delta_e,
-                  AVG(time_sec)::double precision AS mean_time_sec
-                FROM mixing_sessions
-                """
-            )
-        ).mappings().first()
-
-        skip_by_target_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  ms.target_color_id,
-                  tc.name AS target_name,
-                  COUNT(*)::bigint AS n,
-                  AVG(CASE WHEN ms.skipped THEN 1.0 ELSE 0.0 END)::double precision AS skip_rate,
-                  AVG(ms.delta_e)::double precision AS mean_delta_e
-                FROM mixing_sessions ms
-                LEFT JOIN target_colors tc ON tc.id = ms.target_color_id
-                WHERE ms.target_color_id IS NOT NULL
-                GROUP BY ms.target_color_id, tc.name
-                HAVING COUNT(*) >= 5
-                ORDER BY skip_rate DESC NULLS LAST
-                LIMIT 40
-                """
-            )
-        ).mappings().all()
-
-        skip_perception_rows = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  COALESCE(skip_perception, '(null)') AS skip_perception,
-                  COUNT(*)::bigint AS n,
-                  AVG(delta_e)::double precision AS mean_delta_e_at_skip
-                FROM mixing_sessions
-                WHERE skipped
-                GROUP BY skip_perception
-                ORDER BY n DESC
-                """
-            )
-        ).mappings().all()
-
-        user_skill_distribution = db.session.execute(
+        age_pyramid = db.session.execute(
             db.text(
                 """
                 WITH u AS (
                   SELECT
-                    user_id,
-                    COUNT(*)::bigint AS n_attempts,
-                    AVG(final_delta_e)::double precision AS mean_final_de,
-                    MIN(final_delta_e)::double precision AS best_final_de,
-                    STDDEV_POP(final_delta_e)::double precision AS sd_final_de
-                  FROM mixing_attempts
-                  WHERE user_id IS NOT NULL AND final_delta_e IS NOT NULL
-                  GROUP BY user_id
-                  HAVING COUNT(*) >= 3
-                )
-                SELECT
-                  COUNT(*)::bigint AS n_users,
-                  percentile_cont(0.50) WITHIN GROUP (ORDER BY mean_final_de)::double precision AS median_user_mean_de,
-                  percentile_cont(0.50) WITHIN GROUP (ORDER BY best_final_de)::double precision AS median_user_best_de,
-                  percentile_cont(0.90) WITHIN GROUP (ORDER BY mean_final_de)::double precision AS p90_user_mean_de
-                FROM u
-                """
-            )
-        ).mappings().first()
-
-        data_integrity_row = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  COUNT(*) FILTER (WHERE duration_sec IS NOT NULL AND duration_sec < 0)::bigint AS n_negative_duration,
-                  COUNT(*) FILTER (WHERE num_steps IS NOT NULL AND num_steps < 0)::bigint AS n_negative_num_steps,
-                  COUNT(*) FILTER (
-                    WHERE final_delta_e IS NOT NULL AND initial_delta_e IS NOT NULL
-                      AND final_delta_e > initial_delta_e + 0.0001
-                  )::bigint AS n_final_gt_initial_worse_match
-                FROM mixing_attempts
-                """
-            )
-        ).mappings().first()
-
-        seq_gap_row = db.session.execute(
-            db.text(
-                """
-                WITH o AS (
-                  SELECT
-                    attempt_uuid,
-                    seq,
-                    seq - LAG(seq) OVER (PARTITION BY attempt_uuid ORDER BY seq) AS gap
-                  FROM mixing_attempt_events
-                )
-                SELECT
-                  COUNT(*) FILTER (WHERE gap IS NOT NULL AND gap > 1)::bigint AS n_seq_gaps,
-                  COUNT(*)::bigint AS n_events_with_prev
-                FROM o
-                """
-            )
-        ).mappings().first()
-
-        client_server_offset_row = db.session.execute(
-            db.text(
-                """
-                SELECT
-                  percentile_cont(0.50) WITHIN GROUP (ORDER BY (
-                    (client_ts_ms::double precision / 1000.0)
-                    - EXTRACT(EPOCH FROM server_ts)
-                  ))::double precision AS median_client_minus_server_sec
-                FROM mixing_attempt_events
-                """
-            )
-        ).mappings().first()
-
-        def _f_corr(key, row):
-            if not row or row.get(key) is None:
-                return None
-            return float(row[key])
-
-        correlations = {
-            'corr_trial_index_num_steps': _f_corr('corr_trial_index_num_steps', corr_row),
-            'corr_interstep_ms_step_gain': _f_corr('corr_interstep_ms_step_gain', corr_step_row),
-            'corr_final_delta_e_duration_sec': _f_corr('corr_final_de_duration', joint_corr_attempts),
-            'corr_final_delta_e_num_steps': _f_corr('corr_final_de_num_steps', joint_corr_attempts),
-            'corr_duration_sec_num_steps': _f_corr('corr_duration_num_steps', joint_corr_attempts),
-        }
-
-        strategy_by_target = build_strategy_summary_by_target()
-
-        eda_framework = {
-            'data_model': {
-                'outcome_tables': ['mixing_attempts', 'mixing_sessions'],
-                'process_table': 'mixing_attempt_events',
-                'user_tables': ['users', 'user_progress', 'user_target_color_stats'],
-                'join_spine': 'attempt_uuid  (attempts.events.sessions)',
-            },
-            'attempt_derived': dict(attempt_outcome_flags or {}),
-            'histogram_final_delta_e': [dict(r) for r in hist_final_de_rows],
-            'histogram_log_final_delta_e': [dict(r) for r in hist_log_final_de_rows],
-            'histogram_duration_sec': [dict(r) for r in hist_duration_rows],
-            'duration_by_perfect_band': [dict(r) for r in duration_by_perfect_rows],
-            'trial_outcome_curves': [dict(r) for r in trial_outcome_curves],
-            'target_difficulty_ranking': [dict(r) for r in target_difficulty_rows],
-            'action_effectiveness_matrix': [dict(r) for r in action_effectiveness_rows],
-            'step_gain_by_action_type': [dict(r) for r in step_gain_by_action_rows],
-            'early_mid_late_step_behavior': [dict(r) for r in phase_behavior_rows],
-            'reversal_oscillation': {
-                'summary': dict(oscillation_summary or {}),
-                'histogram_sign_changes_capped': [dict(r) for r in hist_oscillation_rows],
-            },
-            'trajectory_shape_mean_delta_e': [dict(r) for r in trajectory_shape_rows],
-            'archetype_feature_percentiles': dict(archetype_feature_percentiles or {}),
-            'mixing_sessions': {
-                'overview': dict(mixing_sessions_overview or {}),
-                'skip_by_target': [dict(r) for r in skip_by_target_rows],
-                'skip_perception_calibration': [dict(r) for r in skip_perception_rows],
-            },
-            'user_heterogeneity': dict(user_skill_distribution or {}),
-            'system_validation': {
-                'counts': dict(data_integrity_row or {}),
-                'sequence_gaps': dict(seq_gap_row or {}),
-                'median_client_minus_server_sec': (client_server_offset_row or {}).get(
-                    'median_client_minus_server_sec'
+                    CASE
+                      WHEN lower(coalesce(gender, 'unknown')) LIKE 'm%' THEN 'male'
+                      WHEN lower(coalesce(gender, 'unknown')) LIKE 'f%' THEN 'female'
+                      ELSE 'other'
+                    END AS gender_group,
+                    EXTRACT(YEAR FROM age(CURRENT_DATE, birthdate))::int AS age_years
+                  FROM users
+                  WHERE birthdate IS NOT NULL
                 ),
-            },
-        }
+                b AS (
+                  SELECT
+                    CASE
+                      WHEN age_years < 18 THEN '<18'
+                      WHEN age_years <= 24 THEN '18-24'
+                      WHEN age_years <= 34 THEN '25-34'
+                      WHEN age_years <= 44 THEN '35-44'
+                      WHEN age_years <= 54 THEN '45-54'
+                      WHEN age_years <= 64 THEN '55-64'
+                      ELSE '65+'
+                    END AS age_bucket,
+                    gender_group
+                  FROM u
+                  WHERE age_years IS NOT NULL AND age_years >= 0
+                )
+                SELECT
+                  age_bucket,
+                  gender_group,
+                  COUNT(*)::bigint AS n_users
+                FROM b
+                GROUP BY age_bucket, gender_group
+                ORDER BY
+                  CASE age_bucket
+                    WHEN '<18' THEN 1
+                    WHEN '18-24' THEN 2
+                    WHEN '25-34' THEN 3
+                    WHEN '35-44' THEN 4
+                    WHEN '45-54' THEN 5
+                    WHEN '55-64' THEN 6
+                    ELSE 7
+                  END,
+                  gender_group
+                """
+            )
+        ).mappings().all()
 
-        return jsonify({
-            'status': 'success',
-            'overview': overview,
-            'eda': {
-                'missingness': {
-                    'attempts': dict(missingness_row or {}),
-                    'events': dict(event_missingness_row or {}),
-                },
-                'percentiles': {
-                    'attempts': dict(attempt_percentiles or {}),
-                    'decision_steps': dict(step_percentiles or {}),
-                },
-                'end_reasons': [dict(r) for r in end_reason_rows],
-                'daily_attempt_volume': list(reversed([dict(r) for r in daily_rows])),
-                'user_attempt_histogram': [dict(r) for r in user_bucket_rows],
-                'top_target_colors': [dict(r) for r in top_targets_rows],
-                'event_type_counts': [dict(r) for r in event_type_rows],
-                'action_type_counts': [dict(r) for r in action_type_rows],
-                'pairwise_correlations': correlations,
-                'strategy_by_target': strategy_by_target,
-                'framework': eda_framework,
-            },
-            'h1_learning': [dict(r) for r in trial_rows],
-            'h2_difficulty': [dict(r) for r in difficulty_rows],
-            'h3_random_search_check': [dict(r) for r in random_rows],
-            'h4_time_cost': [dict(r) for r in time_rows],
-            'h5_stopping_rule': {
-                'by_final_delta_e_bucket': [dict(r) for r in stop_rows],
-                'stop_dispersion': dict(stop_dispersion or {}),
-            },
-        })
+        plays_per_user = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  user_id,
+                  COUNT(*)::bigint AS n_plays
+                FROM mixing_attempts
+                WHERE user_id IS NOT NULL
+                GROUP BY user_id
+                ORDER BY n_plays DESC, user_id
+                LIMIT 500
+                """
+            )
+        ).mappings().all()
+
+        attempts_per_color = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  ma.target_color_id,
+                  COALESCE(tc.name, '(unknown)') AS target_name,
+                  COUNT(*)::bigint AS n_attempts
+                FROM mixing_attempts ma
+                LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
+                GROUP BY ma.target_color_id, COALESCE(tc.name, '(unknown)')
+                ORDER BY n_attempts DESC, target_name
+                """
+            )
+        ).mappings().all()
+
+        delta_e_per_color = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COALESCE(tc.name, '(unknown)') AS target_name,
+                  COUNT(*)::bigint AS n_attempts,
+                  AVG(ma.final_delta_e)::double precision AS mean_delta_e,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY ma.final_delta_e)::double precision AS median_delta_e
+                FROM mixing_attempts ma
+                LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
+                WHERE ma.final_delta_e IS NOT NULL
+                GROUP BY COALESCE(tc.name, '(unknown)')
+                ORDER BY n_attempts DESC, target_name
+                """
+            )
+        ).mappings().all()
+
+        elapsed_per_color = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COALESCE(tc.name, '(unknown)') AS target_name,
+                  COUNT(*)::bigint AS n_attempts,
+                  AVG(ma.duration_sec)::double precision AS mean_elapsed_sec,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY ma.duration_sec)::double precision AS median_elapsed_sec
+                FROM mixing_attempts ma
+                LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
+                WHERE ma.duration_sec IS NOT NULL
+                  AND ma.duration_sec <= 300
+                GROUP BY COALESCE(tc.name, '(unknown)')
+                ORDER BY n_attempts DESC, target_name
+                """
+            )
+        ).mappings().all()
+
+        controlled_by_attempt = db.session.execute(
+            db.text(
+                """
+                WITH base AS (
+                  SELECT
+                    ma.user_id,
+                    COALESCE(tc.name, '(unknown)') AS target_name,
+                    ma.attempt_uuid,
+                    ma.final_delta_e,
+                    ma.duration_sec,
+                    ma.attempt_started_server_ts,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY ma.user_id, COALESCE(tc.name, '(unknown)')
+                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
+                    ) AS attempt_no
+                  FROM mixing_attempts ma
+                  LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
+                  WHERE ma.user_id IS NOT NULL
+                )
+                SELECT
+                  target_name,
+                  attempt_no,
+                  COUNT(*)::bigint AS n_attempts,
+                  AVG(final_delta_e)::double precision AS mean_delta_e,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)::double precision AS median_delta_e,
+                  AVG(duration_sec)::double precision AS mean_elapsed_sec,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec)::double precision AS median_elapsed_sec
+                FROM base
+                WHERE attempt_no <= 10
+                  AND (duration_sec IS NULL OR duration_sec <= 300)
+                GROUP BY target_name, attempt_no
+                HAVING COUNT(*) >= 2
+                ORDER BY target_name, attempt_no
+                """
+            )
+        ).mappings().all()
+
+        archetypes = build_attempt_archetypes()
+
+        return jsonify(
+            {
+                'status': 'success',
+                'overview': dict(overview or {}),
+                'age_pyramid': [dict(r) for r in age_pyramid],
+                'plays_per_user': [dict(r) for r in plays_per_user],
+                'attempts_per_color': [dict(r) for r in attempts_per_color],
+                'delta_e_per_color': [dict(r) for r in delta_e_per_color],
+                'elapsed_per_color': [dict(r) for r in elapsed_per_color],
+                'controlled_by_attempt': [dict(r) for r in controlled_by_attempt],
+                'archetypes': archetypes,
+            }
+        )
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
