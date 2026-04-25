@@ -2,9 +2,9 @@
 Gamification engine: XP, levels, ranks, streaks, freeze, awards, coverage stats.
 
 Quota-first design:
-  - Level 1..10 is derived entirely from quota coverage ratio.
-  - is_maxed_out is the only valid completion signal.
-  - XP/streaks are retained as secondary reinforcement, never as completion.
+  - Level 1..9 is derived from tier quota coverage ratio (thresholds tuned for faster early progression).
+  - Level 10 when fully maxed; is_maxed_out is the completion signal for that tier.
+  - XP/streaks are secondary reinforcement (toasts / XP bar), not tier unlock.
   - Awards are split: quota_major (per-color 150, global %, final) vs reinforcement.
 """
 from datetime import date, datetime, timedelta, time
@@ -20,15 +20,16 @@ MIN_SUM_DROP_BAND = 2
 MAX_SUM_DROP_CATALOG_CAP = 28
 
 # Nonlinear level starts for quota coverage ratio (levels 1..9).
-# Level 10 still requires is_maxed_out=True (all colors at quota).
-LEVEL_START_THRESHOLDS = [0.00, 0.03, 0.08, 0.15, 0.24, 0.36, 0.50, 0.66, 0.83]
+# Lower early thresholds than legacy so levels 2–5 arrive sooner (less idle time).
+# Level 10 still requires is_maxed_out=True (all recipe colors at quota, cap open).
+LEVEL_START_THRESHOLDS = [0.00, 0.018, 0.048, 0.095, 0.155, 0.24, 0.35, 0.48, 0.62]
 
 XP_TABLE = {
-    'perfect': 100,
-    'no_perceivable_difference': 60,
-    'acceptable_difference': 30,
-    'big_difference': 10,
-    'stopped': 5,
+    'perfect': 130,
+    'no_perceivable_difference': 78,
+    'acceptable_difference': 38,
+    'big_difference': 14,
+    'stopped': 7,
 }
 
 RANK_TIERS = [
