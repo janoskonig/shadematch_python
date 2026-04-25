@@ -323,7 +323,7 @@
 
       <!-- Per-color coverage bars -->
       <section class="color-stats-section" id="colorStatsSection" style="display:none;" aria-labelledby="coverageHeading">
-        <h2 id="coverageHeading" class="awards-title">Color Coverage (attempts / 150)</h2>
+        <h2 id="coverageHeading" class="awards-title">Color Coverage</h2>
         <div id="colorStatsList"></div>
       </section>
     </div>
@@ -360,8 +360,12 @@
         const data = await res.json();
         if (data.status !== 'success') return;
 
+        const cq = data.coverage_quota != null ? data.coverage_quota : 10;
+        const covHead = document.getElementById('coverageHeading');
+        if (covHead) covHead.textContent = 'Color Coverage (attempts / ' + cq + ')';
+
         renderProgressCard(data.progress, data.coverage_quota);
-        renderAwards(data.awards);
+        renderAwards(data.awards, cq);
         renderColorStats(data.color_stats, data.coverage_quota);
         document.getElementById('profileSection').style.display = '';
       } catch (e) {
@@ -423,7 +427,6 @@
         document.getElementById('quotaBarLabel').innerHTML =
           '<span>All colors mastered</span><span>100%</span>';
       } else {
-        const quotaLimit = quota || 150;
         const remAttempts = p.remaining_attempts_total != null ? p.remaining_attempts_total.toLocaleString() : '—';
         document.getElementById('quotaBarLabel').innerHTML =
           `<span>${completedColors}/${totalColors} colors at quota</span>` +
@@ -440,12 +443,13 @@
         (p.xp_to_next_level > 0 ? `<span>+${p.xp_to_next_level} to next level</span>` : '<span>Max XP level</span>');
     }
 
-    function awardTypeClass(key, meta) {
+    function awardTypeClass(key, meta, majorThreshold) {
+      const majorT = majorThreshold != null && majorThreshold > 0 ? majorThreshold : 10;
       // Quota-major awards get a distinct style
       const quotaMajorKeys = ['all_colors_complete'];
       if (quotaMajorKeys.includes(key)) return 'award-badge--quota-major';
       if (key.startsWith('quota_milestone_')) return 'award-badge--quota-major';
-      if (key.startsWith('coverage_') && meta && meta.threshold === 150) return 'award-badge--quota-major';
+      if (key.startsWith('coverage_') && meta && meta.threshold === majorT) return 'award-badge--quota-major';
       if (key.startsWith('daily_champion')) return 'award-badge--daily';
       if (key.startsWith('daily_mission_')) return 'award-badge--daily';
       if (key === 'daily_fastest_match') return 'award-badge--daily';
@@ -456,10 +460,11 @@
       return 'award-badge--achievement';
     }
 
-    function awardIcon(key, meta) {
+    function awardIcon(key, meta, majorThreshold) {
+      const majorT = majorThreshold != null && majorThreshold > 0 ? majorThreshold : 10;
       if (key === 'all_colors_complete') return '🎊';
       if (key.startsWith('quota_milestone_')) return '🏆';
-      if (key.startsWith('coverage_') && meta && meta.threshold === 150) return '✅';
+      if (key.startsWith('coverage_') && meta && meta.threshold === majorT) return '✅';
       if (key.startsWith('daily_champion')) return '🏆';
       if (key === 'daily_fastest_match') return '⚡';
       if (key === 'daily_fewest_steps') return '🪄';
@@ -474,7 +479,8 @@
       return '🏅';
     }
 
-    function awardLabel(key, meta) {
+    function awardLabel(key, meta, majorThreshold) {
+      const majorT = majorThreshold != null && majorThreshold > 0 ? majorThreshold : 10;
       if (key === 'all_colors_complete') return 'All Colors Mastered!';
       if (key.startsWith('quota_milestone_')) {
         const pct = meta && meta.pct ? meta.pct : key.replace('quota_milestone_', '').replace('pct', '');
@@ -490,14 +496,15 @@
       if (key.startsWith('level_')) return 'Level ' + (meta && meta.level ? meta.level : '?');
       if (key.startsWith('coverage_')) {
         const t = meta && meta.threshold ? meta.threshold : '?';
-        if (meta && meta.threshold === 150) return 'Color mastered (150 attempts)';
+        if (meta && meta.threshold === majorT) return 'Color mastered (' + majorT + ' attempts)';
         return t + ' attempts milestone';
       }
       if (key === 'first_perfect_match') return 'First Perfect Match';
       return key.replace(/_/g, ' ');
     }
 
-    function renderAwards(awards) {
+    function renderAwards(awards, coverageQuota) {
+      const majorT = coverageQuota != null && coverageQuota > 0 ? coverageQuota : 10;
       const grid = document.getElementById('awardsGrid');
       const section = document.getElementById('awardsSection');
       if (!awards || awards.length === 0) {
@@ -507,14 +514,14 @@
       }
       // Sort: quota-major first, then by unlocked_at desc
       const sorted = [...awards].sort((a, b) => {
-        const aMajor = awardTypeClass(a.key, a.metadata) === 'award-badge--quota-major' ? 0 : 1;
-        const bMajor = awardTypeClass(b.key, b.metadata) === 'award-badge--quota-major' ? 0 : 1;
+        const aMajor = awardTypeClass(a.key, a.metadata, majorT) === 'award-badge--quota-major' ? 0 : 1;
+        const bMajor = awardTypeClass(b.key, b.metadata, majorT) === 'award-badge--quota-major' ? 0 : 1;
         return aMajor - bMajor;
       });
       grid.innerHTML = sorted.map(a => {
-        const cls = awardTypeClass(a.key, a.metadata);
-        const icon = awardIcon(a.key, a.metadata);
-        const label = awardLabel(a.key, a.metadata);
+        const cls = awardTypeClass(a.key, a.metadata, majorT);
+        const icon = awardIcon(a.key, a.metadata, majorT);
+        const label = awardLabel(a.key, a.metadata, majorT);
         return `<div class="award-badge ${cls}">${icon} ${label}</div>`;
       }).join('');
       section.style.display = '';
@@ -525,7 +532,7 @@
       const section = document.getElementById('colorStatsSection');
       if (!colorStats || colorStats.length === 0) return;
 
-      const q = quota || 150;
+      const q = quota != null && quota > 0 ? quota : 10;
 
       // Sort: at-quota colors last, then by remaining ascending (nearest to done first)
       const sorted = [...colorStats].sort((a, b) => {

@@ -5,13 +5,13 @@ Quota-first design:
   - Level 1..9 is derived from tier quota coverage ratio (thresholds tuned for faster early progression).
   - Level 10 when fully maxed; is_maxed_out is the completion signal for that tier.
   - XP/streaks are secondary reinforcement (toasts / XP bar), not tier unlock.
-  - Awards are split: quota_major (per-color 150, global %, final) vs reinforcement.
+  - Awards are split: quota_major (per-color COVERAGE_QUOTA, global %, final) vs reinforcement.
 """
 from datetime import date, datetime, timedelta, time
 from .models import UserProgress, UserAward, UserTargetColorStats, TargetColor, MixingSession, MixingAttempt
 from . import db
 
-COVERAGE_QUOTA = 150
+COVERAGE_QUOTA = 10
 STREAK_FREEZE_CAP = 3
 
 # Sum-drop tier: quota and games only count colors with a full recipe and
@@ -42,15 +42,12 @@ RANK_TIERS = [
 
 STREAK_MILESTONES = [3, 7, 14, 30, 60, 100]
 
-# Per-color reinforcement milestones (< COVERAGE_QUOTA only; 150 is quota_major)
-# This gives players a steady stream of smaller wins before full mastery.
+# Per-color reinforcement milestones (must be < COVERAGE_QUOTA).
 PER_COLOR_REINFORCEMENT_MILESTONES = [
-    (10,  'Warm-Up Complete'),
-    (25,  'Getting Started'),
-    (50,  'Halfway There'),
-    (75,  'Strong Progress'),
-    (100, 'In the Zone'),
-    (125, 'Almost Mastered'),
+    (2, 'Warm-Up'),
+    (4, 'Building'),
+    (6, 'Strong push'),
+    (8, 'Almost there'),
 ]
 
 # Global quota coverage % milestones (quota_major)
@@ -447,9 +444,9 @@ def compute_quota_progress(user_id: str) -> dict:
     Returns:
       tracked_color_ids        – eligible color IDs only (same order as catalog)
       eligible_color_ids       – same as tracked_color_ids (explicit alias)
-      completed_attempt_units  – sum(min(attempt_count, 150)) across eligible
-      required_attempt_units   – len(eligible) * 150
-      completed_colors         – eligible count with attempt_count >= 150
+      completed_attempt_units  – sum(min(attempt_count, COVERAGE_QUOTA)) across eligible
+      required_attempt_units   – len(eligible) * COVERAGE_QUOTA
+      completed_colors         – eligible count with attempt_count >= COVERAGE_QUOTA
       total_tracked_colors     – len(eligible)
       max_sum_drop_unlocked    – user's current cap (default 4 if no row)
       remaining_attempts_total – required - completed
