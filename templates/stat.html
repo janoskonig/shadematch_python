@@ -273,11 +273,25 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Per-attempt archetype tags</p>
+        <div class="trajectory-controls" style="margin-bottom:8px;">
+          <label>Filter archetype
+            <select id="archetypeFilterSelect" aria-label="Filter per-attempt table by archetype">
+              <option value="">All archetypes</option>
+            </select>
+          </label>
+          <span id="archetypeFilterMeta" style="color:var(--text-secondary);font-size:0.82rem;"></span>
+        </div>
         <div class="table-wrap"><table id="archetypePerAttemptTable"></table></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">Archetype distribution by color</p>
         <div class="table-wrap"><table id="archetypeByColorTable"></table></div>
+      </div>
+    </div>
+    <div class="chart-grid" style="margin-top:8px;">
+      <div class="chart-card">
+        <p class="chart-title">DeltaE trajectories for selected archetype</p>
+        <img id="archetypeTrajectoryImg" class="stat-plot-img" alt="Archetype trajectory plot" loading="lazy" />
       </div>
     </div>
     <h3 style="font-size:0.95rem;margin:16px 0 8px;">Archetype across successive attempts</h3>
@@ -404,6 +418,61 @@
     }).join('');
   }
 
+  var archetypePerAttemptRows = [];
+  var archetypePerAttemptColumns = [
+    { key: 'attempt_uuid', label: 'Attempt UUID' },
+    { key: 'target_name', label: 'Color' },
+    { key: 'attempt_no', label: 'Attempt no' },
+    { key: 'n_actions', label: 'Actions' },
+    { key: 'final_delta_e', label: 'Final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
+    { key: 'slope_first30', label: 'Slope first 30%', formatter: function(v) { return fmtNumber(v, 4); } },
+    { key: 'slope_last30', label: 'Slope last 30%', formatter: function(v) { return fmtNumber(v, 4); } },
+    { key: 'convergence_slope_delta', label: 'Convergence delta', formatter: function(v) { return fmtNumber(v, 4); } },
+    { key: 'improve_rate', label: 'Improve rate', formatter: pctFmt },
+    { key: 'volatility_sd_gain', label: 'Volatility SD(gain)', formatter: function(v) { return fmtNumber(v, 4); } },
+    { key: 'oscillation_count', label: 'Oscillation count' },
+    { key: 'reversal_rate', label: 'Reversal rate', formatter: pctFmt },
+    { key: 'efficiency_per_action', label: 'Efficiency / action', formatter: function(v) { return fmtNumber(v, 4); } },
+    { key: 'efficiency_per_sec', label: 'Efficiency / sec', formatter: function(v) { return fmtNumber(v, 4); } },
+    { key: 'expected_final_delta_e', label: 'Expected final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
+    { key: 'stopping_quality_deltae_vs_expected', label: 'Stopping quality (vs exp)', formatter: function(v) { return fmtNumber(v, 3); } },
+    { key: 'archetype', label: 'Archetype' }
+  ];
+
+  function renderArchetypePerAttemptTable() {
+    var sel = document.getElementById('archetypeFilterSelect');
+    var meta = document.getElementById('archetypeFilterMeta');
+    var selected = sel && sel.value ? sel.value : '';
+    var rows = selected
+      ? archetypePerAttemptRows.filter(function(r) { return String(r.archetype || '') === selected; })
+      : archetypePerAttemptRows;
+    buildTable(document.getElementById('archetypePerAttemptTable'), archetypePerAttemptColumns, rows);
+    if (meta) meta.textContent = selected ? ('Showing ' + rows.length + ' attempts') : ('Showing all ' + rows.length + ' attempts');
+  }
+
+  function setupArchetypeFilterOptions(rows) {
+    archetypePerAttemptRows = rows || [];
+    var sel = document.getElementById('archetypeFilterSelect');
+    if (!sel) return;
+    var prev = sel.value || '';
+    var labels = Array.from(new Set(archetypePerAttemptRows.map(function(r) { return String(r.archetype || ''); }).filter(Boolean))).sort();
+    sel.innerHTML = '<option value="">All archetypes</option>' + labels.map(function(label) {
+      return '<option value="' + label + '">' + label + '</option>';
+    }).join('');
+    if (prev && labels.indexOf(prev) >= 0) sel.value = prev;
+    renderArchetypePerAttemptTable();
+    refreshArchetypeTrajectoryPlot();
+  }
+
+  function refreshArchetypeTrajectoryPlot() {
+    var img = document.getElementById('archetypeTrajectoryImg');
+    var sel = document.getElementById('archetypeFilterSelect');
+    if (!img || !sel) return;
+    var q = '?t=' + Date.now();
+    if (sel.value) q += '&archetype=' + encodeURIComponent(sel.value);
+    img.src = '/api/stat/plot/archetype_deltae_trajectories.png' + q;
+  }
+
   async function loadStats() {
     var resp = await fetch('/api/stat/summary');
     var data = await resp.json();
@@ -526,29 +595,7 @@
         ? ('Showing first ' + ((arch.per_attempt_tags || []).length) + ' tagged attempts out of ' + total + '.')
         : ('Tagged attempts: ' + total + '.')) + sameStr;
     }
-    buildTable(
-      document.getElementById('archetypePerAttemptTable'),
-      [
-        { key: 'attempt_uuid', label: 'Attempt UUID' },
-        { key: 'target_name', label: 'Color' },
-        { key: 'attempt_no', label: 'Attempt no' },
-        { key: 'n_actions', label: 'Actions' },
-        { key: 'final_delta_e', label: 'Final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
-        { key: 'slope_first30', label: 'Slope first 30%', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'slope_last30', label: 'Slope last 30%', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'convergence_slope_delta', label: 'Convergence delta', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'improve_rate', label: 'Improve rate', formatter: pctFmt },
-        { key: 'volatility_sd_gain', label: 'Volatility SD(gain)', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'oscillation_count', label: 'Oscillation count' },
-        { key: 'reversal_rate', label: 'Reversal rate', formatter: pctFmt },
-        { key: 'efficiency_per_action', label: 'Efficiency / action', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'efficiency_per_sec', label: 'Efficiency / sec', formatter: function(v) { return fmtNumber(v, 4); } },
-        { key: 'expected_final_delta_e', label: 'Expected final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
-        { key: 'stopping_quality_deltae_vs_expected', label: 'Stopping quality (vs exp)', formatter: function(v) { return fmtNumber(v, 3); } },
-        { key: 'archetype', label: 'Archetype' }
-      ],
-      arch.per_attempt_tags || []
-    );
+    setupArchetypeFilterOptions(arch.per_attempt_tags || []);
     buildTable(
       document.getElementById('archetypeByColorTable'),
       [
@@ -607,6 +654,11 @@
 
   var trajectoryBtn = document.getElementById('trajectoryApplyBtn');
   if (trajectoryBtn) trajectoryBtn.addEventListener('click', refreshAttemptTimelinePlot);
+  var archetypeSel = document.getElementById('archetypeFilterSelect');
+  if (archetypeSel) archetypeSel.addEventListener('change', function() {
+    renderArchetypePerAttemptTable();
+    refreshArchetypeTrajectoryPlot();
+  });
 
   loadStats().catch(function(err) {
     document.getElementById('overviewCards').innerHTML =

@@ -245,7 +245,7 @@ def stat_plot(plot_id: str):
     if pid not in ALLOWED_PLOT_IDS:
         return jsonify({'status': 'error', 'message': 'unknown plot id'}), 404
     plot_options = None
-    if pid in ('fw_attempt_network', 'attempt_deltae_timeline'):
+    if pid in ('fw_attempt_network', 'attempt_deltae_timeline', 'archetype_deltae_trajectories'):
         plot_options = {}
         au = request.args.get('attempt_uuid')
         if au and str(au).strip():
@@ -253,6 +253,9 @@ def stat_plot(plot_id: str):
         tid = request.args.get('target_color_id', type=int)
         if tid is not None:
             plot_options['target_color_id'] = tid
+        archetype = request.args.get('archetype')
+        if archetype and str(archetype).strip():
+            plot_options['archetype'] = str(archetype).strip()
     try:
         png = get_plot_png(pid, plot_options=plot_options)
     except Exception as e:

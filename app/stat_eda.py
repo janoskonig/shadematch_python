@@ -1174,6 +1174,84 @@ def plot_attempt_deltae_timeline(
     return _fig_to_png(fig)
 
 
+def plot_archetype_deltae_trajectories(
+    att: pd.DataFrame,
+    ev: pd.DataFrame,
+    *,
+    archetype: Optional[str] = None,
+) -> bytes:
+    fig, ax = plt.subplots(figsize=(11, 5.5))
+    label = (archetype or '').strip()
+    if not label:
+        ax.text(0.5, 0.5, 'Pick an archetype from the filter to render this plot', ha='center', va='center', fontsize=11)
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    tags = build_attempt_archetypes(per_attempt_limit=250000).get('per_attempt_tags') or []
+    if not tags:
+        ax.text(0.5, 0.5, 'No archetype tags available', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    attempt_ids = [str(r.get('attempt_uuid') or '') for r in tags if str(r.get('archetype') or '') == label]
+    attempt_ids = [x for x in attempt_ids if x]
+    if not attempt_ids:
+        ax.text(0.5, 0.5, f'No attempts with archetype "{label}"', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    # Keep plot readable and bounded for very common archetypes.
+    if len(attempt_ids) > 1200:
+        attempt_ids = attempt_ids[:1200]
+
+    rows = ev[ev['attempt_uuid'].astype(str).isin(set(attempt_ids))].copy()
+    rows = rows[rows['step_index'].notna()].copy()
+    rows = rows.sort_values(['attempt_uuid', 'seq', 'step_index'])
+    rows['delta_e_after'] = pd.to_numeric(rows['delta_e_after'], errors='coerce')
+    rows = rows[rows['delta_e_after'].notna()]
+    if len(rows) == 0:
+        ax.text(0.5, 0.5, 'No DeltaE step rows for selected archetype', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    y_min = float(rows['delta_e_after'].min())
+    y_max = float(rows['delta_e_after'].max())
+    x_max = 0
+    for _, part in rows.groupby('attempt_uuid', sort=False):
+        p = part.sort_values(['seq', 'step_index'])
+        x = np.arange(1, len(p) + 1)
+        y = p['delta_e_after'].to_numpy(dtype=float)
+        x_max = max(x_max, len(x))
+        ax.plot(x, y, color='#334155', linewidth=1.0, alpha=0.11, zorder=1)
+
+    med = (
+        rows.groupby('step_index', sort=True)['delta_e_after']
+        .median()
+        .reset_index()
+        .sort_values('step_index')
+    )
+    if len(med):
+        ax.plot(
+            med['step_index'].to_numpy(dtype=float) + 1.0,
+            med['delta_e_after'].to_numpy(dtype=float),
+            color='#dc2626',
+            linewidth=2.1,
+            alpha=0.95,
+            zorder=3,
+            label='median trajectory',
+        )
+        ax.legend(fontsize=8, loc='upper right')
+
+    ax.axhline(2.0, color='#16a34a', linestyle='--', linewidth=1.2, alpha=0.8)
+    pad = max(0.08 * (y_max - y_min), 0.25)
+    ax.set_ylim(bottom=max(-0.05, y_min - pad), top=y_max + pad)
+    ax.set_xlim(0.5, max(1.5, x_max + 0.5))
+    ax.set_xlabel('Action timeline (ordered step rows per attempt)')
+    ax.set_ylabel('DeltaE after action')
+    ax.set_title(f'Attempt DeltaE trajectories for archetype: {label} (n={len(attempt_ids)})')
+    return _fig_to_png(fig)
+
+
 def plot_archetype_share_by_attempt_no(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
     """Stacked share of archetypes at each successive attempt_no (user × target_name)."""
     fig, ax = plt.subplots(figsize=(10, 5))
@@ -1740,6 +1818,7 @@ PLOT_BUILDERS: Dict[str, Callable[[pd.DataFrame, pd.DataFrame], bytes]] = {
     'controlled_elapsed_by_attempt': plot_controlled_elapsed_by_attempt,
     'deltae_elapsed_scatter': plot_deltae_elapsed_scatter,
     'attempt_deltae_timeline': plot_attempt_deltae_timeline,
+    'archetype_deltae_trajectories': lambda a, e: plot_archetype_deltae_trajectories(a, e, archetype=None),
     'archetype_share_by_attempt_no': plot_archetype_share_by_attempt_no,
     'archetype_transition_heatmap': plot_archetype_transition_heatmap,
 }
@@ -1751,7 +1830,7 @@ def get_plot_png(plot_id: str, plot_options: Optional[Dict[str, Any]] = None) ->
     if plot_id not in ALLOWED_PLOT_IDS:
         raise ValueError(f'unknown plot: {plot_id}')
     att, ev = get_dataframes()
-    if plot_id in ('fw_attempt_network', 'attempt_deltae_timeline'):
+    if plot_id in ('fw_attempt_network', 'attempt_deltae_timeline', 'archetype_deltae_trajectories'):
         opts = plot_options or {}
         if plot_id == 'fw_attempt_network':
             return plot_fw_attempt_network(
@@ -1759,6 +1838,12 @@ def get_plot_png(plot_id: str, plot_options: Optional[Dict[str, Any]] = None) ->
                 ev,
                 attempt_uuid=opts.get('attempt_uuid'),
                 target_color_id=opts.get('target_color_id'),
+            )
+        if plot_id == 'archetype_deltae_trajectories':
+            return plot_archetype_deltae_trajectories(
+                att,
+                ev,
+                archetype=opts.get('archetype'),
             )
         return plot_attempt_deltae_timeline(
             att,
