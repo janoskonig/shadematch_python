@@ -36,10 +36,8 @@ from .gamification import (
     COVERAGE_QUOTA,
     STREAK_FREEZE_CAP,
     MIN_SUM_DROP_BAND,
-    MAX_SUM_DROP_CATALOG_CAP,
     target_color_sum_drop,
     _effective_sum_cap,
-    sample_game_target_colors,
 )
 from .next_action import build_next_action
 from .stat_eda import ALLOWED_PLOT_IDS, build_attempt_archetypes, get_plot_png
@@ -560,7 +558,7 @@ def user_email_settings():
 # ── Target colors ──────────────────────────────────────────────────────────
 
 def _target_color_public_dict(tc):
-    """Shape for /api/target-colors and /api/game-targets."""
+    """Shape for /api/target-colors."""
     entry = {
         'id': tc.id,
         'name': tc.name,
@@ -590,36 +588,6 @@ def get_target_colors():
         next_action_data = build_next_action(user_id)
 
     return jsonify({'status': 'success', 'colors': colors, **next_action_data})
-
-
-@main.route('/api/game-targets', methods=['GET'])
-def get_game_targets():
-    """
-    Seven colors for one game, sampled from the user's current sum-drop tier.
-    Without user_id: guest sample from full recipe palette (cap MAX_SUM_DROP_CATALOG_CAP).
-    Optional ?seed=int for deterministic shuffle (testing).
-    """
-    user_id = (request.args.get('user_id') or '').strip()
-    raw_seed = request.args.get('seed')
-    seed_int = None
-    if raw_seed is not None and str(raw_seed).isdigit():
-        seed_int = int(raw_seed)
-    if user_id:
-        selected = sample_game_target_colors(user_id, count=7, seed=seed_int)
-    else:
-        selected = sample_game_target_colors(
-            None, count=7, seed=seed_int, max_sum_cap=MAX_SUM_DROP_CATALOG_CAP,
-        )
-    if not selected:
-        return jsonify({
-            'status': 'error',
-            'message': (
-                'No eligible colors in your current tier (need full drop_* recipes '
-                'and sum within your unlocked range). Backfill catalog recipes or save from Lab.'
-            ),
-        }), 409
-    colors = [_target_color_public_dict(tc) for tc in selected]
-    return jsonify({'status': 'success', 'colors': colors})
 
 
 def _target_color_drops_for_api(tc):

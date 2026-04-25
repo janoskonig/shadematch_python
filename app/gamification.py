@@ -884,33 +884,6 @@ def get_quota_ordered_catalog(user_id, full_catalog):
     return result
 
 
-def sample_game_target_colors(user_id: str | None = None, count: int = 7, seed=None, max_sum_cap: int | None = None):
-    """
-    Random subset of eligible colors for one game (without replacement).
-    If max_sum_cap is set, it overrides the user's tier cap (e.g. guest play).
-    If user_id is None and max_sum_cap is None, uses MAX_SUM_DROP_CATALOG_CAP.
-    Returns list of TargetColor ORMs in shuffled order.
-    """
-    import random
-
-    if max_sum_cap is not None:
-        cap = int(max_sum_cap)
-    elif user_id:
-        up = UserProgress.query.filter_by(user_id=user_id).first()
-        cap = int(up.max_sum_drop_unlocked) if up else 4
-    else:
-        cap = MAX_SUM_DROP_CATALOG_CAP
-    eligible = _eligible_target_colors(cap)
-    if not eligible:
-        return []
-    rng = random.Random(seed) if seed is not None else random
-    pool = list(eligible)
-    rng.shuffle(pool)
-    if len(pool) <= count:
-        return pool
-    return pool[:count]
-
-
 # ---------------------------------------------------------------------------
 # Full profile for results page
 # ---------------------------------------------------------------------------

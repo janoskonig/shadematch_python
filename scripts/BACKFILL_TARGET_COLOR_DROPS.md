@@ -1,10 +1,10 @@
 # Backfilling `drop_*` on catalog colors
 
-Sum-drop tiers, quota, and 7-color games require every **played** catalog row to have a **complete** recipe: all of `drop_white`, `drop_black`, `drop_red`, `drop_yellow`, `drop_blue` set (use `0` for unused channels). `sum_drop_count` is the sum of those five integers.
+Sum-drop tiers and quota require every **counted** catalog row to have a **complete** recipe: all of `drop_white`, `drop_black`, `drop_red`, `drop_yellow`, `drop_blue` set (use `0` for unused channels). `sum_drop_count` is the sum of those five integers.
 
 Until recipes exist:
 
-- `/api/game-targets` returns **409** with an explanatory message.
+- Logged-in users may see **no unlocked** catalog rows for mixing until recipes exist; guests still see all RGB rows.
 - Quota for logged-in users uses only colors in the current tier band with complete recipes.
 
 ## How to backfill
@@ -15,4 +15,4 @@ Until recipes exist:
 
 3. **Re-run migrations** — `npm run db:migrate` ensures `user_progress.max_sum_drop_unlocked` exists; it does not invent recipes.
 
-After backfill, restart the app and open the main game; `/api/game-targets` should return 7 colors (or fewer if the eligible pool has fewer than seven rows, then all are returned).
+After backfill, restart the app: unlocked tiers and quota use `sum_drop_count` as intended.

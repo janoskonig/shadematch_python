@@ -630,12 +630,13 @@ function updateMatchBar(deltaE) {
 }
 
 // ── Progress indicator ────────────────────────────────────────────────────
-function updateProgressIndicator(currentIndex, total) {
+function updateProgressIndicator(currentIndex, total, visitCount) {
   const textEl = document.getElementById('progressText');
   const segEl = document.getElementById('progressSegments');
   if (!textEl || !segEl) return;
 
-  textEl.textContent = `Color ${currentIndex + 1} of ${total}`;
+  const suffix = visitCount != null && visitCount > 0 ? ` · ${visitCount} this visit` : '';
+  textEl.textContent = `Color ${currentIndex + 1} of ${total}${suffix}`;
   segEl.innerHTML = '';
   for (let i = 0; i < total; i++) {
     const seg = document.createElement('div');
@@ -827,22 +828,90 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   let fullCatalog = [];
   const targetColors = [];
+  let sessionShadesCompleted = 0;
 
-  async function fetchGameTargets() {
-    const uid = window.currentUserId || localStorage.getItem('userId') || '';
-    const params = new URLSearchParams();
-    if (uid) params.set('user_id', uid);
-    const res = await fetch(`/api/game-targets?${params}`);
-    let data;
+  function buildShuffledPlayQueue(catalog) {
+    if (!catalog || !catalog.length) return [];
+    const pool = catalog.filter((c) => c.unlocked !== false);
+    const base = pool.length ? pool : catalog.slice();
+    const arr = base.map((x) => x);
+    for (let i = arr.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  async function refreshCatalogFromServer() {
     try {
-      data = await res.json();
-    } catch {
-      return null;
+      const uid = window.currentUserId || localStorage.getItem('userId') || '';
+      const url = uid ? `/api/target-colors?user_id=${encodeURIComponent(uid)}` : '/api/target-colors';
+      const res = await fetch(url);
+      const d = await res.json();
+      if (d.status === 'success' && Array.isArray(d.colors) && d.colors.length > 0) {
+        fullCatalog = d.colors;
+        return true;
+      }
+    } catch { /* keep existing catalog */ }
+    return false;
+  }
+
+  function maybeRhythmFeedback(sessionN, reshuffled) {
+    if (reshuffled || sessionN <= 0) return;
+    if (sessionN % 12 === 0) {
+      showToast('Strong stretch — open Results anytime for awards and coverage.', 'info', 4200);
+      return;
     }
-    if (data.status === 'success' && Array.isArray(data.colors) && data.colors.length > 0) {
-      return data.colors;
+    if (sessionN % 7 === 0) {
+      showToast('Coverage builds shade by shade. The strip above tracks your tier.', 'info', 3600);
+      return;
     }
-    return null;
+    if (sessionN % 4 === 0) {
+      const tips = [
+        'Tiny nudges beat big jumps.',
+        'Compare the two squares from the side — distance reads clearer.',
+        'When stuck: one drop of black or white, then reassess.',
+      ];
+      showToast(tips[Math.floor(sessionN / 4) % tips.length], 'info', 3000);
+    }
+  }
+
+  async function goToNextShade() {
+    sessionShadesCompleted += 1;
+    let reshuffled = false;
+    let nextIndex = currentTargetIndex + 1;
+    if (nextIndex >= targetColors.length) {
+      await refreshCatalogFromServer();
+      const next = buildShuffledPlayQueue(fullCatalog);
+      if (!next.length) {
+        sessionShadesCompleted -= 1;
+        alert('No target colors available. Check the catalog or your tier unlocks.');
+        return;
+      }
+      targetColors.length = 0;
+      targetColors.push(...next);
+      nextIndex = 0;
+      reshuffled = true;
+      showToast('New shuffle — fresh order, same practice.', 'info', 3200);
+    }
+    currentTargetIndex = nextIndex;
+    currentTargetColor = targetColors[currentTargetIndex];
+    setGameTarget(currentTargetColor);
+    updateBox('targetColor', targetColor);
+    resetMix();
+    stopTimer();
+    resetTimerDisplay();
+    startTimer();
+    enableColorMixing();
+    setControlState('mixing');
+    updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
+    beginAttemptForCurrentTarget();
+
+    maybeRhythmFeedback(sessionShadesCompleted, reshuffled);
+
+    if (sessionShadesCompleted % 6 === 0) {
+      loadAndRenderProgress().catch(() => {});
+    }
   }
 
   try {
@@ -861,15 +930,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  const initialGame = await fetchGameTargets();
-  if (!initialGame) {
+  const initialQueue = buildShuffledPlayQueue(fullCatalog);
+  if (!initialQueue.length) {
     alert(
-      'Could not load a 7-color game. Catalog colors need drop recipes (sum_drop_count). '
-      + 'Use Lab to save recipes or see scripts/BACKFILL_TARGET_COLOR_DROPS.md'
+      'No playable colors (logged-in users need unlocked shades with drop recipes). '
+      + 'See scripts/BACKFILL_TARGET_COLOR_DROPS.md or use Lab.'
     );
     return;
   }
-  targetColors.push(...initialGame);
+  targetColors.push(...initialQueue);
 
   // app_ready: catalog loaded, user context available, ready to play
   trackEvent('app_ready');
@@ -882,7 +951,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.shadeMatchTargetRgb = color.rgb;
   }
   setGameTarget(currentTargetColor);
-  updateProgressIndicator(currentTargetIndex, targetColors.length);
+  updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
 
   function showSkipPerceptionModal() {
     return new Promise((resolve) => {
@@ -990,21 +1059,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     refreshDatabaseConnection();
-    try {
-      const uid = window.currentUserId || localStorage.getItem('userId') || '';
-      const url = uid ? `/api/target-colors?user_id=${encodeURIComponent(uid)}` : '/api/target-colors';
-      const res = await fetch(url);
-      const d = await res.json();
-      if (d.status === 'success' && d.colors.length > 0) fullCatalog = d.colors;
-    } catch { /* use existing */ }
-
-    const newTargetColors = await fetchGameTargets();
-    if (!newTargetColors) {
-      alert('Could not start a new game — no eligible colors in your tier (see Lab / backfill docs).');
+    await refreshCatalogFromServer();
+    sessionShadesCompleted = 0;
+    const newQueue = buildShuffledPlayQueue(fullCatalog);
+    if (!newQueue.length) {
+      alert('No playable colors for your tier. See Lab / backfill docs.');
       return;
     }
     targetColors.length = 0;
-    targetColors.push(...newTargetColors);
+    targetColors.push(...newQueue);
 
     currentTargetIndex = 0;
     currentTargetColor = targetColors[currentTargetIndex];
@@ -1014,7 +1077,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTimer();
     enableColorMixing();
     setControlState('mixing');
-    updateProgressIndicator(currentTargetIndex, targetColors.length);
+    updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
     beginAttemptForCurrentTarget();
   });
 
@@ -1067,80 +1130,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     }
 
-    currentTargetIndex++;
-    if (currentTargetIndex < targetColors.length) {
-      currentTargetColor = targetColors[currentTargetIndex];
-      setGameTarget(currentTargetColor);
-      updateBox('targetColor', targetColor);
-      resetMix();
-      stopTimer();
-      resetTimerDisplay();
-      startTimer();
-      enableColorMixing();
-      setControlState('mixing');
-      updateProgressIndicator(currentTargetIndex, targetColors.length);
-      beginAttemptForCurrentTarget();
-    } else {
-      // Fetch latest progress to determine if all colors are mastered
-      let progressData = null;
-      try {
-        const uid = window.currentUserId || localStorage.getItem('userId');
-        if (uid) {
-          const pRes = await fetch('/api/user-progress', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ user_id: uid }),
-          });
-          if (pRes.ok) {
-            const pData = await pRes.json();
-            if (pData.status === 'success') progressData = pData.progress;
-          }
-        }
-      } catch { /* use generic message */ }
-
-      const isMaxed = progressData && progressData.is_maxed_out;
-      const completedColors = progressData ? progressData.completed_colors : null;
-      const totalColors = progressData ? progressData.total_tracked_colors : null;
-
-      let headline, subtext;
-      if (isMaxed) {
-        headline = 'All Colors Mastered!';
-        subtext = 'You have completed all color matching challenges — every shade is at quota!';
-      } else if (completedColors != null && totalColors != null) {
-        headline = 'Round Complete!';
-        subtext = `${completedColors} of ${totalColors} colors fully covered. Keep going to complete the rest!`;
-      } else {
-        headline = 'Round Complete!';
-        subtext = 'Great work — start a new round to keep building your coverage.';
-      }
-
-      const congratulations = `
-        <div id="congratulations-modal" style="
-          position:fixed;inset:0;
-          background:rgba(0,0,0,0.7);
-          display:flex;justify-content:center;align-items:center;
-          z-index:10000;font-family:var(--font-family);
-        ">
-          <div style="
-            background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
-            color:white;padding:40px;border-radius:20px;
-            text-align:center;max-width:500px;margin:20px;
-            box-shadow:0 20px 40px rgba(0,0,0,0.3);
-          ">
-            <div style="font-size:4em;margin-bottom:20px;">${isMaxed ? '🎊' : '🎉'}</div>
-            <h2 style="margin:0 0 20px 0;font-size:2rem;font-weight:300;">${headline}</h2>
-            <p style="margin:0 0 30px 0;font-size:1.1em;line-height:1.6;">${subtext}</p>
-            <div style="
-              display:inline-block;background:rgba(255,255,255,0.2);
-              padding:15px 30px;border-radius:25px;font-size:1.1em;
-            ">Redirecting to results…</div>
-          </div>
-        </div>`;
-      document.body.insertAdjacentHTML('beforeend', congratulations);
-      createConfetti();
-      setControlState('idle');
-      document.getElementById('startBtn').disabled = isMaxed;
-      setTimeout(() => { window.location.href = '/results'; }, 4000);
-    }
+    await goToNextShade();
   });
 
   document.getElementById('restartBtn').addEventListener('click', async () => {
@@ -1151,13 +1141,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     refreshDatabaseConnection();
-    const newTargetColors = await fetchGameTargets();
-    if (!newTargetColors) {
-      alert('Could not load game colors. Check catalog drop recipes.');
+    await refreshCatalogFromServer();
+    sessionShadesCompleted = 0;
+    const newQueue = buildShuffledPlayQueue(fullCatalog);
+    if (!newQueue.length) {
+      alert('No playable colors. Check catalog / tier unlocks.');
       return;
     }
     targetColors.length = 0;
-    targetColors.push(...newTargetColors);
+    targetColors.push(...newQueue);
 
     currentTargetIndex = 0;
     currentTargetColor = targetColors[currentTargetIndex];
@@ -1168,7 +1160,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTimer();
     enableColorMixing();
     setControlState('mixing');
-    updateProgressIndicator(currentTargetIndex, targetColors.length);
+    updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
     document.getElementById('overflowDropdown').classList.remove('is-open');
     beginAttemptForCurrentTarget();
   });
