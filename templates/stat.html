@@ -135,6 +135,27 @@
   </section>
 
   <section class="section">
+    <h2>DeltaE &lt; 2.0 milestones</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      First point at which users cross DeltaE &lt; 2.0, measured both by attempt number (across repeated plays of the same color) and by step index inside attempts.
+    </p>
+    <h3 style="font-size:0.95rem;margin:0 0 6px;">By attempt number</h3>
+    <div class="cards" id="firstAttemptBelow2Cards" style="margin-top:0;margin-bottom:14px;"></div>
+    <h3 style="font-size:0.95rem;margin:0 0 6px;">By attempt event step</h3>
+    <div class="cards" id="firstEventBelow2Cards" style="margin-top:0;margin-bottom:0;"></div>
+    <div class="chart-grid" style="margin-top:12px;">
+      <div class="chart-card">
+        <p class="chart-title">First attempt no by target color type</p>
+        <div class="table-wrap"><table id="firstAttemptBelow2ByTypeTable"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">First step index by target color type</p>
+        <div class="table-wrap"><table id="firstEventBelow2ByTypeTable"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
     <h2>1) Registered users and age pyramid</h2>
     <div class="chart-grid">
       <div class="chart-card">
@@ -229,6 +250,25 @@
 
   <section class="section">
     <h2>8) Mixing strategy archetypes (rule-based)</h2>
+    <p style="margin:0 0 8px;color:var(--text-secondary);font-size:0.88rem;">
+      Archetypes are assigned per attempt from action-path behavior (not manually labeled).
+    </p>
+    <div class="table-wrap" style="margin:0 0 10px;">
+      <table>
+        <thead>
+          <tr><th>Archetype</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>direct_converger</td><td>Fast, consistent improvement to very low final DeltaE (<=1.0) with few reversals.</td></tr>
+          <tr><td>slow_and_steady</td><td>Many actions, mostly improving, low oscillation; converges gradually.</td></tr>
+          <tr><td>coarse_then_fine</td><td>Default mixed strategy: rough adjustments followed by refinements.</td></tr>
+          <tr><td>oscillator</td><td>Frequent back-and-forth around the target (high gain-sign reversal rate).</td></tr>
+          <tr><td>random_searcher</td><td>Low improvement rate with many revisits; exploration appears unfocused.</td></tr>
+          <tr><td>backslider</td><td>Reached a better DeltaE earlier but ended notably worse than best-in-path.</td></tr>
+          <tr><td>short_run</td><td>Very few actions (&lt;3), insufficient trajectory length for richer patterning.</td></tr>
+        </tbody>
+      </table>
+    </div>
     <p id="archetypeMeta" style="margin:0 0 8px;color:var(--text-secondary);font-size:0.88rem;"></p>
     <div class="chart-grid">
       <div class="chart-card">
@@ -350,6 +390,20 @@
     }).join('');
   }
 
+  function renderMilestoneCards(elId, row, meanKey, medianKey, meanLabel, medianLabel) {
+    var el = document.getElementById(elId);
+    if (!el) return;
+    var n = row && row.n != null ? Number(row.n) : 0;
+    var cards = [
+      { k: 'Hits (n)', v: n },
+      { k: meanLabel, v: n ? fmtNumber(row[meanKey], 2) : '—' },
+      { k: medianLabel, v: n ? fmtNumber(row[medianKey], 2) : '—' }
+    ];
+    el.innerHTML = cards.map(function(c) {
+      return '<div class="card"><div class="k">' + c.k + '</div><div class="v">' + c.v + '</div></div>';
+    }).join('');
+  }
+
   async function loadStats() {
     var resp = await fetch('/api/stat/summary');
     var data = await resp.json();
@@ -359,6 +413,42 @@
     renderSkipPerceptionDeltaE('skipIdenticalDeltaECards', data.skipped_identical_delta_e || {});
     renderSkipPerceptionDeltaE('skipAcceptableDeltaECards', data.skipped_acceptable_delta_e || {});
     renderSkipPerceptionDeltaE('skipUnacceptableDeltaECards', data.skipped_unacceptable_delta_e || {});
+    renderMilestoneCards(
+      'firstAttemptBelow2Cards',
+      data.first_attempt_below_2 || {},
+      'mean_first_attempt_no',
+      'median_first_attempt_no',
+      'Mean first attempt no (<2.0)',
+      'Median first attempt no (<2.0)'
+    );
+    renderMilestoneCards(
+      'firstEventBelow2Cards',
+      data.first_event_below_2 || {},
+      'mean_first_step_index',
+      'median_first_step_index',
+      'Mean first step index (<2.0)',
+      'Median first step index (<2.0)'
+    );
+    buildTable(
+      document.getElementById('firstAttemptBelow2ByTypeTable'),
+      [
+        { key: 'color_type', label: 'Target type' },
+        { key: 'n', label: 'Hits (n)' },
+        { key: 'mean_first_attempt_no', label: 'Mean first attempt no', formatter: function(v) { return fmtNumber(v, 2); } },
+        { key: 'median_first_attempt_no', label: 'Median first attempt no', formatter: function(v) { return fmtNumber(v, 2); } }
+      ],
+      data.first_attempt_below_2_by_type || []
+    );
+    buildTable(
+      document.getElementById('firstEventBelow2ByTypeTable'),
+      [
+        { key: 'color_type', label: 'Target type' },
+        { key: 'n', label: 'Hits (n)' },
+        { key: 'mean_first_step_index', label: 'Mean first step index', formatter: function(v) { return fmtNumber(v, 2); } },
+        { key: 'median_first_step_index', label: 'Median first step index', formatter: function(v) { return fmtNumber(v, 2); } }
+      ],
+      data.first_event_below_2_by_type || []
+    );
 
     buildTable(
       document.getElementById('agePyramidTable'),

@@ -2061,6 +2061,135 @@ def stat_summary():
         skipped_identical_delta_e = dict(skip_identical_row or {})
         skipped_acceptable_delta_e = dict(skip_acceptable_row or {})
         skipped_unacceptable_delta_e = dict(skip_unacceptable_row or {})
+        first_attempt_below_2_row = db.session.execute(
+            db.text(
+                """
+                WITH ranked AS (
+                  SELECT
+                    ma.user_id,
+                    ma.target_color_id,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY ma.user_id, ma.target_color_id
+                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
+                    ) AS attempt_no,
+                    ma.final_delta_e
+                  FROM mixing_attempts ma
+                  WHERE ma.user_id IS NOT NULL
+                    AND ma.target_color_id IS NOT NULL
+                    AND ma.final_delta_e IS NOT NULL
+                ),
+                first_hit AS (
+                  SELECT
+                    user_id,
+                    target_color_id,
+                    MIN(attempt_no)::int AS first_attempt_no
+                  FROM ranked
+                  WHERE final_delta_e < 2.0
+                  GROUP BY user_id, target_color_id
+                )
+                SELECT
+                  COUNT(*)::bigint AS n,
+                  AVG(first_attempt_no)::double precision AS mean_first_attempt_no,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY first_attempt_no)::double precision AS median_first_attempt_no
+                FROM first_hit
+                """
+            )
+        ).mappings().first()
+        first_event_below_2_row = db.session.execute(
+            db.text(
+                """
+                WITH first_hit AS (
+                  SELECT
+                    mae.attempt_uuid,
+                    MIN(mae.step_index)::int AS first_step_index
+                  FROM mixing_attempt_events mae
+                  JOIN mixing_attempts ma ON ma.attempt_uuid = mae.attempt_uuid
+                  WHERE ma.user_id IS NOT NULL
+                    AND mae.step_index IS NOT NULL
+                    AND mae.delta_e_after IS NOT NULL
+                    AND mae.delta_e_after < 2.0
+                  GROUP BY mae.attempt_uuid
+                )
+                SELECT
+                  COUNT(*)::bigint AS n,
+                  AVG(first_step_index)::double precision AS mean_first_step_index,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY first_step_index)::double precision AS median_first_step_index
+                FROM first_hit
+                """
+            )
+        ).mappings().first()
+        first_attempt_below_2 = dict(first_attempt_below_2_row or {})
+        first_event_below_2 = dict(first_event_below_2_row or {})
+        first_attempt_below_2_by_type = db.session.execute(
+            db.text(
+                """
+                WITH ranked AS (
+                  SELECT
+                    ma.user_id,
+                    ma.target_color_id,
+                    lower(coalesce(tc.color_type, '')) AS color_type,
+                    ROW_NUMBER() OVER (
+                      PARTITION BY ma.user_id, ma.target_color_id
+                      ORDER BY ma.attempt_started_server_ts NULLS LAST, ma.attempt_uuid
+                    ) AS attempt_no,
+                    ma.final_delta_e
+                  FROM mixing_attempts ma
+                  JOIN target_colors tc ON tc.id = ma.target_color_id
+                  WHERE ma.user_id IS NOT NULL
+                    AND ma.target_color_id IS NOT NULL
+                    AND ma.final_delta_e IS NOT NULL
+                ),
+                first_hit AS (
+                  SELECT
+                    color_type,
+                    user_id,
+                    target_color_id,
+                    MIN(attempt_no)::int AS first_attempt_no
+                  FROM ranked
+                  WHERE final_delta_e < 2.0
+                    AND color_type IN ('basic', 'skin', 'lab')
+                  GROUP BY color_type, user_id, target_color_id
+                )
+                SELECT
+                  color_type,
+                  COUNT(*)::bigint AS n,
+                  AVG(first_attempt_no)::double precision AS mean_first_attempt_no,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY first_attempt_no)::double precision AS median_first_attempt_no
+                FROM first_hit
+                GROUP BY color_type
+                ORDER BY CASE color_type WHEN 'basic' THEN 1 WHEN 'skin' THEN 2 WHEN 'lab' THEN 3 ELSE 99 END
+                """
+            )
+        ).mappings().all()
+        first_event_below_2_by_type = db.session.execute(
+            db.text(
+                """
+                WITH first_hit AS (
+                  SELECT
+                    lower(coalesce(tc.color_type, '')) AS color_type,
+                    mae.attempt_uuid,
+                    MIN(mae.step_index)::int AS first_step_index
+                  FROM mixing_attempt_events mae
+                  JOIN mixing_attempts ma ON ma.attempt_uuid = mae.attempt_uuid
+                  JOIN target_colors tc ON tc.id = ma.target_color_id
+                  WHERE ma.user_id IS NOT NULL
+                    AND mae.step_index IS NOT NULL
+                    AND mae.delta_e_after IS NOT NULL
+                    AND mae.delta_e_after < 2.0
+                    AND lower(coalesce(tc.color_type, '')) IN ('basic', 'skin', 'lab')
+                  GROUP BY lower(coalesce(tc.color_type, '')), mae.attempt_uuid
+                )
+                SELECT
+                  color_type,
+                  COUNT(*)::bigint AS n,
+                  AVG(first_step_index)::double precision AS mean_first_step_index,
+                  percentile_cont(0.50) WITHIN GROUP (ORDER BY first_step_index)::double precision AS median_first_step_index
+                FROM first_hit
+                GROUP BY color_type
+                ORDER BY CASE color_type WHEN 'basic' THEN 1 WHEN 'skin' THEN 2 WHEN 'lab' THEN 3 ELSE 99 END
+                """
+            )
+        ).mappings().all()
 
         return jsonify(
             {
@@ -2076,6 +2205,10 @@ def stat_summary():
                 'skipped_identical_delta_e': skipped_identical_delta_e,
                 'skipped_acceptable_delta_e': skipped_acceptable_delta_e,
                 'skipped_unacceptable_delta_e': skipped_unacceptable_delta_e,
+                'first_attempt_below_2': first_attempt_below_2,
+                'first_event_below_2': first_event_below_2,
+                'first_attempt_below_2_by_type': [dict(r) for r in first_attempt_below_2_by_type],
+                'first_event_below_2_by_type': [dict(r) for r in first_event_below_2_by_type],
             }
         )
     except Exception as e:
