@@ -830,11 +830,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   const targetColors = [];
   let sessionShadesCompleted = 0;
 
+  function onlyBlockedByPracticeQuota(catalog) {
+    if (!catalog || !catalog.length) return false;
+    const unlocked = catalog.filter((c) => c.unlocked !== false);
+    if (!unlocked.length) return false;
+    return unlocked.every((c) => c.under_quota === false);
+  }
+
   function buildShuffledPlayQueue(catalog) {
     if (!catalog || !catalog.length) return [];
-    const pool = catalog.filter((c) => c.unlocked !== false);
-    const base = pool.length ? pool : catalog.slice();
-    const arr = base.map((x) => x);
+    const unlockedOk = (c) => c.unlocked !== false;
+    const underQuotaOk = (c) => c.under_quota !== false;
+    let pool = catalog.filter((c) => unlockedOk(c) && underQuotaOk(c));
+    if (!pool.length) {
+      const hasUnlocked = catalog.some(unlockedOk);
+      if (hasUnlocked) {
+        return [];
+      }
+      pool = catalog.slice();
+    }
+    const arr = pool.map((x) => x);
     for (let i = arr.length - 1; i > 0; i -= 1) {
       const j = Math.floor(Math.random() * (i + 1));
       [arr[i], arr[j]] = [arr[j], arr[i]];
@@ -885,7 +900,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       const next = buildShuffledPlayQueue(fullCatalog);
       if (!next.length) {
         sessionShadesCompleted -= 1;
-        alert('No target colors available. Check the catalog or your tier unlocks.');
+        alert(
+          onlyBlockedByPracticeQuota(fullCatalog)
+            ? 'You have reached the practice attempt quota on every shade in your tier. Unlock higher sum-drop caps or add new shades to keep playing.'
+            : 'No target colors available. Check the catalog or your tier unlocks.',
+        );
         return;
       }
       targetColors.length = 0;
@@ -933,8 +952,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const initialQueue = buildShuffledPlayQueue(fullCatalog);
   if (!initialQueue.length) {
     alert(
-      'No playable colors (logged-in users need unlocked shades with drop recipes). '
-      + 'See scripts/BACKFILL_TARGET_COLOR_DROPS.md or use Lab.'
+      onlyBlockedByPracticeQuota(fullCatalog)
+        ? 'You have reached the practice attempt quota on every shade in your tier. Open Results for coverage, or unlock higher sum-drop caps to access more shades.'
+        : 'No playable colors (logged-in users need unlocked shades with drop recipes). '
+          + 'See scripts/BACKFILL_TARGET_COLOR_DROPS.md or use Lab.',
     );
     return;
   }
@@ -1063,7 +1084,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     sessionShadesCompleted = 0;
     const newQueue = buildShuffledPlayQueue(fullCatalog);
     if (!newQueue.length) {
-      alert('No playable colors for your tier. See Lab / backfill docs.');
+      alert(
+        onlyBlockedByPracticeQuota(fullCatalog)
+          ? 'Every shade in your tier is already at the practice attempt quota. Unlock more shades or raise your sum-drop cap to continue.'
+          : 'No playable colors for your tier. See Lab / backfill docs.',
+      );
       return;
     }
     targetColors.length = 0;
@@ -1145,7 +1170,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     sessionShadesCompleted = 0;
     const newQueue = buildShuffledPlayQueue(fullCatalog);
     if (!newQueue.length) {
-      alert('No playable colors. Check catalog / tier unlocks.');
+      alert(
+        onlyBlockedByPracticeQuota(fullCatalog)
+          ? 'Every shade in your tier is already at the practice attempt quota. Unlock more shades or raise your sum-drop cap to continue.'
+          : 'No playable colors. Check catalog / tier unlocks.',
+      );
       return;
     }
     targetColors.length = 0;
