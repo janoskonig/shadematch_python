@@ -937,7 +937,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const uid = window.currentUserId || localStorage.getItem('userId') || '';
     const url = uid ? `/api/target-colors?user_id=${encodeURIComponent(uid)}` : '/api/target-colors';
     const res = await fetch(url);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      const hint = data.error === 'database_unavailable' && data.message
+        ? data.message
+        : `Could not load target colors (HTTP ${res.status}). Check the server log.`;
+      alert(hint);
+      return;
+    }
     if (data.status === 'success' && Array.isArray(data.colors) && data.colors.length > 0) {
       fullCatalog = data.colors;
     }
@@ -945,7 +952,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('Failed to load target colors:', e);
   }
   if (!fullCatalog.length) {
-    alert('Could not load target colors. Ensure the database is migrated (npm run db:migrate) and try again.');
+    alert(
+      'Could not load target colors. '
+      + 'Ensure the database is reachable (DATABASE_URL / VPN / firewall), migrated (npm run db:migrate), and try again.',
+    );
     return;
   }
 
@@ -1062,7 +1072,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             endReason: 'saved_match',
             terminalBoundaryType: 'boundary_save',
           });
-          saveSessionToServer(session);
+          await saveSessionToServer(session);
           setControlState('completed');
         }
       });

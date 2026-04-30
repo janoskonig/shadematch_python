@@ -14,6 +14,19 @@ class Config:
     
     # Set the SQLAlchemy database URI configuration
     SQLALCHEMY_DATABASE_URI = database_url
+    # Drop stale TCP connections; cap initial connect wait (see PGCONNECT_TIMEOUT)
+    try:
+        _pg_timeout = int(os.getenv('PGCONNECT_TIMEOUT', '10') or '10')
+    except ValueError:
+        _pg_timeout = 10
+    _pg_timeout = max(2, min(_pg_timeout, 120))
+    if database_url and database_url.startswith('postgresql'):
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'pool_pre_ping': True,
+            'connect_args': {'connect_timeout': _pg_timeout},
+        }
+    else:
+        SQLALCHEMY_ENGINE_OPTIONS = {'pool_pre_ping': True}
     # Disable SQLAlchemy's modification tracking to save resources
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     # Set the application's secret key, defaulting to 'dev' if not provided

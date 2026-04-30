@@ -92,7 +92,7 @@ def _nearest_deficit_unlocked_target(user_id: str):
 # Public builder
 # ---------------------------------------------------------------------------
 
-def build_next_action(user_id: str, today: date = None):
+def build_next_action(user_id: str, today: date = None, quota=None):
     """
     Build and return the next_action envelope for *user_id*.
 
@@ -100,6 +100,9 @@ def build_next_action(user_id: str, today: date = None):
     Shape:
         {'next_action': None}                        — guest / unauthenticated
         {'next_action': {primary, secondary, ...}}   — logged-in user
+
+    Pass *quota* from compute_quota_progress when already computed (e.g. /api/target-colors)
+    to avoid duplicate heavy work.
     """
     if today is None:
         today = date.today()
@@ -112,9 +115,17 @@ def build_next_action(user_id: str, today: date = None):
 
     up = UserProgress.query.filter_by(user_id=user_id).first()
 
-    # Quota state (one canonical query)
-    quota = compute_quota_progress(user_id)
+    if quota is None:
+        quota = compute_quota_progress(user_id)
     is_maxed_out = quota['is_maxed_out']
+
+    nearest_cache = None
+
+    def _nearest_deficit_pair():
+        nonlocal nearest_cache
+        if nearest_cache is None:
+            nearest_cache = _nearest_deficit_unlocked_target(user_id)
+        return nearest_cache
 
     # Secondary is always a non-coercive escape hatch
     secondary = {
@@ -144,7 +155,7 @@ def build_next_action(user_id: str, today: date = None):
 
     # ── 2. Streak at risk ─────────────────────────────────────────────────
     if primary is None and _streak_at_risk(up, today):
-        tc, remaining = _nearest_deficit_unlocked_target(user_id)
+        tc, remaining = _nearest_deficit_pair()
         primary = {
             'id': 'streak_at_risk',
             'type': 'practice',
@@ -161,7 +172,7 @@ def build_next_action(user_id: str, today: date = None):
 
     # ── 3. Nearest unlocked quota deficit ────────────────────────────────
     if primary is None and not is_maxed_out:
-        tc, remaining = _nearest_deficit_unlocked_target(user_id)
+        tc, remaining = _nearest_deficit_pair()
         if tc:
             never_qualified = up is None or up.last_activity_date is None
             if never_qualified:

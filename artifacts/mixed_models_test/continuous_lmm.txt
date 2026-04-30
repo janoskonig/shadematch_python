@@ -1,0 +1,35 @@
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:      log_final_delta_e   R-squared:                       0.571
+Model:                            OLS   Adj. R-squared:                  0.550
+Method:                 Least Squares   F-statistic:                     11.24
+Date:                Sun, 26 Apr 2026   Prob (F-statistic):           1.41e-12
+Time:                        07:37:28   Log-Likelihood:                -67.069
+No. Observations:                 170   AIC:                             152.1
+Df Residuals:                     161   BIC:                             180.4
+Df Model:                           8                                         
+Covariance Type:                  HC3                                         
+=========================================================================================================
+                                            coef    std err          z      P>|z|      [0.025      0.975]
+---------------------------------------------------------------------------------------------------------
+Intercept                                 2.2319      2.198      1.015      0.310      -2.076       6.540
+C(color_type)[T.lab]                     -0.1519      0.060     -2.519      0.012      -0.270      -0.034
+C(color_type)[T.skin]                    -1.3187      0.973     -1.355      0.175      -3.226       0.589
+attempt_no                               -0.0537      0.034     -1.564      0.118      -0.121       0.014
+initial_delta_e                        3.074e-15   1.55e-15      1.978      0.048    2.79e-17    6.12e-15
+log_duration_sec                         -0.4692      0.361     -1.299      0.194      -1.177       0.239
+log_num_steps                             0.8985      0.400      2.249      0.025       0.115       1.682
+target_recipe_n_components               -0.0827      0.069     -1.198      0.231      -0.218       0.053
+similarity                               -2.6925      2.034     -1.324      0.185      -6.678       1.293
+attempt_no:target_recipe_n_components     0.0119      0.012      0.958      0.338      -0.012       0.036
+==============================================================================
+Omnibus:                       64.575   Durbin-Watson:                   1.585
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):              583.070
+Skew:                           1.087   Prob(JB):                    2.44e-127
+Kurtosis:                      11.809   Cond. No.                     1.09e+18
+==============================================================================
+
+Notes:
+[1] Standard Errors are heteroscedasticity robust (HC3)
+[2] The smallest eigenvalue is 4.54e-32. This might indicate that there are
+strong multicollinearity problems or that the design matrix is singular.

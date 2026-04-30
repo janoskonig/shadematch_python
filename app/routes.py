@@ -27,6 +27,7 @@ from .gamification import (
     process_progression,
     build_progress_response,
     get_quota_ordered_catalog,
+    compute_quota_progress,
     grant_daily_champion,
     grant_daily_mission_awards,
     grant_daily_performance_awards,
@@ -40,7 +41,13 @@ from .gamification import (
     _effective_sum_cap,
 )
 from .next_action import build_next_action
-from .stat_eda import ALLOWED_PLOT_IDS, build_attempt_archetypes, get_plot_png
+from .stat_eda import (
+    ALLOWED_PLOT_IDS,
+    build_attempt_archetypes,
+    build_recipe_similarity_summary,
+    get_plot_png,
+)
+from .mixed_models_stat import get_mixed_models_summary
 
 main = Blueprint('main', __name__)
 
@@ -595,8 +602,9 @@ def get_target_colors():
 
     next_action_data = {}
     if user_id:
-        colors = get_quota_ordered_catalog(user_id, colors)
-        next_action_data = build_next_action(user_id)
+        quota = compute_quota_progress(user_id)
+        colors = get_quota_ordered_catalog(user_id, colors, quota=quota)
+        next_action_data = build_next_action(user_id, quota=quota)
 
     return jsonify({'status': 'success', 'colors': colors, **next_action_data})
 
@@ -2049,6 +2057,12 @@ def stat_summary():
         ).mappings().all()
 
         archetypes = build_attempt_archetypes()
+        recipe_similarity = build_recipe_similarity_summary()
+        try:
+            mm_raw = get_mixed_models_summary()
+            mixed_models = {k: v for k, v in (mm_raw or {}).items() if k != 'text_summaries'}
+        except Exception as mm_err:
+            mixed_models = {'status': 'error', 'message': str(mm_err)}
 
         _skip_delta_e_sql = """
                 SELECT
@@ -2213,6 +2227,8 @@ def stat_summary():
                 'elapsed_per_color': [dict(r) for r in elapsed_per_color],
                 'controlled_by_attempt': [dict(r) for r in controlled_by_attempt],
                 'archetypes': archetypes,
+                'recipe_similarity': recipe_similarity,
+                'mixed_models': mixed_models,
                 'skipped_identical_delta_e': skipped_identical_delta_e,
                 'skipped_acceptable_delta_e': skipped_acceptable_delta_e,
                 'skipped_unacceptable_delta_e': skipped_unacceptable_delta_e,
@@ -2311,15 +2327,18 @@ def push_send_daily():
     if secret != os.environ.get('PUSH_CRON_SECRET', ''):
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
+    webpush = None
+    WebPushException = None
     try:
-        from pywebpush import webpush, WebPushException
+        from pywebpush import webpush as _webpush, WebPushException as _WebPushException
+        webpush = _webpush
+        WebPushException = _WebPushException
     except ImportError:
-        return jsonify({'status': 'error', 'message': 'pywebpush not installed'}), 500
+        pass
 
-    vapid_private = os.environ.get('VAPID_PRIVATE_KEY')
-    vapid_public = os.environ.get('VAPID_PUBLIC_KEY')
-    if not vapid_private or not vapid_public:
-        return jsonify({'status': 'error', 'message': 'VAPID keys not configured'}), 500
+    vapid_private = os.environ.get('VAPID_PRIVATE_KEY', '')
+    vapid_public = os.environ.get('VAPID_PUBLIC_KEY', '')
+    push_ready = bool(webpush and vapid_private and vapid_public)
 
     subs = PushSubscription.query.all()
     sent = 0
@@ -2385,27 +2404,28 @@ def push_send_daily():
                 'icon': '/static/icons/icon-192.png',
             }
 
-    for sub in subs:
-        payload_dict = _build_push_payload(sub.user_id)
-        try:
-            webpush(
-                subscription_info={
-                    'endpoint': sub.endpoint,
-                    'keys': {'p256dh': sub.p256dh, 'auth': sub.auth},
-                },
-                data=json.dumps(payload_dict),
-                vapid_private_key=vapid_private,
-                vapid_claims={'sub': 'mailto:admin@shadematch.app'},
-            )
-            sent += 1
-        except WebPushException as ex:
-            status_code = ex.response.status_code if ex.response else None
-            if status_code in (404, 410):
-                dead_endpoints.append(sub.endpoint)
-            else:
+    if push_ready:
+        for sub in subs:
+            payload_dict = _build_push_payload(sub.user_id)
+            try:
+                webpush(
+                    subscription_info={
+                        'endpoint': sub.endpoint,
+                        'keys': {'p256dh': sub.p256dh, 'auth': sub.auth},
+                    },
+                    data=json.dumps(payload_dict),
+                    vapid_private_key=vapid_private,
+                    vapid_claims={'sub': 'mailto:admin@shadematch.app'},
+                )
+                sent += 1
+            except WebPushException as ex:
+                status_code = ex.response.status_code if ex.response else None
+                if status_code in (404, 410):
+                    dead_endpoints.append(sub.endpoint)
+                else:
+                    failed += 1
+            except Exception:
                 failed += 1
-        except Exception:
-            failed += 1
 
     reminder_users = User.query.filter(
         User.email.isnot(None),

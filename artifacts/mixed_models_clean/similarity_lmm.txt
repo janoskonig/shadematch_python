@@ -1,0 +1,30 @@
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:       similarity_logit   R-squared:                       0.722
+Model:                            OLS   Adj. R-squared:                  0.715
+Method:                 Least Squares   F-statistic:                     142.5
+Date:                Mon, 27 Apr 2026   Prob (F-statistic):           6.08e-77
+Time:                        06:09:08   Log-Likelihood:                -577.52
+No. Observations:                 252   AIC:                             1169.
+Df Residuals:                     245   BIC:                             1194.
+Df Model:                           6                                         
+Covariance Type:                  HC3                                         
+================================================================================================
+                                   coef    std err          z      P>|z|      [0.025      0.975]
+------------------------------------------------------------------------------------------------
+Intercept                       11.4919      0.296     38.795      0.000      10.911      12.072
+C(color_type)[T.lab]             1.0963      0.362      3.028      0.002       0.387       1.806
+C(color_type)[T.skin]           -7.0643      0.913     -7.735      0.000      -8.854      -5.274
+z_attempt_no                     0.3235      0.170      1.901      0.057      -0.010       0.657
+z_log_duration_sec              -1.6860      1.084     -1.555      0.120      -3.810       0.439
+z_log_num_steps                 -1.7624      0.984     -1.791      0.073      -3.691       0.166
+z_target_recipe_n_components     0.6730      0.195      3.450      0.001       0.291       1.055
+==============================================================================
+Omnibus:                      108.680   Durbin-Watson:                   1.687
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):              881.319
+Skew:                          -1.494   Prob(JB):                    4.21e-192
+Kurtosis:                      11.660   Cond. No.                         10.3
+==============================================================================
+
+Notes:
+[1] Standard Errors are heteroscedasticity robust (HC3)

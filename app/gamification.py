@@ -376,11 +376,15 @@ def _catalog_recipe_max_sum() -> int:
     return m
 
 
-def _effective_sum_cap(max_sum_drop_unlocked: int) -> int:
-    """User cap clamped to catalog content and global ceiling."""
-    catalog_max = _catalog_recipe_max_sum()
+def _effective_sum_cap_from_catalog_max(max_sum_drop_unlocked: int, catalog_max: int) -> int:
+    """User cap clamped to catalog content and global ceiling (catalog_max from a preloaded row set)."""
     top = catalog_max if catalog_max > 0 else MAX_SUM_DROP_CATALOG_CAP
     return min(int(max_sum_drop_unlocked), MAX_SUM_DROP_CATALOG_CAP, max(top, MIN_SUM_DROP_BAND))
+
+
+def _effective_sum_cap(max_sum_drop_unlocked: int) -> int:
+    """User cap clamped to catalog content and global ceiling."""
+    return _effective_sum_cap_from_catalog_max(max_sum_drop_unlocked, _catalog_recipe_max_sum())
 
 
 def _eligible_target_colors(max_sum_drop_unlocked: int) -> list:
@@ -463,7 +467,23 @@ def compute_quota_progress(user_id: str) -> dict:
         if up is not None:
             max_sum_unlocked = int(up.max_sum_drop_unlocked)
 
-    eligible = _eligible_target_colors(max_sum_unlocked)
+    # Single ordered catalog load: max recipe sum, effective cap, and eligible colors
+    # (avoids 3–4 full-table scans from _eligible_target_colors + duplicate _catalog_recipe_max_sum).
+    all_tracked = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
+    catalog_max = 0
+    for tc in all_tracked:
+        s = target_color_sum_drop(tc)
+        if s is not None:
+            catalog_max = max(catalog_max, s)
+    effective = _effective_sum_cap_from_catalog_max(max_sum_unlocked, catalog_max)
+    eligible = []
+    for tc in all_tracked:
+        s = target_color_sum_drop(tc)
+        if s is None:
+            continue
+        if MIN_SUM_DROP_BAND <= s <= effective:
+            eligible.append(tc)
+
     tracked_color_ids = [tc.id for tc in eligible]
     eligible_ids = set(tracked_color_ids)
     total_tracked_colors = len(tracked_color_ids)
@@ -474,8 +494,6 @@ def compute_quota_progress(user_id: str) -> dict:
             s.target_color_id: s.attempt_count
             for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
         }
-
-    all_tracked = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
     color_quota_map = {}
     for tc in all_tracked:
         attempt_count = stats_map.get(tc.id, 0)
@@ -522,7 +540,6 @@ def compute_quota_progress(user_id: str) -> dict:
         len(recipe_colors) > 0
         and all(stats_map.get(tc.id, 0) >= COVERAGE_QUOTA for tc in recipe_colors)
     )
-    catalog_max = _catalog_recipe_max_sum()
     cap_fully_open = (
         catalog_max <= 0
         or max_sum_unlocked >= min(MAX_SUM_DROP_CATALOG_CAP, catalog_max)
@@ -539,6 +556,7 @@ def compute_quota_progress(user_id: str) -> dict:
         'completed_colors': completed_colors,
         'total_tracked_colors': total_tracked_colors,
         'max_sum_drop_unlocked': max_sum_unlocked,
+        'effective_sum_cap': effective,
         'remaining_attempts_total': remaining_attempts_total,
         'coverage_ratio': coverage_ratio,
         'catalog_coverage_pct': catalog_coverage_pct,
@@ -848,7 +866,7 @@ def grant_daily_champion(user_id, challenge_date_str):
 # Quota-aware catalog helper
 # ---------------------------------------------------------------------------
 
-def get_quota_ordered_catalog(user_id, full_catalog):
+def get_quota_ordered_catalog(user_id, full_catalog, quota=None):
     """
     Annotate each catalog entry with:
       - attempt_count  : per-user plays (from UserTargetColorStats)
@@ -858,19 +876,16 @@ def get_quota_ordered_catalog(user_id, full_catalog):
     if not user_id:
         return full_catalog
 
-    stats_map = {
-        s.target_color_id: s.attempt_count
-        for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
-    }
-
-    quota = compute_quota_progress(user_id)
-    cap = int(quota['max_sum_drop_unlocked'])
-    effective = _effective_sum_cap(cap)
+    if quota is None:
+        quota = compute_quota_progress(user_id)
+    effective = int(quota['effective_sum_cap'])
+    cq = quota['color_quota_map']
 
     result = []
     for c in full_catalog:
         c_copy = dict(c)
-        c_copy['attempt_count'] = stats_map.get(c['id'], 0)
+        meta = cq.get(c['id'], {})
+        c_copy['attempt_count'] = int(meta.get('attempt_count', 0))
         c_copy['under_quota'] = c_copy['attempt_count'] < COVERAGE_QUOTA
         s = c.get('sum_drop_count')
         c_copy['unlocked'] = (

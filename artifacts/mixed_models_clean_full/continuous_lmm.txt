@@ -1,0 +1,3 @@
+FAILED: Error evaluating factor: NameError: name 'z_similarity' is not defined
+    log_final_delta_e ~ z_attempt_no + z_log_duration_sec + z_log_num_steps + C(color_type) + z_target_recipe_n_components + initial_delta_e + z_similarity + z_attempt_no:z_target_recipe_n_components
+                                                                                                                                               ^^^^^^^^^^^^
