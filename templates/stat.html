@@ -230,6 +230,92 @@
   </section>
 
   <section class="section">
+    <h2>6b) Exploratory correlations</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      Scatter plots include Pearson correlation in the title. Heatmap and league summarize attempt-level linear associations.
+    </p>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Scatter: Final DeltaE vs number of steps</p>
+        <img class="stat-plot-img stat-plot" data-plot="scatter_deltae_vs_steps" alt="Scatter final DeltaE vs steps" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Scatter: Elapsed time vs number of steps</p>
+        <img class="stat-plot-img stat-plot" data-plot="scatter_duration_vs_steps" alt="Scatter elapsed time vs steps" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Correlation heatmap</p>
+        <img class="stat-plot-img stat-plot" data-plot="correlation_heatmap" alt="Correlation heatmap" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Correlation league (ranked by |r|)</p>
+        <img class="stat-plot-img stat-plot" data-plot="correlation_league" alt="Correlation league" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Scatter: Final DeltaE vs recipe similarity</p>
+        <img class="stat-plot-img stat-plot" data-plot="deltae_vs_similarity" alt="Scatter final DeltaE vs recipe similarity" loading="lazy" />
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>6c) Recipe-ratio similarity (perfect vs deviant)</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      Similarity compares normalized drop ratios, so scaled recipes are treated as equivalent. Perfect means ratio-identical; deviant means any ratio difference.
+    </p>
+    <div class="cards" id="recipeSimilarityCards"></div>
+    <div class="table-wrap" style="margin-top:10px;"><table id="recipeSimilaritySampleTable"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>6d) Attempt models (stable spec, HC3)</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      Outcomes: <code>log₁p(final&nbsp;ΔE)</code>, <code>logit(similarity)</code>, and binary <code>perfect_ratio</code> (exact recipe match).
+      Predictors are standardized per run (z-scores). With very few distinct users, fits use OLS / logistic GLM with robust SEs (HC3), not full random-effects mixed models.
+    </p>
+    <div class="cards" id="mixedModelsMetaCards"></div>
+    <p id="mixedModelsNotes" style="margin:10px 0 0;color:var(--text-secondary);font-size:0.82rem;"></p>
+    <div class="chart-grid" style="margin-top:12px;">
+      <div class="chart-card">
+        <p class="chart-title">VIF (multicollinearity)</p>
+        <img class="stat-plot-img stat-plot" data-plot="mixed_models_vif" alt="Mixed models VIF" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">log₁p(ΔE): coefficient forest</p>
+        <img class="stat-plot-img stat-plot" data-plot="mixed_models_coef_logde" alt="Coefficients log final DeltaE" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">logit(similarity): coefficient forest</p>
+        <img class="stat-plot-img stat-plot" data-plot="mixed_models_coef_similarity" alt="Coefficients similarity" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Perfect ratio: odds ratios</p>
+        <img class="stat-plot-img stat-plot" data-plot="mixed_models_perfect_ratio_or" alt="Odds ratios perfect ratio" loading="lazy" />
+      </div>
+    </div>
+    <div class="chart-grid" style="margin-top:10px;">
+      <div class="chart-card">
+        <p class="chart-title">VIF table</p>
+        <div class="table-wrap"><table id="mixedModelsVifTable"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">log₁p(ΔE) coefficients</p>
+        <div class="table-wrap"><table id="mixedModelsContCoefTable"></table></div>
+      </div>
+    </div>
+    <div class="chart-grid" style="margin-top:10px;">
+      <div class="chart-card">
+        <p class="chart-title">logit(similarity) coefficients</p>
+        <div class="table-wrap"><table id="mixedModelsSimCoefTable"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Perfect ratio — odds ratios</p>
+        <div class="table-wrap"><table id="mixedModelsOrTable"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
     <h2>7) Action-level DeltaE trajectory (per attempt)</h2>
     <div class="trajectory-controls">
       <label>Target color
@@ -473,6 +559,129 @@
     img.src = '/api/stat/plot/archetype_deltae_trajectories.png' + q;
   }
 
+  function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  function fmtPValue(v) {
+    if (v === null || v === undefined || Number.isNaN(Number(v))) return '—';
+    var n = Number(v);
+    if (n === 0) return '0';
+    if (n < 1e-6) return '<1e-6';
+    if (n < 0.0001) return n.toExponential(2);
+    return n.toFixed(4);
+  }
+
+  function renderMixedModels(mm) {
+    var metaHost = document.getElementById('mixedModelsMetaCards');
+    var notesEl = document.getElementById('mixedModelsNotes');
+    var vifT = document.getElementById('mixedModelsVifTable');
+    var contT = document.getElementById('mixedModelsContCoefTable');
+    var simT = document.getElementById('mixedModelsSimCoefTable');
+    var orT = document.getElementById('mixedModelsOrTable');
+    if (!metaHost) return;
+    metaHost.innerHTML = '';
+    if (notesEl) notesEl.textContent = '';
+    if (vifT) vifT.innerHTML = '';
+    if (contT) contT.innerHTML = '';
+    if (simT) simT.innerHTML = '';
+    if (orT) orT.innerHTML = '';
+    if (!mm || mm.status === 'error') {
+      metaHost.innerHTML =
+        '<div class="card"><div class="k">Mixed models</div><div class="v" style="font-size:0.95rem;">' +
+        escapeHtml((mm && mm.message) || 'Not available') +
+        '</div></div>';
+      return;
+    }
+    if (mm.status === 'empty') {
+      metaHost.innerHTML =
+        '<div class="card"><div class="k">Mixed models</div><div class="v" style="font-size:0.95rem;">' +
+        escapeHtml(mm.message || 'No data') +
+        '</div></div>';
+      return;
+    }
+    var m = mm.meta || {};
+    var cards = [
+      { k: 'Rows', v: m.n_rows != null ? String(m.n_rows) : '—' },
+      { k: 'Users', v: m.n_users != null ? String(m.n_users) : '—' },
+      { k: 'Targets', v: m.n_targets != null ? String(m.n_targets) : '—' },
+      {
+        k: 'Perfect ratio rate',
+        v: m.perfect_ratio_rate != null ? pctFmt(m.perfect_ratio_rate) : '—'
+      },
+      { k: 'Spec', v: m.spec ? String(m.spec) : '—' }
+    ];
+    metaHost.innerHTML = cards
+      .map(function(c) {
+        return '<div class="card"><div class="k">' + escapeHtml(c.k) + '</div><div class="v">' + c.v + '</div></div>';
+      })
+      .join('');
+    if (notesEl && Array.isArray(mm.notes) && mm.notes.length) {
+      notesEl.textContent = mm.notes.join(' ');
+    }
+    if (vifT && Array.isArray(mm.vif) && mm.vif.length) {
+      buildTable(vifT, [
+        { key: 'feature', label: 'Feature' },
+        { key: 'vif', label: 'VIF', formatter: function(v) { return fmtNumber(v, 2); } }
+      ], mm.vif);
+    }
+    var cont = mm.continuous;
+    if (contT) {
+      if (cont && cont.error) {
+        contT.innerHTML = '<tr><td colspan="6">' + escapeHtml(cont.error) + '</td></tr>';
+      } else if (cont && Array.isArray(cont.coefs) && cont.coefs.length) {
+        buildTable(contT, [
+          { key: 'term', label: 'Term' },
+          { key: 'coef', label: 'Coef', formatter: function(v) { return fmtNumber(v, 4); } },
+          { key: 'std_err', label: 'SE', formatter: function(v) { return fmtNumber(v, 4); } },
+          { key: 'ci_low', label: 'CI low', formatter: function(v) { return fmtNumber(v, 4); } },
+          { key: 'ci_high', label: 'CI high', formatter: function(v) { return fmtNumber(v, 4); } },
+          { key: 'p_value', label: 'p', formatter: fmtPValue }
+        ], cont.coefs);
+      } else {
+        contT.innerHTML = '<tr><td colspan="6">No coefficients</td></tr>';
+      }
+    }
+    var sim = mm.similarity;
+    if (simT) {
+      if (sim && sim.error) {
+        simT.innerHTML = '<tr><td colspan="6">' + escapeHtml(sim.error) + '</td></tr>';
+      } else if (sim && Array.isArray(sim.coefs) && sim.coefs.length) {
+        buildTable(simT, [
+          { key: 'term', label: 'Term' },
+          { key: 'coef', label: 'Coef', formatter: function(v) { return fmtNumber(v, 4); } },
+          { key: 'std_err', label: 'SE', formatter: function(v) { return fmtNumber(v, 4); } },
+          { key: 'ci_low', label: 'CI low', formatter: function(v) { return fmtNumber(v, 4); } },
+          { key: 'ci_high', label: 'CI high', formatter: function(v) { return fmtNumber(v, 4); } },
+          { key: 'p_value', label: 'p', formatter: fmtPValue }
+        ], sim.coefs);
+      } else {
+        simT.innerHTML = '<tr><td colspan="6">No coefficients</td></tr>';
+      }
+    }
+    var pr = mm.perfect_ratio;
+    if (orT) {
+      if (pr && pr.error) {
+        orT.innerHTML = '<tr><td colspan="5">' + escapeHtml(pr.error) + '</td></tr>';
+      } else if (pr && Array.isArray(pr.odds_ratios) && pr.odds_ratios.length) {
+        buildTable(orT, [
+          { key: 'term', label: 'Term' },
+          { key: 'odds_ratio', label: 'OR', formatter: function(v) { return fmtNumber(v, 3); } },
+          { key: 'ci_low_or', label: 'CI low', formatter: function(v) { return fmtNumber(v, 3); } },
+          { key: 'ci_high_or', label: 'CI high', formatter: function(v) { return fmtNumber(v, 3); } },
+          { key: 'p_value', label: 'p', formatter: fmtPValue }
+        ], pr.odds_ratios);
+      } else {
+        orT.innerHTML = '<tr><td colspan="5">No odds ratios</td></tr>';
+      }
+    }
+  }
+
   async function loadStats() {
     var resp = await fetch('/api/stat/summary');
     var data = await resp.json();
@@ -583,6 +792,34 @@
       ],
       data.controlled_by_attempt || []
     );
+
+    var rs = data.recipe_similarity || {};
+    var rsCards = [
+      { k: 'Attempts with similarity', v: rs.n_attempts_with_similarity || 0 },
+      { k: 'Perfect ratio solutions', v: rs.n_perfect_ratio_solutions || 0 },
+      { k: 'Deviant solutions', v: rs.n_deviant_ratio_solutions || 0 },
+      { k: 'Perfect ratio share', v: pctFmt(rs.perfect_ratio_share) },
+      { k: 'Mean similarity', v: fmtNumber(rs.mean_similarity, 4) },
+      { k: 'Median similarity', v: fmtNumber(rs.median_similarity, 4) }
+    ];
+    var rsCardsEl = document.getElementById('recipeSimilarityCards');
+    if (rsCardsEl) {
+      rsCardsEl.innerHTML = rsCards.map(function(c) {
+        return '<div class="card"><div class="k">' + c.k + '</div><div class="v">' + c.v + '</div></div>';
+      }).join('');
+    }
+    buildTable(
+      document.getElementById('recipeSimilaritySampleTable'),
+      [
+        { key: 'target_name', label: 'Color' },
+        { key: 'final_delta_e', label: 'Final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
+        { key: 'similarity', label: 'Similarity', formatter: function(v) { return fmtNumber(v, 4); } },
+        { key: 'ratio_is_perfect', label: 'Perfect ratio', formatter: function(v) { return v ? 'yes' : 'no'; } }
+      ],
+      (rs.scatter_rows || []).slice(0, 250)
+    );
+
+    renderMixedModels(data.mixed_models || {});
 
     var arch = data.archetypes || {};
     var meta = document.getElementById('archetypeMeta');

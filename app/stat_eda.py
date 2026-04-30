@@ -68,6 +68,7 @@ def get_dataframes() -> Tuple[pd.DataFrame, pd.DataFrame]:
               seq,
               step_index,
               event_type,
+              state_after_json,
               delta_e_before,
               delta_e_after,
               action_type,
@@ -1079,6 +1080,261 @@ def plot_deltae_elapsed_scatter(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
     return _fig_to_png(fig)
 
 
+def _pearson_corr(x: pd.Series, y: pd.Series) -> Optional[float]:
+    pair = pd.DataFrame({'x': pd.to_numeric(x, errors='coerce'), 'y': pd.to_numeric(y, errors='coerce')}).dropna()
+    if len(pair) < 3:
+        return None
+    if pair['x'].nunique() < 2 or pair['y'].nunique() < 2:
+        return None
+    return float(pair['x'].corr(pair['y']))
+
+
+def _plot_scatter_with_corr(
+    df: pd.DataFrame,
+    x_col: str,
+    y_col: str,
+    x_label: str,
+    y_label: str,
+    title: str,
+    *,
+    x_clip_q: Optional[float] = None,
+    y_clip_q: Optional[float] = None,
+) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 5))
+    if len(df) == 0:
+        ax.text(0.5, 0.5, 'No data available', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    part = df[[x_col, y_col]].copy()
+    part[x_col] = pd.to_numeric(part[x_col], errors='coerce')
+    part[y_col] = pd.to_numeric(part[y_col], errors='coerce')
+    part = part.dropna()
+    if len(part) == 0:
+        ax.text(0.5, 0.5, 'No complete x/y rows', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    if x_clip_q is not None and len(part) > 20:
+        x_cap = part[x_col].quantile(float(x_clip_q))
+        part = part[part[x_col] <= x_cap]
+    if y_clip_q is not None and len(part) > 20:
+        y_cap = part[y_col].quantile(float(y_clip_q))
+        part = part[part[y_col] <= y_cap]
+    if len(part) > 9000:
+        part = part.sample(9000, random_state=42)
+
+    ax.scatter(
+        part[x_col].to_numpy(),
+        part[y_col].to_numpy(),
+        s=10,
+        alpha=0.32,
+        color='#2563eb',
+        edgecolors='none',
+    )
+    r = _pearson_corr(part[x_col], part[y_col])
+    rt = 'n/a' if r is None else f'{r:.3f}'
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(f'{title} (Pearson r={rt})')
+    return _fig_to_png(fig)
+
+
+def plot_scatter_deltae_vs_steps(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    att = _dashboard_attempts_df()
+    att = att[att['final_delta_e'].notna() & att['duration_sec'].notna()]
+    if 'num_steps' not in att.columns:
+        sql = text(
+            """
+            SELECT final_delta_e, duration_sec, num_steps
+            FROM mixing_attempts
+            WHERE final_delta_e IS NOT NULL
+              AND num_steps IS NOT NULL
+            """
+        )
+        with db.engine.connect() as conn:
+            att = pd.read_sql(sql, conn)
+    return _plot_scatter_with_corr(
+        att,
+        'num_steps',
+        'final_delta_e',
+        'Num steps',
+        'Final DeltaE',
+        'Scatter: Final DeltaE vs number of steps',
+        x_clip_q=0.995,
+        y_clip_q=0.995,
+    )
+
+
+def plot_scatter_duration_vs_steps(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    sql = text(
+        """
+        SELECT duration_sec, num_steps
+        FROM mixing_attempts
+        WHERE duration_sec IS NOT NULL
+          AND num_steps IS NOT NULL
+        """
+    )
+    with db.engine.connect() as conn:
+        att = pd.read_sql(sql, conn)
+    return _plot_scatter_with_corr(
+        att,
+        'num_steps',
+        'duration_sec',
+        'Num steps',
+        'Elapsed time (s)',
+        'Scatter: Elapsed time vs number of steps',
+        x_clip_q=0.995,
+        y_clip_q=0.995,
+    )
+
+
+def plot_correlation_heatmap(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(7.6, 6.4))
+    sql = text(
+        """
+        SELECT
+          final_delta_e,
+          duration_sec,
+          num_steps,
+          initial_delta_e
+        FROM mixing_attempts
+        WHERE final_delta_e IS NOT NULL
+           OR duration_sec IS NOT NULL
+           OR num_steps IS NOT NULL
+           OR initial_delta_e IS NOT NULL
+        """
+    )
+    with db.engine.connect() as conn:
+        df = pd.read_sql(sql, conn)
+    if len(df) == 0:
+        ax.text(0.5, 0.5, 'No rows for correlation heatmap', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    num = df.apply(pd.to_numeric, errors='coerce')
+    # Option A: render with always-available core fields, include initial_delta_e only if present.
+    base_cols = [c for c in ['final_delta_e', 'duration_sec', 'num_steps'] if c in num.columns]
+    if len(base_cols) < 2:
+        ax.text(0.5, 0.5, 'Need at least two numeric metrics for correlation', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    present = []
+    for c in base_cols:
+        s = num[c]
+        if s.notna().sum() >= 3 and s.nunique(dropna=True) >= 2:
+            present.append(c)
+    if 'initial_delta_e' in num.columns:
+        s = num['initial_delta_e']
+        if s.notna().sum() >= 3 and s.nunique(dropna=True) >= 2:
+            present.append('initial_delta_e')
+    if len(present) < 2:
+        ax.text(0.5, 0.5, 'Not enough populated metrics for correlation', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    corr = num[present].corr(numeric_only=True)
+    if corr.empty:
+        ax.text(0.5, 0.5, 'Empty correlation matrix', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    cols = list(corr.columns)
+    labels = {
+        'final_delta_e': 'final_dE',
+        'duration_sec': 'duration_s',
+        'num_steps': 'num_steps',
+        'initial_delta_e': 'initial_dE',
+    }
+    show_names = [labels.get(c, c) for c in cols]
+    arr = corr.values.astype(float)
+    im = ax.imshow(arr, vmin=-1.0, vmax=1.0, cmap='coolwarm')
+    ax.set_xticks(np.arange(len(cols)))
+    ax.set_yticks(np.arange(len(cols)))
+    ax.set_xticklabels(show_names, rotation=30, ha='right')
+    ax.set_yticklabels(show_names)
+    for i in range(arr.shape[0]):
+        for j in range(arr.shape[1]):
+            v = arr[i, j]
+            ax.text(j, i, f'{v:.2f}', ha='center', va='center', fontsize=8, color='black')
+    ax.set_title('Correlation heatmap (attempt-level metrics)')
+    fig.colorbar(im, ax=ax, fraction=0.046, pad=0.04, label='Pearson r')
+    fig.tight_layout()
+    return _fig_to_png(fig)
+
+
+def plot_correlation_league(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(8.5, 4.8))
+    sql = text(
+        """
+        SELECT
+          final_delta_e,
+          duration_sec,
+          num_steps,
+          initial_delta_e
+        FROM mixing_attempts
+        WHERE final_delta_e IS NOT NULL
+           OR duration_sec IS NOT NULL
+           OR num_steps IS NOT NULL
+           OR initial_delta_e IS NOT NULL
+        """
+    )
+    with db.engine.connect() as conn:
+        df = pd.read_sql(sql, conn)
+    if len(df) == 0:
+        ax.text(0.5, 0.5, 'No rows for correlation league', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    num = df.apply(pd.to_numeric, errors='coerce')
+    if 'final_delta_e' not in num.columns:
+        ax.text(0.5, 0.5, 'final_delta_e is missing', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    target_valid = num['final_delta_e'].notna().sum()
+    if target_valid < 3 or num['final_delta_e'].nunique(dropna=True) < 2:
+        ax.text(0.5, 0.5, 'Not enough final_delta_e variation', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    target = 'final_delta_e'
+    candidates = [c for c in ['duration_sec', 'num_steps'] if c in num.columns]
+    # Optional field: include initial_delta_e only when populated enough.
+    if 'initial_delta_e' in num.columns:
+        s = num['initial_delta_e']
+        if s.notna().sum() >= 3 and s.nunique(dropna=True) >= 2:
+            candidates.append('initial_delta_e')
+    rows: List[Tuple[str, float]] = []
+    for c in candidates:
+        r = _pearson_corr(num[target], num[c])
+        if r is None:
+            continue
+        rows.append((c, r))
+    if not rows:
+        ax.text(0.5, 0.5, 'No valid pairwise correlations', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    rows = sorted(rows, key=lambda t: abs(t[1]), reverse=True)
+    names = [r[0] for r in rows]
+    vals = np.array([r[1] for r in rows], dtype=float)
+    y = np.arange(len(rows))
+    colors = ['#dc2626' if v < 0 else '#2563eb' for v in vals]
+    ax.barh(y, vals, color=colors, edgecolor='white')
+    ax.axvline(0.0, color='#334155', linewidth=1.0)
+    ax.set_yticks(y)
+    ax.set_yticklabels(names)
+    ax.invert_yaxis()
+    ax.set_xlim(-1.0, 1.0)
+    ax.set_xlabel('Pearson r with final_delta_e')
+    ax.set_title('Correlation league (ranked by |r|)')
+    for yi, v in zip(y, vals):
+        ax.text(
+            v + (0.02 if v >= 0 else -0.02),
+            yi,
+            f'{v:.2f}',
+            va='center',
+            ha='left' if v >= 0 else 'right',
+            fontsize=8,
+            color='#111827',
+        )
+    fig.tight_layout()
+    return _fig_to_png(fig)
+
+
 def plot_attempt_deltae_timeline(
     att: pd.DataFrame,
     ev: pd.DataFrame,
@@ -1327,6 +1583,252 @@ def _json_float(x: Any) -> Optional[float]:
     if np.isnan(xf):
         return None
     return xf
+
+
+def _normalize_recipe_vector(arr: np.ndarray) -> Optional[np.ndarray]:
+    vec = np.asarray(arr, dtype=float)
+    vec = np.where(np.isfinite(vec), vec, 0.0)
+    vec = np.clip(vec, 0.0, None)
+    total = float(vec.sum())
+    if total <= 0:
+        return None
+    return vec / total
+
+
+def build_attempt_recipe_similarity(
+    att: pd.DataFrame,
+    ev: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Build per-attempt, scale-invariant recipe similarity against target recipe.
+
+    Similarity is computed on normalized recipe vectors:
+      similarity = 1 - 0.5 * L1(user_ratio, target_ratio), range [0, 1].
+    """
+    if len(att) == 0:
+        return pd.DataFrame()
+
+    tc_sql = text(
+        """
+        SELECT
+          id AS target_color_id,
+          COALESCE(name, '(unknown)') AS target_name,
+          COALESCE(drop_red, 0) AS target_drop_red,
+          COALESCE(drop_yellow, 0) AS target_drop_yellow,
+          COALESCE(drop_white, 0) AS target_drop_white,
+          COALESCE(drop_blue, 0) AS target_drop_blue,
+          COALESCE(drop_black, 0) AS target_drop_black
+        FROM target_colors
+        """
+    )
+    with db.engine.connect() as conn:
+        tc = pd.read_sql(tc_sql, conn)
+
+    if len(tc) == 0:
+        return pd.DataFrame()
+
+    tc['target_color_id'] = pd.to_numeric(tc['target_color_id'], errors='coerce')
+    tc = tc[tc['target_color_id'].notna()].copy()
+    if len(tc) == 0:
+        return pd.DataFrame()
+    tc['target_color_id'] = tc['target_color_id'].astype(int)
+
+    # Prefer authoritative final drops from the last state_after_json of each attempt.
+    # Fallback to edge reconstruction only when state payload is unavailable.
+    final_by_attempt: Dict[str, Tuple[int, int, int, int, int]] = {}
+    if len(ev):
+        if 'state_after_json' in ev.columns:
+            ev_last = ev.sort_values(['attempt_uuid', 'seq'], na_position='last')
+            for au, part in ev_last.groupby('attempt_uuid', sort=False):
+                raw = part.iloc[-1].get('state_after_json')
+                drops = raw.get('drops') if isinstance(raw, dict) else None
+                if not isinstance(drops, dict):
+                    continue
+                final_by_attempt[str(au)] = (
+                    int(max(0, drops.get('red', 0) or 0)),
+                    int(max(0, drops.get('yellow', 0) or 0)),
+                    int(max(0, drops.get('white', 0) or 0)),
+                    int(max(0, drops.get('blue', 0) or 0)),
+                    int(max(0, drops.get('black', 0) or 0)),
+                )
+        if not final_by_attempt:
+            edges = build_edge_tables_all_attempts(ev)
+            if len(edges):
+                for au, part in edges.groupby('attempt_uuid', sort=False):
+                    p = part.sort_values('seq')
+                    st = p.iloc[-1]['to_state']
+                    if isinstance(st, tuple) and len(st) == 5:
+                        final_by_attempt[str(au)] = tuple(max(0, int(x)) for x in st)
+
+    cols = [
+        'attempt_uuid',
+        'target_color_id',
+        'final_delta_e',
+        'end_reason',
+        'attempt_started_server_ts',
+    ]
+    a = att[[c for c in cols if c in att.columns]].copy()
+    if 'attempt_uuid' not in a.columns or 'target_color_id' not in a.columns:
+        return pd.DataFrame()
+    a = a[a['attempt_uuid'].notna() & a['target_color_id'].notna()].copy()
+    if len(a) == 0:
+        return pd.DataFrame()
+    a['attempt_uuid'] = a['attempt_uuid'].astype(str)
+    a['target_color_id'] = pd.to_numeric(a['target_color_id'], errors='coerce')
+    a = a[a['target_color_id'].notna()].copy()
+    if len(a) == 0:
+        return pd.DataFrame()
+    a['target_color_id'] = a['target_color_id'].astype(int)
+
+    merged = a.merge(tc, on='target_color_id', how='left')
+    if len(merged) == 0:
+        return pd.DataFrame()
+
+    out_rows: List[Dict[str, Any]] = []
+    for _, row in merged.iterrows():
+        au = str(row.get('attempt_uuid') or '')
+        if not au:
+            continue
+        user_state = final_by_attempt.get(au)
+        if user_state is None:
+            continue
+
+        # user_state tuple order: red, yellow, white, blue, black
+        user_vec = np.array(user_state, dtype=float)
+        target_vec = np.array(
+            [
+                row.get('target_drop_red'),
+                row.get('target_drop_yellow'),
+                row.get('target_drop_white'),
+                row.get('target_drop_blue'),
+                row.get('target_drop_black'),
+            ],
+            dtype=float,
+        )
+        user_ratio = _normalize_recipe_vector(user_vec)
+        target_ratio = _normalize_recipe_vector(target_vec)
+        if user_ratio is None or target_ratio is None:
+            continue
+
+        similarity = float(np.clip(1.0 - 0.5 * np.abs(user_ratio - target_ratio).sum(), 0.0, 1.0))
+        ratio_is_perfect = bool(np.isclose(similarity, 1.0, atol=1e-9))
+
+        out_rows.append(
+            {
+                'attempt_uuid': au,
+                'target_color_id': int(row['target_color_id']),
+                'target_name': str(row.get('target_name') or '(unknown)'),
+                'final_delta_e': _json_float(row.get('final_delta_e')),
+                'end_reason': str(row.get('end_reason') or ''),
+                'similarity': similarity,
+                'ratio_is_perfect': ratio_is_perfect,
+                'user_total_drops': int(max(0.0, user_vec.sum())),
+                'target_total_drops': int(max(0.0, target_vec.sum())),
+                'attempt_started_server_ts': row.get('attempt_started_server_ts'),
+            }
+        )
+
+    return pd.DataFrame(out_rows)
+
+
+def build_recipe_similarity_summary() -> Dict[str, Any]:
+    att, ev = get_dataframes()
+    df = build_attempt_recipe_similarity(att, ev)
+    if len(df) == 0:
+        return {
+            'n_attempts_with_similarity': 0,
+            'n_perfect_ratio_solutions': 0,
+            'n_deviant_ratio_solutions': 0,
+            'perfect_ratio_share': None,
+            'mean_similarity': None,
+            'median_similarity': None,
+            'mean_delta_e': None,
+            'scatter_rows': [],
+        }
+
+    solved = df[df['end_reason'].isin(['saved_match', 'saved_stop'])].copy()
+    base = solved if len(solved) else df
+    n = int(len(base))
+    n_perfect = int(base['ratio_is_perfect'].sum())
+    n_deviant = int(n - n_perfect)
+
+    scatter_df = base[['target_name', 'final_delta_e', 'similarity', 'ratio_is_perfect']].copy()
+    scatter_df = scatter_df[
+        scatter_df['final_delta_e'].notna()
+        & scatter_df['similarity'].notna()
+    ]
+    if len(scatter_df) > 3000:
+        scatter_df = scatter_df.sample(3000, random_state=42)
+
+    scatter_rows: List[Dict[str, Any]] = []
+    for _, r in scatter_df.iterrows():
+        scatter_rows.append(
+            {
+                'target_name': str(r.get('target_name') or '(unknown)'),
+                'final_delta_e': _json_float(r.get('final_delta_e')),
+                'similarity': _json_float(r.get('similarity')),
+                'ratio_is_perfect': bool(r.get('ratio_is_perfect')),
+            }
+        )
+
+    return {
+        'n_attempts_with_similarity': n,
+        'n_perfect_ratio_solutions': n_perfect,
+        'n_deviant_ratio_solutions': n_deviant,
+        'perfect_ratio_share': _json_float(n_perfect / n if n > 0 else None),
+        'mean_similarity': _json_float(base['similarity'].mean()),
+        'median_similarity': _json_float(base['similarity'].median()),
+        'mean_delta_e': _json_float(base['final_delta_e'].mean()),
+        'scatter_rows': scatter_rows,
+    }
+
+
+def plot_deltae_vs_similarity(att: pd.DataFrame, ev: pd.DataFrame) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 5))
+    df = build_attempt_recipe_similarity(att, ev)
+    if len(df) == 0:
+        ax.text(0.5, 0.5, 'No recipe similarity data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    part = df[df['final_delta_e'].notna() & df['similarity'].notna()].copy()
+    if len(part) == 0:
+        ax.text(0.5, 0.5, 'No final DeltaE rows with similarity', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    if len(part) > 8000:
+        part = part.sample(8000, random_state=42)
+
+    perfect = part[part['ratio_is_perfect'] == True]
+    deviant = part[part['ratio_is_perfect'] == False]
+    if len(deviant):
+        ax.scatter(
+            deviant['similarity'].to_numpy(dtype=float),
+            deviant['final_delta_e'].to_numpy(dtype=float),
+            s=12,
+            alpha=0.35,
+            color='#2563eb',
+            edgecolors='none',
+            label='deviant ratio',
+        )
+    if len(perfect):
+        ax.scatter(
+            perfect['similarity'].to_numpy(dtype=float),
+            perfect['final_delta_e'].to_numpy(dtype=float),
+            s=18,
+            alpha=0.7,
+            color='#16a34a',
+            edgecolors='none',
+            label='perfect ratio',
+        )
+    r = _pearson_corr(part['similarity'], part['final_delta_e'])
+    rt = 'n/a' if r is None else f'{r:.3f}'
+    ax.set_xlabel('Recipe similarity (ratio-based, 0..1)')
+    ax.set_ylabel('Final DeltaE')
+    ax.set_title(f'Scatter: Final DeltaE vs recipe similarity (Pearson r={rt})')
+    ax.set_xlim(-0.02, 1.02)
+    ax.legend(fontsize=8, loc='upper right')
+    return _fig_to_png(fig)
 
 
 def build_attempt_level_strategy_metrics(att: pd.DataFrame, ev: pd.DataFrame) -> pd.DataFrame:
@@ -1791,6 +2293,30 @@ def build_attempt_archetypes(
     }
 
 
+def plot_mixed_models_vif(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    from . import mixed_models_stat
+
+    return mixed_models_stat.plot_mixed_models_vif(_, __)
+
+
+def plot_mixed_models_coef_logde(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    from . import mixed_models_stat
+
+    return mixed_models_stat.plot_mixed_models_coef_logde(_, __)
+
+
+def plot_mixed_models_coef_similarity(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    from . import mixed_models_stat
+
+    return mixed_models_stat.plot_mixed_models_coef_similarity(_, __)
+
+
+def plot_mixed_models_perfect_ratio_or(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    from . import mixed_models_stat
+
+    return mixed_models_stat.plot_mixed_models_perfect_ratio_or(_, __)
+
+
 PLOT_BUILDERS: Dict[str, Callable[[pd.DataFrame, pd.DataFrame], bytes]] = {
     'fw_hist_final_de': plot_fw_hist_final_de,
     'fw_hist_log_de': plot_fw_hist_log_de,
@@ -1817,6 +2343,15 @@ PLOT_BUILDERS: Dict[str, Callable[[pd.DataFrame, pd.DataFrame], bytes]] = {
     'controlled_deltae_by_attempt': plot_controlled_deltae_by_attempt,
     'controlled_elapsed_by_attempt': plot_controlled_elapsed_by_attempt,
     'deltae_elapsed_scatter': plot_deltae_elapsed_scatter,
+    'scatter_deltae_vs_steps': plot_scatter_deltae_vs_steps,
+    'scatter_duration_vs_steps': plot_scatter_duration_vs_steps,
+    'correlation_heatmap': plot_correlation_heatmap,
+    'correlation_league': plot_correlation_league,
+    'deltae_vs_similarity': plot_deltae_vs_similarity,
+    'mixed_models_vif': plot_mixed_models_vif,
+    'mixed_models_coef_logde': plot_mixed_models_coef_logde,
+    'mixed_models_coef_similarity': plot_mixed_models_coef_similarity,
+    'mixed_models_perfect_ratio_or': plot_mixed_models_perfect_ratio_or,
     'attempt_deltae_timeline': plot_attempt_deltae_timeline,
     'archetype_deltae_trajectories': lambda a, e: plot_archetype_deltae_trajectories(a, e, archetype=None),
     'archetype_share_by_attempt_no': plot_archetype_share_by_attempt_no,
