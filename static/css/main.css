@@ -101,11 +101,10 @@
   color: var(--text-secondary);
 }
 
-/* Wide workspaces: make the pigment palette a side rail so the canvas can grow. */
+/* Wide workspaces: let the canvas grow while keeping the pigment palette horizontal. */
 @media (min-width: 1180px) {
   .mixing-workspace {
-    grid-template-columns: minmax(0, 1fr) 112px;
-    gap: var(--space-lg);
+    gap: var(--space-md);
   }
   .color-pair {
     max-width: none;
@@ -114,12 +113,13 @@
   .palette {
     position: sticky;
     top: 92px;
-    flex-direction: column;
+    flex-direction: row;
     flex-wrap: nowrap;
     align-items: center;
-    gap: var(--space-sm);
-    margin: 0;
-    padding: var(--space-sm);
+    justify-content: space-evenly;
+    gap: var(--space-md);
+    margin: 0 0 var(--space-md);
+    padding: var(--space-sm) var(--space-md);
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
