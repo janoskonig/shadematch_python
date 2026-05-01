@@ -568,7 +568,9 @@
       if (!userIdToUse || userIdToUse.length !== 6) { showError('Please enter a valid 6-character user ID'); return; }
       document.getElementById('results-content').innerHTML = '<div class="loading">Loading your results…</div>';
 
-      if (!userId) loadUserProfile(userIdToUse);
+      if (!userId) {
+        loadUserProfile(userIdToUse);
+      }
 
       fetch('/get_user_results', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },

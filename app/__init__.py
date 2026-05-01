@@ -17,16 +17,7 @@ def create_app():
     print("Template folder used:", app.template_folder)
     print("Static folder used:", app.static_folder)
     app.config.from_object('config.Config')
-    
-    # Debug database connection
-    db_url = os.getenv('DATABASE_URL')
-    if db_url:
-        # Mask the password in the URL for security
-        masked_url = db_url.replace('://', '://***:***@')
-        print("Database URL (masked):", masked_url)
-    else:
-        print("WARNING: DATABASE_URL environment variable is not set!")
-    
+
     db.init_app(app)
 
     @app.errorhandler(OperationalError)

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, send_from_directory, Response, current_app
+from flask import Blueprint, render_template, request, jsonify, send_from_directory, Response, current_app, redirect, url_for
 from datetime import datetime, date, timedelta
 import hashlib
 import random as _random
@@ -19,7 +19,7 @@ import pandas as pd
 import os
 import numpy as np
 import json
-from sqlalchemy import func, text
+from sqlalchemy import case, func, text
 from sqlalchemy.exc import IntegrityError
 from dotenv import dotenv_values
 
@@ -235,9 +235,19 @@ def lab_page():
     return render_template('lab.html')
 
 
+@main.route('/performance')
+def performance_page_redirect():
+    return redirect(url_for('main.leaderboard_page'), code=302)
+
+
 @main.route('/results')
 def results_page():
     return render_template('results.html')
+
+
+@main.route('/leaderboard')
+def leaderboard_page():
+    return render_template('leaderboard.html')
 
 
 @main.route('/stat')
@@ -1617,6 +1627,111 @@ def get_user_results():
             for s in sessions
         ]
         return jsonify({'status': 'success', 'results': results, 'total_sessions': len(results)})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/leaderboard', methods=['POST'])
+def get_leaderboard():
+    data = request.get_json(silent=True) or {}
+    current_user_id = (data.get('user_id') or '').strip().upper()
+    limit = data.get('limit', 25)
+    try:
+        limit = max(1, min(int(limit), 100))
+    except (TypeError, ValueError):
+        limit = 25
+
+    try:
+        rows = (
+            db.session.query(
+                User.id.label('user_id'),
+                func.coalesce(UserProgress.xp, 0).label('xp'),
+                func.coalesce(UserProgress.level, 1).label('level'),
+                func.coalesce(UserProgress.current_streak, 0).label('current_streak'),
+                func.count(MixingSession.id).label('total_sessions'),
+                func.coalesce(func.sum(case((MixingSession.skipped.is_(False), 1), else_=0)), 0).label('completed_sessions'),
+                func.avg(
+                    case(
+                        (
+                            (MixingSession.skipped.is_(False)) & (MixingSession.delta_e.isnot(None)),
+                            MixingSession.delta_e,
+                        ),
+                        else_=None,
+                    )
+                ).label('avg_delta_e'),
+                func.min(
+                    case(
+                        (
+                            (MixingSession.skipped.is_(False)) & (MixingSession.delta_e.isnot(None)),
+                            MixingSession.delta_e,
+                        ),
+                        else_=None,
+                    )
+                ).label('best_delta_e'),
+            )
+            .select_from(User)
+            .outerjoin(UserProgress, UserProgress.user_id == User.id)
+            .outerjoin(MixingSession, MixingSession.user_id == User.id)
+            .group_by(User.id, UserProgress.xp, UserProgress.level, UserProgress.current_streak)
+            .all()
+        )
+
+        active_rows = [
+            r for r in rows
+            if int(r.total_sessions or 0) > 0 or int(r.xp or 0) > 0 or r.user_id == current_user_id
+        ]
+
+        def sort_key(row):
+            best = float(row.best_delta_e) if row.best_delta_e is not None else 999999.0
+            avg = float(row.avg_delta_e) if row.avg_delta_e is not None else 999999.0
+            return (
+                -int(row.level or 1),
+                -int(row.xp or 0),
+                -int(row.completed_sessions or 0),
+                best,
+                avg,
+                row.user_id,
+            )
+
+        ranked_rows = sorted(active_rows, key=sort_key)
+        entries_by_user = {}
+        entries = []
+        current_user_rank = None
+
+        for rank, row in enumerate(ranked_rows, start=1):
+            is_current_user = bool(current_user_id and row.user_id == current_user_id)
+            if is_current_user:
+                current_user_rank = rank
+
+            entry = {
+                'rank': rank,
+                'display_name': f'You ({row.user_id})' if is_current_user else f'Player #{rank}',
+                'is_current_user': is_current_user,
+                'level': int(row.level or 1),
+                'xp': int(row.xp or 0),
+                'current_streak': int(row.current_streak or 0),
+                'total_sessions': int(row.total_sessions or 0),
+                'completed_sessions': int(row.completed_sessions or 0),
+                'avg_delta_e': round(float(row.avg_delta_e), 2) if row.avg_delta_e is not None else None,
+                'best_delta_e': round(float(row.best_delta_e), 2) if row.best_delta_e is not None else None,
+            }
+            entries_by_user[row.user_id] = entry
+            if rank <= limit:
+                entries.append(entry)
+
+        if current_user_id and current_user_id in entries_by_user:
+            own_entry = entries_by_user[current_user_id]
+            if not any(e['is_current_user'] for e in entries):
+                own_entry = dict(own_entry)
+                own_entry['outside_top'] = True
+                entries.append(own_entry)
+
+        return jsonify({
+            'status': 'success',
+            'leaderboard': entries,
+            'total_ranked_users': len(ranked_rows),
+            'current_user_rank': current_user_rank,
+        })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 

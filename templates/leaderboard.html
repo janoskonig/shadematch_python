@@ -1,0 +1,255 @@
+{% extends "base.html" %}
+
+{% block title %}ShadeMatch Leaderboard{% endblock %}
+
+{% block extra_css %}
+<style>
+  body { padding: var(--space-md); }
+  .leaderboard-container { max-width: 1100px; margin: 0 auto; }
+  .back-link {
+    display: inline-flex; align-items: center; gap: var(--space-sm);
+    text-decoration: none; color: var(--accent-primary); font-weight: 700;
+    margin-bottom: var(--space-lg); font-size: var(--font-size-sm);
+  }
+  .back-link:hover { text-decoration: underline; }
+  .page-title { margin: 0 0 var(--space-xs); color: var(--text-primary); }
+  .page-subtitle { color: var(--text-secondary); margin: 0 0 var(--space-lg); }
+  .user-input-section {
+    background: var(--surface); padding: var(--space-lg);
+    border-radius: var(--radius-lg); margin-bottom: var(--space-xl);
+    text-align: center; box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+  }
+  .user-input-section input {
+    min-height: var(--touch-min); padding: var(--space-sm) var(--space-md);
+    border: 2px solid var(--border); border-radius: var(--radius-md);
+    font-size: 1rem; color: var(--text-primary); background: var(--surface);
+    margin-right: var(--space-sm); font-family: monospace;
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+  .user-input-section input:focus { border-color: var(--accent-primary); outline: none; }
+  .user-input-section button {
+    min-height: var(--touch-min); padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-full); border: none; cursor: pointer;
+    font-weight: 700; font-size: 1rem;
+    background: var(--accent-primary); color: var(--text-on-accent);
+    touch-action: manipulation;
+  }
+  .user-input-section button:hover { background: #3a7bc8; }
+  .welcome-message { font-weight: 700; font-size: var(--font-size-lg); color: var(--text-primary); }
+  .leaderboard-section {
+    background: var(--surface); padding: var(--space-lg);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+  }
+  .leaderboard-help {
+    color: var(--text-secondary); font-size: var(--font-size-sm);
+    margin: 0 0 var(--space-md);
+  }
+  .leaderboard-table {
+    width: 100%; border-collapse: collapse;
+    border-radius: var(--radius-md); overflow: hidden;
+  }
+  .leaderboard-table th, .leaderboard-table td {
+    padding: var(--space-sm); text-align: left; border-bottom: 1px solid var(--border);
+  }
+  .leaderboard-table th {
+    background: var(--bg-primary); color: var(--text-primary);
+    font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .leaderboard-table tr.leaderboard-own-row {
+    background: rgba(74,144,217,0.10); font-weight: 800;
+  }
+  .leaderboard-table tr.leaderboard-outside-row td {
+    border-top: 2px dashed var(--border);
+  }
+  .leaderboard-rank {
+    font-weight: 900; color: var(--accent-primary); white-space: nowrap;
+  }
+  .leaderboard-user { font-weight: 800; }
+  .leaderboard-cards { display: none; }
+  .loading, .no-results { text-align: center; padding: var(--space-2xl); color: var(--text-secondary); }
+  .error-message {
+    background: #FFEBEE; color: var(--accent-danger);
+    padding: var(--space-md); border-radius: var(--radius-md);
+    margin: var(--space-md) 0; text-align: center; font-weight: 600;
+    border: 1px solid var(--accent-danger);
+  }
+
+  @media (max-width: 768px) {
+    .leaderboard-table { display: none; }
+    .leaderboard-cards { display: flex; flex-direction: column; gap: var(--space-sm); }
+    .leaderboard-card {
+      background: var(--bg-primary); border-radius: var(--radius-md);
+      padding: var(--space-md); border: 1px solid var(--border);
+    }
+    .leaderboard-card.leaderboard-own-row {
+      border-color: var(--accent-primary); background: rgba(74,144,217,0.10);
+    }
+    .leaderboard-card-head {
+      display: flex; justify-content: space-between; gap: var(--space-sm);
+      margin-bottom: var(--space-xs);
+    }
+    .leaderboard-card-meta {
+      display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-xs);
+      color: var(--text-secondary); font-size: var(--font-size-sm);
+    }
+    .leaderboard-card-meta strong { color: var(--text-primary); }
+  }
+
+  @media (max-width: 600px) {
+    body { padding: var(--space-sm); }
+    .user-input-section { padding: var(--space-md); }
+    #user-input-form {
+      display: flex; flex-direction: column; align-items: stretch; gap: var(--space-sm);
+    }
+    .user-input-section input { margin-right: 0; width: 100%; }
+    .user-input-section button { width: 100%; }
+    .leaderboard-section { padding: var(--space-md); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <main class="leaderboard-container" id="leaderboard-main">
+    <a href="/" class="back-link">← Back to Color Mixing</a>
+    <h1 class="page-title">Leaderboard</h1>
+    <p class="page-subtitle">Compare progress with other players. Everyone else is anonymized; your own row shows your user ID only to you.</p>
+
+    <section class="user-input-section" aria-label="Account and user ID">
+      <div id="stored-user-info" style="display:none;">
+        <p id="welcome-message" class="welcome-message">Welcome back! Loading the leaderboard...</p>
+        <button onclick="clearUserAndReload()" type="button" style="margin-top:var(--space-sm);">Switch User</button>
+      </div>
+      <div id="user-input-form">
+        <p style="margin-bottom:var(--space-md); color:var(--text-secondary);">Enter your 6-character user ID to highlight your position:</p>
+        <input type="text" id="userIdInput" placeholder="e.g., ABC123" maxlength="6">
+        <button onclick="loadLeaderboard()" type="button">View Leaderboard</button>
+      </div>
+    </section>
+
+    <section class="leaderboard-section" aria-labelledby="leaderboardHeading">
+      <h2 id="leaderboardHeading" class="sr-only">Leaderboard rankings</h2>
+      <div id="leaderboard-content">
+        <div class="loading">Enter your user ID above to view the leaderboard</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', function () {
+      const storedUserId = localStorage.getItem('userId');
+      if (storedUserId) {
+        document.getElementById('stored-user-info').style.display = 'block';
+        document.getElementById('user-input-form').style.display = 'none';
+        document.getElementById('welcome-message').textContent = 'Welcome back, ' + storedUserId + '!';
+        loadLeaderboard(storedUserId);
+      }
+    });
+
+    function escapeHTML(value) {
+      return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function loadLeaderboard(userId) {
+      const userIdToUse = userId || document.getElementById('userIdInput').value.toUpperCase();
+      if (!userIdToUse || userIdToUse.length !== 6) {
+        showLeaderboardError('Please enter a valid 6-character user ID');
+        return;
+      }
+
+      document.getElementById('leaderboard-content').innerHTML = '<div class="loading">Loading leaderboard...</div>';
+      fetch('/api/leaderboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userIdToUse, limit: 25 }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.status === 'success') displayLeaderboard(data.leaderboard, data.total_ranked_users);
+          else showLeaderboardError(data.message || 'Failed to load leaderboard');
+        })
+        .catch(() => showLeaderboardError('Failed to load leaderboard. Please try again.'));
+    }
+
+    function fmtNumber(value) {
+      return typeof value === 'number' ? value.toLocaleString() : '0';
+    }
+
+    function fmtDelta(value) {
+      return typeof value === 'number' ? value.toFixed(2) : 'N/A';
+    }
+
+    function displayLeaderboard(rows, totalRankedUsers) {
+      const target = document.getElementById('leaderboard-content');
+      if (!rows || rows.length === 0) {
+        target.innerHTML = '<div class="no-results">No leaderboard entries yet.</div>';
+        return;
+      }
+
+      const tableRows = rows.map(row => {
+        const cls = [
+          row.is_current_user ? 'leaderboard-own-row' : '',
+          row.outside_top ? 'leaderboard-outside-row' : '',
+        ].filter(Boolean).join(' ');
+        return `<tr class="${cls}">
+          <td class="leaderboard-rank">#${row.rank}</td>
+          <td class="leaderboard-user">${escapeHTML(row.display_name)}</td>
+          <td>Level ${row.level}</td>
+          <td>${fmtNumber(row.xp)}</td>
+          <td>${fmtNumber(row.completed_sessions)}</td>
+          <td>${fmtDelta(row.avg_delta_e)}</td>
+          <td>${fmtDelta(row.best_delta_e)}</td>
+          <td>${fmtNumber(row.current_streak)}</td>
+        </tr>`;
+      }).join('');
+
+      const cards = rows.map(row => {
+        const cls = row.is_current_user ? 'leaderboard-card leaderboard-own-row' : 'leaderboard-card';
+        return `<div class="${cls}">
+          <div class="leaderboard-card-head">
+            <span class="leaderboard-rank">#${row.rank}</span>
+            <span class="leaderboard-user">${escapeHTML(row.display_name)}</span>
+          </div>
+          <div class="leaderboard-card-meta">
+            <div><strong>Level:</strong> ${row.level}</div>
+            <div><strong>XP:</strong> ${fmtNumber(row.xp)}</div>
+            <div><strong>Completed:</strong> ${fmtNumber(row.completed_sessions)}</div>
+            <div><strong>Avg Delta E:</strong> ${fmtDelta(row.avg_delta_e)}</div>
+            <div><strong>Best Delta E:</strong> ${fmtDelta(row.best_delta_e)}</div>
+            <div><strong>Streak:</strong> ${fmtNumber(row.current_streak)}</div>
+          </div>
+        </div>`;
+      }).join('');
+
+      const totalLabel = totalRankedUsers
+        ? '<p class="leaderboard-help">Showing top players by level, XP, completed sessions, and match quality. Ranked users: ' + totalRankedUsers + '.</p>'
+        : '';
+      target.innerHTML = totalLabel +
+        '<table class="leaderboard-table"><thead><tr>' +
+        '<th>Rank</th><th>User</th><th>Level</th><th>XP</th><th>Completed</th><th>Avg Delta E</th><th>Best Delta E</th><th>Streak</th>' +
+        '</tr></thead><tbody>' + tableRows + '</tbody></table>' +
+        '<div class="leaderboard-cards">' + cards + '</div>';
+    }
+
+    function showLeaderboardError(message) {
+      document.getElementById('leaderboard-content').innerHTML = '<div class="error-message">' + escapeHTML(message) + '</div>';
+    }
+
+    function clearUserAndReload() {
+      localStorage.removeItem('userId');
+      localStorage.removeItem('userBirthdate');
+      localStorage.removeItem('userGender');
+      location.reload();
+    }
+
+    document.getElementById('userIdInput').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') loadLeaderboard();
+    });
+  </script>
+{% endblock %}
