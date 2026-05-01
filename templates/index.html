@@ -272,62 +272,66 @@
   <div class="app-row">
     <div class="main-content" id="mainContent">
 
-      <!-- Swatches -->
-      <div class="swatches-container" id="swatchesContainer">
-        <div class="color-pair">
-          <div id="targetColor" class="color-half"></div>
-          <div id="currentMix" class="color-half" style="background-color:rgb(255,255,255);"></div>
-        </div>
-        <div class="swatch-labels-row">
-          <span>Match this color</span>
-          <span>Your mix</span>
-        </div>
-      </div>
+      <div class="mixing-workspace">
+        <div class="mixing-canvas-zone">
+          <!-- Swatches -->
+          <div class="swatches-container" id="swatchesContainer">
+            <div class="color-pair">
+              <div id="targetColor" class="color-half"></div>
+              <div id="currentMix" class="color-half" style="background-color:rgb(255,255,255);"></div>
+            </div>
+            <div class="swatch-labels-row">
+              <span>Match this color</span>
+              <span>Your mix</span>
+            </div>
+          </div>
 
-      <!-- Match quality bar -->
-      <div class="match-bar-wrap" id="matchBarContainer" style="display:none;">
-        <div class="match-bar">
-          <div class="match-bar-fill" id="matchBarFill"></div>
-        </div>
-        <span class="match-bar-label" id="matchBarLabel"></span>
-      </div>
+          <!-- Match quality bar -->
+          <div class="match-bar-wrap" id="matchBarContainer" style="display:none;">
+            <div class="match-bar">
+              <div class="match-bar-fill" id="matchBarFill"></div>
+            </div>
+            <span class="match-bar-label" id="matchBarLabel"></span>
+          </div>
 
-      <!-- RGB values (hidden, kept for data compat) -->
-      <div class="rgb-debug" style="display:none;">
-        <span id="mixedRgbValues">RGB: [255, 255, 255]</span>
-      </div>
+          <!-- RGB values (hidden, kept for data compat) -->
+          <div class="rgb-debug" style="display:none;">
+            <span id="mixedRgbValues">RGB: [255, 255, 255]</span>
+          </div>
+        </div>
 
-      <!-- Palette -->
-      <div id="palette" class="palette">
-        <div class="color-control">
-          <span class="drop-badge" data-badge-for="white">0</span>
-          <button class="color-circle" data-color="white" style="background:white;" type="button" aria-label="Add white drop">0</button>
-          <button class="minus-button" data-color="white" type="button" aria-label="Remove white drop">−</button>
-          <span class="color-name">White</span>
-        </div>
-        <div class="color-control">
-          <span class="drop-badge" data-badge-for="black">0</span>
-          <button class="color-circle" data-color="black" style="background:black;" type="button" aria-label="Add black drop">0</button>
-          <button class="minus-button" data-color="black" type="button" aria-label="Remove black drop">−</button>
-          <span class="color-name">Black</span>
-        </div>
-        <div class="color-control">
-          <span class="drop-badge" data-badge-for="red">0</span>
-          <button class="color-circle" data-color="red" style="background:red;" type="button" aria-label="Add red drop">0</button>
-          <button class="minus-button" data-color="red" type="button" aria-label="Remove red drop">−</button>
-          <span class="color-name">Red</span>
-        </div>
-        <div class="color-control">
-          <span class="drop-badge" data-badge-for="yellow">0</span>
-          <button class="color-circle" data-color="yellow" style="background:yellow;" type="button" aria-label="Add yellow drop">0</button>
-          <button class="minus-button" data-color="yellow" type="button" aria-label="Remove yellow drop">−</button>
-          <span class="color-name">Yellow</span>
-        </div>
-        <div class="color-control">
-          <span class="drop-badge" data-badge-for="blue">0</span>
-          <button class="color-circle" data-color="blue" style="background:blue;" type="button" aria-label="Add blue drop">0</button>
-          <button class="minus-button" data-color="blue" type="button" aria-label="Remove blue drop">−</button>
-          <span class="color-name">Blue</span>
+        <!-- Palette -->
+        <div id="palette" class="palette">
+          <div class="color-control">
+            <span class="drop-badge" data-badge-for="white">0</span>
+            <button class="color-circle" data-color="white" style="background:white;" type="button" aria-label="Add white drop">0</button>
+            <button class="minus-button" data-color="white" type="button" aria-label="Remove white drop">−</button>
+            <span class="color-name">White</span>
+          </div>
+          <div class="color-control">
+            <span class="drop-badge" data-badge-for="black">0</span>
+            <button class="color-circle" data-color="black" style="background:black;" type="button" aria-label="Add black drop">0</button>
+            <button class="minus-button" data-color="black" type="button" aria-label="Remove black drop">−</button>
+            <span class="color-name">Black</span>
+          </div>
+          <div class="color-control">
+            <span class="drop-badge" data-badge-for="red">0</span>
+            <button class="color-circle" data-color="red" style="background:red;" type="button" aria-label="Add red drop">0</button>
+            <button class="minus-button" data-color="red" type="button" aria-label="Remove red drop">−</button>
+            <span class="color-name">Red</span>
+          </div>
+          <div class="color-control">
+            <span class="drop-badge" data-badge-for="yellow">0</span>
+            <button class="color-circle" data-color="yellow" style="background:yellow;" type="button" aria-label="Add yellow drop">0</button>
+            <button class="minus-button" data-color="yellow" type="button" aria-label="Remove yellow drop">−</button>
+            <span class="color-name">Yellow</span>
+          </div>
+          <div class="color-control">
+            <span class="drop-badge" data-badge-for="blue">0</span>
+            <button class="color-circle" data-color="blue" style="background:blue;" type="button" aria-label="Add blue drop">0</button>
+            <button class="minus-button" data-color="blue" type="button" aria-label="Remove blue drop">−</button>
+            <span class="color-name">Blue</span>
+          </div>
         </div>
       </div>
 
