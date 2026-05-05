@@ -181,10 +181,6 @@
       return typeof value === 'number' ? value.toLocaleString() : '0';
     }
 
-    function fmtDelta(value) {
-      return typeof value === 'number' ? value.toFixed(2) : 'N/A';
-    }
-
     function displayLeaderboard(rows, totalRankedUsers) {
       const target = document.getElementById('leaderboard-content');
       if (!rows || rows.length === 0) {
@@ -203,8 +199,8 @@
           <td>Level ${row.level}</td>
           <td>${fmtNumber(row.xp)}</td>
           <td>${fmtNumber(row.completed_sessions)}</td>
-          <td>${fmtDelta(row.avg_delta_e)}</td>
-          <td>${fmtDelta(row.best_delta_e)}</td>
+          <td title="Computer-verified perfect matches (\u0394E ≤ threshold)">${fmtNumber(row.perfect_count)}</td>
+          <td title="Skipped attempts marked as visually identical to the target">${fmtNumber(row.no_perceivable_diff_count)}</td>
           <td>${fmtNumber(row.current_streak)}</td>
         </tr>`;
       }).join('');
@@ -220,19 +216,19 @@
             <div><strong>Level:</strong> ${row.level}</div>
             <div><strong>XP:</strong> ${fmtNumber(row.xp)}</div>
             <div><strong>Completed:</strong> ${fmtNumber(row.completed_sessions)}</div>
-            <div><strong>Avg Delta E:</strong> ${fmtDelta(row.avg_delta_e)}</div>
-            <div><strong>Best Delta E:</strong> ${fmtDelta(row.best_delta_e)}</div>
+            <div><strong>Perfect:</strong> ${fmtNumber(row.perfect_count)}</div>
+            <div><strong>No Perceivable Diff:</strong> ${fmtNumber(row.no_perceivable_diff_count)}</div>
             <div><strong>Streak:</strong> ${fmtNumber(row.current_streak)}</div>
           </div>
         </div>`;
       }).join('');
 
       const totalLabel = totalRankedUsers
-        ? '<p class="leaderboard-help">Showing top players by level, XP, completed sessions, and match quality. Ranked users: ' + totalRankedUsers + '.</p>'
+        ? '<p class="leaderboard-help">Ranked by level, XP, completed sessions, then perfect and no-perceivable-difference matches. Ranked users: ' + totalRankedUsers + '.</p>'
         : '';
       target.innerHTML = totalLabel +
         '<table class="leaderboard-table"><thead><tr>' +
-        '<th>Rank</th><th>User</th><th>Level</th><th>XP</th><th>Completed</th><th>Avg Delta E</th><th>Best Delta E</th><th>Streak</th>' +
+        '<th>Rank</th><th>User</th><th>Level</th><th>XP</th><th>Completed</th><th>Perfect</th><th>No Perceivable Diff</th><th>Streak</th>' +
         '</tr></thead><tbody>' + tableRows + '</tbody></table>' +
         '<div class="leaderboard-cards">' + cards + '</div>';
     }

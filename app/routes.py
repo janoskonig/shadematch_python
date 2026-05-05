@@ -1650,24 +1650,12 @@ def get_leaderboard():
                 func.coalesce(UserProgress.current_streak, 0).label('current_streak'),
                 func.count(MixingSession.id).label('total_sessions'),
                 func.coalesce(func.sum(case((MixingSession.skipped.is_(False), 1), else_=0)), 0).label('completed_sessions'),
-                func.avg(
-                    case(
-                        (
-                            (MixingSession.skipped.is_(False)) & (MixingSession.delta_e.isnot(None)),
-                            MixingSession.delta_e,
-                        ),
-                        else_=None,
-                    )
-                ).label('avg_delta_e'),
-                func.min(
-                    case(
-                        (
-                            (MixingSession.skipped.is_(False)) & (MixingSession.delta_e.isnot(None)),
-                            MixingSession.delta_e,
-                        ),
-                        else_=None,
-                    )
-                ).label('best_delta_e'),
+                func.coalesce(func.sum(
+                    case((MixingSession.match_category == 'perfect', 1), else_=0)
+                ), 0).label('perfect_count'),
+                func.coalesce(func.sum(
+                    case((MixingSession.match_category == 'no_perceivable_difference', 1), else_=0)
+                ), 0).label('no_perceivable_diff_count'),
             )
             .select_from(User)
             .outerjoin(UserProgress, UserProgress.user_id == User.id)
@@ -1682,14 +1670,12 @@ def get_leaderboard():
         ]
 
         def sort_key(row):
-            best = float(row.best_delta_e) if row.best_delta_e is not None else 999999.0
-            avg = float(row.avg_delta_e) if row.avg_delta_e is not None else 999999.0
             return (
                 -int(row.level or 1),
                 -int(row.xp or 0),
                 -int(row.completed_sessions or 0),
-                best,
-                avg,
+                -int(row.perfect_count or 0),
+                -int(row.no_perceivable_diff_count or 0),
                 row.user_id,
             )
 
@@ -1712,8 +1698,8 @@ def get_leaderboard():
                 'current_streak': int(row.current_streak or 0),
                 'total_sessions': int(row.total_sessions or 0),
                 'completed_sessions': int(row.completed_sessions or 0),
-                'avg_delta_e': round(float(row.avg_delta_e), 2) if row.avg_delta_e is not None else None,
-                'best_delta_e': round(float(row.best_delta_e), 2) if row.best_delta_e is not None else None,
+                'perfect_count': int(row.perfect_count or 0),
+                'no_perceivable_diff_count': int(row.no_perceivable_diff_count or 0),
             }
             entries_by_user[row.user_id] = entry
             if rank <= limit:
