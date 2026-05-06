@@ -181,6 +181,24 @@
       return typeof value === 'number' ? value.toLocaleString() : '0';
     }
 
+    function fmtDuration(seconds) {
+      if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) return '—';
+      if (seconds < 60) return seconds.toFixed(1) + 's';
+      if (seconds < 3600) {
+        const m = Math.floor(seconds / 60);
+        const s = Math.round(seconds - m * 60);
+        return s === 0 ? `${m}m` : `${m}m ${s}s`;
+      }
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds - h * 3600) / 60);
+      return m === 0 ? `${h}h` : `${h}h ${m}m`;
+    }
+
+    function fmtSeconds(seconds) {
+      if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) return '—';
+      return seconds.toFixed(seconds < 10 ? 1 : 0) + 's';
+    }
+
     function displayLeaderboard(rows, totalRankedUsers) {
       const target = document.getElementById('leaderboard-content');
       if (!rows || rows.length === 0) {
@@ -202,6 +220,8 @@
           <td title="Computer-verified perfect matches (\u0394E ≤ threshold)">${fmtNumber(row.perfect_count)}</td>
           <td title="Skipped attempts marked as visually identical to the target">${fmtNumber(row.no_perceivable_diff_count)}</td>
           <td>${fmtNumber(row.current_streak)}</td>
+          <td title="Total time spent playing (each round capped at 30 min)">${fmtDuration(row.total_time_sec)}</td>
+          <td title="Average time per completed match (rounds &le; 30 min)">${fmtSeconds(row.avg_match_time_sec)}</td>
         </tr>`;
       }).join('');
 
@@ -219,6 +239,8 @@
             <div><strong>Perfect:</strong> ${fmtNumber(row.perfect_count)}</div>
             <div><strong>No Perceivable Diff:</strong> ${fmtNumber(row.no_perceivable_diff_count)}</div>
             <div><strong>Streak:</strong> ${fmtNumber(row.current_streak)}</div>
+            <div><strong>Total Time:</strong> ${fmtDuration(row.total_time_sec)}</div>
+            <div><strong>Avg / Match:</strong> ${fmtSeconds(row.avg_match_time_sec)}</div>
           </div>
         </div>`;
       }).join('');
@@ -229,6 +251,8 @@
       target.innerHTML = totalLabel +
         '<table class="leaderboard-table"><thead><tr>' +
         '<th>Rank</th><th>User</th><th>Level</th><th>XP</th><th>Completed</th><th>Perfect</th><th>No Perceivable Diff</th><th>Streak</th>' +
+        '<th title="Total play time (each round capped at 30 min)">Total Time</th>' +
+        '<th title="Average time per completed match">Avg / Match</th>' +
         '</tr></thead><tbody>' + tableRows + '</tbody></table>' +
         '<div class="leaderboard-cards">' + cards + '</div>';
     }

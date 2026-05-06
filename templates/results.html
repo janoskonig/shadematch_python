@@ -17,8 +17,8 @@
 
   /* ── User input ─────────────────────────────────────────── */
   .user-input-section {
-    background: var(--surface); padding: var(--space-lg);
-    border-radius: var(--radius-lg); margin-bottom: var(--space-xl);
+    background: var(--surface); padding: var(--space-md) var(--space-lg);
+    border-radius: var(--radius-lg); margin-bottom: var(--space-md);
     text-align: center; box-shadow: var(--shadow-sm);
     border: 1px solid var(--border);
   }
@@ -44,9 +44,9 @@
   .mastered-banner {
     background: linear-gradient(135deg, #00b894, #00cec9);
     color: #fff; border-radius: var(--radius-lg);
-    padding: var(--space-md) var(--space-lg);
-    margin-bottom: var(--space-lg);
-    text-align: center; font-weight: 700; font-size: 1.05rem;
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md);
+    text-align: center; font-weight: 700; font-size: 1rem;
     box-shadow: var(--shadow-sm);
   }
 
@@ -55,44 +55,62 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    padding: var(--space-lg);
-    margin-bottom: var(--space-xl);
+    padding: var(--space-md) var(--space-lg);
+    margin-bottom: var(--space-md);
     box-shadow: var(--shadow-sm);
   }
   .progress-card-title {
     font-size: var(--font-size-sm); font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em;
-    color: var(--text-secondary); margin: 0 0 var(--space-md);
+    color: var(--text-secondary); margin: 0 0 var(--space-sm);
   }
-  .progress-stats {
+  /* Hero stats: 4 primary metrics in a row */
+  .progress-stats-primary {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-    gap: var(--space-md);
-    margin-bottom: var(--space-md);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
   }
+  /* Secondary stats: smaller streak / best / freezes */
+  .progress-stats-secondary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+    padding: 6px var(--space-sm);
+    background: var(--bg-primary);
+    border-radius: var(--radius-md);
+    font-size: 0.82rem;
+  }
+  .ps-mini {
+    display: inline-flex; align-items: baseline; gap: 4px;
+    color: var(--text-secondary); font-weight: 600;
+  }
+  .ps-mini-val { color: var(--text-primary); font-weight: 800; font-size: 0.95rem; }
   .ps-stat {
     min-width: 0;
     text-align: center;
     background: var(--bg-primary); border-radius: var(--radius-md);
-    padding: var(--space-sm) var(--space-md);
+    padding: var(--space-xs) var(--space-sm);
   }
   .ps-stat--primary { border: 2px solid var(--accent-primary); }
   .ps-stat-val {
-    font-size: 1.6rem; font-weight: 900;
+    font-size: 1.35rem; font-weight: 900;
     overflow-wrap: anywhere;
     line-height: 1.15;
   }
   .ps-stat-lbl {
-    font-size: 0.7rem; color: var(--text-secondary); font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.04em;
+    font-size: 0.65rem; color: var(--text-secondary); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.03em;
     white-space: normal;
-    line-height: 1.25;
+    line-height: 1.2;
+    margin-top: 2px;
   }
 
   /* Quota progress bar (primary) */
   .quota-bar-wrap {
     background: var(--border); border-radius: 6px;
-    height: 12px; overflow: hidden; margin-bottom: var(--space-xs);
+    height: 10px; overflow: hidden; margin-bottom: var(--space-xs);
   }
   .quota-bar-fill {
     height: 100%;
@@ -108,8 +126,8 @@
   /* XP bar (secondary, smaller) */
   .xp-bar-wrap {
     background: var(--border); border-radius: 4px;
-    height: 6px; overflow: hidden; margin-bottom: var(--space-xs);
-    margin-top: var(--space-md);
+    height: 5px; overflow: hidden; margin-bottom: var(--space-xs);
+    margin-top: var(--space-sm);
   }
   .xp-bar-fill {
     height: 100%;
@@ -139,21 +157,67 @@
   }
   .coverage-pct { font-weight: 700; white-space: nowrap; }
 
+  /* ── Collapsible card (shared) ───────────────────────────── */
+  .collapsible-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-md);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .collapsible-toggle {
+    width: 100%;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-lg);
+    background: transparent; border: none; cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    color: var(--text-primary);
+    min-height: var(--touch-min);
+  }
+  .collapsible-toggle:hover { background: var(--bg-primary); }
+  .collapsible-title {
+    font-size: var(--font-size-sm); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-secondary);
+  }
+  .collapsible-meta {
+    font-size: 0.78rem; color: var(--text-secondary); font-weight: 600;
+    margin-left: auto; margin-right: var(--space-sm);
+    white-space: nowrap;
+  }
+  .collapsible-chevron {
+    color: var(--text-secondary);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+  }
+  .collapsible-card[data-open="true"] .collapsible-chevron {
+    transform: rotate(180deg);
+  }
+  .collapsible-body {
+    display: none;
+    padding: 0 var(--space-lg) var(--space-md);
+    border-top: 1px solid var(--border);
+  }
+  .collapsible-card[data-open="true"] .collapsible-body { display: block; }
+
   /* ── Awards ─────────────────────────────────────────────── */
-  .awards-section { margin-bottom: var(--space-xl); }
+  .awards-section { margin-bottom: var(--space-md); }
   .awards-title {
     font-size: var(--font-size-sm); font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.05em;
-    color: var(--text-secondary); margin-bottom: var(--space-md);
+    color: var(--text-secondary); margin-bottom: var(--space-sm);
   }
   .awards-grid {
-    display: flex; flex-wrap: wrap; gap: var(--space-sm);
+    display: flex; flex-wrap: wrap; gap: 6px;
   }
   .award-badge {
     display: flex; align-items: center; gap: 6px;
     background: var(--bg-primary); border: 1px solid var(--border);
-    border-radius: var(--radius-full); padding: 5px 12px;
-    font-size: 0.78rem; font-weight: 700; color: var(--text-primary);
+    border-radius: var(--radius-full); padding: 4px 10px;
+    font-size: 0.75rem; font-weight: 700; color: var(--text-primary);
   }
   .award-badge--quota-major {
     border-color: #00b894; background: #e8fff8;
@@ -167,9 +231,9 @@
   .no-awards { color: var(--text-secondary); font-size: var(--font-size-sm); }
 
   /* ── Color stats ─────────────────────────────────────────── */
-  .color-stats-section { margin-bottom: var(--space-xl); }
+  .color-stats-section { margin-bottom: var(--space-md); }
   .color-stat-bar-row {
-    display: flex; align-items: center; gap: 8px; margin-bottom: 8px;
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
     font-size: 0.78rem;
   }
   .csr-swatch {
@@ -189,18 +253,33 @@
 
   /* ── Session table ───────────────────────────────────────── */
   .results-section {
-    background: var(--surface); padding: var(--space-lg);
+    background: var(--surface); padding: var(--space-md) var(--space-lg);
     border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
     border: 1px solid var(--border);
   }
   .results-summary {
-    display: flex; justify-content: space-around;
-    margin-bottom: var(--space-lg); padding: var(--space-lg);
+    display: flex; flex-wrap: wrap; justify-content: space-around;
+    gap: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md); padding: var(--space-sm) var(--space-md);
     background: var(--bg-primary); border-radius: var(--radius-md);
   }
-  .summary-item { text-align: center; }
-  .summary-number { font-size: 2.2em; font-weight: 900; color: var(--accent-primary); }
-  .summary-label { font-size: var(--font-size-sm); color: var(--text-secondary); font-weight: 600; }
+  .summary-item { text-align: center; min-width: 0; flex: 1 1 90px; }
+  .summary-number { font-size: 1.6em; font-weight: 900; color: var(--accent-primary); line-height: 1.1; overflow-wrap: anywhere; }
+  .summary-label { font-size: 0.72rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+
+  /* Show-more toggle button (sessions, etc.) */
+  .show-more-btn {
+    display: block; margin: var(--space-md) auto 0;
+    padding: var(--space-xs) var(--space-lg);
+    background: var(--bg-primary); border: 1px solid var(--border);
+    border-radius: var(--radius-full); cursor: pointer;
+    font-family: inherit; font-weight: 700; font-size: 0.85rem;
+    color: var(--accent-primary);
+    min-height: var(--touch-min);
+  }
+  .show-more-btn:hover { background: var(--surface); }
+  .results-table-row.is-hidden,
+  .result-card.is-hidden { display: none; }
 
   .results-table {
     width: 100%; border-collapse: collapse; margin-top: var(--space-md);
@@ -250,28 +329,29 @@
     }
     .result-card-meta strong { color: var(--text-primary); }
     .summary-item { margin: 0 var(--space-sm); }
-    .progress-stats {
-      gap: var(--space-sm);
-      grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
-    }
-    .ps-stat { padding: var(--space-xs) var(--space-sm); }
-    .ps-stat-val { font-size: 1.35rem; }
-    .ps-stat-lbl { font-size: 0.65rem; letter-spacing: 0.02em; }
+    .progress-stats-primary { gap: var(--space-xs); }
+    .ps-stat { padding: 4px var(--space-xs); }
+    .ps-stat-val { font-size: 1.05rem; }
+    .ps-stat-lbl { font-size: 0.6rem; letter-spacing: 0.02em; }
   }
 
   @media (max-width: 600px) {
     body { padding: var(--space-sm); }
-    .user-input-section { padding: var(--space-md); }
+    .user-input-section { padding: var(--space-sm) var(--space-md); }
     #user-input-form { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-sm); }
     .user-input-section input { margin-right: 0; width: 100%; }
     .user-input-section button { width: 100%; }
-    .results-summary { padding: var(--space-md) var(--space-sm); }
-    .summary-number { font-size: 1.8em; }
-    .progress-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .ps-stat { padding: var(--space-xs) var(--space-sm); }
-    .ps-stat-val { font-size: 1.25rem; }
-    .results-section { padding: var(--space-md); }
-    .back-link { margin-bottom: var(--space-md); }
+    .results-summary { padding: var(--space-sm) var(--space-xs); }
+    .summary-number { font-size: 1.4em; }
+    .progress-stats-primary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xs); }
+    .ps-stat { padding: var(--space-xs); }
+    .ps-stat-val { font-size: 1.05rem; }
+    .progress-stats-secondary { gap: var(--space-sm); font-size: 0.78rem; }
+    .results-section { padding: var(--space-sm) var(--space-md); }
+    .progress-card { padding: var(--space-sm) var(--space-md); }
+    .collapsible-toggle { padding: var(--space-sm) var(--space-md); }
+    .collapsible-body { padding: 0 var(--space-md) var(--space-sm); }
+    .back-link { margin-bottom: var(--space-sm); }
   }
 </style>
 {% endblock %}
@@ -304,7 +384,12 @@
       <!-- Progress card -->
       <section class="progress-card" id="progressCard" aria-labelledby="progressHeading">
         <h2 id="progressHeading" class="progress-card-title">Your Progress</h2>
-        <div class="progress-stats" id="progressStats"></div>
+
+        <!-- 4 hero stats -->
+        <div class="progress-stats-primary" id="progressStatsPrimary"></div>
+
+        <!-- Compact secondary stats (streak / best / freezes) -->
+        <div class="progress-stats-secondary" id="progressStatsSecondary"></div>
 
         <!-- Primary: quota progress bar -->
         <div class="quota-bar-wrap"><div class="quota-bar-fill" id="quotaBarFill"></div></div>
@@ -315,16 +400,34 @@
         <div class="xp-bar-label" id="xpBarLabel"></div>
       </section>
 
-      <!-- Awards -->
-      <section class="awards-section" id="awardsSection" style="display:none;" aria-labelledby="awardsHeading">
-        <h2 id="awardsHeading" class="awards-title">Badges &amp; Awards</h2>
-        <div class="awards-grid" id="awardsGrid"></div>
+      <!-- Awards (collapsible) -->
+      <section class="collapsible-card" id="awardsCard" data-open="true" style="display:none;" aria-labelledby="awardsHeading">
+        <button type="button" class="collapsible-toggle" aria-expanded="true" aria-controls="awardsBody"
+                onclick="toggleCollapsible('awardsCard', this)">
+          <span class="collapsible-title" id="awardsHeading">Badges &amp; Awards</span>
+          <span class="collapsible-meta" id="awardsCount"></span>
+          <svg class="collapsible-chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="collapsible-body" id="awardsBody">
+          <div class="awards-grid" id="awardsGrid"></div>
+        </div>
       </section>
 
-      <!-- Per-color coverage bars -->
-      <section class="color-stats-section" id="colorStatsSection" style="display:none;" aria-labelledby="coverageHeading">
-        <h2 id="coverageHeading" class="awards-title">Color Coverage</h2>
-        <div id="colorStatsList"></div>
+      <!-- Per-color coverage bars (collapsible, collapsed by default) -->
+      <section class="collapsible-card" id="colorStatsCard" data-open="false" style="display:none;" aria-labelledby="coverageHeading">
+        <button type="button" class="collapsible-toggle" aria-expanded="false" aria-controls="colorStatsBody"
+                onclick="toggleCollapsible('colorStatsCard', this)">
+          <span class="collapsible-title" id="coverageHeading">Color Coverage</span>
+          <span class="collapsible-meta" id="coverageMeta"></span>
+          <svg class="collapsible-chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="collapsible-body" id="colorStatsBody">
+          <div id="colorStatsList"></div>
+        </div>
       </section>
     </div>
 
@@ -362,7 +465,7 @@
 
         const cq = data.coverage_quota != null ? data.coverage_quota : 10;
         const covHead = document.getElementById('coverageHeading');
-        if (covHead) covHead.textContent = 'Color Coverage (attempts / ' + cq + ')';
+        if (covHead) covHead.textContent = 'Color Coverage';
 
         renderProgressCard(data.progress, data.coverage_quota);
         renderAwards(data.awards, cq);
@@ -374,16 +477,15 @@
     }
 
     function renderProgressCard(p, quota) {
-      const stats = document.getElementById('progressStats');
+      const primary = document.getElementById('progressStatsPrimary');
+      const secondary = document.getElementById('progressStatsSecondary');
       const rankColor = p.rank_color || '#ccc';
 
-      // Quota-dominant primary stats
       const completedColors = p.completed_colors != null ? p.completed_colors : 0;
       const totalColors = p.total_tracked_colors != null ? p.total_tracked_colors : '?';
-      const remaining = p.remaining_attempts_total != null ? p.remaining_attempts_total.toLocaleString() : '—';
       const covPct = p.catalog_coverage_pct != null ? p.catalog_coverage_pct : 0;
 
-      stats.innerHTML = `
+      primary.innerHTML = `
         <div class="ps-stat ps-stat--primary">
           <div class="ps-stat-val">${completedColors}/${totalColors}</div>
           <div class="ps-stat-lbl">Colors Done</div>
@@ -400,18 +502,12 @@
           <div class="ps-stat-val">${p.level_name}</div>
           <div class="ps-stat-lbl">Level</div>
         </div>
-        <div class="ps-stat">
-          <div class="ps-stat-val">🔥 ${p.current_streak}</div>
-          <div class="ps-stat-lbl">Streak</div>
-        </div>
-        <div class="ps-stat">
-          <div class="ps-stat-val">🏆 ${p.longest_streak}</div>
-          <div class="ps-stat-lbl">Best</div>
-        </div>
-        <div class="ps-stat">
-          <div class="ps-stat-val">🧊 ${p.streak_freeze_available}</div>
-          <div class="ps-stat-lbl">Freezes</div>
-        </div>
+      `;
+
+      secondary.innerHTML = `
+        <span class="ps-mini" title="Current streak">🔥 <span class="ps-mini-val">${p.current_streak}</span> streak</span>
+        <span class="ps-mini" title="Longest streak">🏆 <span class="ps-mini-val">${p.longest_streak}</span> best</span>
+        <span class="ps-mini" title="Streak freezes available">🧊 <span class="ps-mini-val">${p.streak_freeze_available}</span> freezes</span>
       `;
 
       // Mastered banner
@@ -506,12 +602,15 @@
     function renderAwards(awards, coverageQuota) {
       const majorT = coverageQuota != null && coverageQuota > 0 ? coverageQuota : 10;
       const grid = document.getElementById('awardsGrid');
-      const section = document.getElementById('awardsSection');
+      const card = document.getElementById('awardsCard');
+      const meta = document.getElementById('awardsCount');
+      card.style.display = '';
       if (!awards || awards.length === 0) {
         grid.innerHTML = '<span class="no-awards">No badges yet — keep playing!</span>';
-        section.style.display = '';
+        if (meta) meta.textContent = '0';
         return;
       }
+      if (meta) meta.textContent = String(awards.length);
       // Sort: quota-major first, then by unlocked_at desc
       const sorted = [...awards].sort((a, b) => {
         const aMajor = awardTypeClass(a.key, a.metadata, majorT) === 'award-badge--quota-major' ? 0 : 1;
@@ -524,15 +623,17 @@
         const label = awardLabel(a.key, a.metadata, majorT);
         return `<div class="award-badge ${cls}">${icon} ${label}</div>`;
       }).join('');
-      section.style.display = '';
     }
 
     function renderColorStats(colorStats, quota) {
       const list = document.getElementById('colorStatsList');
-      const section = document.getElementById('colorStatsSection');
+      const card = document.getElementById('colorStatsCard');
+      const meta = document.getElementById('coverageMeta');
       if (!colorStats || colorStats.length === 0) return;
 
       const q = quota != null && quota > 0 ? quota : 10;
+      const completed = colorStats.filter(s => s.attempt_count >= q).length;
+      if (meta) meta.textContent = `${completed}/${colorStats.length} at quota · ${q} per color`;
 
       // Sort: at-quota colors last, then by remaining ascending (nearest to done first)
       const sorted = [...colorStats].sort((a, b) => {
@@ -559,7 +660,17 @@
         </div>`;
       }).join('');
 
-      section.style.display = '';
+      card.style.display = '';
+    }
+
+    // Collapsible toggle (used by Awards and Color Coverage cards)
+    function toggleCollapsible(cardId, btn) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      const isOpen = card.getAttribute('data-open') === 'true';
+      const next = !isOpen;
+      card.setAttribute('data-open', String(next));
+      if (btn) btn.setAttribute('aria-expanded', String(next));
     }
 
     // ── Session results ───────────────────────────────────────
@@ -584,6 +695,36 @@
         .catch(() => showError('Failed to load results. Please try again.'));
     }
 
+    var INITIAL_SESSIONS_VISIBLE = 8;
+    // Per-session cap (seconds) for aggregating elapsed time. Caps abandoned tabs
+    // so totals/averages stay realistic. Mirrors the leaderboard cap on the server.
+    var SESSION_TIME_CAP_SEC = 1800;
+
+    function fmtDuration(seconds) {
+      if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) return '0s';
+      if (seconds < 60) return seconds.toFixed(1) + 's';
+      if (seconds < 3600) {
+        const m = Math.floor(seconds / 60);
+        const s = Math.round(seconds - m * 60);
+        return s === 0 ? `${m}m` : `${m}m ${s}s`;
+      }
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds - h * 3600) / 60);
+      return m === 0 ? `${h}h` : `${h}h ${m}m`;
+    }
+
+    function fmtSecondsShort(seconds) {
+      if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) return '—';
+      return seconds.toFixed(seconds < 10 ? 1 : 0) + 's';
+    }
+
+    function median(arr) {
+      if (!arr.length) return null;
+      const sorted = [...arr].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+
     function displayResults(results, totalSessions) {
       if (results.length === 0) {
         document.getElementById('results-content').innerHTML = '<div class="no-results">No results found for this user ID.</div>';
@@ -591,6 +732,22 @@
       }
       const completed = results.filter(r => !r.skipped).length;
       const skipped = results.filter(r => r.skipped).length;
+
+      // Elapsed-time aggregates. We cap each session at 30 min so abandoned tabs
+      // don't blow up the totals; matches the server-side cap on the leaderboard.
+      const allTimes = results
+        .map(r => (typeof r.time_sec === 'number' ? r.time_sec : null))
+        .filter(t => t != null);
+      const cappedTimes = allTimes.map(t => Math.min(t, SESSION_TIME_CAP_SEC));
+      const matchedTimes = results
+        .filter(r => !r.skipped && typeof r.time_sec === 'number' && r.time_sec <= SESSION_TIME_CAP_SEC)
+        .map(r => r.time_sec);
+
+      const totalTime = cappedTimes.reduce((a, b) => a + b, 0);
+      const avgMatchTime = matchedTimes.length
+        ? matchedTimes.reduce((a, b) => a + b, 0) / matchedTimes.length
+        : null;
+      const medianMatchTime = median(matchedTimes);
 
       function fmtCat(val, legacySkip, isSkipped) {
         if (val) {
@@ -612,13 +769,23 @@
       const summaryHTML = '<div class="results-summary">' +
         '<div class="summary-item"><div class="summary-number">' + totalSessions + '</div><div class="summary-label">Total</div></div>' +
         '<div class="summary-item"><div class="summary-number">' + completed + '</div><div class="summary-label">Completed</div></div>' +
-        '<div class="summary-item"><div class="summary-number">' + skipped + '</div><div class="summary-label">Skipped</div></div></div>';
+        '<div class="summary-item"><div class="summary-number">' + skipped + '</div><div class="summary-label">Skipped</div></div>' +
+        '<div class="summary-item" title="Sum of elapsed time across all rounds. Each round capped at 30 min to ignore abandoned tabs.">' +
+          '<div class="summary-number">' + fmtDuration(totalTime) + '</div>' +
+          '<div class="summary-label">Total Time</div></div>' +
+        '<div class="summary-item" title="Average elapsed time per completed match (rounds &le; 30 min).">' +
+          '<div class="summary-number">' + fmtSecondsShort(avgMatchTime) + '</div>' +
+          '<div class="summary-label">Avg / Match</div></div>' +
+        '<div class="summary-item" title="Median elapsed time per completed match.">' +
+          '<div class="summary-number">' + fmtSecondsShort(medianMatchTime) + '</div>' +
+          '<div class="summary-label">Median / Match</div></div>' +
+        '</div>';
 
       let tableHTML = '<table class="results-table"><thead><tr>' +
         '<th>Date</th><th>Target</th><th>Drops</th><th>Outcome</th><th>Time</th><th>Status</th></tr></thead><tbody>';
       let cardsHTML = '<div class="result-cards">';
 
-      results.forEach(r => {
+      results.forEach((r, idx) => {
         const rgb = r.target_color.match(/\d+/g);
         const rgbStr = rgb ? rgb.join(',') : '128,128,128';
         const drops = [
@@ -633,14 +800,15 @@
         const statusClass = r.skipped ? 'status-skipped' : 'status-completed';
         const statusText = r.skipped ? 'Skipped' : 'Completed';
         const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A';
+        const hiddenClass = idx >= INITIAL_SESSIONS_VISIBLE ? ' is-hidden' : '';
 
-        tableHTML += `<tr><td>${ts}</td>
+        tableHTML += `<tr class="results-table-row${hiddenClass}"><td>${ts}</td>
           <td><div class="color-preview" style="background-color:rgb(${rgbStr})"></div>${r.target_color}</td>
           <td>${drops}</td><td>${cat}</td>
           <td>${typeof r.time_sec === 'number' ? r.time_sec.toFixed(1) : r.time_sec}s</td>
           <td class="${statusClass}">${statusText}</td></tr>`;
 
-        cardsHTML += `<div class="result-card">
+        cardsHTML += `<div class="result-card${hiddenClass}">
           <div class="result-card-header">
             <div class="result-card-swatch" style="background-color:rgb(${rgbStr})"></div>
             <div>
@@ -659,7 +827,35 @@
 
       tableHTML += '</tbody></table>';
       cardsHTML += '</div>';
-      document.getElementById('results-content').innerHTML = summaryHTML + tableHTML + cardsHTML;
+
+      const hiddenCount = Math.max(0, results.length - INITIAL_SESSIONS_VISIBLE);
+      const showMoreHTML = hiddenCount > 0
+        ? `<button type="button" class="show-more-btn" id="showMoreSessionsBtn"
+                   onclick="toggleSessionRows()">Show all ${results.length} sessions</button>`
+        : '';
+
+      document.getElementById('results-content').innerHTML = summaryHTML + tableHTML + cardsHTML + showMoreHTML;
+    }
+
+    function toggleSessionRows() {
+      const btn = document.getElementById('showMoreSessionsBtn');
+      const hiddenRows = document.querySelectorAll('.results-table-row.is-hidden, .result-card.is-hidden');
+      if (hiddenRows.length > 0) {
+        hiddenRows.forEach(el => el.classList.remove('is-hidden'));
+        if (btn) btn.textContent = 'Show fewer';
+        btn.dataset.expanded = 'true';
+      } else {
+        // Re-hide rows beyond the initial visible count
+        document.querySelectorAll('.results-table-row').forEach((el, i) => {
+          if (i >= INITIAL_SESSIONS_VISIBLE) el.classList.add('is-hidden');
+        });
+        document.querySelectorAll('.result-card').forEach((el, i) => {
+          if (i >= INITIAL_SESSIONS_VISIBLE) el.classList.add('is-hidden');
+        });
+        const total = document.querySelectorAll('.results-table-row').length;
+        if (btn) btn.textContent = 'Show all ' + total + ' sessions';
+        btn.dataset.expanded = 'false';
+      }
     }
 
     function showError(message) {

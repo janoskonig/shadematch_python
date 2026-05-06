@@ -1641,6 +1641,15 @@ def get_leaderboard():
     except (TypeError, ValueError):
         limit = 25
 
+    # Per-session cap (seconds) used when aggregating elapsed time. Caps abandoned
+    # tabs / runaway timers so the leaderboard's total play time stays meaningful.
+    SESSION_TIME_CAP_SEC = 1800.0
+
+    capped_time = func.least(
+        func.coalesce(MixingSession.time_sec, 0.0),
+        SESSION_TIME_CAP_SEC,
+    )
+
     try:
         rows = (
             db.session.query(
@@ -1656,6 +1665,26 @@ def get_leaderboard():
                 func.coalesce(func.sum(
                     case((MixingSession.match_category == 'no_perceivable_difference', 1), else_=0)
                 ), 0).label('no_perceivable_diff_count'),
+                func.coalesce(
+                    func.sum(
+                        case(
+                            (MixingSession.time_sec.isnot(None), capped_time),
+                            else_=0.0,
+                        )
+                    ),
+                    0.0,
+                ).label('total_time_sec'),
+                func.avg(
+                    case(
+                        (
+                            (MixingSession.skipped.is_(False))
+                            & (MixingSession.time_sec.isnot(None))
+                            & (MixingSession.time_sec <= SESSION_TIME_CAP_SEC),
+                            MixingSession.time_sec,
+                        ),
+                        else_=None,
+                    )
+                ).label('avg_match_time_sec'),
             )
             .select_from(User)
             .outerjoin(UserProgress, UserProgress.user_id == User.id)
@@ -1689,6 +1718,10 @@ def get_leaderboard():
             if is_current_user:
                 current_user_rank = rank
 
+            total_time_sec = float(row.total_time_sec or 0.0)
+            avg_match_time_sec = (
+                float(row.avg_match_time_sec) if row.avg_match_time_sec is not None else None
+            )
             entry = {
                 'rank': rank,
                 'display_name': f'You ({row.user_id})' if is_current_user else f'Player #{rank}',
@@ -1700,6 +1733,10 @@ def get_leaderboard():
                 'completed_sessions': int(row.completed_sessions or 0),
                 'perfect_count': int(row.perfect_count or 0),
                 'no_perceivable_diff_count': int(row.no_perceivable_diff_count or 0),
+                'total_time_sec': round(total_time_sec, 1),
+                'avg_match_time_sec': (
+                    round(avg_match_time_sec, 2) if avg_match_time_sec is not None else None
+                ),
             }
             entries_by_user[row.user_id] = entry
             if rank <= limit:
