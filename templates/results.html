@@ -725,13 +725,26 @@
       return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
     }
 
+    // A row counts as "Completed" when the user reached a perfect match OR
+    // explicitly skipped while rating the result as visually identical /
+    // acceptable small difference. Skips marked unacceptable (big difference)
+    // and legacy 'stopped' rows do not qualify. We fall back to the legacy
+    // !skipped heuristic only when match_category is missing on old rows.
+    var COMPLETED_MATCH_CATEGORIES = ['perfect', 'no_perceivable_difference', 'acceptable_difference'];
+    function isCompletedResult(r) {
+      if (r && r.match_category) {
+        return COMPLETED_MATCH_CATEGORIES.indexOf(r.match_category) >= 0;
+      }
+      return r && !r.skipped;
+    }
+
     function displayResults(results, totalSessions) {
       if (results.length === 0) {
         document.getElementById('results-content').innerHTML = '<div class="no-results">No results found for this user ID.</div>';
         return;
       }
-      const completed = results.filter(r => !r.skipped).length;
-      const skipped = results.filter(r => r.skipped).length;
+      const completed = results.filter(isCompletedResult).length;
+      const skipped = results.length - completed;
 
       // Elapsed-time aggregates. We cap each session at 30 min so abandoned tabs
       // don't blow up the totals; matches the server-side cap on the leaderboard.
@@ -740,7 +753,7 @@
         .filter(t => t != null);
       const cappedTimes = allTimes.map(t => Math.min(t, SESSION_TIME_CAP_SEC));
       const matchedTimes = results
-        .filter(r => !r.skipped && typeof r.time_sec === 'number' && r.time_sec <= SESSION_TIME_CAP_SEC)
+        .filter(r => isCompletedResult(r) && typeof r.time_sec === 'number' && r.time_sec <= SESSION_TIME_CAP_SEC)
         .map(r => r.time_sec);
 
       const totalTime = cappedTimes.reduce((a, b) => a + b, 0);
@@ -797,8 +810,9 @@
         ].filter(Boolean).join(' ') || 'None';
 
         const cat = fmtCat(r.match_category, r.skip_perception, r.skipped);
-        const statusClass = r.skipped ? 'status-skipped' : 'status-completed';
-        const statusText = r.skipped ? 'Skipped' : 'Completed';
+        const isCompleted = isCompletedResult(r);
+        const statusClass = isCompleted ? 'status-completed' : 'status-skipped';
+        const statusText = isCompleted ? 'Completed' : 'Skipped';
         const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A';
         const hiddenClass = idx >= INITIAL_SESSIONS_VISIBLE ? ' is-hidden' : '';
 

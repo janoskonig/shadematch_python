@@ -43,6 +43,15 @@ XP_TABLE = {
     'stopped': 7,
 }
 
+# Match categories that count as a "completed" session for user-facing tallies
+# and daily performance awards. Skips marked unacceptable (big difference) and
+# legacy 'stopped' rows are excluded.
+COMPLETED_MATCH_CATEGORIES = (
+    'perfect',
+    'no_perceivable_difference',
+    'acceptable_difference',
+)
+
 # Rank tiers — 6 ranks × 5 levels each over 30 levels.
 RANK_TIERS = [
     {'min_level': 1,  'max_level': 5,  'rank': 'Bronze',   'color': '#CD7F32'},
@@ -374,7 +383,7 @@ def grant_daily_performance_awards(day: date):
     sessions = (
         MixingSession.query
         .filter(MixingSession.timestamp >= start_dt, MixingSession.timestamp < end_dt)
-        .filter(MixingSession.skipped.is_(False))
+        .filter(MixingSession.match_category.in_(COMPLETED_MATCH_CATEGORIES))
         .all()
     )
     if not sessions:
@@ -914,6 +923,12 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
     # ── Color stats + quota awards ────────────────────────────────────────
     color_crossed_quota = False
 
+    # Only attempts that landed in a completed bucket (perfect match, or a skip
+    # rated as "identical" / "acceptable small difference") accrue toward a
+    # color's quota. Skips marked "unacceptable big difference" and legacy
+    # 'stopped' rows are persisted for analytics but do NOT advance progression.
+    counts_toward_quota = match_category in COMPLETED_MATCH_CATEGORIES
+
     if target_color_id is not None:
         stats = UserTargetColorStats.query.filter_by(
             user_id=user_id, target_color_id=target_color_id,
@@ -926,7 +941,8 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             db.session.add(stats)
 
         old_count = stats.attempt_count
-        stats.attempt_count += 1
+        if counts_toward_quota:
+            stats.attempt_count += 1
         if not skipped:
             stats.completed_count += 1
         if delta_e is not None and (stats.best_delta_e is None or delta_e < stats.best_delta_e):

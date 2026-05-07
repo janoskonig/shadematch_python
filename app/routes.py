@@ -65,6 +65,16 @@ EMAIL_VERIFY_TTL_HOURS = 24
 EMAIL_RECOVERY_TTL_MINUTES = 20
 _RATE_LIMIT_BUCKETS = {}
 
+# A session "counts as completed" when the user either reached a perfect match
+# OR explicitly skipped while rating the result as visually identical or as an
+# acceptable small difference. Skips marked as a big/unacceptable difference and
+# legacy "stopped" rows do NOT qualify.
+COMPLETED_MATCH_CATEGORIES = (
+    'perfect',
+    'no_perceivable_difference',
+    'acceptable_difference',
+)
+
 
 def derive_match_category(delta_e, skipped, skip_perception=None):
     """
@@ -789,6 +799,58 @@ MIXING_END_REASONS = frozenset({
 PALETTE_COLORS = ('white', 'black', 'red', 'yellow', 'blue')
 
 
+def _normalize_user_id_value(value):
+    """Strip + uppercase a user-id-like value; return '' if not a string."""
+    if not isinstance(value, str):
+        return ''
+    return value.strip().upper()
+
+
+def _resolve_authenticated_user(payload, *, keys=('user_id', 'userId')):
+    """
+    Pull a user_id from a JSON-ish payload, validate it, and confirm the user
+    exists. Returns (user, normalized_id, error_response_tuple).
+
+    On success: (User, 'ABC123', None)
+    On failure: (None, '', (Response, status_code))
+
+    Gameplay endpoints are anonymous-by-default in this app (no Flask-Login
+    session); we treat the client-supplied id as the authentication assertion.
+    Anything missing or unknown is rejected so we never write orphan rows
+    into mixing_attempts / mixing_sessions again.
+    """
+    raw = None
+    if isinstance(payload, dict):
+        for key in keys:
+            if payload.get(key):
+                raw = payload.get(key)
+                break
+
+    user_id = _normalize_user_id_value(raw)
+    if not user_id:
+        return None, '', (
+            jsonify({
+                'status': 'error',
+                'code': 'AUTH_REQUIRED',
+                'message': 'user_id is required to record gameplay.',
+            }),
+            401,
+        )
+
+    user = User.query.get(user_id)
+    if user is None:
+        return None, user_id, (
+            jsonify({
+                'status': 'error',
+                'code': 'AUTH_UNKNOWN_USER',
+                'message': 'Unknown user_id. Please log in or register before playing.',
+            }),
+            401,
+        )
+
+    return user, user_id, None
+
+
 def _utcnow():
     return datetime.utcnow()
 
@@ -1031,17 +1093,31 @@ def _normalize_event_payload(raw, attempt_uuid_default=None):
     }
 
 
-def _upsert_attempt_header(payload):
+def _upsert_attempt_header(payload, *, authenticated_user_id=None):
     attempt_uuid = payload.get('attempt_uuid')
     if not attempt_uuid:
         raise ValueError('attempt_uuid is required')
 
+    if authenticated_user_id is not None and not authenticated_user_id:
+        raise ValueError('authenticated_user_id must be a non-empty string when provided')
+
     row = MixingAttempt.query.get(attempt_uuid)
     created = False
     if row is None:
-        row = MixingAttempt(attempt_uuid=attempt_uuid, attempt_started_server_ts=_utcnow())
+        row = MixingAttempt(
+            attempt_uuid=attempt_uuid,
+            attempt_started_server_ts=_utcnow(),
+            user_id=authenticated_user_id,
+        )
         db.session.add(row)
         created = True
+    elif (
+        authenticated_user_id is not None
+        and row.user_id is not None
+        and row.user_id != authenticated_user_id
+    ):
+        # Someone is trying to drive an attempt that belongs to a different user.
+        raise PermissionError('attempt_uuid does not belong to the authenticated user')
 
     # Start context / immutable-ish fields are only set if empty
     for attr, key in (
@@ -1057,6 +1133,12 @@ def _upsert_attempt_header(payload):
         val = payload.get(key)
         if val is not None and getattr(row, attr) is None:
             setattr(row, attr, val)
+
+    if authenticated_user_id is not None and row.user_id != authenticated_user_id:
+        # First-write-wins logic above only fires when payload carries a value
+        # and the column is currently NULL. Force the authenticated id either
+        # way so a no-user payload from a logged-in client still gets stamped.
+        row.user_id = authenticated_user_id
 
     final_delta_e = _coerce_float_or_none(payload.get('final_delta_e'))
     if final_delta_e is not None:
@@ -1245,14 +1327,21 @@ def _ingest_mixing_events(attempt_uuid, raw_events):
     return {'inserted': len(to_insert), 'duplicates': duplicates}
 
 
-def _ensure_terminal_telemetry_from_gameplay(data, end_reason):
+def _ensure_terminal_telemetry_from_gameplay(data, end_reason, *, authenticated_user_id=None):
     attempt_uuid = data.get('attempt_uuid')
     if not attempt_uuid:
         return
 
+    user_id = authenticated_user_id or _normalize_user_id_value(data.get('user_id'))
+    if not user_id:
+        # Defensive: callers (save_session/save_skip) must already have validated
+        # the authenticated user. If we somehow get here without one, refuse to
+        # write so we never recreate the orphan rows we just cleaned up.
+        raise ValueError('authenticated_user_id is required for terminal telemetry')
+
     header_payload = {
         'attempt_uuid': attempt_uuid,
-        'user_id': data.get('user_id'),
+        'user_id': user_id,
         'target_color_id': data.get('target_color_id'),
         'target_r': data.get('target_r'),
         'target_g': data.get('target_g'),
@@ -1261,7 +1350,7 @@ def _ensure_terminal_telemetry_from_gameplay(data, end_reason):
         'end_reason': end_reason,
         'final_delta_e': _coerce_float_or_none(data.get('delta_e')),
     }
-    _upsert_attempt_header(header_payload)
+    _upsert_attempt_header(header_payload, authenticated_user_id=user_id)
 
     boundary_type = 'boundary_save' if end_reason in ('saved_match', 'saved_stop') else 'boundary_skip'
     existing_terminal = (
@@ -1330,9 +1419,16 @@ def _ensure_terminal_telemetry_from_gameplay(data, end_reason):
 def mixing_attempt_start_or_update():
     try:
         data = request.get_json(silent=True) or {}
-        _upsert_attempt_header(data)
+        _, user_id, err = _resolve_authenticated_user(data)
+        if err:
+            return err
+        data['user_id'] = user_id
+        _upsert_attempt_header(data, authenticated_user_id=user_id)
         db.session.commit()
         return jsonify({'status': 'success'})
+    except PermissionError as pe:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'code': 'AUTH_FORBIDDEN', 'message': str(pe)}), 403
     except ValueError as ve:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(ve)}), 400
@@ -1345,13 +1441,25 @@ def mixing_attempt_start_or_update():
 def mixing_attempt_events():
     try:
         data = request.get_json(silent=True) or {}
+        _, user_id, err = _resolve_authenticated_user(data)
+        if err:
+            return err
+
         attempt_uuid = data.get('attempt_uuid')
         if not attempt_uuid:
             return jsonify({'status': 'error', 'message': 'attempt_uuid required'}), 400
 
-        exists = MixingAttempt.query.get(attempt_uuid)
-        if not exists:
+        existing = MixingAttempt.query.get(attempt_uuid)
+        if not existing:
             return jsonify({'status': 'error', 'message': 'unknown attempt_uuid'}), 404
+        if existing.user_id is None:
+            existing.user_id = user_id
+        elif existing.user_id != user_id:
+            return jsonify({
+                'status': 'error',
+                'code': 'AUTH_FORBIDDEN',
+                'message': 'attempt_uuid does not belong to the authenticated user',
+            }), 403
 
         result = _ingest_mixing_events(attempt_uuid, data.get('events'))
         _refresh_mixing_attempt_num_steps(attempt_uuid)
@@ -1372,16 +1480,27 @@ def mixing_attempt_ingest():
         header = data.get('attempt') or {}
         events = data.get('events') or []
 
+        # Auth assertion may live on the header (preferred) or top level.
+        _, user_id, err = _resolve_authenticated_user(header)
+        if err:
+            _, user_id, err = _resolve_authenticated_user(data)
+            if err:
+                return err
+        header['user_id'] = user_id
+
         attempt_uuid = header.get('attempt_uuid') or data.get('attempt_uuid')
         if not attempt_uuid:
             return jsonify({'status': 'error', 'message': 'attempt_uuid required'}), 400
 
         header['attempt_uuid'] = attempt_uuid
-        row = _upsert_attempt_header(header)
+        _upsert_attempt_header(header, authenticated_user_id=user_id)
         result = _ingest_mixing_events(attempt_uuid, events)
         _refresh_mixing_attempt_num_steps(attempt_uuid)
         db.session.commit()
         return jsonify({'status': 'success', **result})
+    except PermissionError as pe:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'code': 'AUTH_FORBIDDEN', 'message': str(pe)}), 403
     except ValueError as ve:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(ve)}), 400
@@ -1394,13 +1513,17 @@ def mixing_attempt_ingest():
 
 @main.route('/save_session', methods=['POST'])
 def save_session():
-    data = request.get_json()
+    data = request.get_json() or {}
+
+    _, user_id, err = _resolve_authenticated_user(data)
+    if err:
+        return err
 
     if not refresh_db_connection():
         return jsonify({'status': 'error', 'error': 'Database connection failed'}), 500
 
     try:
-        user_id = data['user_id']
+        data['user_id'] = user_id
         attempt_uuid = data.get('attempt_uuid')
 
         # Idempotency: if this uuid was already persisted, return current progress
@@ -1449,7 +1572,7 @@ def save_session():
         except (TypeError, ValueError):
             delta_for_reason = None
         end_reason = 'saved_match' if (delta_for_reason is not None and delta_for_reason <= MATCH_PERFECT_DELTA_E) else 'saved_stop'
-        _ensure_terminal_telemetry_from_gameplay(data, end_reason=end_reason)
+        _ensure_terminal_telemetry_from_gameplay(data, end_reason=end_reason, authenticated_user_id=user_id)
 
         db.session.commit()
 
@@ -1475,13 +1598,17 @@ def save_session():
 
 @main.route('/save_skip', methods=['POST'])
 def save_skip():
-    data = request.get_json()
+    data = request.get_json() or {}
+
+    _, user_id, err = _resolve_authenticated_user(data)
+    if err:
+        return err
 
     if not refresh_db_connection():
         return jsonify({'status': 'error', 'error': 'Database connection failed'}), 500
 
     try:
-        user_id = data['user_id']
+        data['user_id'] = user_id
         attempt_uuid = data.get('attempt_uuid')
 
         if attempt_uuid:
@@ -1530,7 +1657,7 @@ def save_skip():
         )
         new_awards.extend(grant_daily_mission_awards(user_id))
 
-        _ensure_terminal_telemetry_from_gameplay(data, end_reason='skipped')
+        _ensure_terminal_telemetry_from_gameplay(data, end_reason='skipped', authenticated_user_id=user_id)
 
         db.session.commit()
 
@@ -1658,7 +1785,15 @@ def get_leaderboard():
                 func.coalesce(UserProgress.level, 1).label('level'),
                 func.coalesce(UserProgress.current_streak, 0).label('current_streak'),
                 func.count(MixingSession.id).label('total_sessions'),
-                func.coalesce(func.sum(case((MixingSession.skipped.is_(False), 1), else_=0)), 0).label('completed_sessions'),
+                func.coalesce(func.sum(
+                    case(
+                        (
+                            MixingSession.match_category.in_(COMPLETED_MATCH_CATEGORIES),
+                            1,
+                        ),
+                        else_=0,
+                    )
+                ), 0).label('completed_sessions'),
                 func.coalesce(func.sum(
                     case((MixingSession.match_category == 'perfect', 1), else_=0)
                 ), 0).label('perfect_count'),
@@ -1677,7 +1812,7 @@ def get_leaderboard():
                 func.avg(
                     case(
                         (
-                            (MixingSession.skipped.is_(False))
+                            MixingSession.match_category.in_(COMPLETED_MATCH_CATEGORIES)
                             & (MixingSession.time_sec.isnot(None))
                             & (MixingSession.time_sec <= SESSION_TIME_CAP_SEC),
                             MixingSession.time_sec,

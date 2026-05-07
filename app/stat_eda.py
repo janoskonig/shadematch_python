@@ -36,6 +36,92 @@ def _fig_to_png(fig) -> bytes:
     return buf.getvalue()
 
 
+def _swarm_offsets(
+    y_values: np.ndarray,
+    *,
+    half_bin_x: float = 0.38,
+    n_bins: int = 60,
+) -> np.ndarray:
+    """
+    Beeswarm-style x-offsets for categorical scatter so points don't pile on top.
+    For each y-bin, points are placed at alternating left/right offsets (sym).
+    Returns offsets in the same units as half_bin_x (max |offset| <= half_bin_x).
+    """
+    y = np.asarray(y_values, dtype=float)
+    n = len(y)
+    if n == 0:
+        return np.zeros(0, dtype=float)
+    finite = np.isfinite(y)
+    if not finite.any():
+        return np.zeros(n, dtype=float)
+    yf = y[finite]
+    y_min = float(yf.min())
+    y_max = float(yf.max())
+    if y_max <= y_min:
+        bin_idx = np.zeros(n, dtype=int)
+    else:
+        bin_idx = np.clip(
+            ((y - y_min) / (y_max - y_min) * (n_bins - 1)).astype(int),
+            0,
+            n_bins - 1,
+        )
+    bin_idx = np.where(finite, bin_idx, -1)
+    offsets = np.zeros(n, dtype=float)
+    for b in np.unique(bin_idx):
+        if b < 0:
+            continue
+        idxs = np.where(bin_idx == b)[0]
+        for k, idx in enumerate(idxs):
+            sign = 1 if (k % 2 == 0) else -1
+            offsets[idx] = sign * ((k + 1) // 2)
+    max_off = float(max(np.abs(offsets).max(), 1.0))
+    return (offsets / max_off) * float(half_bin_x)
+
+
+def _multivariate_attempt_metrics() -> pd.DataFrame:
+    """Return per-attempt numeric metrics used by exploratory multivariate plots."""
+    sql = text(
+        """
+        SELECT
+          final_delta_e,
+          duration_sec,
+          num_steps,
+          initial_delta_e
+        FROM mixing_attempts
+        WHERE final_delta_e IS NOT NULL
+          AND duration_sec IS NOT NULL
+          AND num_steps IS NOT NULL
+        """
+    )
+    with db.engine.connect() as conn:
+        df = pd.read_sql(sql, conn)
+    df = df.apply(pd.to_numeric, errors='coerce')
+    df = df.dropna(subset=['final_delta_e', 'duration_sec', 'num_steps'])
+    df = df[(df['duration_sec'] >= 0) & (df['duration_sec'] <= 600)]
+    return df.reset_index(drop=True)
+
+
+def _select_mv_columns(df: pd.DataFrame) -> List[str]:
+    """Pick metric columns with enough non-null variation for multivariate plots."""
+    candidates = ['final_delta_e', 'duration_sec', 'num_steps', 'initial_delta_e']
+    cols: List[str] = []
+    for c in candidates:
+        if c not in df.columns:
+            continue
+        s = pd.to_numeric(df[c], errors='coerce')
+        if s.notna().sum() >= 5 and s.nunique(dropna=True) >= 2:
+            cols.append(c)
+    return cols
+
+
+_MV_LABEL_MAP = {
+    'final_delta_e': 'final_dE',
+    'duration_sec': 'duration_s',
+    'num_steps': 'num_steps',
+    'initial_delta_e': 'initial_dE',
+}
+
+
 def get_dataframes() -> Tuple[pd.DataFrame, pd.DataFrame]:
     """Return (attempts_df, events_df) with shared TTL cache."""
     global _bundle_ts, _bundle
@@ -909,11 +995,16 @@ def plot_plays_per_user(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
         ax.axis('off')
         return _fig_to_png(fig)
     top = per_user.head(30)
-    ax.bar(np.arange(len(top)), top.values, color='#4b5563')
-    ax.set_xticks(np.arange(len(top)))
+    x = np.arange(len(top))
+    y = top.values
+    ax.scatter(x, y, s=42, color='#4b5563', edgecolors='white', linewidths=0.6, alpha=0.9, zorder=2)
+    ax.vlines(x, ymin=0, ymax=y, color='#9ca3af', linewidth=0.8, alpha=0.7, zorder=1)
+    ax.set_xticks(x)
     ax.set_xticklabels(top.index.astype(str), rotation=70, fontsize=7)
     ax.set_ylabel('Plays')
-    ax.set_title('Top users by number of plays')
+    ax.set_xlabel('User (sorted by play count)')
+    ax.set_title('Scatter: plays per user (top 30)')
+    ax.set_ylim(bottom=0)
     return _fig_to_png(fig)
 
 
@@ -925,56 +1016,111 @@ def plot_attempts_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
         ax.axis('off')
         return _fig_to_png(fig)
     g = att.groupby('target_name', dropna=False).size().sort_values(ascending=False).head(20)
-    ax.bar(np.arange(len(g)), g.values, color='#0f766e')
-    ax.set_xticks(np.arange(len(g)))
+    x = np.arange(len(g))
+    y = g.values
+    ax.scatter(x, y, s=48, color='#0f766e', edgecolors='white', linewidths=0.6, alpha=0.9, zorder=2)
+    ax.vlines(x, ymin=0, ymax=y, color='#5eead4', linewidth=0.9, alpha=0.7, zorder=1)
+    ax.set_xticks(x)
     ax.set_xticklabels(g.index.astype(str), rotation=55, ha='right', fontsize=8)
     ax.set_ylabel('Attempts')
-    ax.set_title('Attempts per color (top 20)')
+    ax.set_xlabel('Target color')
+    ax.set_title('Scatter: attempts per color (top 20)')
+    ax.set_ylim(bottom=0)
+    return _fig_to_png(fig)
+
+
+def _plot_per_color_swarm(
+    att: pd.DataFrame,
+    *,
+    metric: str,
+    metric_label: str,
+    point_color: str,
+    title: str,
+    per_category_cap: int = 350,
+) -> bytes:
+    fig, ax = plt.subplots(figsize=(9, 4.8))
+    if len(att) == 0:
+        ax.text(0.5, 0.5, f'No {metric_label} data', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    counts = (
+        att.groupby('target_name', dropna=False)
+        .size()
+        .sort_values(ascending=False)
+        .head(20)
+    )
+    order = list(counts.index)
+    sub = att[att['target_name'].isin(order)].copy()
+    if per_category_cap and per_category_cap > 0:
+        sub = (
+            sub.groupby('target_name', sort=False, group_keys=False)
+            .apply(lambda g: g.sample(min(len(g), int(per_category_cap)), random_state=42))
+            .reset_index(drop=True)
+        )
+    half_bin = 0.38
+    for i, name in enumerate(order):
+        ys = sub.loc[sub['target_name'] == name, metric].to_numpy(dtype=float)
+        if len(ys) == 0:
+            continue
+        offs = _swarm_offsets(ys, half_bin_x=half_bin, n_bins=60)
+        xs = np.full_like(ys, fill_value=float(i)) + offs
+        ax.scatter(
+            xs,
+            ys,
+            s=12,
+            alpha=0.55,
+            color=point_color,
+            edgecolors='none',
+            zorder=2,
+        )
+    means = (
+        att[att['target_name'].isin(order)]
+        .groupby('target_name', dropna=False)[metric]
+        .mean()
+        .reindex(order)
+    )
+    ax.scatter(
+        np.arange(len(order)),
+        means.values,
+        s=70,
+        marker='D',
+        facecolors='none',
+        edgecolors='#1f2937',
+        linewidths=1.5,
+        zorder=3,
+        label='mean per color',
+    )
+    ax.set_xticks(np.arange(len(order)))
+    ax.set_xticklabels([str(o) for o in order], rotation=55, ha='right', fontsize=8)
+    ax.set_ylabel(metric_label)
+    ax.set_xlabel('Target color')
+    ax.set_title(title)
+    ax.legend(fontsize=8, loc='upper right')
     return _fig_to_png(fig)
 
 
 def plot_deltae_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
-    fig, ax = plt.subplots(figsize=(9, 4.5))
     att = _dashboard_attempts_df()
     att = att[att['final_delta_e'].notna()]
-    if len(att) == 0:
-        ax.text(0.5, 0.5, 'No ΔE data', ha='center', va='center')
-        ax.axis('off')
-        return _fig_to_png(fig)
-    g = (
-        att.groupby('target_name', dropna=False)['final_delta_e']
-        .mean()
-        .sort_values(ascending=False)
-        .head(20)
+    return _plot_per_color_swarm(
+        att,
+        metric='final_delta_e',
+        metric_label='Final ΔE',
+        point_color='#7c3aed',
+        title='Swarm: final ΔE per color (top 20 by volume)',
     )
-    ax.bar(np.arange(len(g)), g.values, color='#7c3aed')
-    ax.set_xticks(np.arange(len(g)))
-    ax.set_xticklabels(g.index.astype(str), rotation=55, ha='right', fontsize=8)
-    ax.set_ylabel('Mean final ΔE')
-    ax.set_title('Mean final ΔE per color (top 20 by volume)')
-    return _fig_to_png(fig)
 
 
 def plot_elapsed_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
-    fig, ax = plt.subplots(figsize=(9, 4.5))
     att = _dashboard_attempts_df()
     att = att[att['duration_sec'].notna() & (att['duration_sec'] <= 300)]
-    if len(att) == 0:
-        ax.text(0.5, 0.5, 'No elapsed-time data', ha='center', va='center')
-        ax.axis('off')
-        return _fig_to_png(fig)
-    g = (
-        att.groupby('target_name', dropna=False)['duration_sec']
-        .mean()
-        .sort_values(ascending=False)
-        .head(20)
+    return _plot_per_color_swarm(
+        att,
+        metric='duration_sec',
+        metric_label='Elapsed time (s)',
+        point_color='#b45309',
+        title='Swarm: elapsed time per color (<=300s, top 20 by volume)',
     )
-    ax.bar(np.arange(len(g)), g.values, color='#b45309')
-    ax.set_xticks(np.arange(len(g)))
-    ax.set_xticklabels(g.index.astype(str), rotation=55, ha='right', fontsize=8)
-    ax.set_ylabel('Mean elapsed time (s)')
-    ax.set_title('Mean elapsed time per color (<=300s, top 20 by volume)')
-    return _fig_to_png(fig)
 
 
 def plot_controlled_deltae_by_attempt(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
@@ -2293,6 +2439,332 @@ def build_attempt_archetypes(
     }
 
 
+def plot_mv_scatter_matrix(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    """Scatter plot matrix (SPLOM) of attempt-level numeric metrics."""
+    df = _multivariate_attempt_metrics()
+    cols = _select_mv_columns(df)
+    if len(cols) < 2:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.text(0.5, 0.5, 'Need at least two numeric metrics for SPLOM', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    sub = df[cols].dropna()
+    if len(sub) > 4000:
+        sub = sub.sample(4000, random_state=42)
+    n = len(cols)
+    fig, axes = plt.subplots(n, n, figsize=(2.4 * n, 2.4 * n))
+    if n == 1:
+        axes = np.array([[axes]])
+    for i in range(n):
+        for j in range(n):
+            ax = axes[i][j]
+            ci = cols[i]
+            cj = cols[j]
+            yi = sub[ci].to_numpy(dtype=float)
+            xj = sub[cj].to_numpy(dtype=float)
+            if i == j:
+                ax.hist(yi, bins=30, color='#3949ab', edgecolor='white', linewidth=0.4)
+            else:
+                ax.scatter(xj, yi, s=6, alpha=0.25, color='#1d4ed8', edgecolors='none')
+                if len(xj) >= 3:
+                    sx = pd.Series(xj)
+                    sy = pd.Series(yi)
+                    if sx.nunique() > 1 and sy.nunique() > 1:
+                        r = float(sx.corr(sy))
+                        ax.text(
+                            0.04,
+                            0.94,
+                            f'r={r:.2f}',
+                            transform=ax.transAxes,
+                            fontsize=7,
+                            color='#111827',
+                            va='top',
+                            ha='left',
+                            bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1.5),
+                        )
+            if i < n - 1:
+                ax.set_xticklabels([])
+            else:
+                ax.set_xlabel(_MV_LABEL_MAP.get(cj, cj), fontsize=8)
+            if j > 0:
+                ax.set_yticklabels([])
+            else:
+                ax.set_ylabel(_MV_LABEL_MAP.get(ci, ci), fontsize=8)
+            ax.tick_params(labelsize=7)
+    fig.suptitle(f'Scatter plot matrix (n={len(sub)})', fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
+    return _fig_to_png(fig)
+
+
+def plot_mv_parallel_boxplots(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    """Parallel boxplots of standardized attempt metrics (multidim boxplot)."""
+    df = _multivariate_attempt_metrics()
+    cols = _select_mv_columns(df)
+    fig, ax = plt.subplots(figsize=(9, 4.8))
+    if len(cols) == 0:
+        ax.text(0.5, 0.5, 'No numeric metrics', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    z = df[cols].copy()
+    for c in cols:
+        col = z[c]
+        sd = float(col.std(ddof=0))
+        z[c] = (col - col.mean()) / (sd if sd > 0 else 1.0)
+    data = [z[c].dropna().to_numpy(dtype=float) for c in cols]
+    bp = ax.boxplot(
+        data,
+        labels=[_MV_LABEL_MAP.get(c, c) for c in cols],
+        showfliers=True,
+        patch_artist=True,
+        widths=0.55,
+        medianprops=dict(color='#dc2626', linewidth=1.4),
+        flierprops=dict(marker='o', markerfacecolor='#94a3b8', markeredgecolor='none', markersize=3, alpha=0.5),
+    )
+    palette = plt.cm.get_cmap('tab10', max(len(cols), 1))
+    for idx, patch in enumerate(bp['boxes']):
+        patch.set_facecolor(palette(idx))
+        patch.set_alpha(0.55)
+        patch.set_edgecolor('#1f2937')
+    ax.axhline(0, color='#94a3b8', linestyle='--', linewidth=0.9)
+    ax.set_ylabel('z-score (per metric)')
+    ax.set_title(f'Parallel boxplots of standardized metrics (n={len(df)})')
+    ax.tick_params(axis='x', labelrotation=10)
+    return _fig_to_png(fig)
+
+
+def _kde_contour_panel(
+    ax,
+    x: np.ndarray,
+    y: np.ndarray,
+    *,
+    x_label: str,
+    y_label: str,
+    title: str,
+    cmap: str = 'viridis',
+) -> Optional[Any]:
+    if len(x) < 20:
+        ax.text(0.5, 0.5, 'Not enough data for KDE', ha='center', va='center')
+        ax.axis('off')
+        return None
+    try:
+        from scipy.stats import gaussian_kde
+    except Exception as e:
+        ax.text(0.5, 0.5, f'scipy not available: {e}', ha='center', va='center')
+        ax.axis('off')
+        return None
+    finite = np.isfinite(x) & np.isfinite(y)
+    x = x[finite]
+    y = y[finite]
+    if len(x) < 20:
+        ax.text(0.5, 0.5, 'Not enough finite data for KDE', ha='center', va='center')
+        ax.axis('off')
+        return None
+    xl, xh = np.quantile(x, [0.005, 0.995])
+    yl, yh = np.quantile(y, [0.005, 0.995])
+    mask = (x >= xl) & (x <= xh) & (y >= yl) & (y <= yh)
+    x = x[mask]
+    y = y[mask]
+    if len(x) < 20:
+        ax.text(0.5, 0.5, 'Not enough trimmed data for KDE', ha='center', va='center')
+        ax.axis('off')
+        return None
+    if len(x) > 6000:
+        rng = np.random.default_rng(42)
+        idx = rng.choice(len(x), 6000, replace=False)
+        x = x[idx]
+        y = y[idx]
+    try:
+        xy = np.vstack([x, y])
+        kde = gaussian_kde(xy)
+    except Exception as e:
+        ax.text(0.5, 0.5, f'KDE failed: {e}', ha='center', va='center')
+        ax.axis('off')
+        return None
+    xs = np.linspace(float(x.min()), float(x.max()), 90)
+    ys = np.linspace(float(y.min()), float(y.max()), 90)
+    xx, yy = np.meshgrid(xs, ys)
+    zz = kde(np.vstack([xx.ravel(), yy.ravel()])).reshape(xx.shape)
+    cf = ax.contourf(xx, yy, zz, levels=12, cmap=cmap)
+    ax.contour(xx, yy, zz, levels=6, colors='white', linewidths=0.6, alpha=0.6)
+    ax.scatter(x, y, s=4, alpha=0.18, color='white', edgecolors='none')
+    ax.set_xlabel(x_label)
+    ax.set_ylabel(y_label)
+    ax.set_title(title)
+    return cf
+
+
+def plot_mv_contour_pairs(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    """Multidim histogram approximation: 2D KDE contours for two key pairs."""
+    df = _multivariate_attempt_metrics()
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
+    if len(df) == 0:
+        for ax in axes:
+            ax.text(0.5, 0.5, 'No multivariate data', ha='center', va='center')
+            ax.axis('off')
+        return _fig_to_png(fig)
+    cf1 = _kde_contour_panel(
+        axes[0],
+        df['duration_sec'].to_numpy(dtype=float),
+        df['final_delta_e'].to_numpy(dtype=float),
+        x_label='duration_sec',
+        y_label='final_delta_e',
+        title='Joint density: ΔE × duration',
+    )
+    if cf1 is not None:
+        fig.colorbar(cf1, ax=axes[0], fraction=0.046, pad=0.04, label='density')
+    if 'num_steps' in df.columns and df['num_steps'].notna().sum() >= 20:
+        cf2 = _kde_contour_panel(
+            axes[1],
+            df['num_steps'].to_numpy(dtype=float),
+            df['final_delta_e'].to_numpy(dtype=float),
+            x_label='num_steps',
+            y_label='final_delta_e',
+            title='Joint density: ΔE × num_steps',
+            cmap='magma',
+        )
+        if cf2 is not None:
+            fig.colorbar(cf2, ax=axes[1], fraction=0.046, pad=0.04, label='density')
+    else:
+        axes[1].text(0.5, 0.5, 'num_steps not available', ha='center', va='center')
+        axes[1].axis('off')
+    fig.tight_layout()
+    return _fig_to_png(fig)
+
+
+def plot_mv_mahalanobis(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    """Mahalanobis-distance outlier detection over attempt metrics."""
+    df = _multivariate_attempt_metrics()
+    cols = _select_mv_columns(df)
+    fig, axes = plt.subplots(1, 2, figsize=(12, 4.8))
+    if len(cols) < 2 or len(df) < 10:
+        for ax in axes:
+            ax.text(0.5, 0.5, 'Need ≥10 rows and ≥2 metrics for Mahalanobis', ha='center', va='center')
+            ax.axis('off')
+        return _fig_to_png(fig)
+    sub = df[cols].dropna()
+    if len(sub) < 10:
+        for ax in axes:
+            ax.text(0.5, 0.5, 'Not enough complete rows', ha='center', va='center')
+            ax.axis('off')
+        return _fig_to_png(fig)
+    X = sub.to_numpy(dtype=float)
+    mu = X.mean(axis=0)
+    cov = np.cov(X.T)
+    try:
+        inv = np.linalg.pinv(cov)
+    except Exception as e:
+        for ax in axes:
+            ax.text(0.5, 0.5, f'cov inversion failed: {e}', ha='center', va='center')
+            ax.axis('off')
+        return _fig_to_png(fig)
+    diff = X - mu
+    md2 = np.einsum('ij,jk,ik->i', diff, inv, diff)
+    md2 = np.maximum(md2, 0.0)
+    md = np.sqrt(md2)
+    try:
+        from scipy.stats import chi2
+        threshold = float(np.sqrt(chi2.ppf(0.975, df=len(cols))))
+    except Exception:
+        threshold = float(np.sqrt(np.quantile(md2, 0.975)))
+    is_out = md > threshold
+    n_out = int(is_out.sum())
+
+    ax0 = axes[0]
+    ax0.hist(md, bins=40, color='#3949ab', edgecolor='white', alpha=0.85)
+    ax0.axvline(
+        threshold,
+        color='#dc2626',
+        linestyle='--',
+        linewidth=1.5,
+        label=f'97.5% threshold (df={len(cols)}): {threshold:.2f}',
+    )
+    ax0.set_xlabel('Mahalanobis distance')
+    ax0.set_ylabel('Count')
+    ax0.set_title(f'Mahalanobis distance distribution ({n_out} flagged of {len(md)})')
+    ax0.legend(fontsize=8)
+
+    ax1 = axes[1]
+    if 'duration_sec' in cols and 'final_delta_e' in cols:
+        ix_x = cols.index('duration_sec')
+        ix_y = cols.index('final_delta_e')
+        sc = ax1.scatter(
+            X[:, ix_x],
+            X[:, ix_y],
+            c=md,
+            s=14,
+            alpha=0.55,
+            cmap='viridis',
+            edgecolors='none',
+        )
+        if n_out > 0:
+            ax1.scatter(
+                X[is_out, ix_x],
+                X[is_out, ix_y],
+                s=80,
+                facecolors='none',
+                edgecolors='#dc2626',
+                linewidths=1.4,
+                label=f'outlier (n={n_out})',
+                zorder=3,
+            )
+            ax1.legend(fontsize=8, loc='upper right')
+        fig.colorbar(sc, ax=ax1, fraction=0.046, pad=0.04, label='Mahalanobis dist')
+        ax1.set_xlabel('duration_sec')
+        ax1.set_ylabel('final_delta_e')
+        ax1.set_title('Outliers on duration × ΔE projection')
+    else:
+        ax1.text(0.5, 0.5, 'duration / final_delta_e not in metric set', ha='center', va='center')
+        ax1.axis('off')
+    fig.tight_layout()
+    return _fig_to_png(fig)
+
+
+def plot_mv_qq_grid(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
+    """Normal-QQ plots for each attempt metric."""
+    df = _multivariate_attempt_metrics()
+    cols = _select_mv_columns(df)
+    if len(cols) == 0:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.text(0.5, 0.5, 'No metric data for QQ plots', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    try:
+        from scipy import stats as _scipy_stats
+    except Exception as e:
+        fig, ax = plt.subplots(figsize=(8, 5))
+        ax.text(0.5, 0.5, f'scipy not available: {e}', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    n = len(cols)
+    rows = int(np.ceil(n / 2.0))
+    cols_per_row = 2 if n > 1 else 1
+    fig, axes = plt.subplots(rows, cols_per_row, figsize=(4.8 * cols_per_row, 3.6 * rows))
+    axes_flat = np.atleast_1d(axes).ravel()
+    for i, c in enumerate(cols):
+        ax = axes_flat[i]
+        s = pd.to_numeric(df[c], errors='coerce').dropna().to_numpy(dtype=float)
+        if len(s) < 5:
+            ax.text(0.5, 0.5, f'Not enough data for {c}', ha='center', va='center')
+            ax.axis('off')
+            continue
+        if len(s) > 5000:
+            rng = np.random.default_rng(42)
+            s = rng.choice(s, 5000, replace=False)
+        (osm, osr), (slope, intercept, r) = _scipy_stats.probplot(s, dist='norm')
+        ax.scatter(osm, osr, s=10, alpha=0.5, color='#1d4ed8', edgecolors='none')
+        xs = np.array([float(osm.min()), float(osm.max())])
+        ax.plot(xs, slope * xs + intercept, color='#dc2626', linewidth=1.4)
+        ax.set_xlabel('Theoretical quantiles', fontsize=8)
+        ax.set_ylabel('Sample quantiles', fontsize=8)
+        ax.set_title(f'{_MV_LABEL_MAP.get(c, c)}  (R²={r ** 2:.3f})', fontsize=9)
+        ax.tick_params(labelsize=7)
+    for j in range(n, axes_flat.size):
+        axes_flat[j].axis('off')
+    fig.suptitle('QQ-plots vs normal', fontsize=11)
+    fig.tight_layout(rect=(0, 0, 1, 0.96))
+    return _fig_to_png(fig)
+
+
 def plot_mixed_models_vif(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
     from . import mixed_models_stat
 
@@ -2348,6 +2820,11 @@ PLOT_BUILDERS: Dict[str, Callable[[pd.DataFrame, pd.DataFrame], bytes]] = {
     'correlation_heatmap': plot_correlation_heatmap,
     'correlation_league': plot_correlation_league,
     'deltae_vs_similarity': plot_deltae_vs_similarity,
+    'mv_scatter_matrix': plot_mv_scatter_matrix,
+    'mv_parallel_boxplots': plot_mv_parallel_boxplots,
+    'mv_contour_pairs': plot_mv_contour_pairs,
+    'mv_mahalanobis': plot_mv_mahalanobis,
+    'mv_qq_grid': plot_mv_qq_grid,
     'mixed_models_vif': plot_mixed_models_vif,
     'mixed_models_coef_logde': plot_mixed_models_coef_logde,
     'mixed_models_coef_similarity': plot_mixed_models_coef_similarity,

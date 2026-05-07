@@ -42,6 +42,42 @@ let telemetryEventBuffer = [];
 let currentMixedRgb = [255, 255, 255];
 let mixStateStepId = 0;
 
+function getAuthenticatedUserId() {
+  const id = window.currentUserId || localStorage.getItem('userId') || '';
+  return typeof id === 'string' ? id.trim().toUpperCase() : '';
+}
+
+function promptLoginRequired(reason) {
+  const msg = reason
+    || 'You must be logged in with a valid user ID to play. Please log in or register to continue.';
+  try {
+    if (typeof showToast === 'function') {
+      showToast(msg, 'info', 5000);
+    }
+  } catch { /* showToast may not be defined yet at module load */ }
+  const modal = document.getElementById('userModal');
+  if (modal) {
+    modal.style.display = 'flex';
+    if (typeof showSection === 'function') {
+      showSection('login');
+    } else {
+      const loginSection = document.getElementById('loginSection');
+      const registerSection = document.getElementById('registerSection');
+      if (loginSection) loginSection.style.display = '';
+      if (registerSection) registerSection.style.display = 'none';
+    }
+  } else {
+    alert(msg);
+  }
+}
+
+function requireAuthenticatedUser({ silent = false } = {}) {
+  const uid = getAuthenticatedUserId();
+  if (uid) return uid;
+  if (!silent) promptLoginRequired();
+  return null;
+}
+
 function nowClientTsMs() {
   return Date.now();
 }
@@ -106,7 +142,7 @@ function rgbFields(snapshot, prefix) {
 function serializeAttemptHeader(attempt) {
   return {
     attempt_uuid: attempt.attempt_uuid,
-    user_id: window.currentUserId || localStorage.getItem('userId') || null,
+    user_id: getAuthenticatedUserId() || null,
     target_color_id: attempt.target_color_id ?? null,
     target_r: attempt.target_rgb[0],
     target_g: attempt.target_rgb[1],
@@ -133,6 +169,10 @@ function serializeAttemptHeader(attempt) {
 async function postAttemptHeaderUpdate() {
   if (!telemetryAttempt) return;
   const payload = serializeAttemptHeader(telemetryAttempt);
+  if (!payload.user_id) {
+    // Never write attempts for unauthenticated users.
+    return;
+  }
   try {
     await fetch(MIXING_START_UPDATE_ENDPOINT, {
       method: 'POST',
@@ -195,6 +235,13 @@ function updateBufferedEventDelta(stepId, deltaE) {
 
 function beginAttemptForCurrentTarget() {
   if (!Array.isArray(targetColor) || targetColor.length !== 3) return;
+  if (!getAuthenticatedUserId()) {
+    // Never start an attempt (and thus never write a mixing_attempts row) for
+    // an unauthenticated visitor.
+    telemetryAttempt = null;
+    telemetryEventBuffer = [];
+    return;
+  }
   const nowMs = nowClientTsMs();
   const initialSnapshot = buildMixSnapshot({
     mixedRgbOverride: currentMixedRgb,
@@ -237,6 +284,12 @@ function beginAttemptForCurrentTarget() {
 
 async function flushTelemetry({ finalize = false, endReason = null, terminalBoundaryType = null, useBeacon = false } = {}) {
   if (!telemetryAttempt) return;
+  if (!getAuthenticatedUserId()) {
+    // Drop any buffered telemetry for guests; we never persist it server-side.
+    telemetryAttempt = null;
+    telemetryEventBuffer = [];
+    return;
+  }
 
   if (finalize && !telemetryAttempt.end_reason) {
     telemetryAttempt.end_reason = endReason || 'abandoned';
@@ -755,8 +808,8 @@ async function refreshDatabaseConnection() {
 
 // ── Save session to server ────────────────────────────────────────────────
 async function saveSessionToServer(session) {
-  if (!window.currentUserId) {
-    console.error('❌ No user ID found');
+  if (!requireAuthenticatedUser({ silent: true })) {
+    console.error('❌ No user ID found — not saving session');
     return;
   }
 
@@ -1082,6 +1135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ── Button handlers ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', async () => {
+    if (!requireAuthenticatedUser()) return;
     if (telemetryAttempt) {
       await flushTelemetry({
         finalize: true,
@@ -1117,6 +1171,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('skipBtn').addEventListener('click', async () => {
+    if (!requireAuthenticatedUser()) return;
     refreshDatabaseConnection();
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     const alreadyCompletedThisColor = window.currentSessionSaved === true;
@@ -1169,6 +1224,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('restartBtn').addEventListener('click', async () => {
+    if (!requireAuthenticatedUser()) return;
     await flushTelemetry({
       finalize: true,
       endReason: 'restart',
@@ -1205,6 +1261,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('retryBtn').addEventListener('click', async () => {
+    if (!requireAuthenticatedUser()) return;
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     if (!isNaN(currentDeltaE)) {
       const session = {

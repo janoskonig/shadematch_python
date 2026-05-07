@@ -170,8 +170,8 @@
     <h2>2) Number of all plays per user</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Top users by play count</p>
-        <img class="stat-plot-img stat-plot" data-plot="plays_per_user" alt="Plays per user" loading="lazy" />
+        <p class="chart-title">Scatter: plays per user (top 30)</p>
+        <img class="stat-plot-img stat-plot" data-plot="plays_per_user" alt="Plays per user (scatter)" loading="lazy" />
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="playsPerUserTable"></table></div>
@@ -181,8 +181,8 @@
     <h2>3) Attempts per color</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Attempts by target color</p>
-        <img class="stat-plot-img stat-plot" data-plot="attempts_per_color" alt="Attempts per color" loading="lazy" />
+        <p class="chart-title">Scatter: attempts by target color</p>
+        <img class="stat-plot-img stat-plot" data-plot="attempts_per_color" alt="Attempts per color (scatter)" loading="lazy" />
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="attemptsPerColorTable"></table></div>
@@ -192,8 +192,8 @@
     <h2>4) DeltaE of each color mix</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Mean final DeltaE by color</p>
-        <img class="stat-plot-img stat-plot" data-plot="deltae_per_color" alt="DeltaE per color" loading="lazy" />
+        <p class="chart-title">Swarm: final DeltaE per color</p>
+        <img class="stat-plot-img stat-plot" data-plot="deltae_per_color" alt="DeltaE per color (swarm)" loading="lazy" />
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="deltaETable"></table></div>
@@ -203,8 +203,8 @@
     <h2>5) Elapsed time of each color mix</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Mean elapsed time by color</p>
-        <img class="stat-plot-img stat-plot" data-plot="elapsed_per_color" alt="Elapsed time per color" loading="lazy" />
+        <p class="chart-title">Swarm: elapsed time per color</p>
+        <img class="stat-plot-img stat-plot" data-plot="elapsed_per_color" alt="Elapsed time per color (swarm)" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">Scatter: DeltaE vs elapsed time</p>
@@ -212,6 +212,39 @@
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="elapsedTable"></table></div>
+  </section>
+
+  <section class="section">
+    <h2>5b) Exploratory multivariate analyses</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      Multivariate exploration over per-attempt metrics
+      (<code>final_delta_e</code>, <code>duration_sec</code>, <code>num_steps</code>, <code>initial_delta_e</code>):
+      pairwise scatter matrix, parallel (multidim) boxplots on z-scores, 2D KDE contours
+      (multidim histogram approximation), Mahalanobis-distance outlier flagging
+      (97.5% χ² threshold), and normal-QQ plots per metric.
+    </p>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Scatter plot matrix</p>
+        <img class="stat-plot-img stat-plot" data-plot="mv_scatter_matrix" alt="Scatter plot matrix" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Parallel boxplots (z-scored)</p>
+        <img class="stat-plot-img stat-plot" data-plot="mv_parallel_boxplots" alt="Parallel boxplots of standardized metrics" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">2D KDE contours (joint densities)</p>
+        <img class="stat-plot-img stat-plot" data-plot="mv_contour_pairs" alt="2D KDE contour plots" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Mahalanobis-distance outliers</p>
+        <img class="stat-plot-img stat-plot" data-plot="mv_mahalanobis" alt="Mahalanobis outlier detection" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">QQ-plots vs normal</p>
+        <img class="stat-plot-img stat-plot" data-plot="mv_qq_grid" alt="QQ-plot grid" loading="lazy" />
+      </div>
+    </div>
   </section>
 
   <section class="section">
