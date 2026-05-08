@@ -2571,24 +2571,29 @@ def stat_quality_summary():
         plays_by_device_kind = db.session.execute(
             db.text(
                 """
+                WITH per_attempt AS (
+                  SELECT
+                    CASE
+                      WHEN client_env_json IS NULL THEN 'unknown'
+                      WHEN COALESCE(NULLIF(client_env_json->>'device_kind', ''), '') <> ''
+                        THEN client_env_json->>'device_kind'
+                      WHEN (client_env_json->>'ua') ~* 'iPad'
+                        OR ((client_env_json->>'ua') ~* 'Android' AND (client_env_json->>'ua') !~* 'Mobile')
+                        THEN 'tablet'
+                      WHEN (client_env_json->>'ua') ~* 'iPhone|iPod|Mobile'
+                        THEN 'mobile'
+                      WHEN (client_env_json->>'ua') IS NOT NULL
+                        THEN 'desktop'
+                      ELSE 'unknown'
+                    END AS device_kind
+                  FROM mixing_attempts
+                  WHERE user_id IS NOT NULL
+                )
                 SELECT
-                  CASE
-                    WHEN client_env_json IS NULL THEN 'unknown'
-                    WHEN COALESCE(NULLIF(client_env_json->>'device_kind', ''), '') <> ''
-                      THEN client_env_json->>'device_kind'
-                    WHEN (client_env_json->>'ua') ~* 'iPad'
-                      OR ((client_env_json->>'ua') ~* 'Android' AND (client_env_json->>'ua') !~* 'Mobile')
-                      THEN 'tablet'
-                    WHEN (client_env_json->>'ua') ~* 'iPhone|iPod|Mobile'
-                      THEN 'mobile'
-                    WHEN (client_env_json->>'ua') IS NOT NULL
-                      THEN 'desktop'
-                    ELSE 'unknown'
-                  END AS device_kind,
+                  device_kind,
                   COUNT(*)::bigint AS n_attempts
-                FROM mixing_attempts
-                WHERE user_id IS NOT NULL
-                GROUP BY 1
+                FROM per_attempt
+                GROUP BY device_kind
                 ORDER BY
                   CASE device_kind
                     WHEN 'mobile' THEN 1
