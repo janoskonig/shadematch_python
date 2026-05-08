@@ -1,16 +1,18 @@
 /* ================================================================
-   main.css — Index page layout (color mixing app)
+   main.css — Index page layout (full-bleed canvas overlay UI)
    ================================================================ */
 
-/* ---- App header ---- */
+/* ---- App header (sticky, fixed height tracked by --app-header-h) ---- */
 .app-header {
   position: sticky; top: 0; z-index: 100;
   background: var(--bg-primary);
   border-bottom: 1px solid var(--border);
   padding: var(--space-sm) var(--space-md);
+  min-height: var(--app-header-h);
+  display: flex; align-items: center;
 }
 .app-header-inner {
-  max-width: 1440px; margin: 0 auto;
+  max-width: 1440px; margin: 0 auto; width: 100%;
   display: flex; align-items: center;
   gap: var(--space-md);
 }
@@ -20,76 +22,165 @@
   flex-shrink: 0;
 }
 
-/* ---- Two-column layout ---- */
+/* ---- App row: canvas is the layout root ---- */
 .app-row {
-  display: flex; gap: var(--space-lg);
-  max-width: 1440px; margin: var(--space-lg) auto;
-  padding: 0 var(--space-md); width: 100%;
-  align-items: flex-start;
+  display: block;
+  width: 100%; margin: 0; padding: 0;
 }
-.main-content { flex: 1; min-width: 0; }
-.mixing-workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-md);
-  align-items: start;
-}
+.main-content { width: 100%; min-width: 0; }
+.mixing-workspace { display: block; }
 .mixing-canvas-zone { min-width: 0; }
 
-/* ---- Color swatch pair ---- */
-.swatches-container { margin-bottom: var(--space-md); }
-.swatch-labels-row {
-  display: flex; justify-content: space-around;
-  font-size: var(--font-size-sm); font-weight: 700;
-  color: var(--text-secondary); margin-top: var(--space-xs);
+/* ---- Full-bleed canvas (target | mix) ---- */
+.swatches-container {
+  position: relative;
+  width: 100%;
+  margin: 0;
 }
 .color-pair {
-  display: flex; width: 100%; max-width: 820px;
-  height: clamp(260px, 45vh, 520px);
-  border-radius: var(--radius-md);
+  display: flex;
+  width: 100%;
+  /* Fallback for browsers without dvh, then dynamic vh for desktop. */
+  height: calc(100vh - var(--app-header-h));
+  height: calc(100dvh - var(--app-header-h));
+  max-width: none;
+  border-radius: 0;
   overflow: hidden;
-  box-shadow: var(--shadow-md);
-  margin: 0 auto;
+  box-shadow: none;
+  margin: 0;
 }
 .color-half { flex: 1; height: 100%; }
 
-/* ---- RGB debug ---- */
-.rgb-debug {
-  font-family: monospace; font-size: var(--font-size-sm);
-  text-align: right; color: var(--text-secondary);
-  padding: var(--space-xs) 0;
+/* Hide swatch labels (info collapses into the floating top chip) */
+.swatch-labels-row { display: none; }
+
+/* ---- Floating top chip: match bar + compact RGB ---- */
+.canvas-top-chip {
+  position: absolute;
+  top: var(--space-sm);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex; align-items: center; gap: var(--space-md);
+  padding: 6px 14px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 110;
+  max-width: min(720px, 92vw);
+  pointer-events: auto;
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .canvas-top-chip { background: rgba(255, 255, 255, 0.92); }
+}
+.canvas-top-chip .match-bar-wrap {
+  margin: 0;
+  display: flex; align-items: center; gap: var(--space-sm);
+  min-width: 200px;
+}
+.canvas-top-chip .match-bar { width: 160px; }
+.canvas-top-chip .match-bar-label { min-width: auto; }
+.canvas-top-chip .rgb-readout {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+/* Hide the chip until the user starts mixing (matches existing mixing-disabled gate) */
+.mixing-disabled .canvas-top-chip { display: none; }
+
+/* ---- Floating bottom dock: recipe strip → palette → controls ---- */
+.floating-dock {
+  position: fixed;
+  left: 50%;
+  bottom: max(var(--space-md), env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  display: flex; flex-direction: column; align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm) var(--space-md);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 28px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+  z-index: 120;
+  max-width: calc(100vw - 2 * var(--space-sm));
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .floating-dock { background: rgba(255, 255, 255, 0.95); }
 }
 
-/* ---- Palette grid ---- */
+/* Neutralize the embedded palette + controls so they sit flush inside the dock */
+.floating-dock .palette,
+.floating-dock .controls-bar {
+  position: static;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  width: 100%;
+}
+
+/* ---- Recipe strip (stacked-bar mix visualization) ---- */
+.recipe-strip {
+  display: flex;
+  width: min(560px, 86vw);
+  height: 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.45);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .recipe-seg { transition: flex-basis 160ms ease; }
+}
+.recipe-seg {
+  height: 100%;
+  flex: 0 0 0;
+}
+.recipe-seg[data-color="white"]  { background: #ffffff; }
+.recipe-seg[data-color="black"]  { background: #000000; }
+.recipe-seg[data-color="red"]    { background: #ff0000; }
+.recipe-seg[data-color="yellow"] { background: #ffff00; }
+.recipe-seg[data-color="blue"]   { background: #0000ff; }
+
+/* ---- Palette grid (inside the dock) ---- */
 .palette {
-  display: flex; flex-wrap: wrap;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
   justify-content: center;
-  gap: var(--space-lg);
-  margin: var(--space-lg) 0;
-  padding: var(--space-md) 0;
+  gap: var(--space-md);
 }
 .color-control {
   display: flex; flex-direction: column;
-  align-items: center; gap: var(--space-xs);
+  align-items: center; gap: 4px;
+  position: relative;
 }
 .color-circle {
-  width: 80px; height: 80px;
+  width: 64px; height: 64px;
   border-radius: 50%;
   cursor: pointer;
   display: flex; justify-content: center; align-items: center;
   font-size: 0; color: transparent;
   box-shadow: var(--shadow-md);
-  border: 3px solid rgba(0,0,0,0.08);
+  border: 3px solid rgba(0, 0, 0, 0.08);
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
 }
 .color-circle:hover { box-shadow: var(--shadow-lg); }
 .minus-button {
-  min-width: 44px; min-height: 44px;
+  min-width: 38px; min-height: 32px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 1.3rem; font-weight: 700;
+  font-size: 1.05rem; font-weight: 700;
   border: 1px solid var(--border);
-  background: var(--surface);
+  background: rgba(255, 255, 255, 0.85);
   color: var(--text-secondary);
   border-radius: var(--radius-sm);
   cursor: pointer; touch-action: manipulation;
@@ -97,54 +188,22 @@
 .minus-button:hover:not(:disabled) { background: var(--bg-primary); color: var(--text-primary); }
 .minus-button:disabled { opacity: 0.3; cursor: not-allowed; }
 .color-name {
-  font-size: var(--font-size-sm); font-weight: 600;
+  font-size: 0.7rem; font-weight: 600;
   color: var(--text-secondary);
 }
 
-/* Wide workspaces: let the canvas grow while keeping the pigment palette horizontal. */
-@media (min-width: 1180px) {
-  .mixing-workspace {
-    gap: var(--space-md);
-  }
-  .color-pair {
-    max-width: none;
-    height: clamp(360px, 58vh, 680px);
-  }
-  .palette {
-    position: sticky;
-    top: 92px;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: center;
-    justify-content: space-evenly;
-    gap: var(--space-md);
-    margin: 0 0 var(--space-md);
-    padding: var(--space-sm) var(--space-md);
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-sm);
-  }
-  .palette .color-control { gap: 4px; }
-  .palette .color-circle {
-    width: 64px;
-    height: 64px;
-  }
-  .palette .minus-button {
-    min-width: 38px;
-    min-height: 34px;
-    font-size: 1.05rem;
-  }
-  .palette .color-name { font-size: 0.7rem; }
-}
-
-/* ---- Controls bar ---- */
+/* ---- Controls bar (inside the dock) ---- */
 .controls-bar {
   display: flex; flex-wrap: wrap;
   gap: var(--space-sm);
   justify-content: center; align-items: center;
-  margin: var(--space-md) 0;
-  padding: var(--space-sm) 0;
+}
+.controls-bar .timer-display {
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  padding: 0 var(--space-xs);
+  white-space: nowrap;
 }
 
 /* ---- Mixing disabled state ---- */
@@ -157,10 +216,9 @@
 }
 .mixing-disabled .color-pair { opacity: 0.5; }
 
-/* ---- Sidebar ---- */
-.color-relationships-sidebar {
-  width: 380px; flex-shrink: 0; min-width: 0;
-}
+/* ---- Sidebar (desktop instance removed; drawer-only) ---- */
+.color-relationships-sidebar { display: none; }
+
 .sidebar-card {
   background: var(--surface);
   padding: var(--space-lg);
@@ -176,9 +234,30 @@
 .sidebar-info { color: var(--text-secondary); text-align: center; font-size: var(--font-size-sm); margin-top: var(--space-md); }
 .sidebar-info p { margin: var(--space-xs) 0; }
 
-.sidebar-drawer-trigger { display: none; }
+/* ---- Sidebar drawer trigger: floating chip in the top-right ---- */
+.sidebar-drawer-trigger {
+  display: inline-flex; align-items: center; gap: 6px;
+  position: fixed;
+  top: calc(var(--app-header-h) + var(--space-sm));
+  right: var(--space-sm);
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(10px) saturate(1.1);
+  -webkit-backdrop-filter: blur(10px) saturate(1.1);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  color: var(--text-primary);
+  font-size: 0.82rem; font-weight: 700;
+  cursor: pointer;
+  z-index: 110;
+}
+@supports not (backdrop-filter: blur(1px)) {
+  .sidebar-drawer-trigger { background: rgba(255, 255, 255, 0.92); }
+}
+.sidebar-drawer-trigger:hover { box-shadow: 0 6px 20px rgba(0, 0, 0, 0.16); }
 
-/* ---- Hex diagram colors ---- */
+/* ---- Hex diagram colors (inside the drawer) ---- */
 .hex-diagram { position: relative; width: 300px; height: 320px; margin: 0 auto; }
 .hex-dot {
   position: absolute; width: 36px; height: 36px;
@@ -190,216 +269,191 @@
   font-size: var(--font-size-sm); color: var(--text-primary);
 }
 
-/* --- Mobile layout --- */
-@media (max-width: 768px) {
-  .app-row {
-    flex-direction: column; gap: var(--space-xs);
-    padding: 0 var(--space-sm);
-    margin-top: var(--space-xs); margin-bottom: 0;
-    align-items: stretch;
-  }
-  .main-content {
-    max-width: 100%;
-    padding-bottom: calc(156px + max(0px, env(safe-area-inset-bottom)));
-    width: 100%;
-  }
-  .mixing-workspace {
-    gap: var(--space-xs);
-  }
-
-  .color-relationships-sidebar { display: none; }
-
-  /* Sits above the fixed controls bar; extra offset covers iOS home indicator */
-  .sidebar-drawer-trigger {
-    display: flex;
-    position: fixed;
-    bottom: calc(56px + max(0px, env(safe-area-inset-bottom)));
-    right: calc(var(--space-sm) + max(0px, env(safe-area-inset-right)));
-    min-height: 36px;
-    padding: 6px 12px;
-    font-size: 0.82rem;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    opacity: 0.95;
-    z-index: 90;
-  }
-
-  /* ── Header ── */
-  .app-header { padding: var(--space-xs) var(--space-sm); }
-  .app-header-inner { gap: var(--space-xs); }
-  .header-right { gap: 4px; }
-
-  /* Compact the gamification strip: drop XP bar, level text, freeze count */
-  .ps-xpbar-wrap { display: none; }
-  .ps-level      { display: none; }
-  .ps-freeze     { display: none; }
-
-  /* User ID badge is accessible via overflow menu – hide to reclaim space */
-  .user-badge { display: none; }
-
-  /* Help button: icon only – hide label text via .help-label span */
+/* ---- Tablet header compaction (≤ 1024px) ---- */
+@media (max-width: 1024px) {
+  .ps-level  { display: none; }
+  .ps-freeze { display: none; }
   .help-label { display: none; }
-
-  /* ── Swatches ──
-     Header height = 4px top-pad + 48px (touch-min btn) + 4px bot-pad = 56px */
-  .swatches-container {
-    position: sticky; top: 56px; z-index: 90;
-    background: var(--bg-primary);
+  .header-right .btn-icon {
     padding: var(--space-xs) var(--space-sm);
-    margin: 0 calc(-1 * var(--space-sm)) var(--space-xs);
-  }
-  .color-pair {
-    max-width: 100%;
-    height: clamp(220px, 46vh, 430px);
-  }
-  .swatch-labels-row { margin-top: 2px; font-size: 0.75rem; }
-
-  .match-bar-wrap { margin: var(--space-xs) 0; }
-
-  /* ── Palette ── */
-  .palette {
-    position: sticky;
-    bottom: calc(58px + max(0px, env(safe-area-inset-bottom)));
-    z-index: 95;
-    flex-wrap: nowrap;
-    gap: 0;
-    margin: var(--space-xs) calc(-1 * var(--space-sm));
-    padding: var(--space-xs) var(--space-sm);
-    justify-content: space-evenly;
-    background: var(--bg-primary);
-    border-top: 1px solid var(--border);
-    border-bottom: 1px solid var(--border);
-    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
-  }
-  .color-control { gap: 2px; }
-  .color-circle { width: 52px; height: 52px; border-width: 2px; }
-  .drop-badge { min-width: 22px; height: 20px; font-size: 0.7rem; padding: 0 4px; }
-  .minus-button { min-width: 36px; min-height: 36px; font-size: 1.1rem; }
-  .color-name { font-size: 0.7rem; }
-
-  .timer-display { padding: 2px 0; }
-
-  /* ── Fixed bottom controls bar ── */
-  .controls-bar {
-    position: fixed; bottom: 0; left: 0; right: 0;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
-    padding: var(--space-xs) var(--space-md) max(var(--space-xs), env(safe-area-inset-bottom));
-    z-index: 200;
-    margin: 0;
-    justify-content: center;
-    flex-wrap: nowrap;
-    gap: var(--space-xs);
-  }
-  .controls-bar .btn-lg {
-    min-height: 44px;
-    padding: var(--space-sm) var(--space-md);
-    font-size: 0.95rem;
-    white-space: nowrap;
+    min-height: 40px;
   }
 }
 
-/* ── Extra-small screens (≤ 420 px) ── */
-@media (max-width: 420px) {
-  .color-circle { width: 44px; height: 44px; }
-  .minus-button { min-width: 32px; min-height: 32px; font-size: 1rem; }
-  .drop-badge { min-width: 20px; height: 18px; font-size: 0.65rem; }
+/* ---- Mobile layout (≤ 768px) ---- */
+@media (max-width: 768px) {
+  /* Use the smallest stable viewport height on phones so the canvas
+     never sits behind iOS Safari's collapsing toolbar. */
+  .color-pair {
+    height: calc(100svh - var(--app-header-h));
+  }
+
+  .app-header { padding: var(--space-xs) var(--space-sm); }
+  .app-header-inner { gap: 6px; }
+  .header-right { gap: 4px; }
+  .header-right .btn-icon {
+    min-height: 40px;
+    min-width: 40px;
+    padding: 6px 10px;
+    border-radius: var(--radius-sm);
+    justify-content: center;
+  }
+
+  /* Compact gamification strip + hide non-essentials */
+  .ps-xpbar-wrap { display: none; }
+  .user-badge    { display: none; }
+
+  /* Color names move to assistive-only on phones to keep the dock thin. */
   .color-name {
     position: absolute;
-    width: 1px;
-    height: 1px;
+    width: 1px; height: 1px;
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
   }
-  .color-pair { height: clamp(210px, 44vh, 380px); }
-  .app-header { padding: 2px var(--space-xs); }
-  .ps-streak { display: none; }
+
+  .floating-dock {
+    width: calc(100vw - 2 * var(--space-xs));
+    max-width: calc(100vw - 2 * var(--space-xs));
+    gap: 6px;
+    padding: 6px var(--space-sm);
+    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    border-radius: 22px;
+    bottom: max(var(--space-xs), env(safe-area-inset-bottom));
+  }
+
+  .recipe-strip { width: 100%; max-width: 100%; height: 6px; }
+
+  .palette { gap: var(--space-sm); }
+  .color-control { gap: 3px; }
+  .color-circle { width: 52px; height: 52px; border-width: 2px; }
+  .drop-badge { min-width: 22px; height: 20px; font-size: 0.7rem; padding: 0 4px; }
+  .minus-button { min-width: 34px; min-height: 30px; font-size: 1rem; }
+
+  .controls-bar { gap: var(--space-xs); flex-wrap: nowrap; }
+  .controls-bar .btn-lg {
+    min-height: 40px;
+    padding: 6px var(--space-sm);
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+  .controls-bar .timer-display { font-size: 0.78rem; padding: 0; }
+  .overflow-trigger { min-width: 40px; min-height: 40px; }
+
+  .canvas-top-chip {
+    gap: var(--space-sm);
+    padding: 4px 10px;
+    top: var(--space-xs);
+    max-width: calc(100vw - 2 * var(--space-sm));
+  }
+  .canvas-top-chip .match-bar-wrap { min-width: 0; gap: 6px; }
+  .canvas-top-chip .match-bar { width: 110px; }
+  .canvas-top-chip .rgb-readout { display: none; }
+
   .sidebar-drawer-trigger {
-    right: var(--space-xs);
-    bottom: calc(54px + max(0px, env(safe-area-inset-bottom)));
-    padding: 6px 10px;
+    top: calc(var(--app-header-h) + var(--space-xs));
+    padding: 5px 10px;
     font-size: 0.78rem;
   }
 }
 
-/* Landscape phones: keep the entire mixing loop visible on short screens. */
-@media (max-width: 932px) and (max-height: 500px) and (orientation: landscape) {
-  .app-row {
-    margin-top: 2px;
-    gap: 2px;
+/* ---- Small phones (≤ 480 px portrait) ---- */
+@media (max-width: 480px) {
+  .floating-dock {
+    width: calc(100vw - 2 * 4px);
+    max-width: calc(100vw - 2 * 4px);
+    padding: 5px 6px;
+    padding-bottom: max(5px, env(safe-area-inset-bottom));
+    gap: 5px;
+    border-radius: 20px;
   }
-  .main-content {
-    padding-bottom: calc(52px + max(0px, env(safe-area-inset-bottom)));
-  }
-  .swatches-container {
-    position: static;
-    padding: 2px 0;
-    margin: 0 0 2px;
-  }
-  .color-pair {
-    height: clamp(126px, 38vh, 180px);
-    border-radius: var(--radius-sm);
-  }
-  .swatch-labels-row {
-    display: none;
-  }
-  .match-bar-wrap {
-    margin: 2px 0;
-  }
-  .palette {
-    position: sticky;
-    bottom: calc(48px + max(0px, env(safe-area-inset-bottom)));
-    margin: 0 calc(-1 * var(--space-sm));
-    padding: 2px var(--space-sm);
-  }
-  .color-control {
-    gap: 1px;
-  }
-  .color-circle {
-    width: 40px;
-    height: 40px;
-  }
-  .minus-button {
-    min-width: 30px;
-    min-height: 28px;
-    font-size: 0.95rem;
-  }
-  .drop-badge {
-    min-width: 18px;
-    height: 16px;
-    font-size: 0.62rem;
-  }
-  .color-name {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-  }
-  .timer-display {
-    display: none;
-  }
-  .controls-bar {
-    padding: 3px var(--space-sm) max(3px, env(safe-area-inset-bottom));
-  }
+  .palette { gap: 4px; }
+  .color-circle { width: 48px; height: 48px; }
+  .drop-badge { min-width: 20px; height: 18px; font-size: 0.65rem; }
+  .minus-button { min-width: 32px; min-height: 28px; font-size: 0.95rem; }
   .controls-bar .btn-lg {
-    min-height: 40px;
-    padding: 6px 12px;
-    font-size: 0.86rem;
-  }
-  .sidebar-drawer-trigger {
-    bottom: calc(44px + max(0px, env(safe-area-inset-bottom)));
-    right: calc(var(--space-sm) + max(0px, env(safe-area-inset-right)));
-    min-height: 34px;
+    min-height: 38px;
     padding: 5px 10px;
+    font-size: 0.85rem;
+  }
+  .controls-bar .timer-display { font-size: 0.72rem; }
+  .overflow-trigger { min-width: 36px; min-height: 36px; }
+  .canvas-top-chip { padding: 3px 8px; gap: 6px; }
+  .canvas-top-chip .match-bar { width: 90px; }
+  .canvas-top-chip .match-bar-label { font-size: 0.72rem; }
+}
+
+/* ---- Extra-small screens (≤ 360 px, e.g. iPhone SE) ---- */
+@media (max-width: 360px) {
+  /* Free header width: gamification chip becomes a compact accessory only
+     reachable via the overflow menu on the smallest phones. */
+  .progress-strip { display: none !important; }
+  .progress-text { font-size: 0.78rem; }
+
+  .header-right .btn-icon {
+    min-height: 36px;
+    min-width: 36px;
+    padding: 4px 8px;
+  }
+
+  .color-circle { width: 42px; height: 42px; }
+  .minus-button { min-width: 30px; min-height: 26px; font-size: 0.9rem; }
+  .drop-badge { min-width: 18px; height: 16px; font-size: 0.62rem; padding: 0 3px; }
+  .palette { gap: 3px; }
+  .controls-bar .timer-display { display: none; }
+  .controls-bar .btn-lg { font-size: 0.82rem; padding: 5px 8px; }
+  .sidebar-drawer-trigger-label { display: none; }
+  .sidebar-drawer-trigger { padding: 6px 9px; }
+  .ps-streak { display: none; }
+  .canvas-top-chip .match-bar { width: 70px; }
+  .canvas-top-chip .match-bar-label { font-size: 0.7rem; }
+}
+
+/* ---- Landscape phones (short screens) ----
+   Keep the vertical stack so the seam comparison stays predictable; just
+   shrink everything to fit a ≤ 500px tall viewport. */
+@media (max-width: 932px) and (max-height: 500px) and (orientation: landscape) {
+  .color-pair { height: calc(100svh - var(--app-header-h)); }
+
+  .floating-dock {
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px var(--space-sm);
+    padding-bottom: max(4px, env(safe-area-inset-bottom));
+    border-radius: 16px;
+    width: auto;
+    max-width: calc(100vw - 2 * var(--space-xs));
+  }
+  .recipe-strip {
+    width: min(420px, 80vw);
+    height: 4px;
+    flex: 0 0 auto;
+    align-self: stretch;
+  }
+  .palette { gap: 6px; flex: 0 1 auto; }
+  .color-control { gap: 2px; }
+  .color-circle { width: 36px; height: 36px; border-width: 2px; }
+  .minus-button { min-width: 28px; min-height: 24px; font-size: 0.85rem; }
+  .drop-badge { min-width: 18px; height: 14px; font-size: 0.6rem; padding: 0 3px; }
+  .controls-bar { gap: 4px; }
+  .controls-bar .timer-display { display: none; }
+  .controls-bar .btn-lg {
+    min-height: 32px;
+    padding: 4px 10px;
+    font-size: 0.8rem;
+  }
+  .overflow-trigger { min-width: 34px; min-height: 32px; }
+
+  .canvas-top-chip { padding: 3px 8px; }
+  .canvas-top-chip .match-bar { width: 90px; }
+  .sidebar-drawer-trigger {
+    padding: 4px 9px;
     font-size: 0.75rem;
-    opacity: 0.9;
+    top: calc(var(--app-header-h) + 2px);
   }
 }
 
-/* ---- Sidebar drawer (mobile) ---- */
+/* ---- Sidebar drawer (slide-up panel) ---- */
 .sidebar-drawer-backdrop {
   display: none; position: fixed; inset: 0;
   background: rgba(0,0,0,0.3); z-index: 900;
