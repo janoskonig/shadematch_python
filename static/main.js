@@ -646,6 +646,19 @@ function resetAllBadges() {
   document.querySelectorAll('.drop-badge').forEach(b => { b.textContent = '0'; });
 }
 
+// ── Recipe strip (stacked-bar visualization of current mix) ──────────────
+// Sets each .recipe-seg's flex-basis to (drops / total) * 100%, or 0 when total is 0.
+function updateRecipeStrip(counts) {
+  const c = counts || { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
+  const total = (c.white | 0) + (c.black | 0) + (c.red | 0) + (c.yellow | 0) + (c.blue | 0);
+  document.querySelectorAll('.recipe-seg').forEach((seg) => {
+    const color = seg.dataset.color;
+    const drops = (c[color] | 0);
+    const pct = total > 0 ? (drops / total) * 100 : 0;
+    seg.style.flexBasis = pct + '%';
+  });
+}
+
 // ── Match quality bar ─────────────────────────────────────────────────────
 function updateMatchBar(deltaE) {
   const container = document.getElementById('matchBarContainer');
@@ -765,6 +778,7 @@ function resetMix() {
   dropCounts = { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
   window.shadeMatchDropCounts = dropCounts;
   resetAllBadges();
+  updateRecipeStrip(dropCounts);
 
   const matchContainer = document.getElementById('matchBarContainer');
   if (matchContainer) matchContainer.style.display = 'none';
@@ -1066,6 +1080,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function updateCurrentMix() {
     const stepId = ++mixStateStepId;
     const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
+    updateRecipeStrip(dropCounts);
     if (totalDrops === 0) {
       currentMixedRgb = [255, 255, 255];
       updateBox('currentMix', currentMixedRgb);

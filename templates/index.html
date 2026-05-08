@@ -3,7 +3,7 @@
 {% block title %}Color Mixing App{% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
 <style>
 /* ── Progress strip ────────────────────────────────────────── */
 .progress-strip {
@@ -274,30 +274,42 @@
 
       <div class="mixing-workspace">
         <div class="mixing-canvas-zone">
-          <!-- Swatches -->
+          <!-- Swatches (full-bleed canvas) -->
           <div class="swatches-container" id="swatchesContainer">
             <div class="color-pair">
               <div id="targetColor" class="color-half"></div>
               <div id="currentMix" class="color-half" style="background-color:rgb(255,255,255);"></div>
             </div>
-            <div class="swatch-labels-row">
+
+            <!-- Floating top chip: match bar + compact RGB readout -->
+            <div class="canvas-top-chip" id="canvasTopChip">
+              <div class="match-bar-wrap" id="matchBarContainer" style="display:none;">
+                <div class="match-bar">
+                  <div class="match-bar-fill" id="matchBarFill"></div>
+                </div>
+                <span class="match-bar-label" id="matchBarLabel"></span>
+              </div>
+              <span id="mixedRgbValues" class="rgb-readout">RGB: [255, 255, 255]</span>
+            </div>
+
+            <!-- Hidden labels (kept for legacy selectors) -->
+            <div class="swatch-labels-row" aria-hidden="true">
               <span>Match this color</span>
               <span>Your mix</span>
             </div>
           </div>
+        </div>
+      </div>
 
-          <!-- Match quality bar -->
-          <div class="match-bar-wrap" id="matchBarContainer" style="display:none;">
-            <div class="match-bar">
-              <div class="match-bar-fill" id="matchBarFill"></div>
-            </div>
-            <span class="match-bar-label" id="matchBarLabel"></span>
-          </div>
-
-          <!-- RGB values (hidden, kept for data compat) -->
-          <div class="rgb-debug" style="display:none;">
-            <span id="mixedRgbValues">RGB: [255, 255, 255]</span>
-          </div>
+      <!-- Floating bottom dock: recipe strip → palette → controls -->
+      <div class="floating-dock" id="floatingDock">
+        <!-- Recipe strip: stacked-bar visualization of current mix recipe -->
+        <div class="recipe-strip" id="recipeStrip" aria-hidden="true">
+          <span class="recipe-seg" data-color="white" style="flex-basis:0%;"></span>
+          <span class="recipe-seg" data-color="black" style="flex-basis:0%;"></span>
+          <span class="recipe-seg" data-color="red" style="flex-basis:0%;"></span>
+          <span class="recipe-seg" data-color="yellow" style="flex-basis:0%;"></span>
+          <span class="recipe-seg" data-color="blue" style="flex-basis:0%;"></span>
         </div>
 
         <!-- Palette -->
@@ -333,29 +345,26 @@
             <span class="color-name">Blue</span>
           </div>
         </div>
-      </div>
 
-      <div id="stats"></div>
+        <!-- Controls + timer -->
+        <div id="controls" class="controls-bar">
+          <span class="timer-display" id="timerDisplay">⏱ <span id="timer">0.0</span>s</span>
+          <button id="startBtn" class="btn btn-primary btn-lg">Start</button>
+          <button id="stopBtn" class="btn btn-primary btn-lg" disabled style="display:none;" aria-hidden="true"></button>
+          <button id="skipBtn" class="btn btn-secondary btn-lg" disabled style="display:none;">Skip</button>
+          <button id="retryBtn" class="btn btn-tertiary" disabled style="display:none;">Start over</button>
 
-      <!-- Controls -->
-      <div id="controls" class="controls-bar">
-        <button id="startBtn" class="btn btn-primary btn-lg">Start</button>
-        <button id="stopBtn" class="btn btn-primary btn-lg" disabled style="display:none;" aria-hidden="true"></button>
-        <button id="skipBtn" class="btn btn-secondary btn-lg" disabled style="display:none;">Skip</button>
-        <button id="retryBtn" class="btn btn-tertiary" disabled style="display:none;">Start over</button>
-
-        <div class="overflow-menu" id="overflowMenu">
-          <button class="btn-icon overflow-trigger" id="overflowTrigger" type="button" aria-label="More options">⋮</button>
-          <div class="overflow-dropdown" id="overflowDropdown">
-            <button id="restartBtn" class="overflow-item" type="button" disabled>Restart all</button>
-            <button id="switchUserBtn" class="overflow-item" type="button">Switch user</button>
+          <div class="overflow-menu" id="overflowMenu">
+            <button class="btn-icon overflow-trigger" id="overflowTrigger" type="button" aria-label="More options">⋮</button>
+            <div class="overflow-dropdown" id="overflowDropdown">
+              <button id="restartBtn" class="overflow-item" type="button" disabled>Restart all</button>
+              <button id="switchUserBtn" class="overflow-item" type="button">Switch user</button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div class="timer-display" id="timerDisplay">
-        ⏱ <span id="timer">0.0</span>s
-      </div>
+      <div id="stats"></div>
 
       <button id="pushOptInBtn" class="push-optin-btn" type="button"
               onclick="window.requestPushPermission && window.requestPushPermission()"
@@ -397,40 +406,13 @@
       </div>
     </div>
 
-    <!-- Sidebar (desktop) -->
-    <div class="color-relationships-sidebar" id="sidebarPanel">
-      <div class="sidebar-card">
-        <h2>Color Relationships</h2>
-        <div class="hex-diagram">
-          <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
-            <line x1="150" y1="38" x2="150" y2="238" stroke="var(--border-strong)" stroke-width="2" stroke-dasharray="6,6" />
-            <line x1="53" y1="73" x2="247" y2="173" stroke="var(--border-strong)" stroke-width="2" stroke-dasharray="6,6" />
-            <line x1="53" y1="173" x2="247" y2="73" stroke="var(--border-strong)" stroke-width="2" stroke-dasharray="6,6" />
-          </svg>
-          <div class="hex-dot" style="left:50%;top:20px;transform:translateX(-50%);background:red;"></div>
-          <div class="hex-dot" style="left:225px;top:55px;background:purple;"></div>
-          <div class="hex-dot" style="left:225px;top:155px;background:blue;"></div>
-          <div class="hex-dot" style="left:50%;top:220px;transform:translateX(-50%);background:green;"></div>
-          <div class="hex-dot" style="left:35px;top:155px;background:yellow;"></div>
-          <div class="hex-dot" style="left:35px;top:55px;background:orange;"></div>
-          <span class="hex-label" style="top:-18px;left:50%;transform:translateX(-50%);">Red</span>
-          <span class="hex-label" style="top:35px;left:0;">Orange</span>
-          <span class="hex-label" style="top:35px;right:0;">Purple</span>
-          <span class="hex-label" style="top:185px;left:0;">Yellow</span>
-          <span class="hex-label" style="top:185px;right:0;">Blue</span>
-          <span class="hex-label" style="top:260px;left:50%;transform:translateX(-50%);">Green</span>
-        </div>
-        <div class="sidebar-info">
-          <p>Primary: Red, Yellow, Blue</p>
-          <p>Secondary: Orange (R+Y), Green (Y+B), Purple (R+B)</p>
-          <p><em>Complementary mixes tend toward grey.</em></p>
-        </div>
-      </div>
-    </div>
   </div>
 
-  <!-- Mobile sidebar drawer -->
-  <button id="sidebarDrawerBtn" class="btn btn-secondary sidebar-drawer-trigger" type="button">Color guide</button>
+  <!-- Sidebar drawer trigger (floating, all breakpoints) -->
+  <button id="sidebarDrawerBtn" class="sidebar-drawer-trigger" type="button" aria-label="Open color guide">
+    <span aria-hidden="true">🎨</span>
+    <span class="sidebar-drawer-trigger-label">Color guide</span>
+  </button>
   <div class="sidebar-drawer-backdrop" id="sidebarDrawerBackdrop"></div>
   <div class="sidebar-drawer" id="sidebarDrawer">
     <div class="drawer-handle"></div>
