@@ -1000,12 +1000,13 @@ def plot_plays_per_user(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
     top = per_user.head(30)
     x = np.arange(len(top), dtype=float)
     y = top.to_numpy(dtype=float)
-    ax.bar(x, y, color='#64748b', edgecolor='white', linewidth=0.7, alpha=0.95)
+    ax.scatter(x, y, s=36, alpha=0.75, color='#64748b', edgecolors='none')
+    ax.plot(x, y, color='#94a3b8', linewidth=1.0, alpha=0.55)
     ax.set_xticks(x)
     ax.set_xticklabels(top.index.astype(str), rotation=70, fontsize=7)
     ax.set_ylabel('Plays')
     ax.set_xlabel('User (sorted by play count)')
-    ax.set_title('Bar: plays per user (top 30)')
+    ax.set_title('Scatter: plays per user (top 30)')
     ax.set_ylim(bottom=0)
     return _fig_to_png(fig)
 
@@ -1032,7 +1033,7 @@ def plot_attempts_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
         ax.text(0.5, 0.5, 'No grouped color rows', ha='center', va='center')
         ax.axis('off')
         return _fig_to_png(fig)
-    y = np.arange(len(agg))
+    x = np.arange(len(agg), dtype=float)
     vals = agg['n_attempts'].to_numpy(dtype=float)
     colors = []
     labels = []
@@ -1055,14 +1056,18 @@ def plot_attempts_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
             colors.append((float(rr) / 255.0, float(gg) / 255.0, float(bb) / 255.0))
         else:
             colors.append('#0f766e')
-    ax.barh(y, vals, color=colors, edgecolor='#e5e7eb', linewidth=0.9, alpha=0.95)
-    ax.set_yticks(y)
-    ax.set_yticklabels(labels, fontsize=8)
-    ax.invert_yaxis()
-    ax.set_xlabel('Attempts')
-    ax.set_ylabel('Target color (id + name)')
-    ax.set_title('Bar: attempts per target_color_id (top 20)')
-    ax.set_xlim(left=0)
+    if len(vals) > 1 and float(vals.max()) > float(vals.min()):
+        dot_sizes = np.interp(vals, (vals.min(), vals.max()), (48.0, 140.0))
+    else:
+        dot_sizes = np.full(len(vals), 90.0)
+    ax.scatter(x, vals, s=dot_sizes, c=colors, alpha=0.86, edgecolors='#e5e7eb', linewidths=0.6)
+    ax.plot(x, vals, color='#94a3b8', linewidth=1.0, alpha=0.45)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=55, ha='right', fontsize=8)
+    ax.set_xlabel('Target color (id + name)')
+    ax.set_ylabel('Attempts')
+    ax.set_title('Scatter: attempts per target_color_id (top 20)')
+    ax.set_ylim(bottom=0)
     return _fig_to_png(fig)
 
 
@@ -1074,6 +1079,9 @@ def _plot_per_color_swarm(
     point_color: str,
     title: str,
     per_category_cap: int = 350,
+    y_tick_label_mode: Optional[str] = None,
+    y_ref_line: Optional[float] = None,
+    y_ref_label: Optional[str] = None,
 ) -> bytes:
     fig, ax = plt.subplots(figsize=(9, 4.8))
     if len(att) == 0:
@@ -1092,55 +1100,52 @@ def _plot_per_color_swarm(
         ax.text(0.5, 0.5, f'No {metric_label} rows in top colors', ha='center', va='center')
         ax.axis('off')
         return _fig_to_png(fig)
-    q = (
-        sub.groupby('target_name', dropna=False)[metric]
-        .quantile([0.10, 0.25, 0.50, 0.75, 0.90])
-        .unstack()
-        .reindex(order)
-    )
-    q.columns = ['p10', 'p25', 'p50', 'p75', 'p90']
-    means = sub.groupby('target_name', dropna=False)[metric].mean().reindex(order)
     x = np.arange(len(order), dtype=float)
+    medians = []
+    means = []
     for i, name in enumerate(order):
-        row = q.loc[name]
-        if row.isna().any():
+        vals = pd.to_numeric(sub.loc[sub['target_name'] == name, metric], errors='coerce').dropna()
+        if len(vals) == 0:
+            medians.append(np.nan)
+            means.append(np.nan)
             continue
-        # p10-p90 whisker
-        ax.vlines(
-            x[i],
-            float(row['p10']),
-            float(row['p90']),
-            color='#94a3b8',
-            linewidth=1.2,
-            alpha=0.95,
+        if len(vals) > per_category_cap:
+            vals = vals.sample(per_category_cap, random_state=42)
+        y = vals.to_numpy(dtype=float)
+        xo = x[i] + _swarm_offsets(y, half_bin_x=0.32, n_bins=60)
+        ax.scatter(
+            xo,
+            y,
+            s=12,
+            alpha=0.30,
+            color=point_color,
+            edgecolors='none',
             zorder=1,
         )
-        # IQR band
-        ax.vlines(
-            x[i],
-            float(row['p25']),
-            float(row['p75']),
-            color=point_color,
-            linewidth=6.0,
-            alpha=0.78,
-            zorder=2,
-        )
-        # Median marker
-        ax.plot(
-            [x[i] - 0.18, x[i] + 0.18],
-            [float(row['p50']), float(row['p50'])],
-            color='#111827',
-            linewidth=1.4,
-            zorder=3,
-        )
+        medians.append(float(np.nanmedian(y)))
+        means.append(float(np.nanmean(y)))
+    med_arr = np.array(medians, dtype=float)
+    mean_arr = np.array(means, dtype=float)
+    med_mask = np.isfinite(med_arr)
+    mean_mask = np.isfinite(mean_arr)
     ax.scatter(
-        x,
-        means.to_numpy(dtype=float),
-        s=22,
-        marker='D',
+        x[med_mask],
+        med_arr[med_mask],
+        s=34,
+        marker='o',
         color='#111827',
+        alpha=0.9,
+        zorder=3,
+        label='median',
+    )
+    ax.scatter(
+        x[mean_mask],
+        mean_arr[mean_mask],
+        s=24,
+        marker='D',
+        color='#475569',
         alpha=0.85,
-        zorder=4,
+        zorder=3,
         label='mean',
     )
     ax.set_xticks(x)
@@ -1148,25 +1153,51 @@ def _plot_per_color_swarm(
     ax.set_ylabel(metric_label)
     ax.set_xlabel('Target color')
     ax.set_title(title)
-    legend_handles = [
-        plt.Line2D([0], [0], color='#94a3b8', lw=1.2, label='p10-p90'),
-        plt.Line2D([0], [0], color=point_color, lw=6.0, label='IQR (p25-p75)'),
-        plt.Line2D([0], [0], color='#111827', lw=1.4, label='median'),
-        plt.Line2D([0], [0], marker='D', color='#111827', lw=0, markersize=4.5, label='mean'),
-    ]
-    ax.legend(handles=legend_handles, fontsize=7.5, loc='upper right')
+    if y_tick_label_mode == 'expm1':
+        yt = ax.get_yticks()
+        labels = []
+        for t in yt:
+            raw_v = float(np.expm1(float(t)))
+            if raw_v < 0:
+                raw_v = 0.0
+            if raw_v >= 100:
+                labels.append(f'{raw_v:.0f}')
+            elif raw_v >= 10:
+                labels.append(f'{raw_v:.1f}')
+            else:
+                labels.append(f'{raw_v:.2f}')
+        ax.set_yticks(yt)
+        ax.set_yticklabels(labels)
+    if y_ref_line is not None and np.isfinite(float(y_ref_line)):
+        ax.axhline(
+            float(y_ref_line),
+            color='#dc2626',
+            linestyle='-',
+            linewidth=1.4,
+            alpha=0.9,
+            zorder=2,
+            label=(y_ref_label or 'reference'),
+        )
+    ax.legend(fontsize=7.5, loc='upper right')
     return _fig_to_png(fig)
 
 
 def plot_deltae_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
     att = _dashboard_attempts_df()
-    att = att[att['final_delta_e'].notna()]
+    att = att[att['final_delta_e'].notna()].copy()
+    raw = pd.to_numeric(att['final_delta_e'], errors='coerce')
+    # Right-skewed DeltaE is easier to read on compressed scale.
+    # We render log1p on Y, but keep tick labels in original DeltaE units.
+    att['final_delta_e_tx'] = np.log1p(raw.clip(lower=0))
     return _plot_per_color_swarm(
         att,
-        metric='final_delta_e',
-        metric_label='Final ΔE',
+        metric='final_delta_e_tx',
+        metric_label='Final ΔE (log scale, ticks show original)',
         point_color='#7c3aed',
-        title='Quantile band: final ΔE per color (top 20 by volume)',
+        title='Swarm: final ΔE per color (log-transformed Y, original tick labels)',
+        y_tick_label_mode='expm1',
+        y_ref_line=float(np.log1p(2.0)),
+        y_ref_label='ΔE = 2.0',
     )
 
 
@@ -1178,7 +1209,7 @@ def plot_elapsed_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
         metric='duration_sec',
         metric_label='Elapsed time (s)',
         point_color='#b45309',
-        title='Quantile band: elapsed time per color (<=300s, top 20 by volume)',
+        title='Swarm: elapsed time per color (<=300s, top 20 by volume)',
     )
 
 
@@ -1267,19 +1298,19 @@ def plot_deltae_elapsed_scatter(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
         ax.axis('off')
         return _fig_to_png(fig)
 
-    hb = ax.hexbin(
+    if len(att) > 15000:
+        att = att.sample(15000, random_state=42)
+    ax.scatter(
         att['duration_sec'].to_numpy(dtype=float),
         att['final_delta_e'].to_numpy(dtype=float),
-        gridsize=46,
-        mincnt=1,
-        cmap='Blues',
-        linewidths=0,
+        s=8,
+        alpha=0.2,
+        color='#1d4ed8',
+        edgecolors='none',
     )
-    cbar = fig.colorbar(hb, ax=ax, pad=0.01)
-    cbar.set_label('Count', fontsize=8)
     ax.set_xlabel('Elapsed time (s, <=300)')
     ax.set_ylabel('Final DeltaE')
-    ax.set_title('Hexbin density: Final DeltaE vs elapsed time')
+    ax.set_title('Scatter: Final DeltaE vs elapsed time')
     return _fig_to_png(fig)
 
 
@@ -1323,21 +1354,21 @@ def _plot_scatter_with_corr(
     if y_clip_q is not None and len(part) > 20:
         y_cap = part[y_col].quantile(float(y_clip_q))
         part = part[part[y_col] <= y_cap]
-    hb = ax.hexbin(
+    if len(part) > 18000:
+        part = part.sample(18000, random_state=42)
+    ax.scatter(
         part[x_col].to_numpy(dtype=float),
         part[y_col].to_numpy(dtype=float),
-        gridsize=44,
-        mincnt=1,
-        cmap='Blues',
-        linewidths=0,
+        s=8,
+        alpha=0.2,
+        color='#1d4ed8',
+        edgecolors='none',
     )
-    cbar = fig.colorbar(hb, ax=ax, pad=0.01)
-    cbar.set_label('Count', fontsize=8)
     r = _pearson_corr(part[x_col], part[y_col])
     rt = 'n/a' if r is None else f'{r:.3f}'
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
-    ax.set_title(f'{title} (hexbin, Pearson r={rt})')
+    ax.set_title(f'{title} (scatter, Pearson r={rt})')
     return _fig_to_png(fig)
 
 
@@ -2206,21 +2237,21 @@ def plot_deltae_vs_similarity(att: pd.DataFrame, ev: pd.DataFrame) -> bytes:
         ax.text(0.5, 0.5, 'No final DeltaE rows with similarity', ha='center', va='center')
         ax.axis('off')
         return _fig_to_png(fig)
-    hb = ax.hexbin(
+    if len(part) > 15000:
+        part = part.sample(15000, random_state=42)
+    ax.scatter(
         part['similarity'].to_numpy(dtype=float),
         part['final_delta_e'].to_numpy(dtype=float),
-        gridsize=44,
-        mincnt=1,
-        cmap='Blues',
-        linewidths=0,
+        s=8,
+        alpha=0.2,
+        color='#1d4ed8',
+        edgecolors='none',
     )
-    cbar = fig.colorbar(hb, ax=ax, pad=0.01)
-    cbar.set_label('Count', fontsize=8)
     r = _pearson_corr(part['similarity'], part['final_delta_e'])
     rt = 'n/a' if r is None else f'{r:.3f}'
     ax.set_xlabel('Recipe similarity (ratio-based, 0..1)')
     ax.set_ylabel('Final DeltaE')
-    ax.set_title(f'Hexbin density: Final DeltaE vs recipe similarity (Pearson r={rt})')
+    ax.set_title(f'Scatter: Final DeltaE vs recipe similarity (Pearson r={rt})')
     ax.set_xlim(-0.02, 1.02)
     return _fig_to_png(fig)
 

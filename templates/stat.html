@@ -233,8 +233,8 @@
     <h2>2) Number of all plays per user</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Bar: plays per user (top 30)</p>
-        <img class="stat-plot-img stat-plot" data-plot="plays_per_user" alt="Plays per user (bar)" loading="lazy" />
+        <p class="chart-title">Scatter: plays per user (top 30)</p>
+        <img class="stat-plot-img stat-plot" data-plot="plays_per_user" alt="Plays per user (scatter)" loading="lazy" />
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="playsPerUserTable"></table></div>
@@ -244,8 +244,8 @@
     <h2>3) Attempts per color</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Bar: attempts by target_color_id (color-coded)</p>
-        <img class="stat-plot-img stat-plot" data-plot="attempts_per_color" alt="Attempts per color (bar)" loading="lazy" />
+        <p class="chart-title">Scatter: attempts by target_color_id (color-coded)</p>
+        <img class="stat-plot-img stat-plot" data-plot="attempts_per_color" alt="Attempts per color (scatter)" loading="lazy" />
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="attemptsPerColorTable"></table></div>
@@ -264,7 +264,7 @@
     <h2>4) DeltaE of each color mix</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Quantile band: final DeltaE per color</p>
+        <p class="chart-title">Swarm: final DeltaE per color (log Y, original tick labels)</p>
         <img class="stat-plot-img stat-plot" data-plot="deltae_per_color" alt="DeltaE per color (swarm)" loading="lazy" />
       </div>
     </div>
@@ -275,12 +275,12 @@
     <h2>5) Elapsed time of each color mix</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Quantile band: elapsed time per color</p>
+        <p class="chart-title">Swarm: elapsed time per color</p>
         <img class="stat-plot-img stat-plot" data-plot="elapsed_per_color" alt="Elapsed time per color (swarm)" loading="lazy" />
       </div>
       <div class="chart-card">
-        <p class="chart-title">Hexbin: DeltaE vs elapsed time</p>
-        <img class="stat-plot-img stat-plot" data-plot="deltae_elapsed_scatter" alt="DeltaE vs elapsed hexbin" loading="lazy" />
+        <p class="chart-title">Scatter: DeltaE vs elapsed time</p>
+        <img class="stat-plot-img stat-plot" data-plot="deltae_elapsed_scatter" alt="DeltaE vs elapsed scatter" loading="lazy" />
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="elapsedTable"></table></div>
@@ -341,11 +341,11 @@
     </p>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Hexbin: Final DeltaE vs number of steps</p>
+        <p class="chart-title">Scatter: Final DeltaE vs number of steps</p>
         <img class="stat-plot-img stat-plot" data-plot="scatter_deltae_vs_steps" data-tier="advanced" alt="Scatter final DeltaE vs steps" loading="lazy" />
       </div>
       <div class="chart-card">
-        <p class="chart-title">Hexbin: Elapsed time vs number of steps</p>
+        <p class="chart-title">Scatter: Elapsed time vs number of steps</p>
         <img class="stat-plot-img stat-plot" data-plot="scatter_duration_vs_steps" data-tier="advanced" alt="Scatter elapsed time vs steps" loading="lazy" />
       </div>
       <div class="chart-card">
@@ -357,8 +357,8 @@
         <img class="stat-plot-img stat-plot" data-plot="correlation_league" data-tier="advanced" alt="Correlation league" loading="lazy" />
       </div>
       <div class="chart-card">
-        <p class="chart-title">Hexbin: Final DeltaE vs recipe similarity</p>
-        <img class="stat-plot-img stat-plot" data-plot="deltae_vs_similarity" data-tier="advanced" alt="Hexbin final DeltaE vs recipe similarity" loading="lazy" />
+        <p class="chart-title">Scatter: Final DeltaE vs recipe similarity</p>
+        <img class="stat-plot-img stat-plot" data-plot="deltae_vs_similarity" data-tier="advanced" alt="Scatter final DeltaE vs recipe similarity" loading="lazy" />
       </div>
     </div>
   </section>
