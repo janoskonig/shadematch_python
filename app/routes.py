@@ -1129,6 +1129,7 @@ def _upsert_attempt_header(payload, *, authenticated_user_id=None):
         ('attempt_started_client_ts_ms', 'attempt_started_client_ts_ms'),
         ('initial_delta_e', 'initial_delta_e'),
         ('app_version', 'app_version'),
+        ('client_env_json', 'client_env_json'),
     ):
         val = payload.get(key)
         if val is not None and getattr(row, attr) is None:
@@ -2157,6 +2158,9 @@ ALLOWED_EVENTS = frozenset({
     'app_ready',
     'first_palette_interaction',
     'save_attempt',
+    'instruction_acknowledged',
+    'fullscreen_change',
+    'visibility_change',
 })
 
 
@@ -2511,6 +2515,133 @@ def stat_summary():
                 'first_event_below_2_by_type': [dict(r) for r in first_event_below_2_by_type],
             }
         )
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/stat/quality-summary', methods=['GET'])
+def stat_quality_summary():
+    """
+    Quality-control aggregations over per-attempt environment snapshots
+    (`mixing_attempts.client_env_json`). Powers the QC tiles in /stat.
+
+    Returns four small breakdowns:
+      - plays_by_hour_of_day (0..23, local)
+      - plays_by_color_gamut (rec2020 | p3 | srgb | unknown)
+      - plays_by_fullscreen  (fullscreen true | false | unknown)
+      - plays_by_device_kind (mobile | tablet | desktop | unknown)
+    """
+    try:
+        plays_by_hour = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  CASE
+                    WHEN client_env_json IS NULL THEN NULL
+                    WHEN (client_env_json->>'hour_of_day_local') ~ '^[0-9]+$'
+                      THEN (client_env_json->>'hour_of_day_local')::int
+                    ELSE NULL
+                  END AS hour_of_day_local,
+                  COUNT(*)::bigint AS n_attempts
+                FROM mixing_attempts
+                WHERE user_id IS NOT NULL
+                GROUP BY 1
+                ORDER BY 1 NULLS LAST
+                """
+            )
+        ).mappings().all()
+
+        plays_by_gamut = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COALESCE(NULLIF(client_env_json->>'color_gamut', ''), 'unknown') AS color_gamut,
+                  COUNT(*)::bigint AS n_attempts
+                FROM mixing_attempts
+                WHERE user_id IS NOT NULL
+                GROUP BY 1
+                ORDER BY n_attempts DESC, color_gamut
+                """
+            )
+        ).mappings().all()
+
+        plays_by_fullscreen = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  CASE
+                    WHEN client_env_json IS NULL THEN 'unknown'
+                    WHEN (client_env_json->>'fullscreen') = 'true' THEN 'fullscreen'
+                    WHEN (client_env_json->>'fullscreen') = 'false' THEN 'windowed'
+                    ELSE 'unknown'
+                  END AS fullscreen_state,
+                  COUNT(*)::bigint AS n_attempts
+                FROM mixing_attempts
+                WHERE user_id IS NOT NULL
+                GROUP BY 1
+                ORDER BY n_attempts DESC, fullscreen_state
+                """
+            )
+        ).mappings().all()
+
+        # `device_kind` is derived client-side (UA-CH + UA-string heuristics)
+        # and stamped onto each attempt's snapshot. For attempts captured
+        # before the client started writing it, fall back to a UA-string
+        # heuristic on the stored UA so older rows still bucket usefully.
+        plays_by_device_kind = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  CASE
+                    WHEN client_env_json IS NULL THEN 'unknown'
+                    WHEN COALESCE(NULLIF(client_env_json->>'device_kind', ''), '') <> ''
+                      THEN client_env_json->>'device_kind'
+                    WHEN (client_env_json->>'ua') ~* 'iPad'
+                      OR ((client_env_json->>'ua') ~* 'Android' AND (client_env_json->>'ua') !~* 'Mobile')
+                      THEN 'tablet'
+                    WHEN (client_env_json->>'ua') ~* 'iPhone|iPod|Mobile'
+                      THEN 'mobile'
+                    WHEN (client_env_json->>'ua') IS NOT NULL
+                      THEN 'desktop'
+                    ELSE 'unknown'
+                  END AS device_kind,
+                  COUNT(*)::bigint AS n_attempts
+                FROM mixing_attempts
+                WHERE user_id IS NOT NULL
+                GROUP BY 1
+                ORDER BY
+                  CASE device_kind
+                    WHEN 'mobile' THEN 1
+                    WHEN 'tablet' THEN 2
+                    WHEN 'desktop' THEN 3
+                    WHEN 'unknown' THEN 4
+                    ELSE 5
+                  END,
+                  device_kind
+                """
+            )
+        ).mappings().all()
+
+        coverage_total = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  COUNT(*)::bigint AS total_attempts,
+                  COUNT(client_env_json)::bigint AS attempts_with_env
+                FROM mixing_attempts
+                WHERE user_id IS NOT NULL
+                """
+            )
+        ).mappings().first() or {}
+
+        return jsonify({
+            'status': 'success',
+            'coverage': dict(coverage_total),
+            'plays_by_hour_of_day': [dict(r) for r in plays_by_hour],
+            'plays_by_color_gamut': [dict(r) for r in plays_by_gamut],
+            'plays_by_fullscreen': [dict(r) for r in plays_by_fullscreen],
+            'plays_by_device_kind': [dict(r) for r in plays_by_device_kind],
+        })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 

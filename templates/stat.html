@@ -110,6 +110,32 @@
   <div class="cards" id="overviewCards"></div>
 
   <section class="section">
+    <h2>0) Data quality controls</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      Per-attempt environment snapshots from <code>mixing_attempts.client_env_json</code>: time of day, screen color gamut, and full-screen state. Useful as exclusion / stratification variables when interpreting color-task results.
+    </p>
+    <div class="cards" id="qualityCoverageCards"></div>
+    <div class="chart-grid" style="margin-top:12px;">
+      <div class="chart-card">
+        <p class="chart-title">Plays by hour of day (local)</p>
+        <div class="table-wrap"><table id="qualityHourTable"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Plays by reported color gamut</p>
+        <div class="table-wrap"><table id="qualityGamutTable"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Plays by fullscreen state</p>
+        <div class="table-wrap"><table id="qualityFullscreenTable"></table></div>
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Plays by device kind</p>
+        <div class="table-wrap"><table id="qualityDeviceKindTable"></table></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
     <h2>Skipped: perception vs DeltaE</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       DeltaE at skip time from <code>mixing_sessions</code> when the user picked a skip perception (stored as <code>skip_perception</code>).
@@ -715,6 +741,74 @@
     }
   }
 
+  function renderQualityControls(qc) {
+    var coverage = (qc && qc.coverage) || {};
+    var total = Number(coverage.total_attempts || 0);
+    var withEnv = Number(coverage.attempts_with_env || 0);
+    var coverageRatio = total > 0 ? withEnv / total : 0;
+    var covCards = [
+      { k: 'Attempts (auth users)', v: total },
+      { k: 'Attempts with env snapshot', v: withEnv },
+      { k: 'Env snapshot coverage', v: total > 0 ? pctFmt(coverageRatio) : '—' }
+    ];
+    var covEl = document.getElementById('qualityCoverageCards');
+    if (covEl) {
+      covEl.innerHTML = covCards.map(function(c) {
+        return '<div class="card"><div class="k">' + c.k + '</div><div class="v">' + c.v + '</div></div>';
+      }).join('');
+    }
+    buildTable(
+      document.getElementById('qualityHourTable'),
+      [
+        { key: 'hour_of_day_local', label: 'Hour of day', formatter: function(v) {
+          if (v === null || v === undefined) return 'unknown';
+          var n = Number(v);
+          return Number.isFinite(n) ? (n < 10 ? '0' + n : String(n)) + ':00' : 'unknown';
+        } },
+        { key: 'n_attempts', label: 'Attempts' }
+      ],
+      (qc && qc.plays_by_hour_of_day) || []
+    );
+    buildTable(
+      document.getElementById('qualityGamutTable'),
+      [
+        { key: 'color_gamut', label: 'Color gamut' },
+        { key: 'n_attempts', label: 'Attempts' }
+      ],
+      (qc && qc.plays_by_color_gamut) || []
+    );
+    buildTable(
+      document.getElementById('qualityFullscreenTable'),
+      [
+        { key: 'fullscreen_state', label: 'Fullscreen' },
+        { key: 'n_attempts', label: 'Attempts' }
+      ],
+      (qc && qc.plays_by_fullscreen) || []
+    );
+    buildTable(
+      document.getElementById('qualityDeviceKindTable'),
+      [
+        { key: 'device_kind', label: 'Device kind' },
+        { key: 'n_attempts', label: 'Attempts' }
+      ],
+      (qc && qc.plays_by_device_kind) || []
+    );
+  }
+
+  async function loadQualitySummary() {
+    try {
+      var resp = await fetch('/api/stat/quality-summary');
+      var data = await resp.json();
+      if (data.status !== 'success') throw new Error(data.message || 'Failed to load QC');
+      renderQualityControls(data);
+    } catch (err) {
+      var covEl = document.getElementById('qualityCoverageCards');
+      if (covEl) {
+        covEl.innerHTML = '<div class="card"><div class="k">QC summary</div><div class="v" style="font-size:0.95rem;">' + err.message + '</div></div>';
+      }
+    }
+  }
+
   async function loadStats() {
     var resp = await fetch('/api/stat/summary');
     var data = await resp.json();
@@ -934,5 +1028,6 @@
     document.getElementById('overviewCards').innerHTML =
       '<div class="card"><div class="k">Error</div><div class="v" style="font-size:0.95rem;">' + err.message + '</div></div>';
   });
+  loadQualitySummary();
 </script>
 {% endblock %}
