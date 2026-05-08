@@ -167,7 +167,7 @@
       fetch('/api/leaderboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userIdToUse, limit: 25 }),
+        body: JSON.stringify({ user_id: userIdToUse, include_all: true }),
       })
         .then(r => r.json())
         .then(data => {

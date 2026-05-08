@@ -1758,11 +1758,14 @@ def get_user_results():
 def get_leaderboard():
     data = request.get_json(silent=True) or {}
     current_user_id = (data.get('user_id') or '').strip().upper()
-    limit = data.get('limit', 25)
-    try:
-        limit = max(1, min(int(limit), 100))
-    except (TypeError, ValueError):
-        limit = 25
+    include_all = bool(data.get('include_all'))
+    limit = None
+    if not include_all:
+        limit = data.get('limit', 25)
+        try:
+            limit = max(1, min(int(limit), 100))
+        except (TypeError, ValueError):
+            limit = 25
 
     # Per-session cap (seconds) used when aggregating elapsed time. Caps abandoned
     # tabs / runaway timers so the leaderboard's total play time stays meaningful.
@@ -1870,7 +1873,7 @@ def get_leaderboard():
                 ),
             }
             entries_by_user[row.user_id] = entry
-            if rank <= limit:
+            if include_all or rank <= limit:
                 entries.append(entry)
 
         if current_user_id and current_user_id in entries_by_user:
