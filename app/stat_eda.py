@@ -1300,17 +1300,34 @@ def plot_deltae_elapsed_scatter(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
 
     if len(att) > 15000:
         att = att.sample(15000, random_state=42)
+    x = pd.to_numeric(att['duration_sec'], errors='coerce').to_numpy(dtype=float)
+    y_raw = pd.to_numeric(att['final_delta_e'], errors='coerce').to_numpy(dtype=float)
+    y = np.log1p(np.clip(y_raw, a_min=0.0, a_max=None))
     ax.scatter(
-        att['duration_sec'].to_numpy(dtype=float),
-        att['final_delta_e'].to_numpy(dtype=float),
+        x,
+        y,
         s=8,
         alpha=0.2,
         color='#1d4ed8',
         edgecolors='none',
     )
+    yt = ax.get_yticks()
+    y_labels = []
+    for t in yt:
+        raw_v = float(np.expm1(float(t)))
+        if raw_v < 0:
+            raw_v = 0.0
+        if raw_v >= 100:
+            y_labels.append(f'{raw_v:.0f}')
+        elif raw_v >= 10:
+            y_labels.append(f'{raw_v:.1f}')
+        else:
+            y_labels.append(f'{raw_v:.2f}')
+    ax.set_yticks(yt)
+    ax.set_yticklabels(y_labels)
     ax.set_xlabel('Elapsed time (s, <=300)')
-    ax.set_ylabel('Final DeltaE')
-    ax.set_title('Scatter: Final DeltaE vs elapsed time')
+    ax.set_ylabel('Final DeltaE (log scale, ticks show original)')
+    ax.set_title('Scatter: Final DeltaE vs elapsed time (log Y, original tick labels)')
     return _fig_to_png(fig)
 
 
