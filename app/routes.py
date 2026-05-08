@@ -1,9 +1,12 @@
 from flask import Blueprint, render_template, request, jsonify, send_from_directory, Response, current_app, redirect, url_for
 from datetime import datetime, date, timedelta
+import copy
 import hashlib
 import random as _random
 import secrets
 import re
+import threading
+import time
 from . import db
 from .models import (
     User, MixingSession, TargetColor,
@@ -2143,10 +2146,59 @@ ALLOWED_EVENTS = frozenset({
     'visibility_change',
 })
 
+_STAT_SUMMARY_CACHE_TTL_SEC = int(os.environ.get('STAT_SUMMARY_CACHE_SECONDS', '120'))
+_STAT_QUALITY_CACHE_TTL_SEC = int(os.environ.get('STAT_QUALITY_SUMMARY_CACHE_SECONDS', '120'))
+_stat_summary_cache_lock = threading.Lock()
+_stat_summary_cache_entries = {}
+_stat_quality_cache_lock = threading.Lock()
+_stat_quality_cache_ts = 0.0
+_stat_quality_cache_payload = None
+
+
+def _get_cached_stat_summary_payload(cache_key='full'):
+    now = time.time()
+    with _stat_summary_cache_lock:
+        entry = _stat_summary_cache_entries.get(str(cache_key))
+        if entry is None:
+            return None
+        ts, payload = entry
+        if (now - float(ts)) <= _STAT_SUMMARY_CACHE_TTL_SEC:
+            return copy.deepcopy(payload)
+        _stat_summary_cache_entries.pop(str(cache_key), None)
+    return None
+
+
+def _set_cached_stat_summary_payload(payload, cache_key='full'):
+    with _stat_summary_cache_lock:
+        _stat_summary_cache_entries[str(cache_key)] = (time.time(), copy.deepcopy(payload))
+
+
+def _get_cached_stat_quality_payload():
+    now = time.time()
+    with _stat_quality_cache_lock:
+        if (
+            _stat_quality_cache_payload is not None
+            and (now - _stat_quality_cache_ts) <= _STAT_QUALITY_CACHE_TTL_SEC
+        ):
+            return copy.deepcopy(_stat_quality_cache_payload)
+    return None
+
+
+def _set_cached_stat_quality_payload(payload):
+    global _stat_quality_cache_ts, _stat_quality_cache_payload
+    with _stat_quality_cache_lock:
+        _stat_quality_cache_payload = copy.deepcopy(payload)
+        _stat_quality_cache_ts = time.time()
+
 
 @main.route('/api/stat/summary', methods=['GET'])
 def stat_summary():
     """Focused dashboard summary for /stat."""
+    scope_raw = str(request.args.get('scope', 'full') or 'full').strip().lower()
+    scope = 'basic' if scope_raw == 'basic' else 'full'
+    cached_payload = _get_cached_stat_summary_payload(scope)
+    if cached_payload is not None:
+        return jsonify(cached_payload)
     try:
         overview = db.session.execute(
             db.text(
@@ -2313,6 +2365,21 @@ def stat_summary():
             )
         ).mappings().all()
 
+        if scope == 'basic':
+            payload = {
+                'status': 'success',
+                'scope': 'basic',
+                'overview': dict(overview or {}),
+                'age_pyramid': [dict(r) for r in age_pyramid],
+                'plays_per_user': [dict(r) for r in plays_per_user],
+                'attempts_per_color': [dict(r) for r in attempts_per_color],
+                'delta_e_per_color': [dict(r) for r in delta_e_per_color],
+                'elapsed_per_color': [dict(r) for r in elapsed_per_color],
+                'controlled_by_attempt': [dict(r) for r in controlled_by_attempt],
+            }
+            _set_cached_stat_summary_payload(payload, scope)
+            return jsonify(payload)
+
         archetypes = build_attempt_archetypes()
         recipe_similarity = build_recipe_similarity_summary()
         try:
@@ -2473,28 +2540,29 @@ def stat_summary():
             )
         ).mappings().all()
 
-        return jsonify(
-            {
-                'status': 'success',
-                'overview': dict(overview or {}),
-                'age_pyramid': [dict(r) for r in age_pyramid],
-                'plays_per_user': [dict(r) for r in plays_per_user],
-                'attempts_per_color': [dict(r) for r in attempts_per_color],
-                'delta_e_per_color': [dict(r) for r in delta_e_per_color],
-                'elapsed_per_color': [dict(r) for r in elapsed_per_color],
-                'controlled_by_attempt': [dict(r) for r in controlled_by_attempt],
-                'archetypes': archetypes,
-                'recipe_similarity': recipe_similarity,
-                'mixed_models': mixed_models,
-                'skipped_identical_delta_e': skipped_identical_delta_e,
-                'skipped_acceptable_delta_e': skipped_acceptable_delta_e,
-                'skipped_unacceptable_delta_e': skipped_unacceptable_delta_e,
-                'first_attempt_below_2': first_attempt_below_2,
-                'first_event_below_2': first_event_below_2,
-                'first_attempt_below_2_by_type': [dict(r) for r in first_attempt_below_2_by_type],
-                'first_event_below_2_by_type': [dict(r) for r in first_event_below_2_by_type],
-            }
-        )
+        payload = {
+            'status': 'success',
+            'scope': 'full',
+            'overview': dict(overview or {}),
+            'age_pyramid': [dict(r) for r in age_pyramid],
+            'plays_per_user': [dict(r) for r in plays_per_user],
+            'attempts_per_color': [dict(r) for r in attempts_per_color],
+            'delta_e_per_color': [dict(r) for r in delta_e_per_color],
+            'elapsed_per_color': [dict(r) for r in elapsed_per_color],
+            'controlled_by_attempt': [dict(r) for r in controlled_by_attempt],
+            'archetypes': archetypes,
+            'recipe_similarity': recipe_similarity,
+            'mixed_models': mixed_models,
+            'skipped_identical_delta_e': skipped_identical_delta_e,
+            'skipped_acceptable_delta_e': skipped_acceptable_delta_e,
+            'skipped_unacceptable_delta_e': skipped_unacceptable_delta_e,
+            'first_attempt_below_2': first_attempt_below_2,
+            'first_event_below_2': first_event_below_2,
+            'first_attempt_below_2_by_type': [dict(r) for r in first_attempt_below_2_by_type],
+            'first_event_below_2_by_type': [dict(r) for r in first_event_below_2_by_type],
+        }
+        _set_cached_stat_summary_payload(payload, scope)
+        return jsonify(payload)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
@@ -2511,6 +2579,9 @@ def stat_quality_summary():
       - plays_by_fullscreen  (fullscreen true | false | unknown)
       - plays_by_device_kind (mobile | tablet | desktop | unknown)
     """
+    cached_payload = _get_cached_stat_quality_payload()
+    if cached_payload is not None:
+        return jsonify(cached_payload)
     try:
         plays_by_hour = db.session.execute(
             db.text(
@@ -2619,14 +2690,16 @@ def stat_quality_summary():
             )
         ).mappings().first() or {}
 
-        return jsonify({
+        payload = {
             'status': 'success',
             'coverage': dict(coverage_total),
             'plays_by_hour_of_day': [dict(r) for r in plays_by_hour],
             'plays_by_color_gamut': [dict(r) for r in plays_by_gamut],
             'plays_by_fullscreen': [dict(r) for r in plays_by_fullscreen],
             'plays_by_device_kind': [dict(r) for r in plays_by_device_kind],
-        })
+        }
+        _set_cached_stat_quality_payload(payload)
+        return jsonify(payload)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 

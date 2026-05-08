@@ -97,6 +97,13 @@
     cursor: pointer;
     font-size: 0.85rem;
   }
+  .advanced-only { display: none; }
+  .advanced-only.is-visible { display: block; }
+  #advancedLoadStatus {
+    margin-left: 10px;
+    color: var(--text-secondary);
+    font-size: 0.84rem;
+  }
 </style>
 {% endblock %}
 
@@ -109,7 +116,7 @@
 
   <div class="cards" id="overviewCards"></div>
 
-  <section class="section">
+  <section class="section advanced-only">
     <h2>0) Data quality controls</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Per-attempt environment snapshots from <code>mixing_attempts.client_env_json</code>: time of day, screen color gamut, and full-screen state. Useful as exclusion / stratification variables when interpreting color-task results.
@@ -135,7 +142,7 @@
     </div>
   </section>
 
-  <section class="section">
+  <section class="section advanced-only">
     <h2>Skipped: perception vs DeltaE</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       DeltaE at skip time from <code>mixing_sessions</code> when the user picked a skip perception (stored as <code>skip_perception</code>).
@@ -241,6 +248,15 @@
   </section>
 
   <section class="section">
+    <h2>Advanced analyses</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      Heavy, event-level and model-based analyses are loaded on demand.
+    </p>
+    <button type="button" id="loadAdvancedBtn">Load advanced sections</button>
+    <span id="advancedLoadStatus">Not loaded</span>
+  </section>
+
+  <section class="section advanced-only">
     <h2>5b) Exploratory multivariate analyses</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Multivariate exploration over per-attempt metrics
@@ -252,23 +268,23 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Scatter plot matrix</p>
-        <img class="stat-plot-img stat-plot" data-plot="mv_scatter_matrix" alt="Scatter plot matrix" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="mv_scatter_matrix" data-tier="advanced" alt="Scatter plot matrix" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">Parallel boxplots (z-scored)</p>
-        <img class="stat-plot-img stat-plot" data-plot="mv_parallel_boxplots" alt="Parallel boxplots of standardized metrics" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="mv_parallel_boxplots" data-tier="advanced" alt="Parallel boxplots of standardized metrics" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">2D KDE contours (joint densities)</p>
-        <img class="stat-plot-img stat-plot" data-plot="mv_contour_pairs" alt="2D KDE contour plots" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="mv_contour_pairs" data-tier="advanced" alt="2D KDE contour plots" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">Mahalanobis-distance outliers</p>
-        <img class="stat-plot-img stat-plot" data-plot="mv_mahalanobis" alt="Mahalanobis outlier detection" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="mv_mahalanobis" data-tier="advanced" alt="Mahalanobis outlier detection" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">QQ-plots vs normal</p>
-        <img class="stat-plot-img stat-plot" data-plot="mv_qq_grid" alt="QQ-plot grid" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="mv_qq_grid" data-tier="advanced" alt="QQ-plot grid" loading="lazy" />
       </div>
     </div>
   </section>
@@ -288,7 +304,7 @@
     <div class="table-wrap" style="margin-top:10px;"><table id="controlledTable"></table></div>
   </section>
 
-  <section class="section">
+  <section class="section advanced-only">
     <h2>6b) Exploratory correlations</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Scatter plots include Pearson correlation in the title. Heatmap and league summarize attempt-level linear associations.
@@ -296,28 +312,28 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Scatter: Final DeltaE vs number of steps</p>
-        <img class="stat-plot-img stat-plot" data-plot="scatter_deltae_vs_steps" alt="Scatter final DeltaE vs steps" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="scatter_deltae_vs_steps" data-tier="advanced" alt="Scatter final DeltaE vs steps" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">Scatter: Elapsed time vs number of steps</p>
-        <img class="stat-plot-img stat-plot" data-plot="scatter_duration_vs_steps" alt="Scatter elapsed time vs steps" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="scatter_duration_vs_steps" data-tier="advanced" alt="Scatter elapsed time vs steps" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">Correlation heatmap</p>
-        <img class="stat-plot-img stat-plot" data-plot="correlation_heatmap" alt="Correlation heatmap" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="correlation_heatmap" data-tier="advanced" alt="Correlation heatmap" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">Correlation league (ranked by |r|)</p>
-        <img class="stat-plot-img stat-plot" data-plot="correlation_league" alt="Correlation league" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="correlation_league" data-tier="advanced" alt="Correlation league" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">Scatter: Final DeltaE vs recipe similarity</p>
-        <img class="stat-plot-img stat-plot" data-plot="deltae_vs_similarity" alt="Scatter final DeltaE vs recipe similarity" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="deltae_vs_similarity" data-tier="advanced" alt="Scatter final DeltaE vs recipe similarity" loading="lazy" />
       </div>
     </div>
   </section>
 
-  <section class="section">
+  <section class="section advanced-only">
     <h2>6c) Recipe-ratio similarity (perfect vs deviant)</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Similarity compares normalized drop ratios, so scaled recipes are treated as equivalent. Perfect means ratio-identical; deviant means any ratio difference.
@@ -326,7 +342,7 @@
     <div class="table-wrap" style="margin-top:10px;"><table id="recipeSimilaritySampleTable"></table></div>
   </section>
 
-  <section class="section">
+  <section class="section advanced-only">
     <h2>6d) Attempt models (stable spec, HC3)</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Outcomes: <code>log₁p(final&nbsp;ΔE)</code>, <code>logit(similarity)</code>, and binary <code>perfect_ratio</code> (exact recipe match).
@@ -337,19 +353,19 @@
     <div class="chart-grid" style="margin-top:12px;">
       <div class="chart-card">
         <p class="chart-title">VIF (multicollinearity)</p>
-        <img class="stat-plot-img stat-plot" data-plot="mixed_models_vif" alt="Mixed models VIF" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="mixed_models_vif" data-tier="advanced" alt="Mixed models VIF" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">log₁p(ΔE): coefficient forest</p>
-        <img class="stat-plot-img stat-plot" data-plot="mixed_models_coef_logde" alt="Coefficients log final DeltaE" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="mixed_models_coef_logde" data-tier="advanced" alt="Coefficients log final DeltaE" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">logit(similarity): coefficient forest</p>
-        <img class="stat-plot-img stat-plot" data-plot="mixed_models_coef_similarity" alt="Coefficients similarity" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="mixed_models_coef_similarity" data-tier="advanced" alt="Coefficients similarity" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">Perfect ratio: odds ratios</p>
-        <img class="stat-plot-img stat-plot" data-plot="mixed_models_perfect_ratio_or" alt="Odds ratios perfect ratio" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="mixed_models_perfect_ratio_or" data-tier="advanced" alt="Odds ratios perfect ratio" loading="lazy" />
       </div>
     </div>
     <div class="chart-grid" style="margin-top:10px;">
@@ -374,7 +390,7 @@
     </div>
   </section>
 
-  <section class="section">
+  <section class="section advanced-only">
     <h2>7) Action-level DeltaE trajectory (per attempt)</h2>
     <div class="trajectory-controls">
       <label>Target color
@@ -393,7 +409,7 @@
     </div>
   </section>
 
-  <section class="section">
+  <section class="section advanced-only">
     <h2>8) Mixing strategy archetypes (rule-based)</h2>
     <p style="margin:0 0 8px;color:var(--text-secondary);font-size:0.88rem;">
       Archetypes are assigned per attempt from action-path behavior (not manually labeled).
@@ -447,11 +463,11 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Share of archetypes by attempt number</p>
-        <img class="stat-plot-img stat-plot" data-plot="archetype_share_by_attempt_no" alt="Archetype share by attempt no" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="archetype_share_by_attempt_no" data-tier="advanced" alt="Archetype share by attempt no" loading="lazy" />
       </div>
       <div class="chart-card">
         <p class="chart-title">Transition heatmap (k → k+1)</p>
-        <img class="stat-plot-img stat-plot" data-plot="archetype_transition_heatmap" alt="Archetype transition heatmap" loading="lazy" />
+        <img class="stat-plot-img stat-plot" data-plot="archetype_transition_heatmap" data-tier="advanced" alt="Archetype transition heatmap" loading="lazy" />
       </div>
     </div>
     <div class="chart-grid">
@@ -499,12 +515,20 @@
     el.innerHTML = html;
   }
 
-  function refreshPlots() {
+  function refreshPlots(includeAdvanced) {
     var t = Date.now();
     document.querySelectorAll('img.stat-plot').forEach(function(img) {
+      if (!includeAdvanced && img.getAttribute('data-tier') === 'advanced') return;
       var pid = img.getAttribute('data-plot');
       if (!pid) return;
       img.src = '/api/stat/plot/' + encodeURIComponent(pid) + '.png?t=' + t;
+    });
+  }
+
+  function setAdvancedVisible(visible) {
+    document.querySelectorAll('.advanced-only').forEach(function(el) {
+      if (visible) el.classList.add('is-visible');
+      else el.classList.remove('is-visible');
     });
   }
 
@@ -809,51 +833,12 @@
     }
   }
 
-  async function loadStats() {
-    var resp = await fetch('/api/stat/summary');
+  async function loadStatsBasic() {
+    var resp = await fetch('/api/stat/summary?scope=basic');
     var data = await resp.json();
     if (data.status !== 'success') throw new Error(data.message || 'Failed to load stats');
 
     renderOverview(data.overview || {});
-    renderSkipPerceptionDeltaE('skipIdenticalDeltaECards', data.skipped_identical_delta_e || {});
-    renderSkipPerceptionDeltaE('skipAcceptableDeltaECards', data.skipped_acceptable_delta_e || {});
-    renderSkipPerceptionDeltaE('skipUnacceptableDeltaECards', data.skipped_unacceptable_delta_e || {});
-    renderMilestoneCards(
-      'firstAttemptBelow2Cards',
-      data.first_attempt_below_2 || {},
-      'mean_first_attempt_no',
-      'median_first_attempt_no',
-      'Mean first attempt no (<2.0)',
-      'Median first attempt no (<2.0)'
-    );
-    renderMilestoneCards(
-      'firstEventBelow2Cards',
-      data.first_event_below_2 || {},
-      'mean_first_step_index',
-      'median_first_step_index',
-      'Mean first step index (<2.0)',
-      'Median first step index (<2.0)'
-    );
-    buildTable(
-      document.getElementById('firstAttemptBelow2ByTypeTable'),
-      [
-        { key: 'color_type', label: 'Target type' },
-        { key: 'n', label: 'Hits (n)' },
-        { key: 'mean_first_attempt_no', label: 'Mean first attempt no', formatter: function(v) { return fmtNumber(v, 2); } },
-        { key: 'median_first_attempt_no', label: 'Median first attempt no', formatter: function(v) { return fmtNumber(v, 2); } }
-      ],
-      data.first_attempt_below_2_by_type || []
-    );
-    buildTable(
-      document.getElementById('firstEventBelow2ByTypeTable'),
-      [
-        { key: 'color_type', label: 'Target type' },
-        { key: 'n', label: 'Hits (n)' },
-        { key: 'mean_first_step_index', label: 'Mean first step index', formatter: function(v) { return fmtNumber(v, 2); } },
-        { key: 'median_first_step_index', label: 'Median first step index', formatter: function(v) { return fmtNumber(v, 2); } }
-      ],
-      data.first_event_below_2_by_type || []
-    );
 
     buildTable(
       document.getElementById('agePyramidTable'),
@@ -1012,8 +997,139 @@
         }).join('');
     }
 
-    refreshPlots();
+    refreshPlots(false);
+  }
+
+  async function loadStatsAdvanced() {
+    var resp = await fetch('/api/stat/summary');
+    var data = await resp.json();
+    if (data.status !== 'success') throw new Error(data.message || 'Failed to load advanced stats');
+
+    renderSkipPerceptionDeltaE('skipIdenticalDeltaECards', data.skipped_identical_delta_e || {});
+    renderSkipPerceptionDeltaE('skipAcceptableDeltaECards', data.skipped_acceptable_delta_e || {});
+    renderSkipPerceptionDeltaE('skipUnacceptableDeltaECards', data.skipped_unacceptable_delta_e || {});
+    renderMilestoneCards(
+      'firstAttemptBelow2Cards',
+      data.first_attempt_below_2 || {},
+      'mean_first_attempt_no',
+      'median_first_attempt_no',
+      'Mean first attempt no (<2.0)',
+      'Median first attempt no (<2.0)'
+    );
+    renderMilestoneCards(
+      'firstEventBelow2Cards',
+      data.first_event_below_2 || {},
+      'mean_first_step_index',
+      'median_first_step_index',
+      'Mean first step index (<2.0)',
+      'Median first step index (<2.0)'
+    );
+    buildTable(
+      document.getElementById('firstAttemptBelow2ByTypeTable'),
+      [
+        { key: 'color_type', label: 'Target type' },
+        { key: 'n', label: 'Hits (n)' },
+        { key: 'mean_first_attempt_no', label: 'Mean first attempt no', formatter: function(v) { return fmtNumber(v, 2); } },
+        { key: 'median_first_attempt_no', label: 'Median first attempt no', formatter: function(v) { return fmtNumber(v, 2); } }
+      ],
+      data.first_attempt_below_2_by_type || []
+    );
+    buildTable(
+      document.getElementById('firstEventBelow2ByTypeTable'),
+      [
+        { key: 'color_type', label: 'Target type' },
+        { key: 'n', label: 'Hits (n)' },
+        { key: 'mean_first_step_index', label: 'Mean first step index', formatter: function(v) { return fmtNumber(v, 2); } },
+        { key: 'median_first_step_index', label: 'Median first step index', formatter: function(v) { return fmtNumber(v, 2); } }
+      ],
+      data.first_event_below_2_by_type || []
+    );
+
+    var rs = data.recipe_similarity || {};
+    var rsCards = [
+      { k: 'Attempts with similarity', v: rs.n_attempts_with_similarity || 0 },
+      { k: 'Perfect ratio solutions', v: rs.n_perfect_ratio_solutions || 0 },
+      { k: 'Deviant solutions', v: rs.n_deviant_ratio_solutions || 0 },
+      { k: 'Perfect ratio share', v: pctFmt(rs.perfect_ratio_share) },
+      { k: 'Mean similarity', v: fmtNumber(rs.mean_similarity, 4) },
+      { k: 'Median similarity', v: fmtNumber(rs.median_similarity, 4) }
+    ];
+    var rsCardsEl = document.getElementById('recipeSimilarityCards');
+    if (rsCardsEl) {
+      rsCardsEl.innerHTML = rsCards.map(function(c) {
+        return '<div class="card"><div class="k">' + c.k + '</div><div class="v">' + c.v + '</div></div>';
+      }).join('');
+    }
+    buildTable(
+      document.getElementById('recipeSimilaritySampleTable'),
+      [
+        { key: 'target_name', label: 'Color' },
+        { key: 'final_delta_e', label: 'Final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
+        { key: 'similarity', label: 'Similarity', formatter: function(v) { return fmtNumber(v, 4); } },
+        { key: 'ratio_is_perfect', label: 'Perfect ratio', formatter: function(v) { return v ? 'yes' : 'no'; } }
+      ],
+      (rs.scatter_rows || []).slice(0, 250)
+    );
+
+    renderMixedModels(data.mixed_models || {});
+
+    var arch = data.archetypes || {};
+    var meta = document.getElementById('archetypeMeta');
+    if (meta) {
+      var total = arch.per_attempt_total || 0;
+      var truncated = !!arch.per_attempt_truncated;
+      var same = arch.archetype_transition_same_rate;
+      var sameStr = (same === null || same === undefined || Number.isNaN(Number(same))) ? '' : (' P(same archetype k→k+1)=' + pctFmt(same) + '.');
+      meta.textContent = (truncated
+        ? ('Showing first ' + ((arch.per_attempt_tags || []).length) + ' tagged attempts out of ' + total + '.')
+        : ('Tagged attempts: ' + total + '.')) + sameStr;
+    }
+    setupArchetypeFilterOptions(arch.per_attempt_tags || []);
+    buildTable(
+      document.getElementById('archetypeByColorTable'),
+      [
+        { key: 'target_name', label: 'Color' },
+        { key: 'archetype', label: 'Archetype' },
+        { key: 'n_attempts', label: 'N attempts' },
+        { key: 'total_attempts_for_color', label: 'Total for color' },
+        { key: 'share_within_color', label: 'Share', formatter: pctFmt }
+      ],
+      arch.distribution_by_color || []
+    );
+    buildTable(
+      document.getElementById('archetypeByAttemptNoTable'),
+      [
+        { key: 'attempt_no', label: 'Attempt no' },
+        { key: 'archetype', label: 'Archetype' },
+        { key: 'n', label: 'N' },
+        { key: 'total_at_attempt_no', label: 'Total at step' },
+        { key: 'share_within_attempt_no', label: 'Share', formatter: pctFmt }
+      ],
+      arch.archetype_by_attempt_no || []
+    );
+    buildTable(
+      document.getElementById('archetypeTransitionsTable'),
+      [
+        { key: 'from_archetype', label: 'From (k)' },
+        { key: 'to_archetype', label: 'To (k+1)' },
+        { key: 'n', label: 'Count' }
+      ],
+      arch.archetype_transitions || []
+    );
+    buildTable(
+      document.getElementById('archetypeSequenceSamplesTable'),
+      [
+        { key: 'user_id', label: 'User' },
+        { key: 'target_name', label: 'Color' },
+        { key: 'n_steps', label: 'Steps' },
+        { key: 'sequence', label: 'attempt_no:archetype chain' }
+      ],
+      arch.archetype_sequence_samples || []
+    );
+
+    refreshPlots(true);
     refreshAttemptTimelinePlot();
+    refreshArchetypeTrajectoryPlot();
   }
 
   var trajectoryBtn = document.getElementById('trajectoryApplyBtn');
@@ -1024,7 +1140,27 @@
     refreshArchetypeTrajectoryPlot();
   });
 
-  loadStats().catch(function(err) {
+  var advancedLoadBtn = document.getElementById('loadAdvancedBtn');
+  var advancedLoadStatus = document.getElementById('advancedLoadStatus');
+  var advancedLoaded = false;
+
+  if (advancedLoadBtn) advancedLoadBtn.addEventListener('click', function() {
+    if (advancedLoaded) return;
+    advancedLoadBtn.disabled = true;
+    if (advancedLoadStatus) advancedLoadStatus.textContent = 'Loading...';
+    loadStatsAdvanced().then(function() {
+      advancedLoaded = true;
+      setAdvancedVisible(true);
+      if (advancedLoadStatus) advancedLoadStatus.textContent = 'Loaded';
+      advancedLoadBtn.textContent = 'Advanced loaded';
+    }).catch(function(err) {
+      if (advancedLoadStatus) advancedLoadStatus.textContent = 'Failed: ' + err.message;
+      advancedLoadBtn.disabled = false;
+    });
+  });
+
+  setAdvancedVisible(false);
+  loadStatsBasic().catch(function(err) {
     document.getElementById('overviewCards').innerHTML =
       '<div class="card"><div class="k">Error</div><div class="v" style="font-size:0.95rem;">' + err.message + '</div></div>';
   });
