@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Email preferences - ShadeMatch{% endblock %}
+
+{% block content %}
+<div style="max-width:640px;margin:40px auto;padding:32px;border:1px solid var(--border);border-radius:16px;background:var(--surface);">
+  <h1 style="margin-top:0;">{% if success %}You're unsubscribed{% else %}Could not update your preferences{% endif %}</h1>
+  <p>{{ message }}</p>
+  {% if success %}
+    <p style="color:var(--text-secondary, #6B6B6B); font-size:14px;">
+      You can re-enable reminders any time from your account settings inside ShadeMatch.
+    </p>
+  {% endif %}
+  <p style="margin-top:24px;"><a href="/" class="btn btn-primary">Back to ShadeMatch</a></p>
+</div>
+{% endblock %}

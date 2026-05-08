@@ -1,0 +1,19 @@
+{{ headline }}
+{% if subhead %}
+{{ subhead }}
+{% endif %}
+{% if stats %}
+Your stats:
+{% for stat in stats %}  - {{ stat.label }}: {{ stat.value }}
+{% endfor %}{% endif %}
+Open today's challenge:
+{{ cta_url }}
+
+{% if tip %}Tip: {{ tip }}
+
+{% endif %}Streaks are kind — even a quick 30-second mix keeps your run alive.
+
+— The {{ brand_name }} team
+
+To stop these reminders in one click:
+{{ list_unsubscribe_url }}

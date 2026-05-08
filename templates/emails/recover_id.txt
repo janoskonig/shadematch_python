@@ -1,0 +1,12 @@
+Let's get you back to mixing.
+
+We received a request to recover your {{ brand_name }} player ID for this
+email address. Use the secure link below to look it up.
+
+Recover your ID:
+{{ recovery_url }}
+
+This link expires in {{ ttl_minutes }} minutes. If you didn't request this,
+you can safely ignore this message — your account stays untouched.
+
+— The {{ brand_name }} team

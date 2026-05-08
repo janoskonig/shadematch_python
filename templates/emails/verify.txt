@@ -1,0 +1,18 @@
+Welcome to {{ brand_name }}{% if username %}, {{ username }}{% endif %}!
+
+Thanks for joining the color mixing game. Confirm your email to switch on
+daily challenge reminders, progress recaps, and player-ID recovery.
+
+Verify your email:
+{{ verify_url }}
+
+What you get when verified:
+  - Daily challenge nudges (only if you opt in)
+  - Player ID recovery if you switch devices
+  - Streak protection and progress recaps
+
+This link expires in {{ ttl_hours }} hours. If you didn't sign up for
+{{ brand_name }}, you can safely ignore this email — no account changes will
+be made.
+
+— The {{ brand_name }} team

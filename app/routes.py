@@ -4,8 +4,6 @@ import hashlib
 import random as _random
 import secrets
 import re
-import smtplib
-from email.message import EmailMessage
 from . import db
 from .models import (
     User, MixingSession, TargetColor,
@@ -15,13 +13,13 @@ from .models import (
 )
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb, reverse_engineer_recipe
+from . import email_utils
 import pandas as pd
 import os
 import numpy as np
 import json
 from sqlalchemy import case, func, text
 from sqlalchemy.exc import IntegrityError
-from dotenv import dotenv_values
 
 from .gamification import (
     process_progression,
@@ -134,71 +132,9 @@ def _rate_limit_allow(key, max_hits=5, window_sec=600):
     return True
 
 
-def _resolve_email_settings():
-    settings = {
-        'host': os.environ.get('SMTP_HOST', '').strip(),
-        'port': int(os.environ.get('SMTP_PORT', '587') or '587'),
-        'user': os.environ.get('SMTP_USER', '').strip(),
-        'password': (
-            os.environ.get('SMTP_PASSWORD', '').strip()
-            or os.environ.get('SMTP_PASS', '').strip()
-        ),
-        'sender': (
-            os.environ.get('SMTP_SENDER_EMAIL', '').strip()
-            or os.environ.get('SMTP_FROM', '').strip()
-        ),
-        'use_tls': (os.environ.get('SMTP_USE_TLS', 'true').strip().lower() != 'false'),
-        'use_ssl': (os.environ.get('SMTP_USE_SSL', 'false').strip().lower() == 'true'),
-    }
-    if all([settings['host'], settings['user'], settings['password'], settings['sender']]):
-        return settings
-
-    # Fallback: import config values from neighboring maxillofacialisrehabilitacio .env
-    candidate_paths = [
-        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', 'maxillofacialisrehabilitacio', '.env')),
-        os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..', 'maxillofacialisrehabilitacio', '.env')),
-    ]
-    for candidate in candidate_paths:
-        if not os.path.exists(candidate):
-            continue
-        values = dotenv_values(candidate)
-        settings['host'] = settings['host'] or (values.get('SMTP_HOST') or '').strip()
-        settings['port'] = settings['port'] if settings['port'] else int(values.get('SMTP_PORT') or 587)
-        settings['user'] = settings['user'] or (values.get('SMTP_USER') or '').strip()
-        settings['password'] = settings['password'] or (
-            (values.get('SMTP_PASSWORD') or '').strip()
-            or (values.get('SMTP_PASS') or '').strip()
-        )
-        settings['sender'] = settings['sender'] or (
-            (values.get('SMTP_SENDER_EMAIL') or '').strip()
-            or (values.get('SMTP_FROM') or '').strip()
-            or (values.get('SMTP_USER') or '').strip()
-        )
-        if values.get('SMTP_USE_TLS') is not None:
-            settings['use_tls'] = str(values.get('SMTP_USE_TLS')).strip().lower() != 'false'
-        if values.get('SMTP_USE_SSL') is not None:
-            settings['use_ssl'] = str(values.get('SMTP_USE_SSL')).strip().lower() == 'true'
-        break
-    return settings
-
-
-def _send_email_message(to_email, subject, plain_text):
-    settings = _resolve_email_settings()
-    if not all([settings['host'], settings['user'], settings['password'], settings['sender']]):
-        raise RuntimeError('Email sender is not configured')
-
-    message = EmailMessage()
-    message['Subject'] = subject
-    message['From'] = settings['sender']
-    message['To'] = to_email
-    message.set_content(plain_text)
-
-    smtp_cls = smtplib.SMTP_SSL if settings['use_ssl'] else smtplib.SMTP
-    with smtp_cls(settings['host'], settings['port'], timeout=15) as server:
-        if settings['use_tls'] and not settings['use_ssl']:
-            server.starttls()
-        server.login(settings['user'], settings['password'])
-        server.send_message(message)
+# SMTP settings resolution and the multipart/HTML email sender now live in
+# app/email_utils.py to keep deliverability concerns (headers, unsubscribe
+# tokens, branded templates) out of the route layer.
 
 
 def _issue_email_token(user_id, purpose, ttl_minutes):
@@ -376,16 +312,12 @@ def register():
                 purpose='verify_email',
                 ttl_minutes=EMAIL_VERIFY_TTL_HOURS * 60,
             )
-            verify_url = request.url_root.rstrip('/') + f"/email/verify?token={token_plain}"
-            _send_email_message(
+            verify_url = email_utils.base_url(request.url_root) + f"/email/verify?token={token_plain}"
+            email_utils.send_verification_email(
                 to_email=email,
-                subject='Verify your ShadeMatch email',
-                plain_text=(
-                    "Thanks for joining ShadeMatch.\n\n"
-                    "To enable email reminders, verify your email here:\n"
-                    f"{verify_url}\n\n"
-                    "If you did not request this, you can ignore this email."
-                ),
+                verify_url=verify_url,
+                ttl_hours=EMAIL_VERIFY_TTL_HOURS,
+                username=user.id,
             )
             db.session.commit()
         except Exception as exc:
@@ -459,16 +391,13 @@ def email_verification_request():
         purpose='verify_email',
         ttl_minutes=EMAIL_VERIFY_TTL_HOURS * 60,
     )
-    verify_url = request.url_root.rstrip('/') + f"/email/verify?token={token_plain}"
+    verify_url = email_utils.base_url(request.url_root) + f"/email/verify?token={token_plain}"
     try:
-        _send_email_message(
+        email_utils.send_verification_email(
             to_email=user.email,
-            subject='Verify your ShadeMatch email',
-            plain_text=(
-                "Please verify your email to receive ShadeMatch reminders.\n\n"
-                f"Verify link: {verify_url}\n\n"
-                "If you did not request this, please ignore this email."
-            ),
+            verify_url=verify_url,
+            ttl_hours=EMAIL_VERIFY_TTL_HOURS,
+            username=user.id,
         )
         db.session.commit()
     except Exception as exc:
@@ -519,16 +448,12 @@ def email_recover_id():
         purpose='recover_id',
         ttl_minutes=EMAIL_RECOVERY_TTL_MINUTES,
     )
-    verify_url = request.url_root.rstrip('/') + f"/email/recover-id/confirm?token={token_plain}"
+    recovery_url = email_utils.base_url(request.url_root) + f"/email/recover-id/confirm?token={token_plain}"
     try:
-        _send_email_message(
+        email_utils.send_recovery_email(
             to_email=user.email,
-            subject='ShadeMatch ID recovery',
-            plain_text=(
-                "We received an ID recovery request.\n\n"
-                f"Open this link to view your ShadeMatch ID: {verify_url}\n\n"
-                f"This link expires in {EMAIL_RECOVERY_TTL_MINUTES} minutes."
-            ),
+            recovery_url=recovery_url,
+            ttl_minutes=EMAIL_RECOVERY_TTL_MINUTES,
         )
         db.session.commit()
     except Exception as exc:
@@ -559,6 +484,61 @@ def email_recover_id_confirm():
         'email_verify_result.html',
         success=True,
         message=f'Your ShadeMatch ID is: {user.id}',
+    )
+
+
+@main.route('/email/unsubscribe', methods=['GET', 'POST'])
+def email_unsubscribe():
+    """One-click unsubscribe endpoint (RFC 8058 + plain link).
+
+    GET shows a friendly confirmation page; POST is the one-click variant
+    invoked by Gmail/Yahoo/Apple Mail when they hit the URL listed in
+    ``List-Unsubscribe-Post: List-Unsubscribe=One-Click``.
+    """
+    token = (request.args.get('token') or request.form.get('token') or '').strip()
+    user_id = email_utils.verify_unsubscribe_token(token)
+
+    if not user_id:
+        if request.method == 'POST':
+            return ('', 400)
+        return render_template(
+            'email_unsubscribe_result.html',
+            success=False,
+            message='This unsubscribe link is invalid or has expired. Please open ShadeMatch and update your email preferences from your account.',
+        )
+
+    user = User.query.get(user_id)
+    if not user:
+        if request.method == 'POST':
+            return ('', 404)
+        return render_template(
+            'email_unsubscribe_result.html',
+            success=False,
+            message='We could not find your account. It may have been removed already.',
+        )
+
+    if user.email_opt_in_reminders:
+        user.email_opt_in_reminders = False
+        db.session.commit()
+
+    if request.method == 'POST':
+        return ('', 200)
+
+    masked_email = (user.email or '').lower()
+    if '@' in masked_email:
+        local, _, domain = masked_email.partition('@')
+        if len(local) > 2:
+            local = local[0] + '•' * max(1, len(local) - 2) + local[-1]
+        masked_email = f'{local}@{domain}'
+
+    return render_template(
+        'email_unsubscribe_result.html',
+        success=True,
+        message=(
+            f"You'll no longer receive ShadeMatch reminder emails"
+            + (f" at {masked_email}" if masked_email else '')
+            + ". Transactional messages (verification or ID recovery) may still be sent when you take an action that requires them."
+        ),
     )
 
 
@@ -2752,20 +2732,29 @@ def push_send_daily():
     email_failed = 0
     email_skipped_unverified = 0
 
-    def _build_push_payload(user_id):
-        """Return personalized push payload dict for this user."""
+    def _build_personalized_context(user_id):
+        """Compute per-user reminder context, shared by push + email channels.
+
+        Returns a dict with: ``is_maxed_out``, ``best_tc``, ``best_rem``,
+        ``completed``, ``total``, ``current_streak``. On any error it falls
+        back to a generic context so we still send *something* friendly.
+        """
         try:
             quota = compute_quota_progress(user_id)
+            up = UserProgress.query.filter_by(user_id=user_id).first()
+            current_streak = int(up.current_streak) if up else 0
+
             if quota['is_maxed_out']:
                 return {
-                    'title': 'ShadeMatch',
-                    'body': "All colors mastered — keep your streak alive with today's challenge!",
-                    'url': '/',
-                    'icon': '/static/icons/icon-192.png',
+                    'is_maxed_out': True,
+                    'best_tc': None,
+                    'best_rem': None,
+                    'completed': quota['completed_colors'],
+                    'total': quota['total_tracked_colors'],
+                    'current_streak': current_streak,
                 }
-            # Find nearest actionable deficit among sum-drop-eligible colors
+
             color_map = quota['color_quota_map']
-            up = UserProgress.query.filter_by(user_id=user_id).first()
             cap = int(up.max_sum_drop_unlocked) if up else 4
             eff = _effective_sum_cap(cap)
             tc_rows = [
@@ -2781,32 +2770,106 @@ def push_send_daily():
                     best_tc = tc
                     best_rem = rem
 
-            completed = quota['completed_colors']
-            total = quota['total_tracked_colors']
-            if best_tc:
-                body = (
-                    f"Today's challenge is live — {best_tc.name} needs "
-                    f"{best_rem} more attempt{'s' if best_rem != 1 else ''} "
-                    f"({completed}/{total} colors done)"
-                )
-            else:
-                body = (
-                    f"Today's palette challenge is live — "
-                    f"{completed}/{total} colors complete so far!"
-                )
             return {
-                'title': 'ShadeMatch Daily Challenge',
-                'body': body,
-                'url': '/',
-                'icon': '/static/icons/icon-192.png',
+                'is_maxed_out': False,
+                'best_tc': best_tc,
+                'best_rem': best_rem,
+                'completed': quota['completed_colors'],
+                'total': quota['total_tracked_colors'],
+                'current_streak': current_streak,
             }
         except Exception:
             return {
-                'title': 'ShadeMatch Daily Challenge',
-                'body': "Today's palette challenge is live — can you match every shade?",
-                'url': '/',
-                'icon': '/static/icons/icon-192.png',
+                'is_maxed_out': False,
+                'best_tc': None,
+                'best_rem': None,
+                'completed': 0,
+                'total': 0,
+                'current_streak': 0,
             }
+
+    def _build_push_payload(user_id):
+        """Return personalized push payload dict for this user."""
+        ctx = _build_personalized_context(user_id)
+        if ctx['is_maxed_out']:
+            body = "All colors mastered — keep your streak alive with today's challenge!"
+        elif ctx['best_tc']:
+            body = (
+                f"Today's challenge is live — {ctx['best_tc'].name} needs "
+                f"{ctx['best_rem']} more attempt{'s' if ctx['best_rem'] != 1 else ''} "
+                f"({ctx['completed']}/{ctx['total']} colors done)"
+            )
+        elif ctx['total']:
+            body = (
+                f"Today's palette challenge is live — "
+                f"{ctx['completed']}/{ctx['total']} colors complete so far!"
+            )
+        else:
+            body = "Today's palette challenge is live — can you match every shade?"
+        return {
+            'title': 'ShadeMatch Daily Challenge',
+            'body': body,
+            'url': '/',
+            'icon': '/static/icons/icon-192.png',
+        }
+
+    def _build_email_reminder_context(user):
+        """Build the rich Jinja context consumed by the daily reminder email."""
+        ctx = _build_personalized_context(user.id)
+        cta_url = email_utils.base_url(request.url_root) + '/'
+
+        stats = []
+        if ctx['current_streak']:
+            stats.append({
+                'label': 'Day streak',
+                'value': f"{ctx['current_streak']}🔥" if ctx['current_streak'] >= 3 else str(ctx['current_streak']),
+            })
+        if ctx['total']:
+            stats.append({'label': 'Colors mastered', 'value': f"{ctx['completed']}/{ctx['total']}"})
+
+        if ctx['is_maxed_out']:
+            return {
+                'subject': "Streak day — keep your run alive",
+                'eyebrow': 'You mastered the palette',
+                'headline': "Keep your streak alive today",
+                'subhead': "Every color in the catalog is mastered. A single mix today keeps your run going — go for a personal best Delta-E?",
+                'preheader': 'A quick mix today protects your streak.',
+                'cta_url': cta_url,
+                'cta_label': 'Open today\'s challenge →',
+                'stats': stats,
+                'tip': 'Even a 30-second attempt counts toward your streak.',
+            }
+
+        best_tc = ctx['best_tc']
+        if best_tc:
+            attempts_word = 'attempt' if ctx['best_rem'] == 1 else 'attempts'
+            swatch_hex = f"#{best_tc.r:02X}{best_tc.g:02X}{best_tc.b:02X}"
+            return {
+                'subject': f"Today's challenge: {best_tc.name}",
+                'eyebrow': "Today's target color",
+                'headline': f"{best_tc.name} is calling, {user.id}",
+                'subhead': f"You're {ctx['best_rem']} {attempts_word} away from mastering this shade. Today is a great day to close it out.",
+                'preheader': f"{best_tc.name} needs {ctx['best_rem']} more {attempts_word} — open the daily challenge.",
+                'swatch_hex': swatch_hex,
+                'swatch_label': best_tc.name,
+                'swatch_caption': f"{ctx['best_rem']} {attempts_word} to master",
+                'cta_url': cta_url,
+                'cta_label': f"Mix {best_tc.name} now →",
+                'stats': stats,
+                'tip': 'Match the lightness first, then nudge the hue — a single drop can change everything.',
+            }
+
+        return {
+            'subject': "Today's ShadeMatch challenge is live",
+            'eyebrow': "Today's palette",
+            'headline': "Your daily challenge is ready",
+            'subhead': "Mix today's colors and watch your progress climb. Even one attempt keeps the streak alive.",
+            'preheader': 'Open the daily challenge — every drop counts.',
+            'cta_url': cta_url,
+            'cta_label': "Open today's challenge →",
+            'stats': stats,
+            'tip': 'Aim for low Delta-E by tweaking one drop at a time.',
+        }
 
     if push_ready:
         for sub in subs:
@@ -2839,12 +2902,13 @@ def push_send_daily():
         if not user.email_verified_at:
             email_skipped_unverified += 1
             continue
-        payload_dict = _build_push_payload(user.id)
         try:
-            _send_email_message(
+            email_ctx = _build_email_reminder_context(user)
+            email_utils.send_daily_reminder_email(
                 to_email=user.email,
-                subject=payload_dict.get('title') or 'ShadeMatch Daily Challenge',
-                plain_text=(payload_dict.get('body') or "Today's daily challenge is live!") + "\n\nhttps://shadematch.app/",
+                user_id=user.id,
+                context=email_ctx,
+                request_url_root=request.url_root,
             )
             email_sent += 1
         except Exception as exc:
