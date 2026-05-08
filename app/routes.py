@@ -211,7 +211,7 @@ def stat_plot(plot_id: str):
     if pid not in ALLOWED_PLOT_IDS:
         return jsonify({'status': 'error', 'message': 'unknown plot id'}), 404
     plot_options = None
-    if pid in ('fw_attempt_network', 'attempt_deltae_timeline', 'archetype_deltae_trajectories'):
+    if pid in ('fw_attempt_network', 'attempt_deltae_timeline', 'archetype_deltae_trajectories', 'archetype_compare_trajectories'):
         plot_options = {}
         au = request.args.get('attempt_uuid')
         if au and str(au).strip():
@@ -222,6 +222,18 @@ def stat_plot(plot_id: str):
         archetype = request.args.get('archetype')
         if archetype and str(archetype).strip():
             plot_options['archetype'] = str(archetype).strip()
+        if pid == 'attempt_deltae_timeline':
+            view_mode = request.args.get('view_mode')
+            if view_mode and str(view_mode).strip():
+                plot_options['view_mode'] = str(view_mode).strip().lower()
+        if pid == 'archetype_compare_trajectories':
+            raw = request.args.get('archetypes')
+            if raw and str(raw).strip():
+                plot_options['archetypes'] = [
+                    part.strip()
+                    for part in str(raw).split(',')
+                    if part and part.strip()
+                ]
     try:
         png = get_plot_png(pid, plot_options=plot_options)
     except Exception as e:
@@ -2284,11 +2296,47 @@ def stat_summary():
                 SELECT
                   ma.target_color_id,
                   COALESCE(tc.name, '(unknown)') AS target_name,
+                  tc.r AS target_r,
+                  tc.g AS target_g,
+                  tc.b AS target_b,
+                  MAX(
+                    COALESCE(tc.drop_red, 0)
+                    + COALESCE(tc.drop_yellow, 0)
+                    + COALESCE(tc.drop_white, 0)
+                    + COALESCE(tc.drop_blue, 0)
+                    + COALESCE(tc.drop_black, 0)
+                  )::bigint AS target_total_drops,
                   COUNT(*)::bigint AS n_attempts
                 FROM mixing_attempts ma
                 LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
-                GROUP BY ma.target_color_id, COALESCE(tc.name, '(unknown)')
+                GROUP BY ma.target_color_id, COALESCE(tc.name, '(unknown)'), tc.r, tc.g, tc.b
                 ORDER BY n_attempts DESC, target_name
+                """
+            )
+        ).mappings().all()
+
+        unplayed_target_colors = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  tc.id AS target_color_id,
+                  COALESCE(tc.name, '(unknown)') AS target_name,
+                  tc.r AS target_r,
+                  tc.g AS target_g,
+                  tc.b AS target_b,
+                  (
+                    COALESCE(tc.drop_red, 0)
+                    + COALESCE(tc.drop_yellow, 0)
+                    + COALESCE(tc.drop_white, 0)
+                    + COALESCE(tc.drop_blue, 0)
+                    + COALESCE(tc.drop_black, 0)
+                  )::bigint AS target_total_drops
+                FROM target_colors tc
+                LEFT JOIN mixing_attempts ma ON ma.target_color_id = tc.id
+                GROUP BY tc.id, COALESCE(tc.name, '(unknown)'), tc.r, tc.g, tc.b,
+                         tc.drop_red, tc.drop_yellow, tc.drop_white, tc.drop_blue, tc.drop_black
+                HAVING COUNT(ma.attempt_uuid) = 0
+                ORDER BY tc.id
                 """
             )
         ).mappings().all()
@@ -2373,6 +2421,7 @@ def stat_summary():
                 'age_pyramid': [dict(r) for r in age_pyramid],
                 'plays_per_user': [dict(r) for r in plays_per_user],
                 'attempts_per_color': [dict(r) for r in attempts_per_color],
+                'unplayed_target_colors': [dict(r) for r in unplayed_target_colors],
                 'delta_e_per_color': [dict(r) for r in delta_e_per_color],
                 'elapsed_per_color': [dict(r) for r in elapsed_per_color],
                 'controlled_by_attempt': [dict(r) for r in controlled_by_attempt],
@@ -2547,6 +2596,7 @@ def stat_summary():
             'age_pyramid': [dict(r) for r in age_pyramid],
             'plays_per_user': [dict(r) for r in plays_per_user],
             'attempts_per_color': [dict(r) for r in attempts_per_color],
+            'unplayed_target_colors': [dict(r) for r in unplayed_target_colors],
             'delta_e_per_color': [dict(r) for r in delta_e_per_color],
             'elapsed_per_color': [dict(r) for r in elapsed_per_color],
             'controlled_by_attempt': [dict(r) for r in controlled_by_attempt],

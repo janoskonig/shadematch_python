@@ -97,13 +97,33 @@
     cursor: pointer;
     font-size: 0.85rem;
   }
-  .advanced-only { display: none; }
-  .advanced-only.is-visible { display: block; }
-  #advancedLoadStatus {
-    margin-left: 10px;
+  .tab-controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    margin: 10px 0 16px;
+  }
+  .tab-controls button {
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-elevated, #eee);
+    cursor: pointer;
+    font-size: 0.84rem;
+  }
+  .tab-controls button.is-active {
+    background: #1d4ed8;
+    color: white;
+    border-color: #1d4ed8;
+  }
+  #tabLoadStatus {
+    margin-left: 6px;
     color: var(--text-secondary);
     font-size: 0.84rem;
   }
+  .tab-panel { display: none; }
+  .tab-panel.is-active { display: block; }
 </style>
 {% endblock %}
 
@@ -113,10 +133,20 @@
     <h1>Stats dashboard</h1>
     <p>Focused telemetry view with attempt-controlled color metrics.</p>
   </div>
+  <div class="tab-controls">
+    <button type="button" class="tab-btn is-active" data-tab-target="core">Core</button>
+    <button type="button" class="tab-btn" data-tab-target="quality">Quality</button>
+    <button type="button" class="tab-btn" data-tab-target="analysis">Deep analysis</button>
+    <button type="button" class="tab-btn" data-tab-target="strategy">Strategy</button>
+    <span id="tabLoadStatus"></span>
+  </div>
 
-  <div class="cards" id="overviewCards"></div>
+  <section class="section tab-panel is-active" data-tab="core" id="stat-overview">
+    <h2>Overview</h2>
+    <div class="cards" id="overviewCards"></div>
+  </section>
 
-  <section class="section advanced-only">
+  <section class="section tab-panel" data-tab="quality" id="stat-quality-controls">
     <h2>0) Data quality controls</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Per-attempt environment snapshots from <code>mixing_attempts.client_env_json</code>: time of day, screen color gamut, and full-screen state. Useful as exclusion / stratification variables when interpreting color-task results.
@@ -142,7 +172,7 @@
     </div>
   </section>
 
-  <section class="section advanced-only">
+  <section class="section tab-panel" data-tab="analysis" id="stat-skip-deltae">
     <h2>Skipped: perception vs DeltaE</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       DeltaE at skip time from <code>mixing_sessions</code> when the user picked a skip perception (stored as <code>skip_perception</code>).
@@ -167,7 +197,7 @@
     <div class="cards" id="skipUnacceptableDeltaECards" style="margin-top:0;margin-bottom:0;"></div>
   </section>
 
-  <section class="section">
+  <section class="section tab-panel" data-tab="analysis" id="stat-milestones">
     <h2>DeltaE &lt; 2.0 milestones</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       First point at which users cross DeltaE &lt; 2.0, measured both by attempt number (across repeated plays of the same color) and by step index inside attempts.
@@ -188,7 +218,7 @@
     </div>
   </section>
 
-  <section class="section">
+  <section class="section tab-panel is-active" data-tab="core" id="stat-age">
     <h2>1) Registered users and age pyramid</h2>
     <div class="chart-grid">
       <div class="chart-card">
@@ -199,64 +229,64 @@
     <div class="table-wrap" style="margin-top:10px;"><table id="agePyramidTable"></table></div>
   </section>
 
-  <section class="section">
+  <section class="section tab-panel is-active" data-tab="core" id="stat-plays-user">
     <h2>2) Number of all plays per user</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Scatter: plays per user (top 30)</p>
-        <img class="stat-plot-img stat-plot" data-plot="plays_per_user" alt="Plays per user (scatter)" loading="lazy" />
+        <p class="chart-title">Bar: plays per user (top 30)</p>
+        <img class="stat-plot-img stat-plot" data-plot="plays_per_user" alt="Plays per user (bar)" loading="lazy" />
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="playsPerUserTable"></table></div>
   </section>
 
-  <section class="section">
+  <section class="section tab-panel is-active" data-tab="core" id="stat-attempts-color">
     <h2>3) Attempts per color</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Scatter: attempts by target color</p>
-        <img class="stat-plot-img stat-plot" data-plot="attempts_per_color" alt="Attempts per color (scatter)" loading="lazy" />
+        <p class="chart-title">Bar: attempts by target_color_id (color-coded)</p>
+        <img class="stat-plot-img stat-plot" data-plot="attempts_per_color" alt="Attempts per color (bar)" loading="lazy" />
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="attemptsPerColorTable"></table></div>
   </section>
 
-  <section class="section">
+  <section class="section tab-panel is-active" data-tab="core" id="stat-unplayed-targets">
+    <h2>3b) Target colors never attempted</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      Target colors that currently have zero rows in <code>mixing_attempts</code>.
+    </p>
+    <div class="cards" id="unplayedTargetCards"></div>
+    <div class="table-wrap" style="margin-top:10px;"><table id="unplayedTargetTable"></table></div>
+  </section>
+
+  <section class="section tab-panel is-active" data-tab="core" id="stat-deltae-color">
     <h2>4) DeltaE of each color mix</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Swarm: final DeltaE per color</p>
+        <p class="chart-title">Quantile band: final DeltaE per color</p>
         <img class="stat-plot-img stat-plot" data-plot="deltae_per_color" alt="DeltaE per color (swarm)" loading="lazy" />
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="deltaETable"></table></div>
   </section>
 
-  <section class="section">
+  <section class="section tab-panel is-active" data-tab="core" id="stat-elapsed-color">
     <h2>5) Elapsed time of each color mix</h2>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Swarm: elapsed time per color</p>
+        <p class="chart-title">Quantile band: elapsed time per color</p>
         <img class="stat-plot-img stat-plot" data-plot="elapsed_per_color" alt="Elapsed time per color (swarm)" loading="lazy" />
       </div>
       <div class="chart-card">
-        <p class="chart-title">Scatter: DeltaE vs elapsed time</p>
-        <img class="stat-plot-img stat-plot" data-plot="deltae_elapsed_scatter" alt="DeltaE vs elapsed scatter" loading="lazy" />
+        <p class="chart-title">Hexbin: DeltaE vs elapsed time</p>
+        <img class="stat-plot-img stat-plot" data-plot="deltae_elapsed_scatter" alt="DeltaE vs elapsed hexbin" loading="lazy" />
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="elapsedTable"></table></div>
   </section>
 
-  <section class="section">
-    <h2>Advanced analyses</h2>
-    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
-      Heavy, event-level and model-based analyses are loaded on demand.
-    </p>
-    <button type="button" id="loadAdvancedBtn">Load advanced sections</button>
-    <span id="advancedLoadStatus">Not loaded</span>
-  </section>
-
-  <section class="section advanced-only">
+  <section class="section tab-panel" data-tab="analysis" id="stat-multivariate">
     <h2>5b) Exploratory multivariate analyses</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Multivariate exploration over per-attempt metrics
@@ -289,7 +319,7 @@
     </div>
   </section>
 
-  <section class="section">
+  <section class="section tab-panel is-active" data-tab="core" id="stat-controlled">
     <h2>6) Attempt-controlled metrics</h2>
     <div class="chart-grid">
       <div class="chart-card">
@@ -304,18 +334,18 @@
     <div class="table-wrap" style="margin-top:10px;"><table id="controlledTable"></table></div>
   </section>
 
-  <section class="section advanced-only">
+  <section class="section tab-panel" data-tab="analysis" id="stat-correlations">
     <h2>6b) Exploratory correlations</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Scatter plots include Pearson correlation in the title. Heatmap and league summarize attempt-level linear associations.
     </p>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">Scatter: Final DeltaE vs number of steps</p>
+        <p class="chart-title">Hexbin: Final DeltaE vs number of steps</p>
         <img class="stat-plot-img stat-plot" data-plot="scatter_deltae_vs_steps" data-tier="advanced" alt="Scatter final DeltaE vs steps" loading="lazy" />
       </div>
       <div class="chart-card">
-        <p class="chart-title">Scatter: Elapsed time vs number of steps</p>
+        <p class="chart-title">Hexbin: Elapsed time vs number of steps</p>
         <img class="stat-plot-img stat-plot" data-plot="scatter_duration_vs_steps" data-tier="advanced" alt="Scatter elapsed time vs steps" loading="lazy" />
       </div>
       <div class="chart-card">
@@ -327,13 +357,13 @@
         <img class="stat-plot-img stat-plot" data-plot="correlation_league" data-tier="advanced" alt="Correlation league" loading="lazy" />
       </div>
       <div class="chart-card">
-        <p class="chart-title">Scatter: Final DeltaE vs recipe similarity</p>
-        <img class="stat-plot-img stat-plot" data-plot="deltae_vs_similarity" data-tier="advanced" alt="Scatter final DeltaE vs recipe similarity" loading="lazy" />
+        <p class="chart-title">Hexbin: Final DeltaE vs recipe similarity</p>
+        <img class="stat-plot-img stat-plot" data-plot="deltae_vs_similarity" data-tier="advanced" alt="Hexbin final DeltaE vs recipe similarity" loading="lazy" />
       </div>
     </div>
   </section>
 
-  <section class="section advanced-only">
+  <section class="section tab-panel" data-tab="analysis" id="stat-recipe-sim">
     <h2>6c) Recipe-ratio similarity (perfect vs deviant)</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Similarity compares normalized drop ratios, so scaled recipes are treated as equivalent. Perfect means ratio-identical; deviant means any ratio difference.
@@ -342,7 +372,7 @@
     <div class="table-wrap" style="margin-top:10px;"><table id="recipeSimilaritySampleTable"></table></div>
   </section>
 
-  <section class="section advanced-only">
+  <section class="section tab-panel" data-tab="analysis" id="stat-models">
     <h2>6d) Attempt models (stable spec, HC3)</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Outcomes: <code>log₁p(final&nbsp;ΔE)</code>, <code>logit(similarity)</code>, and binary <code>perfect_ratio</code> (exact recipe match).
@@ -390,9 +420,15 @@
     </div>
   </section>
 
-  <section class="section advanced-only">
+  <section class="section tab-panel" data-tab="strategy" id="stat-action-timeline">
     <h2>7) Action-level DeltaE trajectory (per attempt)</h2>
     <div class="trajectory-controls">
+      <label>View
+        <select id="trajectoryViewMode" aria-label="Trajectory view mode">
+          <option value="aggregate" selected>Aggregate (recommended)</option>
+          <option value="detailed">Detailed (single attempt)</option>
+        </select>
+      </label>
       <label>Target color
         <select id="trajectoryTargetId" aria-label="Filter attempt trajectory by target color"></select>
       </label>
@@ -409,7 +445,7 @@
     </div>
   </section>
 
-  <section class="section advanced-only">
+  <section class="section tab-panel" data-tab="strategy" id="stat-archetypes">
     <h2>8) Mixing strategy archetypes (rule-based)</h2>
     <p style="margin:0 0 8px;color:var(--text-secondary);font-size:0.88rem;">
       Archetypes are assigned per attempt from action-path behavior (not manually labeled).
@@ -430,6 +466,8 @@
         </tbody>
       </table>
     </div>
+    <div class="cards" id="archetypeSummaryCards" style="margin-top:0;margin-bottom:10px;"></div>
+    <p id="archetypeInsight" style="margin:0 0 8px;color:var(--text-secondary);font-size:0.88rem;"></p>
     <p id="archetypeMeta" style="margin:0 0 8px;color:var(--text-secondary);font-size:0.88rem;"></p>
     <div class="chart-grid">
       <div class="chart-card">
@@ -438,6 +476,14 @@
           <label>Filter archetype
             <select id="archetypeFilterSelect" aria-label="Filter per-attempt table by archetype">
               <option value="">All archetypes</option>
+            </select>
+          </label>
+          <label>Rows shown
+            <select id="archetypeRowLimitSelect" aria-label="Limit rows in per-attempt table">
+              <option value="50">Top 50</option>
+              <option value="100" selected>Top 100</option>
+              <option value="250">Top 250</option>
+              <option value="0">All</option>
             </select>
           </label>
           <span id="archetypeFilterMeta" style="color:var(--text-secondary);font-size:0.82rem;"></span>
@@ -452,7 +498,25 @@
     <div class="chart-grid" style="margin-top:8px;">
       <div class="chart-card">
         <p class="chart-title">DeltaE trajectories for selected archetype</p>
+        <div class="trajectory-controls" style="margin-bottom:8px;">
+          <label>Archetype
+            <select id="archetypeTrajectorySelect" aria-label="Select archetype for trajectory plot">
+              <option value="">All archetypes</option>
+            </select>
+          </label>
+          <button type="button" id="archetypeTrajectoryApplyBtn">Render trajectory</button>
+        </div>
         <img id="archetypeTrajectoryImg" class="stat-plot-img" alt="Archetype trajectory plot" loading="lazy" />
+      </div>
+      <div class="chart-card">
+        <p class="chart-title">Overlay comparison across archetypes</p>
+        <div class="trajectory-controls" style="margin-bottom:8px;">
+          <label>Archetypes (multi-select)
+            <select id="archetypeCompareSelect" multiple size="6" aria-label="Select archetypes for overlay comparison"></select>
+          </label>
+          <button type="button" id="archetypeCompareApplyBtn">Render overlay</button>
+        </div>
+        <img id="archetypeCompareTrajectoryImg" class="stat-plot-img" alt="Overlay archetype trajectory comparison" loading="lazy" />
       </div>
     </div>
     <h3 style="font-size:0.95rem;margin:16px 0 8px;">Archetype across successive attempts</h3>
@@ -497,6 +561,47 @@
     return (100 * Number(x)).toFixed(1) + '%';
   }
 
+  var targetColorByName = {};
+
+  function updateTargetColorMap(rows) {
+    targetColorByName = {};
+    (rows || []).forEach(function(r) {
+      var name = String((r && r.target_name) || '');
+      var rr = Number(r && r.target_r);
+      var gg = Number(r && r.target_g);
+      var bb = Number(r && r.target_b);
+      if (!name || !Number.isFinite(rr) || !Number.isFinite(gg) || !Number.isFinite(bb)) return;
+      if (rr < 0 || rr > 255 || gg < 0 || gg > 255 || bb < 0 || bb > 255) return;
+      targetColorByName[name] = { r: rr, g: gg, b: bb };
+    });
+  }
+
+  function targetRgbForRow(row) {
+    if (!row) return null;
+    var rr = Number(row.target_r);
+    var gg = Number(row.target_g);
+    var bb = Number(row.target_b);
+    if (Number.isFinite(rr) && Number.isFinite(gg) && Number.isFinite(bb)) {
+      if (rr >= 0 && rr <= 255 && gg >= 0 && gg <= 255 && bb >= 0 && bb <= 255) {
+        return { r: rr, g: gg, b: bb };
+      }
+    }
+    var name = String(row.target_name || '');
+    return targetColorByName[name] || null;
+  }
+
+  function targetChip(name, row) {
+    var label = (name === null || name === undefined) ? '—' : String(name);
+    var rgb = targetRgbForRow(row);
+    if (!rgb) return escapeHtml(label);
+    var yiq = (rgb.r * 299 + rgb.g * 587 + rgb.b * 114) / 1000;
+    var fg = yiq >= 145 ? '#111827' : '#f9fafb';
+    var border = yiq >= 145 ? 'rgba(17,24,39,0.18)' : 'rgba(249,250,251,0.28)';
+    return '<span style="display:inline-block;padding:2px 8px;border-radius:8px;background:rgb(' +
+      rgb.r + ',' + rgb.g + ',' + rgb.b + ');color:' + fg + ';border:1px solid ' + border + ';">' +
+      escapeHtml(label) + '</span>';
+  }
+
   function buildTable(el, columns, rows) {
     var html = '<thead><tr>' + columns.map(function(c) { return '<th>' + c.label + '</th>'; }).join('') + '</tr></thead>';
     html += '<tbody>';
@@ -506,7 +611,7 @@
       rows.forEach(function(row) {
         html += '<tr>' + columns.map(function(c) {
           var val = row[c.key];
-          if (c.formatter) val = c.formatter(val);
+          if (c.formatter) val = c.formatter(val, row);
           return '<td>' + val + '</td>';
         }).join('') + '</tr>';
       });
@@ -515,20 +620,12 @@
     el.innerHTML = html;
   }
 
-  function refreshPlots(includeAdvanced) {
+  function refreshPlotsForActiveTab() {
     var t = Date.now();
-    document.querySelectorAll('img.stat-plot').forEach(function(img) {
-      if (!includeAdvanced && img.getAttribute('data-tier') === 'advanced') return;
+    document.querySelectorAll('.tab-panel.is-active img.stat-plot').forEach(function(img) {
       var pid = img.getAttribute('data-plot');
       if (!pid) return;
       img.src = '/api/stat/plot/' + encodeURIComponent(pid) + '.png?t=' + t;
-    });
-  }
-
-  function setAdvancedVisible(visible) {
-    document.querySelectorAll('.advanced-only').forEach(function(el) {
-      if (visible) el.classList.add('is-visible');
-      else el.classList.remove('is-visible');
     });
   }
 
@@ -538,6 +635,8 @@
     var q = '?t=' + Date.now();
     var au = document.getElementById('trajectoryAttemptUuid');
     var tid = document.getElementById('trajectoryTargetId');
+    var mode = document.getElementById('trajectoryViewMode');
+    if (mode && mode.value) q += '&view_mode=' + encodeURIComponent(mode.value);
     if (au && au.value.trim()) {
       q += '&attempt_uuid=' + encodeURIComponent(au.value.trim());
     } else if (tid && tid.value) {
@@ -590,7 +689,7 @@
   var archetypePerAttemptRows = [];
   var archetypePerAttemptColumns = [
     { key: 'attempt_uuid', label: 'Attempt UUID' },
-    { key: 'target_name', label: 'Color' },
+    { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
     { key: 'attempt_no', label: 'Attempt no' },
     { key: 'n_actions', label: 'Actions' },
     { key: 'final_delta_e', label: 'Final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
@@ -610,36 +709,134 @@
 
   function renderArchetypePerAttemptTable() {
     var sel = document.getElementById('archetypeFilterSelect');
+    var limitSel = document.getElementById('archetypeRowLimitSelect');
     var meta = document.getElementById('archetypeFilterMeta');
     var selected = sel && sel.value ? sel.value : '';
     var rows = selected
       ? archetypePerAttemptRows.filter(function(r) { return String(r.archetype || '') === selected; })
       : archetypePerAttemptRows;
+    var total = rows.length;
+    var limit = limitSel ? Number(limitSel.value || 100) : 100;
+    if (Number.isFinite(limit) && limit > 0) {
+      rows = rows.slice(0, limit);
+    }
     buildTable(document.getElementById('archetypePerAttemptTable'), archetypePerAttemptColumns, rows);
-    if (meta) meta.textContent = selected ? ('Showing ' + rows.length + ' attempts') : ('Showing all ' + rows.length + ' attempts');
+    if (meta) {
+      var filterTxt = selected ? ('Filter: ' + selected + '. ') : '';
+      var shownTxt = (rows.length === total) ? ('Showing all ' + total + ' attempts') : ('Showing ' + rows.length + ' of ' + total + ' attempts');
+      meta.textContent = filterTxt + shownTxt + '.';
+    }
   }
 
   function setupArchetypeFilterOptions(rows) {
     archetypePerAttemptRows = rows || [];
     var sel = document.getElementById('archetypeFilterSelect');
-    if (!sel) return;
-    var prev = sel.value || '';
+    var trajSel = document.getElementById('archetypeTrajectorySelect');
+    if (!sel && !trajSel) return;
+    var prev = (sel && sel.value) ? sel.value : ((trajSel && trajSel.value) ? trajSel.value : '');
     var labels = Array.from(new Set(archetypePerAttemptRows.map(function(r) { return String(r.archetype || ''); }).filter(Boolean))).sort();
-    sel.innerHTML = '<option value="">All archetypes</option>' + labels.map(function(label) {
+    var html = '<option value="">All archetypes</option>' + labels.map(function(label) {
       return '<option value="' + label + '">' + label + '</option>';
     }).join('');
-    if (prev && labels.indexOf(prev) >= 0) sel.value = prev;
+    if (sel) sel.innerHTML = html;
+    if (trajSel) trajSel.innerHTML = html;
+    if (prev && labels.indexOf(prev) >= 0) {
+      if (sel) sel.value = prev;
+      if (trajSel) trajSel.value = prev;
+    } else {
+      if (sel) sel.value = '';
+      if (trajSel) trajSel.value = '';
+    }
+    setupArchetypeCompareOptions(labels);
     renderArchetypePerAttemptTable();
     refreshArchetypeTrajectoryPlot();
+    refreshArchetypeComparePlot();
+  }
+
+  function renderArchetypeInsights(arch) {
+    var cardsEl = document.getElementById('archetypeSummaryCards');
+    var insightEl = document.getElementById('archetypeInsight');
+    if (!cardsEl || !insightEl) return;
+    var total = Number((arch && arch.per_attempt_total) || 0);
+    var byColor = (arch && arch.distribution_by_color) || [];
+    var transitions = (arch && arch.archetype_transitions) || [];
+    var same = (arch && arch.archetype_transition_same_rate);
+
+    var counts = {};
+    byColor.forEach(function(r) {
+      var key = String((r && r.archetype) || '');
+      if (!key) return;
+      counts[key] = (counts[key] || 0) + Number((r && r.n_attempts) || 0);
+    });
+    var ranked = Object.keys(counts).map(function(k) { return { archetype: k, n: counts[k] }; })
+      .sort(function(a, b) { return b.n - a.n; });
+    var top = ranked.length ? ranked[0] : null;
+    var topShare = (top && total > 0) ? (top.n / total) : null;
+    var topTransition = transitions.length ? transitions[0] : null;
+
+    var cards = [
+      { k: 'Tagged attempts', v: total || 0 },
+      { k: 'Dominant archetype', v: top ? (top.archetype + ' (' + pctFmt(topShare) + ')') : '—' },
+      { k: 'Transition stability', v: (same === null || same === undefined || Number.isNaN(Number(same))) ? '—' : pctFmt(same) },
+      { k: 'Top transition', v: topTransition ? (topTransition.from_archetype + ' → ' + topTransition.to_archetype + ' (' + (topTransition.n || 0) + ')') : '—' }
+    ];
+    cardsEl.innerHTML = cards.map(function(c) {
+      return '<div class="card"><div class="k">' + escapeHtml(c.k) + '</div><div class="v" style="font-size:1rem;">' + escapeHtml(c.v) + '</div></div>';
+    }).join('');
+
+    if (!top) {
+      insightEl.textContent = 'Not enough tagged attempts yet for a stable archetype profile.';
+      return;
+    }
+    var stabilityTxt = (same === null || same === undefined || Number.isNaN(Number(same)))
+      ? 'successive-attempt stability is not available yet'
+      : ('successive-attempt stability is ' + pctFmt(same));
+    var transitionTxt = topTransition
+      ? ('Most frequent change is ' + topTransition.from_archetype + ' → ' + topTransition.to_archetype + '.')
+      : 'No repeated-attempt transitions yet.';
+    insightEl.textContent = 'Current dominant behavior is ' + top.archetype + ' (' + pctFmt(topShare) + ' of tagged attempts); ' + stabilityTxt + '. ' + transitionTxt;
+  }
+
+  function setupArchetypeCompareOptions(labels) {
+    var sel = document.getElementById('archetypeCompareSelect');
+    if (!sel) return;
+    var prev = Array.from(sel.selectedOptions || []).map(function(o) { return o.value; });
+    var opts = labels || [];
+    sel.innerHTML = opts.map(function(label) {
+      return '<option value="' + escapeHtml(label) + '">' + escapeHtml(label) + '</option>';
+    }).join('');
+    var toSelect = prev.filter(function(v) { return opts.indexOf(v) >= 0; });
+    if (!toSelect.length) toSelect = opts.slice(0, Math.min(4, opts.length));
+    Array.from(sel.options).forEach(function(opt) {
+      opt.selected = toSelect.indexOf(opt.value) >= 0;
+    });
   }
 
   function refreshArchetypeTrajectoryPlot() {
     var img = document.getElementById('archetypeTrajectoryImg');
-    var sel = document.getElementById('archetypeFilterSelect');
+    var sel = document.getElementById('archetypeTrajectorySelect') || document.getElementById('archetypeFilterSelect');
     if (!img || !sel) return;
     var q = '?t=' + Date.now();
     if (sel.value) q += '&archetype=' + encodeURIComponent(sel.value);
     img.src = '/api/stat/plot/archetype_deltae_trajectories.png' + q;
+  }
+
+  function setArchetypeSelection(value) {
+    var v = String(value || '');
+    var sel = document.getElementById('archetypeFilterSelect');
+    var trajSel = document.getElementById('archetypeTrajectorySelect');
+    if (sel) sel.value = v;
+    if (trajSel) trajSel.value = v;
+  }
+
+  function refreshArchetypeComparePlot() {
+    var img = document.getElementById('archetypeCompareTrajectoryImg');
+    var sel = document.getElementById('archetypeCompareSelect');
+    if (!img || !sel) return;
+    var selected = Array.from(sel.selectedOptions || []).map(function(o) { return o.value; }).filter(Boolean);
+    var q = '?t=' + Date.now();
+    if (selected.length) q += '&archetypes=' + encodeURIComponent(selected.join(','));
+    img.src = '/api/stat/plot/archetype_compare_trajectories.png' + q;
   }
 
   function escapeHtml(s) {
@@ -837,6 +1034,7 @@
     var resp = await fetch('/api/stat/summary?scope=basic');
     var data = await resp.json();
     if (data.status !== 'success') throw new Error(data.message || 'Failed to load stats');
+    updateTargetColorMap(data.attempts_per_color || []);
 
     renderOverview(data.overview || {});
 
@@ -863,16 +1061,36 @@
       document.getElementById('attemptsPerColorTable'),
       [
         { key: 'target_color_id', label: 'Target ID' },
-        { key: 'target_name', label: 'Color' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
+        { key: 'target_total_drops', label: 'Total drops in target recipe' },
         { key: 'n_attempts', label: 'Attempts' }
       ],
       data.attempts_per_color || []
     );
 
+    var unplayed = data.unplayed_target_colors || [];
+    var unplayedCardsEl = document.getElementById('unplayedTargetCards');
+    if (unplayedCardsEl) {
+      unplayedCardsEl.innerHTML = [
+        { k: 'Never attempted target colors', v: unplayed.length }
+      ].map(function(c) {
+        return '<div class="card"><div class="k">' + c.k + '</div><div class="v">' + c.v + '</div></div>';
+      }).join('');
+    }
+    buildTable(
+      document.getElementById('unplayedTargetTable'),
+      [
+        { key: 'target_color_id', label: 'Target ID' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
+        { key: 'target_total_drops', label: 'Total drops in target recipe' }
+      ],
+      unplayed
+    );
+
     buildTable(
       document.getElementById('deltaETable'),
       [
-        { key: 'target_name', label: 'Color' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
         { key: 'n_attempts', label: 'Attempts' },
         { key: 'mean_delta_e', label: 'Mean DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
         { key: 'median_delta_e', label: 'Median DeltaE', formatter: function(v) { return fmtNumber(v, 3); } }
@@ -883,7 +1101,7 @@
     buildTable(
       document.getElementById('elapsedTable'),
       [
-        { key: 'target_name', label: 'Color' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
         { key: 'n_attempts', label: 'Attempts' },
         { key: 'mean_elapsed_sec', label: 'Mean elapsed (s)', formatter: function(v) { return fmtNumber(v, 2); } },
         { key: 'median_elapsed_sec', label: 'Median elapsed (s)', formatter: function(v) { return fmtNumber(v, 2); } }
@@ -894,7 +1112,7 @@
     buildTable(
       document.getElementById('controlledTable'),
       [
-        { key: 'target_name', label: 'Color' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
         { key: 'attempt_no', label: 'Attempt no' },
         { key: 'n_attempts', label: 'N' },
         { key: 'mean_delta_e', label: 'Mean DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
@@ -923,7 +1141,7 @@
     buildTable(
       document.getElementById('recipeSimilaritySampleTable'),
       [
-        { key: 'target_name', label: 'Color' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
         { key: 'final_delta_e', label: 'Final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
         { key: 'similarity', label: 'Similarity', formatter: function(v) { return fmtNumber(v, 4); } },
         { key: 'ratio_is_perfect', label: 'Perfect ratio', formatter: function(v) { return v ? 'yes' : 'no'; } }
@@ -944,11 +1162,12 @@
         ? ('Showing first ' + ((arch.per_attempt_tags || []).length) + ' tagged attempts out of ' + total + '.')
         : ('Tagged attempts: ' + total + '.')) + sameStr;
     }
+    renderArchetypeInsights(arch);
     setupArchetypeFilterOptions(arch.per_attempt_tags || []);
     buildTable(
       document.getElementById('archetypeByColorTable'),
       [
-        { key: 'target_name', label: 'Color' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
         { key: 'archetype', label: 'Archetype' },
         { key: 'n_attempts', label: 'N attempts' },
         { key: 'total_attempts_for_color', label: 'Total for color' },
@@ -980,7 +1199,7 @@
       document.getElementById('archetypeSequenceSamplesTable'),
       [
         { key: 'user_id', label: 'User' },
-        { key: 'target_name', label: 'Color' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
         { key: 'n_steps', label: 'Steps' },
         { key: 'sequence', label: 'attempt_no:archetype chain' }
       ],
@@ -997,13 +1216,14 @@
         }).join('');
     }
 
-    refreshPlots(false);
+    refreshPlotsForActiveTab();
   }
 
   async function loadStatsAdvanced() {
     var resp = await fetch('/api/stat/summary');
     var data = await resp.json();
     if (data.status !== 'success') throw new Error(data.message || 'Failed to load advanced stats');
+    updateTargetColorMap(data.attempts_per_color || []);
 
     renderSkipPerceptionDeltaE('skipIdenticalDeltaECards', data.skipped_identical_delta_e || {});
     renderSkipPerceptionDeltaE('skipAcceptableDeltaECards', data.skipped_acceptable_delta_e || {});
@@ -1063,7 +1283,7 @@
     buildTable(
       document.getElementById('recipeSimilaritySampleTable'),
       [
-        { key: 'target_name', label: 'Color' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
         { key: 'final_delta_e', label: 'Final DeltaE', formatter: function(v) { return fmtNumber(v, 3); } },
         { key: 'similarity', label: 'Similarity', formatter: function(v) { return fmtNumber(v, 4); } },
         { key: 'ratio_is_perfect', label: 'Perfect ratio', formatter: function(v) { return v ? 'yes' : 'no'; } }
@@ -1088,7 +1308,7 @@
     buildTable(
       document.getElementById('archetypeByColorTable'),
       [
-        { key: 'target_name', label: 'Color' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
         { key: 'archetype', label: 'Archetype' },
         { key: 'n_attempts', label: 'N attempts' },
         { key: 'total_attempts_for_color', label: 'Total for color' },
@@ -1120,50 +1340,132 @@
       document.getElementById('archetypeSequenceSamplesTable'),
       [
         { key: 'user_id', label: 'User' },
-        { key: 'target_name', label: 'Color' },
+        { key: 'target_name', label: 'Color', formatter: function(v, row) { return targetChip(v, row); } },
         { key: 'n_steps', label: 'Steps' },
         { key: 'sequence', label: 'attempt_no:archetype chain' }
       ],
       arch.archetype_sequence_samples || []
     );
 
-    refreshPlots(true);
-    refreshAttemptTimelinePlot();
-    refreshArchetypeTrajectoryPlot();
+    refreshPlotsForActiveTab();
+    if (activeTab === 'strategy') {
+      refreshAttemptTimelinePlot();
+      refreshArchetypeTrajectoryPlot();
+      refreshArchetypeComparePlot();
+    }
   }
 
   var trajectoryBtn = document.getElementById('trajectoryApplyBtn');
   if (trajectoryBtn) trajectoryBtn.addEventListener('click', refreshAttemptTimelinePlot);
+  var trajectoryViewMode = document.getElementById('trajectoryViewMode');
+  if (trajectoryViewMode) trajectoryViewMode.addEventListener('change', refreshAttemptTimelinePlot);
   var archetypeSel = document.getElementById('archetypeFilterSelect');
   if (archetypeSel) archetypeSel.addEventListener('change', function() {
+    setArchetypeSelection(archetypeSel.value);
     renderArchetypePerAttemptTable();
     refreshArchetypeTrajectoryPlot();
   });
+  var archetypeTrajectorySel = document.getElementById('archetypeTrajectorySelect');
+  if (archetypeTrajectorySel) archetypeTrajectorySel.addEventListener('change', function() {
+    setArchetypeSelection(archetypeTrajectorySel.value);
+    renderArchetypePerAttemptTable();
+    refreshArchetypeTrajectoryPlot();
+  });
+  var archetypeTrajectoryBtn = document.getElementById('archetypeTrajectoryApplyBtn');
+  if (archetypeTrajectoryBtn) archetypeTrajectoryBtn.addEventListener('click', function() {
+    refreshArchetypeTrajectoryPlot();
+  });
+  var archetypeCompareBtn = document.getElementById('archetypeCompareApplyBtn');
+  if (archetypeCompareBtn) archetypeCompareBtn.addEventListener('click', function() {
+    refreshArchetypeComparePlot();
+  });
+  var archetypeCompareSel = document.getElementById('archetypeCompareSelect');
+  if (archetypeCompareSel) archetypeCompareSel.addEventListener('change', function() {
+    refreshArchetypeComparePlot();
+  });
+  var archetypeLimitSel = document.getElementById('archetypeRowLimitSelect');
+  if (archetypeLimitSel) archetypeLimitSel.addEventListener('change', function() {
+    renderArchetypePerAttemptTable();
+  });
 
-  var advancedLoadBtn = document.getElementById('loadAdvancedBtn');
-  var advancedLoadStatus = document.getElementById('advancedLoadStatus');
+  var tabLoadStatus = document.getElementById('tabLoadStatus');
+  var activeTab = 'core';
+  var qualityLoaded = false;
   var advancedLoaded = false;
+  var advancedLoadPromise = null;
 
-  if (advancedLoadBtn) advancedLoadBtn.addEventListener('click', function() {
-    if (advancedLoaded) return;
-    advancedLoadBtn.disabled = true;
-    if (advancedLoadStatus) advancedLoadStatus.textContent = 'Loading...';
-    loadStatsAdvanced().then(function() {
-      advancedLoaded = true;
-      setAdvancedVisible(true);
-      if (advancedLoadStatus) advancedLoadStatus.textContent = 'Loaded';
-      advancedLoadBtn.textContent = 'Advanced loaded';
+  function setTabButtons(tab) {
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+      var target = btn.getAttribute('data-tab-target');
+      if (target === tab) btn.classList.add('is-active');
+      else btn.classList.remove('is-active');
+    });
+  }
+
+  function setActiveTab(tab) {
+    activeTab = tab;
+    document.querySelectorAll('.tab-panel').forEach(function(panel) {
+      if (panel.getAttribute('data-tab') === tab) panel.classList.add('is-active');
+      else panel.classList.remove('is-active');
+    });
+    setTabButtons(tab);
+    refreshPlotsForActiveTab();
+  }
+
+  function ensureQualityLoaded() {
+    if (qualityLoaded) return Promise.resolve();
+    if (tabLoadStatus) tabLoadStatus.textContent = 'Loading quality tab...';
+    return loadQualitySummary().then(function() {
+      qualityLoaded = true;
+      if (tabLoadStatus) tabLoadStatus.textContent = '';
     }).catch(function(err) {
-      if (advancedLoadStatus) advancedLoadStatus.textContent = 'Failed: ' + err.message;
-      advancedLoadBtn.disabled = false;
+      if (tabLoadStatus) tabLoadStatus.textContent = 'Quality load failed: ' + err.message;
+      throw err;
+    });
+  }
+
+  function ensureAdvancedLoaded() {
+    if (advancedLoaded) return Promise.resolve();
+    if (advancedLoadPromise) return advancedLoadPromise;
+    if (tabLoadStatus) tabLoadStatus.textContent = 'Loading deep analysis...';
+    advancedLoadPromise = loadStatsAdvanced().then(function() {
+      advancedLoaded = true;
+      advancedLoadPromise = null;
+      if (tabLoadStatus) tabLoadStatus.textContent = '';
+    }).catch(function(err) {
+      advancedLoadPromise = null;
+      if (tabLoadStatus) tabLoadStatus.textContent = 'Deep analysis load failed: ' + err.message;
+      throw err;
+    });
+    return advancedLoadPromise;
+  }
+
+  document.querySelectorAll('.tab-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var tab = btn.getAttribute('data-tab-target') || 'core';
+      setActiveTab(tab);
+      if (tab === 'quality') {
+        ensureQualityLoaded().catch(function() {});
+        return;
+      }
+      if (tab === 'analysis' || tab === 'strategy') {
+        ensureAdvancedLoaded().then(function() {
+          if (activeTab === 'strategy') {
+            refreshAttemptTimelinePlot();
+            refreshArchetypeTrajectoryPlot();
+            refreshArchetypeComparePlot();
+          } else if (activeTab === 'analysis') {
+            refreshPlotsForActiveTab();
+          }
+        }).catch(function() {});
+      }
     });
   });
 
-  setAdvancedVisible(false);
   loadStatsBasic().catch(function(err) {
     document.getElementById('overviewCards').innerHTML =
       '<div class="card"><div class="k">Error</div><div class="v" style="font-size:0.95rem;">' + err.message + '</div></div>';
   });
-  loadQualitySummary();
+  setActiveTab('core');
 </script>
 {% endblock %}

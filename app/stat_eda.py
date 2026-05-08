@@ -884,6 +884,9 @@ def _dashboard_attempts_df() -> pd.DataFrame:
           ma.attempt_uuid,
           ma.target_color_id,
           COALESCE(tc.name, '(unknown)') AS target_name,
+          tc.r AS target_r,
+          tc.g AS target_g,
+          tc.b AS target_b,
           ma.final_delta_e,
           ma.duration_sec,
           ma.attempt_started_server_ts
@@ -995,15 +998,14 @@ def plot_plays_per_user(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
         ax.axis('off')
         return _fig_to_png(fig)
     top = per_user.head(30)
-    x = np.arange(len(top))
-    y = top.values
-    ax.scatter(x, y, s=42, color='#4b5563', edgecolors='white', linewidths=0.6, alpha=0.9, zorder=2)
-    ax.vlines(x, ymin=0, ymax=y, color='#9ca3af', linewidth=0.8, alpha=0.7, zorder=1)
+    x = np.arange(len(top), dtype=float)
+    y = top.to_numpy(dtype=float)
+    ax.bar(x, y, color='#64748b', edgecolor='white', linewidth=0.7, alpha=0.95)
     ax.set_xticks(x)
     ax.set_xticklabels(top.index.astype(str), rotation=70, fontsize=7)
     ax.set_ylabel('Plays')
     ax.set_xlabel('User (sorted by play count)')
-    ax.set_title('Scatter: plays per user (top 30)')
+    ax.set_title('Bar: plays per user (top 30)')
     ax.set_ylim(bottom=0)
     return _fig_to_png(fig)
 
@@ -1015,17 +1017,52 @@ def plot_attempts_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
         ax.text(0.5, 0.5, 'No attempts data', ha='center', va='center')
         ax.axis('off')
         return _fig_to_png(fig)
-    g = att.groupby('target_name', dropna=False).size().sort_values(ascending=False).head(20)
-    x = np.arange(len(g))
-    y = g.values
-    ax.scatter(x, y, s=48, color='#0f766e', edgecolors='white', linewidths=0.6, alpha=0.9, zorder=2)
-    ax.vlines(x, ymin=0, ymax=y, color='#5eead4', linewidth=0.9, alpha=0.7, zorder=1)
-    ax.set_xticks(x)
-    ax.set_xticklabels(g.index.astype(str), rotation=55, ha='right', fontsize=8)
-    ax.set_ylabel('Attempts')
-    ax.set_xlabel('Target color')
-    ax.set_title('Scatter: attempts per color (top 20)')
-    ax.set_ylim(bottom=0)
+    agg = (
+        att.groupby(
+            ['target_color_id', 'target_name', 'target_r', 'target_g', 'target_b'],
+            dropna=False,
+            as_index=False,
+        )
+        .size()
+        .rename(columns={'size': 'n_attempts'})
+        .sort_values('n_attempts', ascending=False)
+        .head(20)
+    )
+    if len(agg) == 0:
+        ax.text(0.5, 0.5, 'No grouped color rows', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    y = np.arange(len(agg))
+    vals = agg['n_attempts'].to_numpy(dtype=float)
+    colors = []
+    labels = []
+    for _, r in agg.iterrows():
+        tid = r.get('target_color_id')
+        name = str(r.get('target_name') or '(unknown)')
+        if pd.notna(tid):
+            labels.append(f'id {int(tid)} · {name}')
+        else:
+            labels.append(f'id ? · {name}')
+        rr = pd.to_numeric(r.get('target_r'), errors='coerce')
+        gg = pd.to_numeric(r.get('target_g'), errors='coerce')
+        bb = pd.to_numeric(r.get('target_b'), errors='coerce')
+        if (
+            pd.notna(rr) and pd.notna(gg) and pd.notna(bb)
+            and 0 <= float(rr) <= 255
+            and 0 <= float(gg) <= 255
+            and 0 <= float(bb) <= 255
+        ):
+            colors.append((float(rr) / 255.0, float(gg) / 255.0, float(bb) / 255.0))
+        else:
+            colors.append('#0f766e')
+    ax.barh(y, vals, color=colors, edgecolor='#e5e7eb', linewidth=0.9, alpha=0.95)
+    ax.set_yticks(y)
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xlabel('Attempts')
+    ax.set_ylabel('Target color (id + name)')
+    ax.set_title('Bar: attempts per target_color_id (top 20)')
+    ax.set_xlim(left=0)
     return _fig_to_png(fig)
 
 
@@ -1051,51 +1088,73 @@ def _plot_per_color_swarm(
     )
     order = list(counts.index)
     sub = att[att['target_name'].isin(order)].copy()
-    if per_category_cap and per_category_cap > 0:
-        sub = (
-            sub.groupby('target_name', sort=False, group_keys=False)
-            .apply(lambda g: g.sample(min(len(g), int(per_category_cap)), random_state=42))
-            .reset_index(drop=True)
-        )
-    half_bin = 0.38
-    for i, name in enumerate(order):
-        ys = sub.loc[sub['target_name'] == name, metric].to_numpy(dtype=float)
-        if len(ys) == 0:
-            continue
-        offs = _swarm_offsets(ys, half_bin_x=half_bin, n_bins=60)
-        xs = np.full_like(ys, fill_value=float(i)) + offs
-        ax.scatter(
-            xs,
-            ys,
-            s=12,
-            alpha=0.55,
-            color=point_color,
-            edgecolors='none',
-            zorder=2,
-        )
-    means = (
-        att[att['target_name'].isin(order)]
-        .groupby('target_name', dropna=False)[metric]
-        .mean()
+    if len(sub) == 0:
+        ax.text(0.5, 0.5, f'No {metric_label} rows in top colors', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    q = (
+        sub.groupby('target_name', dropna=False)[metric]
+        .quantile([0.10, 0.25, 0.50, 0.75, 0.90])
+        .unstack()
         .reindex(order)
     )
+    q.columns = ['p10', 'p25', 'p50', 'p75', 'p90']
+    means = sub.groupby('target_name', dropna=False)[metric].mean().reindex(order)
+    x = np.arange(len(order), dtype=float)
+    for i, name in enumerate(order):
+        row = q.loc[name]
+        if row.isna().any():
+            continue
+        # p10-p90 whisker
+        ax.vlines(
+            x[i],
+            float(row['p10']),
+            float(row['p90']),
+            color='#94a3b8',
+            linewidth=1.2,
+            alpha=0.95,
+            zorder=1,
+        )
+        # IQR band
+        ax.vlines(
+            x[i],
+            float(row['p25']),
+            float(row['p75']),
+            color=point_color,
+            linewidth=6.0,
+            alpha=0.78,
+            zorder=2,
+        )
+        # Median marker
+        ax.plot(
+            [x[i] - 0.18, x[i] + 0.18],
+            [float(row['p50']), float(row['p50'])],
+            color='#111827',
+            linewidth=1.4,
+            zorder=3,
+        )
     ax.scatter(
-        np.arange(len(order)),
-        means.values,
-        s=70,
+        x,
+        means.to_numpy(dtype=float),
+        s=22,
         marker='D',
-        facecolors='none',
-        edgecolors='#1f2937',
-        linewidths=1.5,
-        zorder=3,
-        label='mean per color',
+        color='#111827',
+        alpha=0.85,
+        zorder=4,
+        label='mean',
     )
-    ax.set_xticks(np.arange(len(order)))
+    ax.set_xticks(x)
     ax.set_xticklabels([str(o) for o in order], rotation=55, ha='right', fontsize=8)
     ax.set_ylabel(metric_label)
     ax.set_xlabel('Target color')
     ax.set_title(title)
-    ax.legend(fontsize=8, loc='upper right')
+    legend_handles = [
+        plt.Line2D([0], [0], color='#94a3b8', lw=1.2, label='p10-p90'),
+        plt.Line2D([0], [0], color=point_color, lw=6.0, label='IQR (p25-p75)'),
+        plt.Line2D([0], [0], color='#111827', lw=1.4, label='median'),
+        plt.Line2D([0], [0], marker='D', color='#111827', lw=0, markersize=4.5, label='mean'),
+    ]
+    ax.legend(handles=legend_handles, fontsize=7.5, loc='upper right')
     return _fig_to_png(fig)
 
 
@@ -1107,7 +1166,7 @@ def plot_deltae_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
         metric='final_delta_e',
         metric_label='Final ΔE',
         point_color='#7c3aed',
-        title='Swarm: final ΔE per color (top 20 by volume)',
+        title='Quantile band: final ΔE per color (top 20 by volume)',
     )
 
 
@@ -1119,7 +1178,7 @@ def plot_elapsed_per_color(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
         metric='duration_sec',
         metric_label='Elapsed time (s)',
         point_color='#b45309',
-        title='Swarm: elapsed time per color (<=300s, top 20 by volume)',
+        title='Quantile band: elapsed time per color (<=300s, top 20 by volume)',
     )
 
 
@@ -1208,21 +1267,19 @@ def plot_deltae_elapsed_scatter(_: pd.DataFrame, __: pd.DataFrame) -> bytes:
         ax.axis('off')
         return _fig_to_png(fig)
 
-    # Reduce overplotting for dense datasets.
-    if len(att) > 8000:
-        att = att.sample(8000, random_state=42)
-
-    ax.scatter(
-        att['duration_sec'].values,
-        att['final_delta_e'].values,
-        s=10,
-        alpha=0.35,
-        color='#1d4ed8',
-        edgecolors='none',
+    hb = ax.hexbin(
+        att['duration_sec'].to_numpy(dtype=float),
+        att['final_delta_e'].to_numpy(dtype=float),
+        gridsize=46,
+        mincnt=1,
+        cmap='Blues',
+        linewidths=0,
     )
+    cbar = fig.colorbar(hb, ax=ax, pad=0.01)
+    cbar.set_label('Count', fontsize=8)
     ax.set_xlabel('Elapsed time (s, <=300)')
     ax.set_ylabel('Final DeltaE')
-    ax.set_title('Scatter: Final DeltaE vs elapsed time')
+    ax.set_title('Hexbin density: Final DeltaE vs elapsed time')
     return _fig_to_png(fig)
 
 
@@ -1266,22 +1323,21 @@ def _plot_scatter_with_corr(
     if y_clip_q is not None and len(part) > 20:
         y_cap = part[y_col].quantile(float(y_clip_q))
         part = part[part[y_col] <= y_cap]
-    if len(part) > 9000:
-        part = part.sample(9000, random_state=42)
-
-    ax.scatter(
-        part[x_col].to_numpy(),
-        part[y_col].to_numpy(),
-        s=10,
-        alpha=0.32,
-        color='#2563eb',
-        edgecolors='none',
+    hb = ax.hexbin(
+        part[x_col].to_numpy(dtype=float),
+        part[y_col].to_numpy(dtype=float),
+        gridsize=44,
+        mincnt=1,
+        cmap='Blues',
+        linewidths=0,
     )
+    cbar = fig.colorbar(hb, ax=ax, pad=0.01)
+    cbar.set_label('Count', fontsize=8)
     r = _pearson_corr(part[x_col], part[y_col])
     rt = 'n/a' if r is None else f'{r:.3f}'
     ax.set_xlabel(x_label)
     ax.set_ylabel(y_label)
-    ax.set_title(f'{title} (Pearson r={rt})')
+    ax.set_title(f'{title} (hexbin, Pearson r={rt})')
     return _fig_to_png(fig)
 
 
@@ -1487,8 +1543,11 @@ def plot_attempt_deltae_timeline(
     *,
     attempt_uuid: Optional[str] = None,
     target_color_id: Optional[int] = None,
+    view_mode: Optional[str] = None,
 ) -> bytes:
     fig, ax = plt.subplots(figsize=(11, 5.5))
+    mode = str(view_mode or 'aggregate').strip().lower()
+    mode = 'detailed' if mode == 'detailed' else 'aggregate'
     au_in = (attempt_uuid or '').strip()
     if au_in:
         resolved, err = _resolve_network_attempt_uuid(att, ev, au_in, None)
@@ -1500,34 +1559,54 @@ def plot_attempt_deltae_timeline(
             ax.axis('off')
             return _fig_to_png(fig)
         attempt_ids = [resolved]
+        render_single = True
         mode_title = f'Attempt DeltaE trajectory (…{resolved[-8:]})'
-        line_alpha = 0.9
-        point_alpha = 0.95
     elif target_color_id is not None:
-        candidates = (
-            att.loc[att['target_color_id'] == target_color_id, 'attempt_uuid']
-            .dropna()
-            .astype(str)
-            .tolist()
-        )
-        if len(candidates) == 0:
-            ax.text(0.5, 0.5, 'No attempts for this target_color_id', ha='center', va='center', fontsize=11)
-            ax.axis('off')
-            return _fig_to_png(fig)
-        attempt_ids = candidates
-        mode_title = f'Attempt DeltaE trajectories (all attempts, target_id={target_color_id})'
-        line_alpha = 0.12
-        point_alpha = 0.18
+        if mode == 'detailed':
+            resolved, err = _resolve_network_attempt_uuid(att, ev, None, target_color_id)
+            if resolved is None:
+                msg = {
+                    'no_attempts_for_target': 'No attempts for this target_color_id',
+                }.get(err, err or 'No attempt to show')
+                ax.text(0.5, 0.5, msg, ha='center', va='center', fontsize=11)
+                ax.axis('off')
+                return _fig_to_png(fig)
+            attempt_ids = [resolved]
+            render_single = True
+            mode_title = f'Attempt DeltaE trajectory (target_id={target_color_id}, …{resolved[-8:]})'
+        else:
+            candidates = (
+                att.loc[att['target_color_id'] == target_color_id, 'attempt_uuid']
+                .dropna()
+                .astype(str)
+                .tolist()
+            )
+            if len(candidates) == 0:
+                ax.text(0.5, 0.5, 'No attempts for this target_color_id', ha='center', va='center', fontsize=11)
+                ax.axis('off')
+                return _fig_to_png(fig)
+            attempt_ids = candidates
+            render_single = False
+            mode_title = f'Aggregate DeltaE timeline (target_id={target_color_id})'
     else:
-        # Fall back to all attempts in-sample when no explicit filter is provided.
-        attempt_ids = ev['attempt_uuid'].dropna().astype(str).unique().tolist()
-        if len(attempt_ids) == 0:
-            ax.text(0.5, 0.5, 'No attempts to show', ha='center', va='center', fontsize=11)
-            ax.axis('off')
-            return _fig_to_png(fig)
-        mode_title = 'Attempt DeltaE trajectories (all attempts in sample)'
-        line_alpha = 0.06
-        point_alpha = 0.10
+        if mode == 'detailed':
+            resolved, err = _resolve_network_attempt_uuid(att, ev, None, None)
+            if resolved is None:
+                ax.text(0.5, 0.5, err or 'No attempts to show', ha='center', va='center', fontsize=11)
+                ax.axis('off')
+                return _fig_to_png(fig)
+            attempt_ids = [resolved]
+            render_single = True
+            mode_title = f'Attempt DeltaE trajectory (…{resolved[-8:]})'
+        else:
+            # Fall back to all attempts in-sample when no explicit filter is provided.
+            attempt_ids = ev['attempt_uuid'].dropna().astype(str).unique().tolist()
+            if len(attempt_ids) == 0:
+                ax.text(0.5, 0.5, 'No attempts to show', ha='center', va='center', fontsize=11)
+                ax.axis('off')
+                return _fig_to_png(fig)
+            render_single = False
+            mode_title = 'Aggregate DeltaE timeline (all attempts in sample)'
 
     rows = ev[ev['attempt_uuid'].astype(str).isin(set(attempt_ids))].copy()
     rows = rows[rows['step_index'].notna()].copy()
@@ -1539,40 +1618,113 @@ def plot_attempt_deltae_timeline(
         ax.axis('off')
         return _fig_to_png(fig)
 
-    y_min = float(rows['delta_e_after'].min())
-    y_max = float(rows['delta_e_after'].max())
-    x_max = 0
-    is_single = len(attempt_ids) == 1
-    for aid, part in rows.groupby('attempt_uuid', sort=False):
-        p = part.sort_values(['seq', 'step_index'])
+    if render_single:
+        p = rows.sort_values(['seq', 'step_index']).reset_index(drop=True)
         x = np.arange(1, len(p) + 1)
         y = p['delta_e_after'].to_numpy(dtype=float)
-        x_max = max(x_max, len(x))
-        if is_single:
-            action_type = p['action_type'].fillna('').astype(str).str.lower()
-            c = np.where(action_type.eq('remove'), '#ef4444', '#2563eb')
-            ax.plot(x, y, color='#334155', linewidth=1.8, alpha=line_alpha, zorder=1)
-            ax.scatter(x, y, c=c, s=28, alpha=point_alpha, zorder=2)
-        else:
-            ax.plot(x, y, color='#334155', linewidth=1.1, alpha=line_alpha, zorder=1)
-            ax.scatter(x, y, color='#1d4ed8', s=8, alpha=point_alpha, zorder=2)
-
-    ax.axhline(0.0, color='#16a34a', linestyle='--', linewidth=1.2, alpha=0.8)
-    pad = max(0.08 * (y_max - y_min), 0.25)
-    ax.set_ylim(bottom=max(-0.05, y_min - pad), top=y_max + pad)
-    ax.set_xlim(0.5, max(1.5, x_max + 0.5))
-    ax.set_xlabel('Action timeline (ordered step rows per attempt)')
-    ax.set_ylabel('DeltaE after action')
-    ax.set_title(mode_title)
-
-    if is_single:
+        action_type = p['action_type'].fillna('').astype(str).str.lower()
+        c = np.where(action_type.eq('remove'), '#ef4444', '#2563eb')
+        ax.plot(x, y, color='#334155', linewidth=1.8, alpha=0.9, zorder=1)
+        ax.scatter(x, y, c=c, s=28, alpha=0.95, zorder=2)
+        y_min = float(np.nanmin(y))
+        y_max = float(np.nanmax(y))
+        ax.axhline(2.0, color='#16a34a', linestyle='--', linewidth=1.2, alpha=0.8)
+        pad = max(0.08 * (y_max - y_min), 0.25)
+        ax.set_ylim(bottom=max(-0.05, y_min - pad), top=y_max + pad)
+        ax.set_xlim(0.5, max(1.5, len(x) + 0.5))
+        ax.set_xlabel('Action timeline (ordered step rows)')
+        ax.set_ylabel('DeltaE after action')
+        ax.set_title(mode_title)
         from matplotlib.lines import Line2D
         legend_items = [
             Line2D([0], [0], marker='o', color='w', markerfacecolor='#2563eb', markersize=7, label='add / other'),
             Line2D([0], [0], marker='o', color='w', markerfacecolor='#ef4444', markersize=7, label='remove'),
-            Line2D([0], [0], color='#16a34a', linestyle='--', linewidth=1.2, label='DeltaE = 0'),
+            Line2D([0], [0], color='#16a34a', linestyle='--', linewidth=1.2, label='DeltaE = 2.0'),
         ]
         ax.legend(handles=legend_items, fontsize=8, loc='upper right')
+        return _fig_to_png(fig)
+
+    # Aggregate mode: normalize each attempt timeline to progress in [0, 1] and
+    # render quantile bands + median for a compact, informative population view.
+    max_attempts = 350
+    max_steps_per_attempt = 180
+    bins = 24
+    ids_unique = rows['attempt_uuid'].astype(str).dropna().unique().tolist()
+    total_attempts = len(ids_unique)
+    if total_attempts > max_attempts:
+        ids_keep = set(ids_unique[:max_attempts])
+        rows = rows[rows['attempt_uuid'].astype(str).isin(ids_keep)].copy()
+    if len(rows) == 0:
+        ax.text(0.5, 0.5, 'No rows after sampling', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    packed_parts = []
+    first_under2 = 0
+    attempts_in_plot = 0
+    for _, part in rows.groupby('attempt_uuid', sort=False):
+        p = part.sort_values(['seq', 'step_index']).copy()
+        if len(p) == 0:
+            continue
+        attempts_in_plot += 1
+        if (p['delta_e_after'] < 2.0).any():
+            first_under2 += 1
+        if len(p) > max_steps_per_attempt:
+            idx = np.linspace(0, len(p) - 1, num=max_steps_per_attempt, dtype=int)
+            p = p.iloc[np.unique(idx)].copy()
+        n = len(p)
+        if n <= 1:
+            p['progress'] = 0.0
+        else:
+            p['progress'] = np.linspace(0.0, 1.0, num=n)
+        packed_parts.append(p[['progress', 'delta_e_after']])
+
+    if not packed_parts:
+        ax.text(0.5, 0.5, 'No packed timeline rows', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+    packed = pd.concat(packed_parts, ignore_index=True)
+    packed['bin'] = np.clip((packed['progress'] * bins).astype(int), 0, bins - 1)
+    summary = (
+        packed.groupby('bin', sort=True)['delta_e_after']
+        .agg(
+            p10=lambda s: s.quantile(0.10),
+            p25=lambda s: s.quantile(0.25),
+            p50='median',
+            p75=lambda s: s.quantile(0.75),
+            p90=lambda s: s.quantile(0.90),
+            n='count',
+        )
+        .reset_index()
+    )
+    summary = summary[summary['n'] >= 3].copy()
+    if len(summary) == 0:
+        ax.text(0.5, 0.5, 'No aggregate bins with enough rows', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    x = (summary['bin'].to_numpy(dtype=float) + 0.5) / float(bins)
+    p10 = summary['p10'].to_numpy(dtype=float)
+    p25 = summary['p25'].to_numpy(dtype=float)
+    p50 = summary['p50'].to_numpy(dtype=float)
+    p75 = summary['p75'].to_numpy(dtype=float)
+    p90 = summary['p90'].to_numpy(dtype=float)
+
+    ax.fill_between(x, p10, p90, color='#93c5fd', alpha=0.28, linewidth=0, label='p10-p90')
+    ax.fill_between(x, p25, p75, color='#2563eb', alpha=0.32, linewidth=0, label='IQR (p25-p75)')
+    ax.plot(x, p50, color='#1e293b', linewidth=2.1, label='median')
+    ax.axhline(2.0, color='#16a34a', linestyle='--', linewidth=1.2, alpha=0.9, label='DeltaE = 2.0')
+    ax.set_xlim(0.0, 1.0)
+    ax.set_xticks(np.linspace(0.0, 1.0, 6))
+    ax.set_xticklabels([f'{int(v * 100)}%' for v in np.linspace(0.0, 1.0, 6)])
+    ax.set_xlabel('Normalized attempt progress')
+    ax.set_ylabel('DeltaE after action')
+    hit_rate = (float(first_under2) / float(max(1, attempts_in_plot))) * 100.0
+    sampled_note = ''
+    if total_attempts > attempts_in_plot:
+        sampled_note = f' [sampled {attempts_in_plot}/{total_attempts}]'
+    ax.set_title(f'{mode_title}{sampled_note} | hit(<2.0)={hit_rate:.1f}%')
+    ax.legend(fontsize=8, loc='upper right')
     return _fig_to_png(fig)
 
 
@@ -1651,6 +1803,118 @@ def plot_archetype_deltae_trajectories(
     ax.set_xlabel('Action timeline (ordered step rows per attempt)')
     ax.set_ylabel('DeltaE after action')
     ax.set_title(f'Attempt DeltaE trajectories for archetype: {label} (n={len(attempt_ids)})')
+    return _fig_to_png(fig)
+
+
+def plot_archetype_compare_trajectories(
+    att: pd.DataFrame,
+    ev: pd.DataFrame,
+    *,
+    archetypes: Optional[List[str]] = None,
+) -> bytes:
+    """
+    Overlay median DeltaE trajectories for multiple archetypes in one chart.
+    """
+    fig, ax = plt.subplots(figsize=(11, 5.8))
+    tags = build_attempt_archetypes(per_attempt_limit=250000).get('per_attempt_tags') or []
+    if not tags:
+        ax.text(0.5, 0.5, 'No archetype tags available', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    tags_df = pd.DataFrame(tags)
+    if tags_df.empty or 'attempt_uuid' not in tags_df.columns or 'archetype' not in tags_df.columns:
+        ax.text(0.5, 0.5, 'No archetype tags available', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    tags_df['attempt_uuid'] = tags_df['attempt_uuid'].astype(str)
+    tags_df['archetype'] = tags_df['archetype'].astype(str)
+    tags_df = tags_df[(tags_df['attempt_uuid'] != '') & (tags_df['archetype'] != '')].copy()
+    if tags_df.empty:
+        ax.text(0.5, 0.5, 'No valid archetype-tagged attempts', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    available = sorted(tags_df['archetype'].unique().tolist())
+    selected = [str(a).strip() for a in (archetypes or []) if str(a).strip()]
+    if selected:
+        selected = [a for a in selected if a in available]
+    if not selected:
+        counts = (
+            tags_df.groupby('archetype', sort=False)['attempt_uuid']
+            .nunique()
+            .sort_values(ascending=False)
+        )
+        selected = counts.head(5).index.tolist()
+    if not selected:
+        ax.text(0.5, 0.5, 'No archetypes selected', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    rows = ev[['attempt_uuid', 'seq', 'step_index', 'delta_e_after']].copy()
+    rows['attempt_uuid'] = rows['attempt_uuid'].astype(str)
+    rows['step_index'] = pd.to_numeric(rows['step_index'], errors='coerce')
+    rows['delta_e_after'] = pd.to_numeric(rows['delta_e_after'], errors='coerce')
+    rows = rows[rows['step_index'].notna() & rows['delta_e_after'].notna()].copy()
+    if rows.empty:
+        ax.text(0.5, 0.5, 'No DeltaE step rows', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    tags_sel = tags_df[tags_df['archetype'].isin(selected)][['attempt_uuid', 'archetype']].drop_duplicates()
+    merged = rows.merge(tags_sel, on='attempt_uuid', how='inner')
+    if merged.empty:
+        ax.text(0.5, 0.5, 'No matching step rows for selected archetypes', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    # Keep response bounded on very large classes.
+    cap_per_archetype = 1200
+    kept_ids: List[str] = []
+    for arc in selected:
+        ids = (
+            tags_sel[tags_sel['archetype'] == arc]['attempt_uuid']
+            .drop_duplicates()
+            .astype(str)
+            .tolist()
+        )
+        kept_ids.extend(ids[:cap_per_archetype])
+    keep_set = set(kept_ids)
+    merged = merged[merged['attempt_uuid'].isin(keep_set)].copy()
+    if merged.empty:
+        ax.text(0.5, 0.5, 'No rows after cap/filtering', ha='center', va='center')
+        ax.axis('off')
+        return _fig_to_png(fig)
+
+    cmap = plt.get_cmap('tab10')
+    max_step = 1
+    for i, arc in enumerate(selected):
+        part = merged[merged['archetype'] == arc].copy()
+        if part.empty:
+            continue
+        grp = (
+            part.groupby('step_index', sort=True)['delta_e_after']
+            .agg(['median', 'count'])
+            .reset_index()
+            .sort_values('step_index')
+        )
+        grp = grp[grp['count'] >= 3]
+        if grp.empty:
+            continue
+        x = grp['step_index'].to_numpy(dtype=float) + 1.0
+        y = grp['median'].to_numpy(dtype=float)
+        max_step = max(max_step, int(np.nanmax(x)))
+        color = cmap(i % 10)
+        n_attempts = int(part['attempt_uuid'].nunique())
+        ax.plot(x, y, linewidth=2.0, alpha=0.95, color=color, label=f'{arc} (n={n_attempts})')
+
+    ax.axhline(2.0, color='#16a34a', linestyle='--', linewidth=1.1, alpha=0.8)
+    ax.set_xlim(0.5, max(2.5, max_step + 0.5))
+    ax.set_xlabel('Action timeline (step index + 1)')
+    ax.set_ylabel('Median DeltaE after action')
+    ax.set_title('Archetype trajectory comparison (overlaid medians)')
+    ax.legend(fontsize=8, loc='upper right', ncol=1)
     return _fig_to_png(fig)
 
 
@@ -1942,38 +2206,22 @@ def plot_deltae_vs_similarity(att: pd.DataFrame, ev: pd.DataFrame) -> bytes:
         ax.text(0.5, 0.5, 'No final DeltaE rows with similarity', ha='center', va='center')
         ax.axis('off')
         return _fig_to_png(fig)
-    if len(part) > 8000:
-        part = part.sample(8000, random_state=42)
-
-    perfect = part[part['ratio_is_perfect'] == True]
-    deviant = part[part['ratio_is_perfect'] == False]
-    if len(deviant):
-        ax.scatter(
-            deviant['similarity'].to_numpy(dtype=float),
-            deviant['final_delta_e'].to_numpy(dtype=float),
-            s=12,
-            alpha=0.35,
-            color='#2563eb',
-            edgecolors='none',
-            label='deviant ratio',
-        )
-    if len(perfect):
-        ax.scatter(
-            perfect['similarity'].to_numpy(dtype=float),
-            perfect['final_delta_e'].to_numpy(dtype=float),
-            s=18,
-            alpha=0.7,
-            color='#16a34a',
-            edgecolors='none',
-            label='perfect ratio',
-        )
+    hb = ax.hexbin(
+        part['similarity'].to_numpy(dtype=float),
+        part['final_delta_e'].to_numpy(dtype=float),
+        gridsize=44,
+        mincnt=1,
+        cmap='Blues',
+        linewidths=0,
+    )
+    cbar = fig.colorbar(hb, ax=ax, pad=0.01)
+    cbar.set_label('Count', fontsize=8)
     r = _pearson_corr(part['similarity'], part['final_delta_e'])
     rt = 'n/a' if r is None else f'{r:.3f}'
     ax.set_xlabel('Recipe similarity (ratio-based, 0..1)')
     ax.set_ylabel('Final DeltaE')
-    ax.set_title(f'Scatter: Final DeltaE vs recipe similarity (Pearson r={rt})')
+    ax.set_title(f'Hexbin density: Final DeltaE vs recipe similarity (Pearson r={rt})')
     ax.set_xlim(-0.02, 1.02)
-    ax.legend(fontsize=8, loc='upper right')
     return _fig_to_png(fig)
 
 
@@ -2831,6 +3079,7 @@ PLOT_BUILDERS: Dict[str, Callable[[pd.DataFrame, pd.DataFrame], bytes]] = {
     'mixed_models_perfect_ratio_or': plot_mixed_models_perfect_ratio_or,
     'attempt_deltae_timeline': plot_attempt_deltae_timeline,
     'archetype_deltae_trajectories': lambda a, e: plot_archetype_deltae_trajectories(a, e, archetype=None),
+    'archetype_compare_trajectories': lambda a, e: plot_archetype_compare_trajectories(a, e, archetypes=None),
     'archetype_share_by_attempt_no': plot_archetype_share_by_attempt_no,
     'archetype_transition_heatmap': plot_archetype_transition_heatmap,
 }
@@ -2842,7 +3091,12 @@ def get_plot_png(plot_id: str, plot_options: Optional[Dict[str, Any]] = None) ->
     if plot_id not in ALLOWED_PLOT_IDS:
         raise ValueError(f'unknown plot: {plot_id}')
     att, ev = get_dataframes()
-    if plot_id in ('fw_attempt_network', 'attempt_deltae_timeline', 'archetype_deltae_trajectories'):
+    if plot_id in (
+        'fw_attempt_network',
+        'attempt_deltae_timeline',
+        'archetype_deltae_trajectories',
+        'archetype_compare_trajectories',
+    ):
         opts = plot_options or {}
         if plot_id == 'fw_attempt_network':
             return plot_fw_attempt_network(
@@ -2857,10 +3111,17 @@ def get_plot_png(plot_id: str, plot_options: Optional[Dict[str, Any]] = None) ->
                 ev,
                 archetype=opts.get('archetype'),
             )
+        if plot_id == 'archetype_compare_trajectories':
+            return plot_archetype_compare_trajectories(
+                att,
+                ev,
+                archetypes=opts.get('archetypes'),
+            )
         return plot_attempt_deltae_timeline(
             att,
             ev,
             attempt_uuid=opts.get('attempt_uuid'),
             target_color_id=opts.get('target_color_id'),
+            view_mode=opts.get('view_mode'),
         )
     return PLOT_BUILDERS[plot_id](att, ev)
