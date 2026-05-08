@@ -1,6 +1,7 @@
 // main.js (Mixbox JS + Flask colormath backend)
 
 import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
+import { captureEnv } from './env_capture.js?v=20260508-qc2';
 
 console.log('✅ main.js loaded');
 let sessionLogs = [];
@@ -163,6 +164,7 @@ function serializeAttemptHeader(attempt) {
     final_delta_e: normalizeDelta(window.lastMixDeltaE),
     num_steps: attempt.decisionStepIndex,
     app_version: APP_VERSION,
+    client_env_json: attempt.client_env_json || null,
   };
 }
 
@@ -249,6 +251,9 @@ function beginAttemptForCurrentTarget() {
     timerSecOverride: getTimerSec(),
   });
 
+  let envSnapshot = null;
+  try { envSnapshot = captureEnv(); } catch { envSnapshot = null; }
+
   telemetryAttempt = {
     attempt_uuid: generateUUID(),
     seq: 0,
@@ -261,6 +266,7 @@ function beginAttemptForCurrentTarget() {
     initial_snapshot: initialSnapshot,
     lastDecisionClientTsMs: null,
     decisionStepIndex: 0,
+    client_env_json: envSnapshot,
   };
   telemetryEventBuffer = [];
 
@@ -349,15 +355,18 @@ async function flushTelemetry({ finalize = false, endReason = null, terminalBoun
 // ── Analytics ─────────────────────────────────────────────────────────────
 const ALLOWED_EVENTS = new Set([
   'app_opened', 'app_ready', 'first_palette_interaction', 'save_attempt',
+  'instruction_acknowledged', 'fullscreen_change', 'visibility_change',
 ]);
 
 function trackEvent(event, metadata = {}) {
   if (!ALLOWED_EVENTS.has(event)) return;
+  let device = null;
+  try { device = captureEnv(); } catch { device = null; }
   const payload = {
     event,
     ts: new Date().toISOString(),
     user_id: window.currentUserId || localStorage.getItem('userId') || null,
-    metadata: { client_session_id: CLIENT_SESSION_ID, ...metadata },
+    metadata: { client_session_id: CLIENT_SESSION_ID, device, ...metadata },
   };
   fetch('/api/analytics/event', {
     method: 'POST',
@@ -366,8 +375,24 @@ function trackEvent(event, metadata = {}) {
   }).catch(() => {});
 }
 
+window.shadeMatchTrackEvent = trackEvent;
+window.shadeMatchCaptureEnv = captureEnv;
+
 // Fire app_opened immediately on module load
 trackEvent('app_opened');
+
+// Passive listeners for environmental state changes that affect color rendering.
+if (typeof document !== 'undefined') {
+  document.addEventListener('fullscreenchange', () => {
+    trackEvent('fullscreen_change');
+  });
+  document.addEventListener('webkitfullscreenchange', () => {
+    trackEvent('fullscreen_change');
+  });
+  document.addEventListener('visibilitychange', () => {
+    trackEvent('visibility_change', { visibility_state: document.visibilityState });
+  });
+}
 
 // ── Cookie Consent ────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function () {

@@ -98,6 +98,10 @@ class MixingAttempt(db.Model):
     final_delta_e = db.Column(db.Float, nullable=True)
     duration_sec = db.Column(db.Float, nullable=True)
     num_steps = db.Column(db.Integer, nullable=True)
+    # Passive client environment snapshot (screen, viewport, color_gamut,
+    # fullscreen, locale, timezone, ...) — first-write-wins per attempt so we
+    # capture the environment at attempt-start time and ignore later updates.
+    client_env_json = db.Column(db.JSON, nullable=True)
 
 
 class MixingAttemptEvent(db.Model):
@@ -245,7 +249,10 @@ class AnalyticsEvent(db.Model):
     """
     Lightweight client-side event log.
     Events: app_opened | app_ready | first_palette_interaction | save_attempt
+            | instruction_acknowledged | fullscreen_change | visibility_change
     Metadata must always include client_session_id (UUID per browser session).
+    Metadata typically also carries `device` — a passive environment snapshot
+    (screen, viewport, color_gamut, fullscreen, locale, timezone, etc.).
     """
     __tablename__ = 'analytics_events'
 

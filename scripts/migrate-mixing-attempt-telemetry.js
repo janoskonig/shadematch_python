@@ -112,6 +112,11 @@ async function main() {
       ON mixing_attempt_events (event_type, server_ts)
     `);
 
+    await run(client, 'mixing_attempts.client_env_json column', `
+      ALTER TABLE mixing_attempts
+      ADD COLUMN IF NOT EXISTS client_env_json JSONB
+    `);
+
     console.log('\n✅ Mixing telemetry migration complete.');
   } catch (err) {
     console.error('\n❌ Migration failed:', err.message);

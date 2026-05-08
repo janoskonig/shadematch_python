@@ -232,6 +232,26 @@
     </div>
   </div>
 
+  <!-- ======== Display-setup instructions modal (one-shot, post-login) ======== -->
+  <div id="instructionsModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <h2 class="modal-title">Before you start</h2>
+      <p class="modal-subtitle">A few quick checks so your screen shows colors faithfully.</p>
+      <ul style="margin: 0 0 var(--space-md); padding-left: 1.2rem; line-height: 1.55; color: var(--text-primary);">
+        <li><strong>Turn off Night Shift / True Tone / Night Light</strong> and any blue-light filter (in your operating system).</li>
+        <li><strong>Use steady, indirect ambient lighting.</strong> Avoid direct sunlight on the screen and reflective glare.</li>
+        <li><strong>Set display brightness to about 50&ndash;75%.</strong></li>
+        <li>For best results, use full-screen mode.</li>
+      </ul>
+      <button id="instructionsFullscreenBtn" type="button" class="btn btn-secondary btn-full" style="margin-bottom: var(--space-sm);">
+        Enter full-screen
+      </button>
+      <button id="instructionsAckBtn" type="button" class="btn btn-primary btn-full btn-lg">
+        I have done this &mdash; start
+      </button>
+    </div>
+  </div>
+
   <!-- ======== Skip Perception Modal ======== -->
   <div id="skipPerceptionModal" class="skip-modal-overlay">
     <div class="skip-modal-panel">
@@ -749,6 +769,55 @@
     }
   });
 
+  /* Display-setup instructions modal — shown once per browser per logged-in user */
+  window.addEventListener('DOMContentLoaded', function() {
+    var modal = document.getElementById('instructionsModal');
+    if (!modal) return;
+    var ackBtn = document.getElementById('instructionsAckBtn');
+    var fsBtn = document.getElementById('instructionsFullscreenBtn');
+    var STORAGE_KEY = 'shadeMatchInstructionsAckV1';
+
+    function fireEvent(event, extra) {
+      try {
+        if (typeof window.shadeMatchTrackEvent === 'function') {
+          window.shadeMatchTrackEvent(event, extra || {});
+        }
+      } catch (err) { /* analytics is best-effort */ }
+    }
+
+    function maybeShowInstructions() {
+      var uid = localStorage.getItem('userId');
+      if (!uid) return;
+      if (localStorage.getItem(STORAGE_KEY) === '1') return;
+      modal.style.display = 'flex';
+    }
+
+    if (fsBtn) {
+      fsBtn.addEventListener('click', function() {
+        var el = document.documentElement;
+        var req = el.requestFullscreen
+          || el.webkitRequestFullscreen
+          || el.msRequestFullscreen;
+        if (typeof req === 'function') {
+          try { req.call(el); } catch (err) { /* ignore */ }
+        }
+      });
+    }
+
+    if (ackBtn) {
+      ackBtn.addEventListener('click', function() {
+        try { localStorage.setItem(STORAGE_KEY, '1'); } catch (e) { /* ignore */ }
+        fireEvent('instruction_acknowledged', {
+          fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement)
+        });
+        modal.style.display = 'none';
+      });
+    }
+
+    /* Defer slightly so the registration / login modal has a chance to settle. */
+    setTimeout(maybeShowInstructions, 600);
+  });
+
   function calculateMixedColor() {
     var colors = { white: [255,255,255], black: [0,0,0], red: [255,0,0], yellow: [255,255,0], blue: [0,0,255] };
     var totalDrops = 0;
@@ -772,7 +841,7 @@
 
 {% block extra_js %}
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260330"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260508-qc2"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>
