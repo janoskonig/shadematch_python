@@ -7,7 +7,7 @@ import io
 import os
 import threading
 import time
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import matplotlib
 
@@ -197,6 +197,13 @@ def _events_with_trial(att: pd.DataFrame, ev: pd.DataFrame) -> pd.DataFrame:
 
 
 PIGMENT_ORDER = ('red', 'yellow', 'white', 'blue', 'black')
+PIGMENT_HEX = {
+    'red': '#ef4444',
+    'yellow': '#f59e0b',
+    'white': '#f8fafc',
+    'blue': '#3b82f6',
+    'black': '#111827',
+}
 
 
 def _zero_state_counts() -> Dict[str, int]:
@@ -215,6 +222,138 @@ def _state_label(state: Tuple[int, int, int, int, int]) -> str:
 def _state_label_compact(state: Tuple[int, int, int, int, int]) -> str:
     r, y, w, b, k = state
     return f'{r},{y},{w},{b},{k}'
+
+
+def _target_recipe_ratio_map(target_color_ids: List[int]) -> Dict[int, Dict[str, float]]:
+    ids = sorted({int(x) for x in target_color_ids if x is not None})
+    if not ids:
+        return {}
+    in_list = ','.join(str(x) for x in ids)
+    q = text(
+        f"""
+        SELECT
+          id,
+          COALESCE(drop_red, 0) AS drop_red,
+          COALESCE(drop_yellow, 0) AS drop_yellow,
+          COALESCE(drop_white, 0) AS drop_white,
+          COALESCE(drop_blue, 0) AS drop_blue,
+          COALESCE(drop_black, 0) AS drop_black
+        FROM target_colors
+        WHERE id IN ({in_list})
+        """
+    )
+    with db.engine.connect() as conn:
+        df = pd.read_sql(q, conn)
+    out: Dict[int, Dict[str, float]] = {}
+    if df.empty:
+        return out
+    for _, row in df.iterrows():
+        tid = int(row['id'])
+        counts = {
+            'red': float(row['drop_red']),
+            'yellow': float(row['drop_yellow']),
+            'white': float(row['drop_white']),
+            'blue': float(row['drop_blue']),
+            'black': float(row['drop_black']),
+        }
+        total = sum(counts.values())
+        if total <= 0:
+            out[tid] = {k: 0.0 for k in PIGMENT_ORDER}
+        else:
+            out[tid] = {k: counts[k] / total for k in PIGMENT_ORDER}
+    return out
+
+
+def _attempt_display_meta(attempt_uuid: str) -> Dict[str, Any]:
+    if not attempt_uuid:
+        return {}
+    q = text(
+        """
+        SELECT
+          ma.attempt_uuid,
+          ma.end_reason,
+          ma.final_delta_e,
+          ma.target_color_id,
+          tc.name AS target_name,
+          ms.skipped,
+          ms.skip_perception
+        FROM mixing_attempts ma
+        LEFT JOIN target_colors tc ON tc.id = ma.target_color_id
+        LEFT JOIN mixing_sessions ms ON ms.attempt_uuid = ma.attempt_uuid
+        WHERE ma.attempt_uuid = :au
+        LIMIT 1
+        """
+    )
+    with db.engine.connect() as conn:
+        row = pd.read_sql(q, conn, params={'au': str(attempt_uuid)}).head(1)
+    if row.empty:
+        return {}
+    r = row.iloc[0]
+    end_reason = str(r.get('end_reason') or '').strip().lower()
+    skip_perception = str(r.get('skip_perception') or '').strip().lower()
+    skipped = bool(r.get('skipped')) if pd.notna(r.get('skipped')) else False
+    final_de = pd.to_numeric(r.get('final_delta_e'), errors='coerce')
+    outcome = 'incomplete'
+    if skipped or end_reason == 'skipped':
+        if skip_perception == 'identical':
+            outcome = 'skipped: no diff'
+        elif skip_perception == 'acceptable':
+            outcome = 'skipped: small diff'
+        elif skip_perception == 'unacceptable':
+            outcome = 'skipped: big diff'
+        else:
+            outcome = 'skipped'
+    elif end_reason == 'saved_match' or (pd.notna(final_de) and float(final_de) <= MATCH_PERFECT_DELTA_E):
+        outcome = 'perfect'
+    elif end_reason == 'saved_stop':
+        outcome = 'stopped'
+    elif end_reason:
+        outcome_map = {
+            'abandoned': 'abandoned',
+            'restart': 'restart',
+            'reset': 'reset',
+        }
+        outcome = outcome_map.get(end_reason, end_reason)
+    return {
+        'target_color_id': int(r.get('target_color_id')) if pd.notna(r.get('target_color_id')) else None,
+        'target_name': str(r.get('target_name') or '') or None,
+        'end_reason': end_reason or None,
+        'skip_perception': skip_perception or None,
+        'outcome': outcome or 'incomplete',
+    }
+
+
+def _target_ids_by_total_drop_range(
+    min_target_total_drops: Optional[int],
+    max_target_total_drops: Optional[int],
+) -> Optional[Set[int]]:
+    if min_target_total_drops is None and max_target_total_drops is None:
+        return None
+    q = text(
+        """
+        SELECT
+          id,
+          (
+            COALESCE(drop_red, 0)
+            + COALESCE(drop_yellow, 0)
+            + COALESCE(drop_white, 0)
+            + COALESCE(drop_blue, 0)
+            + COALESCE(drop_black, 0)
+          ) AS total_drops
+        FROM target_colors
+        """
+    )
+    with db.engine.connect() as conn:
+        df = pd.read_sql(q, conn)
+    if df.empty:
+        return set()
+    td = pd.to_numeric(df['total_drops'], errors='coerce').fillna(0)
+    keep = pd.Series([True] * len(df))
+    if min_target_total_drops is not None:
+        keep = keep & (td >= float(min_target_total_drops))
+    if max_target_total_drops is not None:
+        keep = keep & (td <= float(max_target_total_drops))
+    return set(df.loc[keep, 'id'].dropna().astype(int).tolist())
 
 
 def _build_edge_table_for_attempt(df_attempt: pd.DataFrame) -> pd.DataFrame:
@@ -1592,13 +1731,101 @@ def plot_attempt_deltae_timeline(
     attempt_uuid: Optional[str] = None,
     target_color_id: Optional[int] = None,
     view_mode: Optional[str] = None,
+    user_id: Optional[str] = None,
+    archetype: Optional[str] = None,
+    min_final_delta_e: Optional[float] = None,
+    max_final_delta_e: Optional[float] = None,
+    min_num_steps: Optional[int] = None,
+    max_num_steps: Optional[int] = None,
+    min_target_total_drops: Optional[int] = None,
+    max_target_total_drops: Optional[int] = None,
+    action_colors: Optional[List[str]] = None,
+    action_types: Optional[List[str]] = None,
 ) -> bytes:
     fig, ax = plt.subplots(figsize=(11, 5.5))
     mode = str(view_mode or 'aggregate').strip().lower()
     mode = 'detailed' if mode == 'detailed' else 'aggregate'
+    att_f = att.copy()
+    ev_f = ev.copy()
+    att_f['attempt_uuid'] = att_f['attempt_uuid'].astype(str)
+    ev_f['attempt_uuid'] = ev_f['attempt_uuid'].astype(str)
+
+    if user_id and str(user_id).strip():
+        uid = str(user_id).strip().upper()
+        users = att_f['user_id'].fillna('').astype(str).str.upper()
+        att_f = att_f[users == uid].copy()
+
+    if min_final_delta_e is not None:
+        vals = pd.to_numeric(att_f['final_delta_e'], errors='coerce')
+        att_f = att_f[vals >= float(min_final_delta_e)].copy()
+    if max_final_delta_e is not None:
+        vals = pd.to_numeric(att_f['final_delta_e'], errors='coerce')
+        att_f = att_f[vals <= float(max_final_delta_e)].copy()
+    if min_num_steps is not None:
+        vals = pd.to_numeric(att_f['num_steps'], errors='coerce')
+        att_f = att_f[vals >= float(min_num_steps)].copy()
+    if max_num_steps is not None:
+        vals = pd.to_numeric(att_f['num_steps'], errors='coerce')
+        att_f = att_f[vals <= float(max_num_steps)].copy()
+    target_id_keep = _target_ids_by_total_drop_range(
+        min_target_total_drops=min_target_total_drops,
+        max_target_total_drops=max_target_total_drops,
+    )
+    if target_id_keep is not None:
+        if target_id_keep:
+            tids = pd.to_numeric(att_f['target_color_id'], errors='coerce')
+            att_f = att_f[tids.isin(target_id_keep)].copy()
+        else:
+            att_f = att_f.iloc[0:0].copy()
+
+    archetype_label = str(archetype or '').strip()
+    if archetype_label:
+        tags = build_attempt_archetypes(per_attempt_limit=250000).get('per_attempt_tags') or []
+        if tags:
+            tags_df = pd.DataFrame(tags)
+            if not tags_df.empty and 'attempt_uuid' in tags_df.columns and 'archetype' in tags_df.columns:
+                tags_df['attempt_uuid'] = tags_df['attempt_uuid'].astype(str)
+                tags_df['archetype'] = tags_df['archetype'].fillna('').astype(str)
+                keep = set(
+                    tags_df.loc[tags_df['archetype'] == archetype_label, 'attempt_uuid']
+                    .dropna()
+                    .astype(str)
+                    .tolist()
+                )
+                att_f = att_f[att_f['attempt_uuid'].isin(keep)].copy()
+            else:
+                att_f = att_f.iloc[0:0].copy()
+        else:
+            att_f = att_f.iloc[0:0].copy()
+
+    allowed_attempt_ids = set(att_f['attempt_uuid'].dropna().astype(str).tolist())
+    if not allowed_attempt_ids and not (attempt_uuid and str(attempt_uuid).strip()):
+        ax.text(0.5, 0.5, 'No attempts left after filters', ha='center', va='center', fontsize=11)
+        ax.axis('off')
+        return _fig_to_png(fig)
+    if allowed_attempt_ids:
+        ev_f = ev_f[ev_f['attempt_uuid'].isin(allowed_attempt_ids)].copy()
+
+    action_type_set: Set[str] = set()
+    for t in (action_types or []):
+        tl = str(t or '').strip().lower()
+        if tl in {'add', 'remove'}:
+            action_type_set.add(tl)
+    action_color_set: Set[str] = set()
+    for c in (action_colors or []):
+        cl = str(c or '').strip().lower()
+        if cl in PIGMENT_ORDER:
+            action_color_set.add(cl)
+    if action_type_set:
+        ev_f['action_type_norm'] = ev_f['action_type'].fillna('').astype(str).str.lower().str.strip()
+        ev_f = ev_f[ev_f['action_type_norm'].isin(action_type_set)].copy()
+    if action_color_set:
+        ev_f['action_color_norm'] = ev_f['action_color'].fillna('').astype(str).str.lower().str.strip()
+        ev_f = ev_f[ev_f['action_color_norm'].isin(action_color_set)].copy()
+
     au_in = (attempt_uuid or '').strip()
     if au_in:
-        resolved, err = _resolve_network_attempt_uuid(att, ev, au_in, None)
+        resolved, err = _resolve_network_attempt_uuid(att_f, ev_f, au_in, None)
         if resolved is None:
             msg = {
                 'unknown_attempt_uuid': 'Unknown attempt_uuid (no events in sample)',
@@ -1611,7 +1838,7 @@ def plot_attempt_deltae_timeline(
         mode_title = f'Attempt DeltaE trajectory (…{resolved[-8:]})'
     elif target_color_id is not None:
         if mode == 'detailed':
-            resolved, err = _resolve_network_attempt_uuid(att, ev, None, target_color_id)
+            resolved, err = _resolve_network_attempt_uuid(att_f, ev_f, None, target_color_id)
             if resolved is None:
                 msg = {
                     'no_attempts_for_target': 'No attempts for this target_color_id',
@@ -1624,7 +1851,7 @@ def plot_attempt_deltae_timeline(
             mode_title = f'Attempt DeltaE trajectory (target_id={target_color_id}, …{resolved[-8:]})'
         else:
             candidates = (
-                att.loc[att['target_color_id'] == target_color_id, 'attempt_uuid']
+                att_f.loc[att_f['target_color_id'] == target_color_id, 'attempt_uuid']
                 .dropna()
                 .astype(str)
                 .tolist()
@@ -1638,7 +1865,7 @@ def plot_attempt_deltae_timeline(
             mode_title = f'Aggregate DeltaE timeline (target_id={target_color_id})'
     else:
         if mode == 'detailed':
-            resolved, err = _resolve_network_attempt_uuid(att, ev, None, None)
+            resolved, err = _resolve_network_attempt_uuid(att_f, ev_f, None, None)
             if resolved is None:
                 ax.text(0.5, 0.5, err or 'No attempts to show', ha='center', va='center', fontsize=11)
                 ax.axis('off')
@@ -1648,7 +1875,7 @@ def plot_attempt_deltae_timeline(
             mode_title = f'Attempt DeltaE trajectory (…{resolved[-8:]})'
         else:
             # Fall back to all attempts in-sample when no explicit filter is provided.
-            attempt_ids = ev['attempt_uuid'].dropna().astype(str).unique().tolist()
+            attempt_ids = ev_f['attempt_uuid'].dropna().astype(str).unique().tolist()
             if len(attempt_ids) == 0:
                 ax.text(0.5, 0.5, 'No attempts to show', ha='center', va='center', fontsize=11)
                 ax.axis('off')
@@ -1656,10 +1883,11 @@ def plot_attempt_deltae_timeline(
             render_single = False
             mode_title = 'Aggregate DeltaE timeline (all attempts in sample)'
 
-    rows = ev[ev['attempt_uuid'].astype(str).isin(set(attempt_ids))].copy()
+    rows = ev_f[ev_f['attempt_uuid'].astype(str).isin(set(attempt_ids))].copy()
     rows = rows[rows['step_index'].notna()].copy()
     rows = rows.sort_values(['attempt_uuid', 'seq', 'step_index'])
     rows['delta_e_after'] = pd.to_numeric(rows['delta_e_after'], errors='coerce')
+    rows['delta_e_before'] = pd.to_numeric(rows['delta_e_before'], errors='coerce')
     rows = rows[rows['delta_e_after'].notna()]
     if len(rows) == 0:
         ax.text(0.5, 0.5, 'No DeltaE step rows for selected attempts', ha='center', va='center')
@@ -1668,28 +1896,168 @@ def plot_attempt_deltae_timeline(
 
     if render_single:
         p = rows.sort_values(['seq', 'step_index']).reset_index(drop=True)
-        x = np.arange(1, len(p) + 1)
+        p['action_type'] = p['action_type'].fillna('').astype(str).str.lower().str.strip()
+        p['action_color'] = p['action_color'].fillna('').astype(str).str.lower().str.strip()
+        p = p[p['action_type'].isin(['add', 'remove'])].copy()
+        if len(p) == 0:
+            ax.text(0.5, 0.5, 'No action_add/action_remove rows after filters', ha='center', va='center')
+            ax.axis('off')
+            return _fig_to_png(fig)
+        fig.clf()
+        gs = fig.add_gridspec(nrows=2, ncols=1, height_ratios=[3.2, 1.45], hspace=0.08)
+        ax_main = fig.add_subplot(gs[0, 0])
+        ax_ratio = fig.add_subplot(gs[1, 0], sharex=ax_main)
+
+        x = pd.to_numeric(p['step_index'], errors='coerce').to_numpy(dtype=float)
+        if not np.isfinite(x).any():
+            x = np.arange(1, len(p) + 1, dtype=float)
         y = p['delta_e_after'].to_numpy(dtype=float)
-        action_type = p['action_type'].fillna('').astype(str).str.lower()
-        c = np.where(action_type.eq('remove'), '#ef4444', '#2563eb')
-        ax.plot(x, y, color='#334155', linewidth=1.8, alpha=0.9, zorder=1)
-        ax.scatter(x, y, c=c, s=28, alpha=0.95, zorder=2)
+        y_before = p['delta_e_before'].to_numpy(dtype=float)
+        delta_change = np.where(np.isfinite(y_before), y - y_before, np.nan)
+        action_type = p['action_type'].tolist()
+        action_color = p['action_color'].tolist()
+        signs = ['+' if t == 'add' else '-' for t in action_type]
+        bubble_colors = [PIGMENT_HEX.get(col, '#64748b') for col in action_color]
+        bubble_sizes = 220.0 + np.clip(np.nan_to_num(np.abs(delta_change), nan=0.0) * 240.0, 0, 420)
+
+        ax_main.plot(x, y, color='#94a3b8', linewidth=1.3, alpha=0.75, zorder=1)
+        ax_main.scatter(
+            x,
+            y,
+            s=bubble_sizes,
+            c=bubble_colors,
+            edgecolors='#0f172a',
+            linewidths=0.85,
+            alpha=0.95,
+            zorder=2,
+        )
+        for xi, yi, sign, dch, col in zip(x, y, signs, delta_change, action_color):
+            txt_color = 'black' if col in ('yellow', 'white') else 'white'
+            ax_main.text(
+                xi,
+                yi,
+                sign,
+                ha='center',
+                va='center',
+                fontsize=9,
+                fontweight='bold',
+                color=txt_color,
+                zorder=3,
+            )
+            dy = 13 if int(xi) % 2 == 0 else -16
+            delta_txt = f'ΔE {dch:+.2f}' if np.isfinite(dch) else 'ΔE n/a'
+            ax_main.annotate(
+                f'{sign}{col}\n{delta_txt}',
+                xy=(xi, yi),
+                xytext=(0, dy),
+                textcoords='offset points',
+                ha='center',
+                va='bottom' if dy > 0 else 'top',
+                fontsize=7,
+                color='#111827',
+            )
         y_min = float(np.nanmin(y))
         y_max = float(np.nanmax(y))
-        ax.axhline(2.0, color='#16a34a', linestyle='--', linewidth=1.2, alpha=0.8)
+        ax_main.axhline(2.0, color='#16a34a', linestyle='--', linewidth=1.2, alpha=0.8)
         pad = max(0.08 * (y_max - y_min), 0.25)
-        ax.set_ylim(bottom=max(-0.05, y_min - pad), top=y_max + pad)
-        ax.set_xlim(0.5, max(1.5, len(x) + 0.5))
-        ax.set_xlabel('Action timeline (ordered step rows)')
-        ax.set_ylabel('DeltaE after action')
-        ax.set_title(mode_title)
+        x_min = float(np.nanmin(x))
+        x_max = float(np.nanmax(x))
+        ax_main.set_ylim(bottom=max(-0.05, y_min - pad), top=y_max + pad)
+        ax_main.set_xlim(max(0.5, x_min - 0.5), x_max + 0.5)
+        ax_main.set_ylabel('DeltaE after action')
+        ax_main.set_title(f'{mode_title} | n_steps={len(x)}')
+
+        resolved_id = None
+        if len(p):
+            resolved_id = str(p.iloc[0].get('attempt_uuid') or '')
+        target_id = None
+        if resolved_id:
+            tvals = (
+                att_f.loc[att_f['attempt_uuid'].astype(str) == resolved_id, 'target_color_id']
+                .dropna()
+                .astype(int)
+                .tolist()
+            )
+            if tvals:
+                target_id = int(tvals[0])
+        target_ratios: Dict[str, float] = {}
+        if target_id is not None:
+            target_ratios = _target_recipe_ratio_map([target_id]).get(target_id, {})
+
+        raw = ev[ev['attempt_uuid'].astype(str) == resolved_id].copy() if resolved_id else pd.DataFrame()
+        raw = raw[raw['event_type'].isin(['action_add', 'action_remove'])].copy()
+        raw = raw.sort_values(['seq', 'step_index'])
+        running = _zero_state_counts()
+        xs_ratio: List[float] = []
+        ys_ratio: Dict[str, List[float]] = {k: [] for k in PIGMENT_ORDER}
+        for _, rr in raw.iterrows():
+            act = str(rr.get('action_type') or '').lower().strip()
+            col = str(rr.get('action_color') or '').lower().strip()
+            if act not in ('add', 'remove') or col not in running:
+                continue
+            amt = rr.get('amount')
+            amt_i = int(amt) if pd.notna(amt) else 1
+            if amt_i < 1:
+                amt_i = 1
+            if act == 'add':
+                running[col] += amt_i
+            else:
+                running[col] = max(0, running[col] - amt_i)
+            total = float(sum(running.values()))
+            x_step = rr.get('step_index')
+            try:
+                x_num = float(x_step)
+            except Exception:
+                x_num = float(len(xs_ratio) + 1)
+            xs_ratio.append(x_num)
+            for pk in PIGMENT_ORDER:
+                ys_ratio[pk].append((running[pk] / total) if total > 0 else 0.0)
+
+        for pk in PIGMENT_ORDER:
+            cpk = PIGMENT_HEX.get(pk, '#64748b')
+            if xs_ratio:
+                ax_ratio.plot(xs_ratio, ys_ratio[pk], color=cpk, linewidth=1.5, alpha=0.95)
+            if target_ratios:
+                ax_ratio.axhline(
+                    target_ratios.get(pk, 0.0),
+                    color=cpk,
+                    linestyle='--',
+                    linewidth=1.0,
+                    alpha=0.85,
+                )
+        ax_ratio.set_ylim(-0.02, 1.02)
+        ax_ratio.set_ylabel('Pigment ratio')
+        ax_ratio.set_xlabel('Action step index')
+        ax_ratio.grid(alpha=0.18, linewidth=0.6)
+
+        if target_ratios:
+            target_txt = ', '.join(
+                f'{k}:{(100.0 * float(target_ratios.get(k, 0.0))):.0f}%'
+                for k in PIGMENT_ORDER
+            )
+            ax_ratio.set_title(f'Target ratio (dashed): {target_txt}', fontsize=9)
+        else:
+            ax_ratio.set_title('Target ratio unavailable for selected attempt', fontsize=9)
         from matplotlib.lines import Line2D
+
+        pigment_legend = [
+            Line2D(
+                [0],
+                [0],
+                marker='o',
+                color='none',
+                markerfacecolor=PIGMENT_HEX[k],
+                markeredgecolor='#0f172a',
+                markersize=7,
+                label=k,
+            )
+            for k in PIGMENT_ORDER
+        ]
         legend_items = [
-            Line2D([0], [0], marker='o', color='w', markerfacecolor='#2563eb', markersize=7, label='add / other'),
-            Line2D([0], [0], marker='o', color='w', markerfacecolor='#ef4444', markersize=7, label='remove'),
+            *pigment_legend,
             Line2D([0], [0], color='#16a34a', linestyle='--', linewidth=1.2, label='DeltaE = 2.0'),
         ]
-        ax.legend(handles=legend_items, fontsize=8, loc='upper right')
+        ax_main.legend(handles=legend_items, fontsize=8, loc='upper right')
         return _fig_to_png(fig)
 
     # Aggregate mode: normalize each attempt timeline to progress in [0, 1] and
@@ -1771,9 +2139,200 @@ def plot_attempt_deltae_timeline(
     sampled_note = ''
     if total_attempts > attempts_in_plot:
         sampled_note = f' [sampled {attempts_in_plot}/{total_attempts}]'
-    ax.set_title(f'{mode_title}{sampled_note} | hit(<2.0)={hit_rate:.1f}%')
+    ax.set_title(f'{mode_title}{sampled_note} | hit(<2.0)={hit_rate:.1f}% | n={attempts_in_plot}')
     ax.legend(fontsize=8, loc='upper right')
     return _fig_to_png(fig)
+
+
+def get_attempt_deltae_timeline_data(plot_options: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    opts = plot_options or {}
+    att, ev = get_dataframes()
+    mode = str(opts.get('view_mode') or 'detailed').strip().lower()
+    mode = 'detailed' if mode == 'detailed' else 'aggregate'
+
+    att_f = att.copy()
+    ev_f = ev.copy()
+    att_f['attempt_uuid'] = att_f['attempt_uuid'].astype(str)
+    ev_f['attempt_uuid'] = ev_f['attempt_uuid'].astype(str)
+
+    user_id = opts.get('user_id')
+    if user_id and str(user_id).strip():
+        uid = str(user_id).strip().upper()
+        users = att_f['user_id'].fillna('').astype(str).str.upper()
+        att_f = att_f[users == uid].copy()
+
+    min_final_delta_e = opts.get('min_final_delta_e')
+    max_final_delta_e = opts.get('max_final_delta_e')
+    min_num_steps = opts.get('min_num_steps')
+    max_num_steps = opts.get('max_num_steps')
+    min_target_total_drops = opts.get('min_target_total_drops')
+    max_target_total_drops = opts.get('max_target_total_drops')
+
+    if min_final_delta_e is not None:
+        vals = pd.to_numeric(att_f['final_delta_e'], errors='coerce')
+        att_f = att_f[vals >= float(min_final_delta_e)].copy()
+    if max_final_delta_e is not None:
+        vals = pd.to_numeric(att_f['final_delta_e'], errors='coerce')
+        att_f = att_f[vals <= float(max_final_delta_e)].copy()
+    if min_num_steps is not None:
+        vals = pd.to_numeric(att_f['num_steps'], errors='coerce')
+        att_f = att_f[vals >= float(min_num_steps)].copy()
+    if max_num_steps is not None:
+        vals = pd.to_numeric(att_f['num_steps'], errors='coerce')
+        att_f = att_f[vals <= float(max_num_steps)].copy()
+    target_id_keep = _target_ids_by_total_drop_range(
+        min_target_total_drops=min_target_total_drops,
+        max_target_total_drops=max_target_total_drops,
+    )
+    if target_id_keep is not None:
+        if target_id_keep:
+            tids = pd.to_numeric(att_f['target_color_id'], errors='coerce')
+            att_f = att_f[tids.isin(target_id_keep)].copy()
+        else:
+            att_f = att_f.iloc[0:0].copy()
+
+    archetype_label = str(opts.get('archetype') or '').strip()
+    if archetype_label:
+        tags = build_attempt_archetypes(per_attempt_limit=250000).get('per_attempt_tags') or []
+        if tags:
+            tags_df = pd.DataFrame(tags)
+            if not tags_df.empty and 'attempt_uuid' in tags_df.columns and 'archetype' in tags_df.columns:
+                tags_df['attempt_uuid'] = tags_df['attempt_uuid'].astype(str)
+                tags_df['archetype'] = tags_df['archetype'].fillna('').astype(str)
+                keep = set(
+                    tags_df.loc[tags_df['archetype'] == archetype_label, 'attempt_uuid']
+                    .dropna()
+                    .astype(str)
+                    .tolist()
+                )
+                att_f = att_f[att_f['attempt_uuid'].isin(keep)].copy()
+            else:
+                att_f = att_f.iloc[0:0].copy()
+        else:
+            att_f = att_f.iloc[0:0].copy()
+
+    allowed_attempt_ids = set(att_f['attempt_uuid'].dropna().astype(str).tolist())
+    if allowed_attempt_ids:
+        ev_f = ev_f[ev_f['attempt_uuid'].isin(allowed_attempt_ids)].copy()
+
+    action_type_set: Set[str] = set()
+    for t in (opts.get('action_types') or []):
+        tl = str(t or '').strip().lower()
+        if tl in {'add', 'remove'}:
+            action_type_set.add(tl)
+    action_color_set: Set[str] = set()
+    for c in (opts.get('action_colors') or []):
+        cl = str(c or '').strip().lower()
+        if cl in PIGMENT_ORDER:
+            action_color_set.add(cl)
+    if action_type_set:
+        ev_f['action_type_norm'] = ev_f['action_type'].fillna('').astype(str).str.lower().str.strip()
+        ev_f = ev_f[ev_f['action_type_norm'].isin(action_type_set)].copy()
+    if action_color_set:
+        ev_f['action_color_norm'] = ev_f['action_color'].fillna('').astype(str).str.lower().str.strip()
+        ev_f = ev_f[ev_f['action_color_norm'].isin(action_color_set)].copy()
+
+    attempt_uuid = str(opts.get('attempt_uuid') or '').strip()
+    target_color_id = opts.get('target_color_id')
+    resolved: Optional[str] = None
+    if attempt_uuid:
+        resolved, _ = _resolve_network_attempt_uuid(att_f, ev_f, attempt_uuid, None)
+    elif target_color_id is not None:
+        resolved, _ = _resolve_network_attempt_uuid(att_f, ev_f, None, target_color_id)
+    else:
+        resolved, _ = _resolve_network_attempt_uuid(att_f, ev_f, None, None)
+
+    if resolved is None:
+        return {'status': 'empty', 'message': 'No attempt to show after filters'}
+
+    rows = ev_f[ev_f['attempt_uuid'].astype(str) == resolved].copy()
+    rows = rows[rows['step_index'].notna()].copy()
+    rows = rows.sort_values(['seq', 'step_index'])
+    rows['delta_e_after'] = pd.to_numeric(rows['delta_e_after'], errors='coerce')
+    rows['delta_e_before'] = pd.to_numeric(rows['delta_e_before'], errors='coerce')
+    rows['step_index'] = pd.to_numeric(rows['step_index'], errors='coerce')
+    rows['action_type'] = rows['action_type'].fillna('').astype(str).str.lower().str.strip()
+    rows['action_color'] = rows['action_color'].fillna('').astype(str).str.lower().str.strip()
+    rows = rows[
+        rows['delta_e_after'].notna()
+        & rows['step_index'].notna()
+        & rows['action_type'].isin(['add', 'remove'])
+    ].copy()
+    if rows.empty:
+        return {'status': 'empty', 'message': 'No action rows for selected attempt'}
+
+    points: List[Dict[str, Any]] = []
+    for _, r in rows.iterrows():
+        dch = np.nan
+        if pd.notna(r.get('delta_e_before')):
+            dch = float(r['delta_e_after']) - float(r['delta_e_before'])
+        points.append(
+            {
+                'step_index': float(r['step_index']),
+                'delta_e_after': float(r['delta_e_after']),
+                'delta_change': float(dch) if np.isfinite(dch) else None,
+                'action_type': str(r['action_type']),
+                'action_color': str(r['action_color']),
+            }
+        )
+
+    meta = _attempt_display_meta(resolved)
+    target_id = meta.get('target_color_id')
+    if target_id is None:
+        tvals = (
+            att_f.loc[att_f['attempt_uuid'].astype(str) == resolved, 'target_color_id']
+            .dropna()
+            .astype(int)
+            .tolist()
+        )
+        target_id = int(tvals[0]) if tvals else None
+    target_ratio: Dict[str, float] = {}
+    if target_id is not None:
+        target_ratio = _target_recipe_ratio_map([target_id]).get(target_id, {})
+
+    raw = ev[ev['attempt_uuid'].astype(str) == resolved].copy()
+    raw = raw[raw['event_type'].isin(['action_add', 'action_remove'])].copy()
+    raw = raw.sort_values(['seq', 'step_index'])
+    running = _zero_state_counts()
+    ratio_series: List[Dict[str, Any]] = []
+    for _, rr in raw.iterrows():
+        act = str(rr.get('action_type') or '').lower().strip()
+        col = str(rr.get('action_color') or '').lower().strip()
+        if act not in ('add', 'remove') or col not in running:
+            continue
+        amt = rr.get('amount')
+        amt_i = int(amt) if pd.notna(amt) else 1
+        if amt_i < 1:
+            amt_i = 1
+        if act == 'add':
+            running[col] += amt_i
+        else:
+            running[col] = max(0, running[col] - amt_i)
+        total = float(sum(running.values()))
+        step = rr.get('step_index')
+        try:
+            step_num = float(step)
+        except Exception:
+            step_num = float(len(ratio_series) + 1)
+        row = {'step_index': step_num}
+        for pk in PIGMENT_ORDER:
+            row[pk] = (running[pk] / total) if total > 0 else 0.0
+        ratio_series.append(row)
+
+    return {
+        'status': 'success',
+        'mode': mode,
+        'attempt_uuid': resolved,
+        'target_name': meta.get('target_name'),
+        'target_color_id': target_id,
+        'outcome': meta.get('outcome') or 'incomplete',
+        'end_reason': meta.get('end_reason'),
+        'skip_perception': meta.get('skip_perception'),
+        'target_ratio': {k: float(target_ratio.get(k, 0.0)) for k in PIGMENT_ORDER},
+        'points': points,
+        'ratio_series': ratio_series,
+        'deltae_threshold': 2.0,
+    }
 
 
 def plot_archetype_deltae_trajectories(
@@ -3171,5 +3730,15 @@ def get_plot_png(plot_id: str, plot_options: Optional[Dict[str, Any]] = None) ->
             attempt_uuid=opts.get('attempt_uuid'),
             target_color_id=opts.get('target_color_id'),
             view_mode=opts.get('view_mode'),
+            user_id=opts.get('user_id'),
+            archetype=opts.get('archetype'),
+            min_final_delta_e=opts.get('min_final_delta_e'),
+            max_final_delta_e=opts.get('max_final_delta_e'),
+            min_num_steps=opts.get('min_num_steps'),
+            max_num_steps=opts.get('max_num_steps'),
+            min_target_total_drops=opts.get('min_target_total_drops'),
+            max_target_total_drops=opts.get('max_target_total_drops'),
+            action_colors=opts.get('action_colors'),
+            action_types=opts.get('action_types'),
         )
     return PLOT_BUILDERS[plot_id](att, ev)

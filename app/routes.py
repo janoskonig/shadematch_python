@@ -46,6 +46,7 @@ from .stat_eda import (
     ALLOWED_PLOT_IDS,
     build_attempt_archetypes,
     build_recipe_similarity_summary,
+    get_attempt_deltae_timeline_data,
     get_plot_png,
 )
 from .mixed_models_stat import get_mixed_models_summary
@@ -226,6 +227,41 @@ def stat_plot(plot_id: str):
             view_mode = request.args.get('view_mode')
             if view_mode and str(view_mode).strip():
                 plot_options['view_mode'] = str(view_mode).strip().lower()
+            user_id = request.args.get('user_id')
+            if user_id and str(user_id).strip():
+                plot_options['user_id'] = str(user_id).strip()
+            min_final_de = request.args.get('min_final_delta_e', type=float)
+            if min_final_de is not None:
+                plot_options['min_final_delta_e'] = float(min_final_de)
+            max_final_de = request.args.get('max_final_delta_e', type=float)
+            if max_final_de is not None:
+                plot_options['max_final_delta_e'] = float(max_final_de)
+            min_steps = request.args.get('min_num_steps', type=int)
+            if min_steps is not None:
+                plot_options['min_num_steps'] = int(min_steps)
+            max_steps = request.args.get('max_num_steps', type=int)
+            if max_steps is not None:
+                plot_options['max_num_steps'] = int(max_steps)
+            min_target_drops = request.args.get('min_target_total_drops', type=int)
+            if min_target_drops is not None:
+                plot_options['min_target_total_drops'] = int(min_target_drops)
+            max_target_drops = request.args.get('max_target_total_drops', type=int)
+            if max_target_drops is not None:
+                plot_options['max_target_total_drops'] = int(max_target_drops)
+            action_colors_raw = request.args.get('action_colors')
+            if action_colors_raw and str(action_colors_raw).strip():
+                plot_options['action_colors'] = [
+                    part.strip().lower()
+                    for part in str(action_colors_raw).split(',')
+                    if part and part.strip()
+                ]
+            action_types_raw = request.args.get('action_types')
+            if action_types_raw and str(action_types_raw).strip():
+                plot_options['action_types'] = [
+                    part.strip().lower()
+                    for part in str(action_types_raw).split(',')
+                    if part and part.strip()
+                ]
         if pid == 'archetype_compare_trajectories':
             raw = request.args.get('archetypes')
             if raw and str(raw).strip():
@@ -242,6 +278,64 @@ def stat_plot(plot_id: str):
             pass
         return jsonify({'status': 'error', 'message': str(e)}), 500
     return Response(png, mimetype='image/png')
+
+
+@main.route('/api/stat/attempt-timeline-data', methods=['GET'])
+def stat_attempt_timeline_data():
+    opts = {}
+    au = request.args.get('attempt_uuid')
+    if au and str(au).strip():
+        opts['attempt_uuid'] = str(au).strip()
+    tid = request.args.get('target_color_id', type=int)
+    if tid is not None:
+        opts['target_color_id'] = tid
+    view_mode = request.args.get('view_mode')
+    if view_mode and str(view_mode).strip():
+        opts['view_mode'] = str(view_mode).strip().lower()
+    user_id = request.args.get('user_id')
+    if user_id and str(user_id).strip():
+        opts['user_id'] = str(user_id).strip()
+    archetype = request.args.get('archetype')
+    if archetype and str(archetype).strip():
+        opts['archetype'] = str(archetype).strip()
+    min_final_de = request.args.get('min_final_delta_e', type=float)
+    if min_final_de is not None:
+        opts['min_final_delta_e'] = float(min_final_de)
+    max_final_de = request.args.get('max_final_delta_e', type=float)
+    if max_final_de is not None:
+        opts['max_final_delta_e'] = float(max_final_de)
+    min_steps = request.args.get('min_num_steps', type=int)
+    if min_steps is not None:
+        opts['min_num_steps'] = int(min_steps)
+    max_steps = request.args.get('max_num_steps', type=int)
+    if max_steps is not None:
+        opts['max_num_steps'] = int(max_steps)
+    min_target_drops = request.args.get('min_target_total_drops', type=int)
+    if min_target_drops is not None:
+        opts['min_target_total_drops'] = int(min_target_drops)
+    max_target_drops = request.args.get('max_target_total_drops', type=int)
+    if max_target_drops is not None:
+        opts['max_target_total_drops'] = int(max_target_drops)
+    action_colors_raw = request.args.get('action_colors')
+    if action_colors_raw and str(action_colors_raw).strip():
+        opts['action_colors'] = [
+            part.strip().lower()
+            for part in str(action_colors_raw).split(',')
+            if part and part.strip()
+        ]
+    action_types_raw = request.args.get('action_types')
+    if action_types_raw and str(action_types_raw).strip():
+        opts['action_types'] = [
+            part.strip().lower()
+            for part in str(action_types_raw).split(',')
+            if part and part.strip()
+        ]
+    try:
+        payload = get_attempt_deltae_timeline_data(opts)
+        return jsonify(payload)
+    except Exception as e:
+        print(f'stat_attempt_timeline_data error: {e}')
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @main.route('/spectral')

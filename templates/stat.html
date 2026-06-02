@@ -53,6 +53,18 @@
     min-height: 140px;
     background: var(--surface-elevated, #f6f7f8);
   }
+  .timeline-responsive-host {
+    width: 100%;
+    min-height: 360px;
+    background: var(--surface-elevated, #f6f7f8);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .timeline-responsive-host svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
   table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
   th, td {
     border-bottom: 1px solid var(--border);
@@ -88,6 +100,9 @@
     border: 1px solid var(--border);
     background: var(--surface);
     color: inherit;
+  }
+  .trajectory-controls select[multiple] {
+    min-height: 6rem;
   }
   .trajectory-controls button {
     padding: 7px 14px;
@@ -435,12 +450,54 @@
       <label>Attempt UUID (optional)
         <input type="text" id="trajectoryAttemptUuid" placeholder="explicit attempt UUID" autocomplete="off" />
       </label>
+      <label>User ID (optional)
+        <input type="text" id="trajectoryUserId" placeholder="e.g. AB12CD34" autocomplete="off" />
+      </label>
+      <label>Archetype
+        <select id="trajectoryArchetype" aria-label="Filter timeline by archetype">
+          <option value="">(all)</option>
+        </select>
+      </label>
+      <label>Final DeltaE range
+        <div style="display:flex;gap:6px;">
+          <input type="number" step="0.01" id="trajectoryMinFinalDeltaE" placeholder="min" style="min-width:5.5rem;" />
+          <input type="number" step="0.01" id="trajectoryMaxFinalDeltaE" placeholder="max" style="min-width:5.5rem;" />
+        </div>
+      </label>
+      <label>Action count range
+        <div style="display:flex;gap:6px;">
+          <input type="number" step="1" id="trajectoryMinNumSteps" placeholder="min" style="min-width:5.5rem;" />
+          <input type="number" step="1" id="trajectoryMaxNumSteps" placeholder="max" style="min-width:5.5rem;" />
+        </div>
+      </label>
+      <label>Target total drops range
+        <div style="display:flex;gap:6px;">
+          <input type="number" step="1" id="trajectoryMinTargetDrops" placeholder="min" style="min-width:5.5rem;" />
+          <input type="number" step="1" id="trajectoryMaxTargetDrops" placeholder="max" style="min-width:5.5rem;" />
+        </div>
+      </label>
+      <label>Action colors (multi-select)
+        <select id="trajectoryActionColors" multiple size="5" aria-label="Filter timeline actions by pigment color">
+          <option value="red">red</option>
+          <option value="yellow">yellow</option>
+          <option value="white">white</option>
+          <option value="blue">blue</option>
+          <option value="black">black</option>
+        </select>
+      </label>
+      <label>Action type (multi-select)
+        <select id="trajectoryActionTypes" multiple size="2" aria-label="Filter timeline actions by action type">
+          <option value="add">add</option>
+          <option value="remove">remove</option>
+        </select>
+      </label>
       <button type="button" id="trajectoryApplyBtn">Render trajectory</button>
     </div>
     <div class="chart-grid">
       <div class="chart-card">
-        <p class="chart-title">x: action timeline, y: DeltaE after action</p>
-        <img id="attemptTimelineImg" class="stat-plot-img" alt="Attempt DeltaE trajectory" loading="lazy" />
+        <p class="chart-title">x: action timeline, y: DeltaE after action (bubble color=pigment, +/- in bubble, size=|ΔE change|)</p>
+        <div id="attemptTimelineResponsiveHost" class="timeline-responsive-host" aria-label="Responsive attempt DeltaE trajectory plot"></div>
+        <img id="attemptTimelineImg" class="stat-plot-img" alt="Attempt DeltaE trajectory" loading="lazy" style="display:none;" />
       </div>
     </div>
   </section>
@@ -629,9 +686,9 @@
     });
   }
 
-  function refreshAttemptTimelinePlot() {
-    var img = document.getElementById('attemptTimelineImg');
-    if (!img) return;
+  var lastTimelinePayload = null;
+
+  function buildAttemptTimelineQuery() {
     var q = '?t=' + Date.now();
     var au = document.getElementById('trajectoryAttemptUuid');
     var tid = document.getElementById('trajectoryTargetId');
@@ -642,6 +699,198 @@
     } else if (tid && tid.value) {
       q += '&target_color_id=' + encodeURIComponent(tid.value);
     }
+    var uid = document.getElementById('trajectoryUserId');
+    if (uid && uid.value.trim()) q += '&user_id=' + encodeURIComponent(uid.value.trim().toUpperCase());
+    var arc = document.getElementById('trajectoryArchetype');
+    if (arc && arc.value) q += '&archetype=' + encodeURIComponent(arc.value);
+    var minDe = document.getElementById('trajectoryMinFinalDeltaE');
+    if (minDe && minDe.value !== '') q += '&min_final_delta_e=' + encodeURIComponent(minDe.value);
+    var maxDe = document.getElementById('trajectoryMaxFinalDeltaE');
+    if (maxDe && maxDe.value !== '') q += '&max_final_delta_e=' + encodeURIComponent(maxDe.value);
+    var minSteps = document.getElementById('trajectoryMinNumSteps');
+    if (minSteps && minSteps.value !== '') q += '&min_num_steps=' + encodeURIComponent(minSteps.value);
+    var maxSteps = document.getElementById('trajectoryMaxNumSteps');
+    if (maxSteps && maxSteps.value !== '') q += '&max_num_steps=' + encodeURIComponent(maxSteps.value);
+    var minTargetDrops = document.getElementById('trajectoryMinTargetDrops');
+    if (minTargetDrops && minTargetDrops.value !== '') q += '&min_target_total_drops=' + encodeURIComponent(minTargetDrops.value);
+    var maxTargetDrops = document.getElementById('trajectoryMaxTargetDrops');
+    if (maxTargetDrops && maxTargetDrops.value !== '') q += '&max_target_total_drops=' + encodeURIComponent(maxTargetDrops.value);
+    var colorsSel = document.getElementById('trajectoryActionColors');
+    if (colorsSel) {
+      var colors = Array.from(colorsSel.selectedOptions || []).map(function(o) { return o.value; }).filter(Boolean);
+      if (colors.length) q += '&action_colors=' + encodeURIComponent(colors.join(','));
+    }
+    var typesSel = document.getElementById('trajectoryActionTypes');
+    if (typesSel) {
+      var types = Array.from(typesSel.selectedOptions || []).map(function(o) { return o.value; }).filter(Boolean);
+      if (types.length) q += '&action_types=' + encodeURIComponent(types.join(','));
+    }
+    return q;
+  }
+
+  function renderAttemptTimelineSvg(payload) {
+    var host = document.getElementById('attemptTimelineResponsiveHost');
+    if (!host) return;
+    host.innerHTML = '';
+    if (!payload || payload.status !== 'success' || !Array.isArray(payload.points) || !payload.points.length) {
+      host.innerHTML = '<div style="padding:14px;color:var(--text-secondary);font-size:0.9rem;">'
+        + escapeHtml((payload && payload.message) || 'No timeline data to render.')
+        + '</div>';
+      return;
+    }
+
+    var points = payload.points;
+    var ratios = Array.isArray(payload.ratio_series) ? payload.ratio_series : [];
+    var targetRatio = payload.target_ratio || {};
+    var colors = { red:'#ef4444', yellow:'#f59e0b', white:'#f8fafc', blue:'#3b82f6', black:'#111827' };
+    var pigments = ['red', 'yellow', 'white', 'blue', 'black'];
+
+    var W = 1100;
+    var H = 560;
+    var m = { l: 52, r: 18, t: 24, b: 34 };
+    var splitY = 375;
+    var panelGap = 24;
+    var topBottom = splitY - (panelGap / 2);
+    var botTop = splitY + (panelGap / 2);
+    var topH = topBottom - m.t;
+    var botH = H - botTop - m.b;
+    var xMin = Math.min.apply(null, points.map(function(p) { return Number(p.step_index); }));
+    var xMax = Math.max.apply(null, points.map(function(p) { return Number(p.step_index); }));
+    if (!Number.isFinite(xMin) || !Number.isFinite(xMax)) return;
+    if (xMax <= xMin) xMax = xMin + 1;
+    var yMin = Math.min.apply(null, points.map(function(p) { return Number(p.delta_e_after); }));
+    var yMax = Math.max.apply(null, points.map(function(p) { return Number(p.delta_e_after); }));
+    if (!Number.isFinite(yMin) || !Number.isFinite(yMax)) return;
+    var pad = Math.max(0.25, (yMax - yMin) * 0.08);
+    yMin = Math.max(-0.05, yMin - pad);
+    yMax = yMax + pad;
+    if (yMax <= yMin) yMax = yMin + 1;
+
+    function sx(x) { return m.l + ((x - xMin) / (xMax - xMin)) * (W - m.l - m.r); }
+    function syTop(y) { return m.t + ((yMax - y) / (yMax - yMin)) * topH; }
+    function syBot(y) { return botTop + ((1 - y) * botH); }
+    function jitteredRatioY(ratioValue, pigmentIdx) {
+      var v = Number(ratioValue);
+      if (!Number.isFinite(v)) v = 0;
+      if (Math.abs(v) > 1e-12) return syBot(v);
+      // Separate exact-zero lines a bit so all pigments remain visible at 0.00.
+      var step = 0.006;
+      var jitter = (pigmentIdx - 2) * step; // centered offsets for 5 pigments
+      var vv = Math.max(0, Math.min(1, jitter));
+      return syBot(vv);
+    }
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    var out = [];
+    out.push('<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Attempt trajectory responsive chart">');
+    out.push('<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="white"/>');
+    out.push('<rect x="' + m.l + '" y="' + m.t + '" width="' + (W - m.l - m.r) + '" height="' + topH + '" fill="none" stroke="#cbd5e1" stroke-width="1"/>');
+    out.push('<rect x="' + m.l + '" y="' + botTop + '" width="' + (W - m.l - m.r) + '" height="' + botH + '" fill="#e5e7eb" stroke="#cbd5e1" stroke-width="1"/>');
+
+    var xTicks = [];
+    for (var xi = 0; xi <= 5; xi += 1) {
+      xTicks.push(xMin + (xMax - xMin) * (xi / 5));
+    }
+    xTicks.forEach(function(xv) {
+      var xx = sx(xv);
+      out.push('<line x1="' + xx.toFixed(2) + '" y1="' + m.t + '" x2="' + xx.toFixed(2) + '" y2="' + (H - m.b) + '" stroke="#e2e8f0" stroke-width="1"/>');
+      out.push('<text x="' + xx.toFixed(2) + '" y="' + (H - 8) + '" text-anchor="middle" font-size="10" fill="#475569">' + Math.round(xv) + '</text>');
+    });
+
+    var yTopTicks = [];
+    for (var yi = 0; yi <= 4; yi += 1) {
+      yTopTicks.push(yMin + (yMax - yMin) * (yi / 4));
+    }
+    yTopTicks.forEach(function(yv) {
+      var yy = syTop(yv);
+      out.push('<line x1="' + m.l + '" y1="' + yy.toFixed(2) + '" x2="' + (W - m.r) + '" y2="' + yy.toFixed(2) + '" stroke="#eef2f7" stroke-width="1"/>');
+      out.push('<text x="' + (m.l - 8) + '" y="' + (yy + 3).toFixed(2) + '" text-anchor="end" font-size="10" fill="#475569">' + yv.toFixed(1) + '</text>');
+    });
+
+    [0, 0.25, 0.5, 0.75, 1].forEach(function(rv) {
+      var ry = syBot(rv);
+      out.push('<line x1="' + m.l + '" y1="' + ry.toFixed(2) + '" x2="' + (W - m.r) + '" y2="' + ry.toFixed(2) + '" stroke="#eef2f7" stroke-width="1"/>');
+      out.push('<text x="' + (m.l - 8) + '" y="' + (ry + 3).toFixed(2) + '" text-anchor="end" font-size="10" fill="#475569">' + rv.toFixed(2) + '</text>');
+    });
+
+    var thrY = syTop(Number(payload.deltae_threshold || 2));
+    out.push('<line x1="' + m.l + '" y1="' + thrY + '" x2="' + (W - m.r) + '" y2="' + thrY + '" stroke="#16a34a" stroke-dasharray="6 4" stroke-width="1.3"/>');
+
+    var topPath = '';
+    points.forEach(function(p, i) {
+      var x = sx(Number(p.step_index));
+      var y = syTop(Number(p.delta_e_after));
+      topPath += (i ? ' L ' : 'M ') + x.toFixed(2) + ' ' + y.toFixed(2);
+    });
+    out.push('<path d="' + topPath + '" fill="none" stroke="#94a3b8" stroke-width="1.5"/>');
+
+    points.forEach(function(p) {
+      var x = sx(Number(p.step_index));
+      var y = syTop(Number(p.delta_e_after));
+      var col = colors[p.action_color] || '#64748b';
+      var dc = Number(p.delta_change);
+      var radius = 10 + Math.min(16, Math.abs(Number.isFinite(dc) ? dc : 0) * 6);
+      var sign = p.action_type === 'remove' ? '-' : '+';
+      var txtColor = (p.action_color === 'yellow' || p.action_color === 'white') ? '#111827' : '#f9fafb';
+      out.push('<circle cx="' + x.toFixed(2) + '" cy="' + y.toFixed(2) + '" r="' + radius.toFixed(2) + '" fill="' + col + '" stroke="#0f172a" stroke-width="1"/>');
+      out.push('<text x="' + x.toFixed(2) + '" y="' + (y + 3).toFixed(2) + '" text-anchor="middle" font-size="10" font-weight="700" fill="' + txtColor + '">' + sign + '</text>');
+      var dy = (Math.round(Number(p.step_index)) % 2 === 0) ? -14 : 16;
+      var label = Number.isFinite(dc) ? ((dc >= 0 ? '+' : '') + dc.toFixed(2)) : 'n/a';
+      out.push('<text x="' + x.toFixed(2) + '" y="' + (y + dy).toFixed(2) + '" text-anchor="middle" font-size="9" fill="#0f172a">' + esc(label) + '</text>');
+    });
+
+    pigments.forEach(function(pk, pkIdx) {
+      if (ratios.length) {
+        var rp = '';
+        ratios.forEach(function(r, idx) {
+          var x = sx(Number(r.step_index));
+          var y = jitteredRatioY(r[pk], pkIdx);
+          rp += (idx ? ' L ' : 'M ') + x.toFixed(2) + ' ' + y.toFixed(2);
+        });
+        out.push('<path d="' + rp + '" fill="none" stroke="' + colors[pk] + '" stroke-width="1.6"/>');
+      }
+      if (targetRatio && targetRatio[pk] != null) {
+        var ty = jitteredRatioY(targetRatio[pk], pkIdx);
+        out.push('<line x1="' + m.l + '" y1="' + ty.toFixed(2) + '" x2="' + (W - m.r) + '" y2="' + ty.toFixed(2) + '" stroke="' + colors[pk] + '" stroke-dasharray="4 4" stroke-width="1"/>');
+      }
+    });
+
+    out.push('<line x1="' + m.l + '" y1="' + topBottom + '" x2="' + (W - m.r) + '" y2="' + topBottom + '" stroke="#ffffff" stroke-width="1"/>');
+    out.push('<line x1="' + m.l + '" y1="' + botTop + '" x2="' + (W - m.r) + '" y2="' + botTop + '" stroke="#ffffff" stroke-width="1"/>');
+    var headerBits = [];
+    if (payload.target_name) headerBits.push('Color: ' + payload.target_name);
+    if (payload.outcome) headerBits.push('Outcome: ' + payload.outcome);
+    if (payload.attempt_uuid) headerBits.push('Attempt: …' + String(payload.attempt_uuid).slice(-8));
+    out.push('<text x="' + m.l + '" y="14" font-size="11" fill="#334155">' + esc(headerBits.join(' | ')) + '</text>');
+    out.push('<text x="' + m.l + '" y="30" font-size="11" fill="#334155">DeltaE after action</text>');
+    out.push('<text x="' + m.l + '" y="' + (botTop + 16) + '" font-size="11" fill="#334155">Pigment ratio (solid=actual, dashed=target)</text>');
+    out.push('<text x="' + (W - m.r) + '" y="' + (H - 8) + '" text-anchor="end" font-size="11" fill="#334155">Step index</text>');
+    out.push('</svg>');
+    host.innerHTML = out.join('');
+  }
+
+  async function refreshAttemptTimelinePlot() {
+    var img = document.getElementById('attemptTimelineImg');
+    var host = document.getElementById('attemptTimelineResponsiveHost');
+    if (!img || !host) return;
+    var mode = document.getElementById('trajectoryViewMode');
+    var q = buildAttemptTimelineQuery();
+    var selectedMode = mode && mode.value ? mode.value : 'aggregate';
+    if (selectedMode === 'detailed') {
+      img.style.display = 'none';
+      host.style.display = 'block';
+      try {
+        var resp = await fetch('/api/stat/attempt-timeline-data' + q);
+        var data = await resp.json();
+        lastTimelinePayload = data;
+        renderAttemptTimelineSvg(data);
+      } catch (err) {
+        renderAttemptTimelineSvg({ status: 'error', message: err && err.message ? err.message : 'Failed to load timeline data' });
+      }
+      return;
+    }
+    host.style.display = 'none';
+    img.style.display = 'block';
     img.src = '/api/stat/plot/attempt_deltae_timeline.png' + q;
   }
 
@@ -748,9 +997,25 @@
       if (trajSel) trajSel.value = '';
     }
     setupArchetypeCompareOptions(labels);
+    setupTrajectoryArchetypeOptions(labels);
     renderArchetypePerAttemptTable();
     refreshArchetypeTrajectoryPlot();
     refreshArchetypeComparePlot();
+  }
+
+  function setupTrajectoryArchetypeOptions(labels) {
+    var sel = document.getElementById('trajectoryArchetype');
+    if (!sel) return;
+    var prev = sel.value || '';
+    var opts = labels || [];
+    sel.innerHTML = '<option value="">(all)</option>' + opts.map(function(label) {
+      return '<option value="' + escapeHtml(label) + '">' + escapeHtml(label) + '</option>';
+    }).join('');
+    if (prev && opts.indexOf(prev) >= 0) {
+      sel.value = prev;
+    } else {
+      sel.value = '';
+    }
   }
 
   function renderArchetypeInsights(arch) {
@@ -1359,6 +1624,25 @@
   if (trajectoryBtn) trajectoryBtn.addEventListener('click', refreshAttemptTimelinePlot);
   var trajectoryViewMode = document.getElementById('trajectoryViewMode');
   if (trajectoryViewMode) trajectoryViewMode.addEventListener('change', refreshAttemptTimelinePlot);
+  ['trajectoryTargetId', 'trajectoryArchetype', 'trajectoryActionColors', 'trajectoryActionTypes']
+    .forEach(function(id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener('change', refreshAttemptTimelinePlot);
+    });
+  ['trajectoryAttemptUuid', 'trajectoryUserId', 'trajectoryMinFinalDeltaE', 'trajectoryMaxFinalDeltaE', 'trajectoryMinNumSteps', 'trajectoryMaxNumSteps', 'trajectoryMinTargetDrops', 'trajectoryMaxTargetDrops']
+    .forEach(function(id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener('keydown', function(evt) {
+        if (evt.key === 'Enter') refreshAttemptTimelinePlot();
+      });
+    });
+  window.addEventListener('resize', function() {
+    var mode = document.getElementById('trajectoryViewMode');
+    if (mode && mode.value === 'detailed' && lastTimelinePayload && lastTimelinePayload.status === 'success') {
+      renderAttemptTimelineSvg(lastTimelinePayload);
+    }
+  });
   var archetypeSel = document.getElementById('archetypeFilterSelect');
   if (archetypeSel) archetypeSel.addEventListener('change', function() {
     setArchetypeSelection(archetypeSel.value);
