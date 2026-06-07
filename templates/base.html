@@ -1,24 +1,65 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="theme-color" content="#1a1a2e">
-  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
-  <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <title>{% block title %}ShadeMatch{% endblock %}</title>
-  {% block head %}{% endblock %}
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#F8F6F3">
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
+    <title>{% block title %}ShadeMatch{% endblock %}</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/theme.css') }}?v=20260508d">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/components.css') }}?v=20260508d">
+    <link rel="stylesheet" href="{{ url_for('static', filename='cookie-consent.css') }}?v=20260508d">
+
+    {% block extra_css %}{% endblock %}
+    {% block extra_head %}{% endblock %}
 </head>
 <body>
-  {% block body %}{% endblock %}
-  <script>
+    <script>
+    (function () {
+      var CURRENT = {{ client_storage_version|tojson }};
+      var KEY = 'sm_client_storage_version';
+      function clearAllCookies() {
+        var secure = location.protocol === 'https:' ? ';Secure' : '';
+        var raw = document.cookie ? document.cookie.split(';') : [];
+        for (var i = 0; i < raw.length; i++) {
+          var name = raw[i].split('=')[0].trim();
+          if (!name) continue;
+          document.cookie = name + '=;Max-Age=0;path=/;SameSite=Lax' + secure;
+        }
+      }
+      try {
+        if (localStorage.getItem(KEY) !== String(CURRENT)) {
+          try { sessionStorage.clear(); } catch (e1) {}
+          try { localStorage.clear(); } catch (e2) {}
+          clearAllCookies();
+          localStorage.setItem(KEY, String(CURRENT));
+        }
+      } catch (e) { /* private mode / blocked storage */ }
+    })();
+    </script>
+    {% block content %}{% endblock %}
+
+    <script src="{{ url_for('static', filename='cookie-consent.js') }}"></script>
+    {% block extra_js %}{% endblock %}
+
+    <script>
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.register('{{ url_for("static", filename="sw.js") }}', { scope: '/' })
-        .then(function(reg) { console.log('SW registered:', reg.scope); })
-        .catch(function(err) { console.warn('SW registration failed:', err); });
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('/sw.js', { scope: '/' })
+          .then(function (reg) {
+            window.__swRegistration = reg;
+          })
+          .catch(function (err) {
+            console.warn('Service worker registration failed:', err);
+          });
+      });
     }
-  </script>
+    </script>
 </body>
 </html>

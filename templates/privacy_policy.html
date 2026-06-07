@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}Privacy Policy - ShadeMatch{% endblock %}
+
+{% block extra_css %}
+<style>
+    :root {
+        --bg-color: rgb(46, 46, 46);
+        --surface-color: rgb(66, 66, 66);
+        --accent-color: rgb(86, 86, 86);
+        --text-color: white;
+        --border-color: rgb(86, 86, 86);
+        --shadow-color: rgba(0, 0, 0, 0.2);
+    }
+
+    body {
+        font-family: sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        line-height: 1.6;
+        margin: 0;
+        padding: 20px;
+    }
+
+    .container {
+        max-width: 800px;
+        margin: 0 auto;
+        background-color: var(--surface-color);
+        padding: 40px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px var(--shadow-color);
+    }
+
+    h1 {
+        color: var(--text-color);
+        text-align: center;
+        margin-bottom: 30px;
+        border-bottom: 2px solid var(--accent-color);
+        padding-bottom: 10px;
+    }
+
+    h2 {
+        color: var(--accent-color);
+        margin-top: 30px;
+        margin-bottom: 15px;
+    }
+
+    h3 {
+        color: var(--text-color);
+        margin-top: 20px;
+        margin-bottom: 10px;
+    }
+
+    p {
+        margin-bottom: 15px;
+    }
+
+    ul {
+        margin-bottom: 15px;
+        padding-left: 20px;
+    }
+
+    li {
+        margin-bottom: 5px;
+    }
+
+    .contact-info {
+        background-color: var(--bg-color);
+        padding: 20px;
+        border-radius: 6px;
+        margin-top: 30px;
+        border-left: 4px solid var(--accent-color);
+    }
+
+    .back-link {
+        display: inline-block;
+        margin-bottom: 20px;
+        color: var(--accent-color);
+        text-decoration: none;
+        font-weight: 500;
+    }
+
+    .back-link:hover {
+        color: var(--text-color);
+    }
+
+    .last-updated {
+        text-align: center;
+        font-style: italic;
+        color: #bdc3c7;
+        margin-top: 30px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container">
+    <a href="/" class="back-link">← Back to ShadeMatch</a>
+    
+    <h1>Privacy Policy</h1>
+    
+    <p><strong>Last Updated:</strong> December 2024</p>
+    
+    <h2>1. Introduction</h2>
+    <p>
+        This Privacy Policy explains how ShadeMatch ("we", "our", or "us") collects, uses, and protects your information when you use our color vision testing and color mixing application. This research has been approved by the Semmelweis University Regional and Institutional Committee of Science and Research Ethics under approval number SE RKEB 167/2025.
+    </p>
+    
+    <p><strong>Important:</strong> Most research data is stored under a pseudonymous user ID. If you provide an email address, it is stored separately and used only for account recovery and optional reminders.</p>
+    
+    <h2>2. Information We Collect</h2>
+    
+    <h3>2.1 Pseudonymous User Data</h3>
+    <p>We collect the following pseudonymous data for research purposes:</p>
+    <ul>
+        <li><strong>User ID:</strong> A randomly generated 6-character identifier</li>
+        <li><strong>Birthdate:</strong> For demographic analysis in color vision research</li>
+        <li><strong>Gender:</strong> For demographic analysis in color vision research</li>
+        <li><strong>Email (optional):</strong> Used for ID recovery and reminder emails if you opt in</li>
+        <li><strong>Email verification status:</strong> Timestamp indicating whether your email address is verified</li>
+        <li><strong>Account Creation Date:</strong> Timestamp of user registration</li>
+    </ul>
+    
+    <h3>2.2 Color Mixing Session Data</h3>
+    <p>For each color mixing session, we collect:</p>
+    <ul>
+        <li><strong>Target Color:</strong> RGB values of the target color to be mixed</li>
+        <li><strong>Drop Counts:</strong> Number of drops used for each color (white, black, red, yellow, blue)</li>
+        <li><strong>Computed color difference:</strong> A technical color-difference score may be stored for research analysis; it is not shown to participants in the app interface.</li>
+        <li><strong>Session Duration:</strong> Time taken to complete the mixing task</li>
+        <li><strong>Session Timestamp:</strong> When the session was completed</li>
+        <li><strong>Skip Status:</strong> Whether the session was skipped</li>
+        <li><strong>Skip perception (when applicable):</strong> If you skip a trial while still mixing, we may ask you to rate how acceptable your mix was compared to the target (e.g., in a facial-prosthesis color-matching context). For analysis, this may be combined with the computed color difference into a short outcome label (e.g. perfect match vs. acceptable vs. large difference).</li>
+    </ul>
+    
+    <h3>2.3 Technical Information</h3>
+    <p>We automatically collect minimal technical information:</p>
+    <ul>
+        <li>Session management data for application functionality</li>
+        <li>Cookie consent preferences</li>
+    </ul>
+    
+    <h2>3. How We Use Your Information</h2>
+    <p>We use your information for the following purposes:</p>
+    <ul>
+        <li><strong>Research:</strong> To study color vision and color mixing performance</li>
+        <li><strong>Application Functionality:</strong> To provide personalized color testing experiences</li>
+        <li><strong>Email Recovery:</strong> To send secure links so you can recover your user ID</li>
+        <li><strong>Reminders:</strong> To send optional daily challenge reminders if you explicitly opt in</li>
+        <li><strong>Analytics:</strong> To understand how users interact with our application</li>
+        <li><strong>Improvement:</strong> To enhance our application and research methods</li>
+    </ul>
+    
+    <h2>4. Cookie Usage</h2>
+    <p>We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking "Accept All", you consent to our use of cookies.</p>
+    
+    <h3>4.1 Cookie Consent Banner</h3>
+    <p>When you first visit our application, you will see a cookie consent banner with the following message:</p>
+    <blockquote style="background-color: var(--bg-color); padding: 15px; border-left: 4px solid var(--accent-color); margin: 15px 0; font-style: italic;">
+        "We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking 'Accept All', you consent to our use of cookies."
+    </blockquote>
+    
+    <h3>4.2 Necessary Cookies</h3>
+    <p>These cookies are essential for the website to function properly and cannot be disabled:</p>
+    <ul>
+        <li><strong>session_id:</strong> Maintains your session during color mixing activities</li>
+        <li><strong>csrf_token:</strong> Security token to prevent cross-site request forgery</li>
+        <li><strong>user_preferences:</strong> Stores basic application preferences</li>
+    </ul>
+    
+    <h3>4.3 Cookie Consent Management</h3>
+    <p>We use a cookie consent management system that stores:</p>
+    <ul>
+        <li><strong>cookie_consent:</strong> Your consent preferences for different cookie categories</li>
+    </ul>
+    
+    <p><strong>Note:</strong> We do not use analytics, marketing, or advertising cookies. All data collection is anonymous and for research purposes only.</p>
+    
+    <h2>5. Data Sharing</h2>
+    <p>Research data may be shared in anonymized or aggregated form:</p>
+    <ul>
+        <li><strong>Research Collaboration:</strong> With other researchers for scientific advancement in color vision research</li>
+        <li><strong>Academic Publication:</strong> In scientific journals and conferences (data remains anonymous)</li>
+        <li><strong>Legal Requirements:</strong> When required by law or regulatory authorities</li>
+    </ul>
+    
+    <p><strong>Note:</strong> Email addresses are not shared for research publication and are used only for operational communication described above.</p>
+    
+    <h2>6. Data Security</h2>
+    <p>We implement appropriate security measures to protect the anonymous research data:</p>
+    <ul>
+        <li>Encrypted data transmission (HTTPS)</li>
+        <li>Secure database storage with access controls</li>
+        <li>Regular security updates and monitoring</li>
+        <li>Pseudonymous data collection for research metrics</li>
+        <li>Email contact data is stored separately from research telemetry where feasible</li>
+    </ul>
+    
+    <h2>7. Your Rights (GDPR)</h2>
+    <p>You have GDPR rights regarding any personal data (such as your email address), including the right to access, correct, and request deletion where legally applicable. You also have the right to:</p>
+    <ul>
+        <li><strong>Withdraw Participation:</strong> Stop using the application at any time</li>
+        <li><strong>Cookie Consent:</strong> Withdraw consent for cookie usage through our cookie consent banner</li>
+        <li><strong>Information:</strong> Request information about the research and data collection practices</li>
+        <li><strong>Contact:</strong> Contact us with any questions about the research</li>
+    </ul>
+    
+    <p><strong>Note:</strong> For pseudonymous research-only records, direct identification may be limited. For email-related data, you may contact us to manage or remove reminder contact details.</p>
+    
+    <h2>8. Data Retention</h2>
+    <p>We retain pseudonymous research data for as long as necessary to:</p>
+    <ul>
+        <li>Complete the research study</li>
+        <li>Publish research findings</li>
+        <li>Comply with academic and legal obligations</li>
+        <li>Support future research in color vision</li>
+    </ul>
+    
+    <p><strong>Note:</strong> Email contact data is retained only while needed for reminders/recovery and can be removed on request where permitted.</p>
+    
+    <h2>9. Age Requirements</h2>
+    <p>This research application is intended for adults aged 18 and above. We do not knowingly collect data from individuals under 18 years of age. If you are under 18, please do not use this application.</p>
+    
+    <h2>10. Changes to This Policy</h2>
+    <p>We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page.</p>
+    
+    <div class="contact-info">
+        <h2>11. Contact Information</h2>
+        <p>If you have any questions about this Privacy Policy, the research, or our data practices, please contact us:</p>
+        <p>
+            <strong>Principal Investigator:</strong> Dr. János König<br>
+            <strong>Email:</strong> <a href="mailto:konig.janos@semmelweis.hu" style="color: var(--accent-color);">konig.janos@semmelweis.hu</a><br>
+            <strong>Subject Line:</strong> "SHADEMATCH Research Inquiry"<br>
+            <strong>Institution:</strong> Semmelweis University<br>
+            <strong>Research Ethics Approval:</strong> SE RKEB 167/2025
+        </p>
+    </div>
+    
+    <div class="last-updated">
+        <p>This Privacy Policy was last updated on December 2024.</p>
+    </div>
+</div>
+{% endblock %}

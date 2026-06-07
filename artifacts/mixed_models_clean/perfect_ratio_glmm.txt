@@ -1,0 +1,22 @@
+                 Generalized Linear Model Regression Results                  
+==============================================================================
+Dep. Variable:          perfect_ratio   No. Observations:                  256
+Model:                            GLM   Df Residuals:                      249
+Model Family:                Binomial   Df Model:                            6
+Link Function:                  Logit   Scale:                          1.0000
+Method:                          IRLS   Log-Likelihood:                -30.834
+Date:                Mon, 27 Apr 2026   Deviance:                       61.668
+Time:                        06:09:08   Pearson chi2:                     187.
+No. Iterations:                    22   Pseudo R-squ. (CS):             0.4789
+Covariance Type:                  HC3                                         
+================================================================================================
+                                   coef    std err          z      P>|z|      [0.025      0.975]
+------------------------------------------------------------------------------------------------
+Intercept                        2.4953      0.459      5.440      0.000       1.596       3.394
+C(color_type)[T.lab]             1.5700      0.826      1.900      0.057      -0.050       3.190
+C(color_type)[T.skin]          -21.9579     11.410     -1.924      0.054     -44.322       0.406
+z_attempt_no                     0.2899      0.401      0.722      0.470      -0.497       1.076
+z_log_duration_sec              -6.3396      1.344     -4.717      0.000      -8.974      -3.705
+z_log_num_steps                  2.9304      0.798      3.671      0.000       1.366       4.495
+z_target_recipe_n_components     0.2705      0.606      0.446      0.655      -0.918       1.459
+================================================================================================

@@ -1,268 +1,989 @@
 {% extends "base.html" %}
 
-{% block title %}ShadeMatch — Color Mixing{% endblock %}
+{% block title %}Color Mixing App{% endblock %}
 
-{% block head %}
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
 <style>
-  *, *::before, *::after { box-sizing: border-box; }
+/* ── Progress strip ────────────────────────────────────────── */
+.progress-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 4px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  margin-right: 8px;
+  flex-shrink: 0;
+}
+.ps-rank { font-size: 0.7rem; font-weight: 800; letter-spacing: 0.04em; }
+.ps-level { color: var(--text-secondary); font-size: 0.7rem; }
+.ps-xpbar-wrap {
+  width: 52px; height: 5px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.ps-xpbar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #00b894, #55efc4);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+.ps-colors { font-size: 0.7rem; color: var(--text-secondary); font-weight: 700; white-space: nowrap; }
+.ps-streak { font-size: 0.75rem; }
+.ps-freeze { font-size: 0.75rem; }
 
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin: 0;
-    padding: 16px;
-    min-height: 100vh;
-    min-height: 100dvh;
-    background: #fafafa;
-    color: #222;
-  }
+/* ── Toasts ─────────────────────────────────────────────────── */
+/* Anchored top-center under the header so they stay clear of the
+   floating dock at the bottom and the Color guide chip at top-right. */
+.shade-toast-container {
+  position: fixed;
+  /* Sits below the header AND below the canvas-top-chip so the chip's
+     match bar / RGB readout stays readable while a toast is on screen. */
+  top: calc(var(--app-header-h, 56px) + 56px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+  max-width: min(360px, calc(100vw - 24px));
+  width: max-content;
+  align-items: center;
+}
+.shade-toast {
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.22);
+  opacity: 0;
+  transform: translateY(-8px);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: auto;
+  background: #444;
+}
+.shade-toast--visible { opacity: 1; transform: translateY(0); }
+.shade-toast--xp      { background: linear-gradient(135deg,#667eea,#764ba2); }
+.shade-toast--levelup { background: linear-gradient(135deg,#f9ca24,#f0932b); color:#fff; }
+.shade-toast--streak  { background: linear-gradient(135deg,#ff6b6b,#ee5a24); }
+.shade-toast--freeze  { background: linear-gradient(135deg,#74b9ff,#0984e3); }
+.shade-toast--award   { background: linear-gradient(135deg,#55efc4,#00b894); }
+.shade-toast--info    { background: linear-gradient(135deg,#636e72,#2d3436); }
 
-  h1 {
-    font-size: 1.5rem;
-    margin: 0.5em 0;
-  }
+/* ── Push opt-in ─────────────────────────────────────────────── */
+.push-optin-btn {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-full);
+  padding: 4px 10px;
+  cursor: pointer;
+  margin-top: 8px;
+}
+.push-optin-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
 
-  /* --- Color display row --- */
-  .color-display-row {
-    display: flex;
-    justify-content: center;
-    gap: 32px;
-    width: 100%;
-    max-width: 600px;
-    min-width: 0;
-  }
+/* ── Next-action CTA ─────────────────────────────────────────── */
+.next-action-cta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, rgba(102,126,234,0.1), rgba(118,75,162,0.1));
+  border: 1px solid rgba(102,126,234,0.3);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  cursor: default;
+  flex-wrap: wrap;
+}
+.na-icon { font-size: 1.1rem; flex-shrink: 0; }
+.na-label { font-weight: 700; color: var(--text-primary); }
+.na-reason { color: var(--text-secondary); font-size: 0.75rem; flex-basis: 100%; margin-top: 2px; }
 
-  .color-display-col {
-    flex: 1 1 0;
-    min-width: 0;
-    text-align: center;
-  }
-
-  .color-display-col h3 {
-    font-size: 0.95rem;
-    margin: 0 0 8px;
-  }
-
-  .color-box {
-    width: 100%;
-    aspect-ratio: 1 / 1;
-    max-width: 200px;
-    margin: 0 auto;
-    border: 2px solid #333;
-    border-radius: 8px;
-  }
-
-  /* --- Palette --- */
-  #palette {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    row-gap: 12px;
-    column-gap: 10px;
-    margin-top: 20px;
-    width: 100%;
-    max-width: 600px;
-  }
-
-  .color-control {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    touch-action: manipulation;
-  }
-
-  .color-circle {
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    color: white;
-    font-weight: bold;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    user-select: none;
-    transition: transform 0.1s ease;
-  }
-
-  .color-circle:active {
-    transform: scale(0.92);
-  }
-
-  .minus-button {
-    margin-top: 6px;
-    font-size: 18px;
-    width: 32px;
-    height: 32px;
-    padding: 0;
-    border: none;
-    background: #ddd;
-    border-radius: 50%;
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: background 0.15s;
-  }
-
-  .minus-button:active {
-    background: #bbb;
-  }
-
-  /* --- Stats & controls --- */
-  #stats {
-    margin-top: 16px;
-    font-size: 0.95rem;
-  }
-
-  #controls {
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
-    margin-top: 16px;
-    width: 100%;
-    max-width: 600px;
-  }
-
-  #controls button, #exportBtn {
-    padding: 10px 18px;
-    font-size: 0.95rem;
-    border: 1px solid #bbb;
-    border-radius: 6px;
-    background: #fff;
-    cursor: pointer;
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-    min-height: 44px;
-  }
-
-  #controls button:disabled {
-    opacity: 0.45;
-    cursor: default;
-  }
-
-  #controls button:not(:disabled):active, #exportBtn:active {
-    background: #eee;
-  }
-
-  .timer-line {
-    margin-top: 12px;
-    font-size: 0.95rem;
-  }
-
-  #exportBtn {
-    margin-top: 12px;
-  }
-
-  /* --- Hover tooltips: only for fine pointer devices --- */
-  @media (hover: hover) and (pointer: fine) {
-    .color-circle:hover {
-      transform: scale(1.1);
-    }
-    .minus-button:hover {
-      background: #c0c0c0;
-    }
-  }
-
-  /* --- Mobile breakpoint --- */
-  @media (max-width: 768px) {
-    body {
-      padding: 12px 8px;
-    }
-
-    h1 {
-      font-size: 1.25rem;
-    }
-
-    .color-display-row {
-      gap: 16px;
-    }
-  }
-
-  @media (max-width: 480px) {
-    .color-display-row {
-      flex-direction: column;
-      align-items: center;
-      gap: 12px;
-    }
-
-    .color-box {
-      max-width: 160px;
-    }
-
-    .color-circle {
-      width: 44px;
-      height: 44px;
-      font-size: 0.9rem;
-    }
-
-    #controls button, #exportBtn {
-      padding: 10px 14px;
-      font-size: 0.875rem;
-    }
-  }
+/* ── PWA install CTA ─────────────────────────────────────────── */
+.pwa-install-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  font-size: 0.8rem;
+}
+.pwa-install-body { display: flex; align-items: center; gap: 10px; }
+.pwa-install-icon { font-size: 1.4rem; }
+.pwa-install-text { display: flex; flex-direction: column; gap: 2px; }
+.pwa-install-text strong { font-size: 0.85rem; }
+.pwa-install-text span { color: var(--text-secondary); font-size: 0.75rem; }
+.pwa-ios-hint { font-size: 0.72rem !important; margin-top: 4px; }
+.pwa-install-actions { display: flex; gap: 6px; flex-shrink: 0; }
 </style>
-
-<script src="{{ url_for('static', filename='mixbox.js') }}"></script>
-<script type="module" src="{{ url_for('static', filename='main.js') }}"></script>
 {% endblock %}
 
-{% block body %}
-<h1>Color Mixing App</h1>
+{% block content %}
+  <!-- ======== Registration / Login Modal ======== -->
+  <!-- ======== Research informed-consent modal (blocking, pre-registration) ======== -->
+  <div id="researchConsentModal" class="modal-overlay" style="display:none; z-index:10010;" data-consent-version="{{ research_consent_version }}">
+    <div class="modal-card">
+      <img src="{{ url_for('static', filename='img/semmelweis-logo.png') }}"
+           alt="Semmelweis University"
+           style="display:block; max-height:52px; width:auto; margin:0 auto var(--space-md);"
+           onerror="this.style.display='none'">
+      <h2 class="modal-title">Before you take part</h2>
+      <div id="researchConsentText" style="line-height: 1.55; color: var(--text-primary); max-height: 48vh; overflow-y: auto; margin-bottom: var(--space-md); text-align: left;">
+        <p style="margin: 0 0 var(--space-md);">{{ research_consent_intro }}</p>
+        <ul style="margin: 0; padding-left: 1.2rem;">
+          {% for title, body in research_consent_items %}
+          <li style="margin-bottom: var(--space-sm);"><strong>{{ title }}.</strong> {{ body }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <p class="modal-alt-text" style="text-align: left; margin-bottom: var(--space-md);">
+        Read our <a href="/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a> for full details.
+      </p>
+      <label class="form-label" for="researchConsentCheckbox" style="display:flex; align-items:flex-start; gap:8px; text-align:left; margin-bottom: var(--space-md); cursor:pointer;">
+        <input type="checkbox" id="researchConsentCheckbox" style="margin-top:3px; flex-shrink:0;">
+        <span>I have read and understood the information above and I voluntarily agree to take part.</span>
+      </label>
+      <button id="researchConsentBtn" type="button" class="btn btn-primary btn-full btn-lg" disabled>
+        I understand &mdash; begin
+      </button>
+    </div>
+  </div>
 
-<div class="color-display-row">
-  <div class="color-display-col">
-    <h3>Target Color</h3>
-    <div id="targetColor" class="color-box"></div>
-  </div>
-  <div class="color-display-col">
-    <h3>Current Mix</h3>
-    <div id="currentMix" class="color-box"></div>
-  </div>
-</div>
+  <div id="userModal" class="modal-overlay">
+    <div class="modal-card">
 
-<div id="palette">
-  <div class="color-control">
-    <div class="color-circle" data-color="white" style="background: white; color: black;">0</div>
-    <button class="minus-button" data-color="white">&minus;</button>
-  </div>
-  <div class="color-control">
-    <div class="color-circle" data-color="black" style="background: black;">0</div>
-    <button class="minus-button" data-color="black">&minus;</button>
-  </div>
-  <div class="color-control">
-    <div class="color-circle" data-color="red" style="background: red;">0</div>
-    <button class="minus-button" data-color="red">&minus;</button>
-  </div>
-  <div class="color-control">
-    <div class="color-circle" data-color="yellow" style="background: yellow; color: black;">0</div>
-    <button class="minus-button" data-color="yellow">&minus;</button>
-  </div>
-  <div class="color-control">
-    <div class="color-circle" data-color="blue" style="background: blue;">0</div>
-    <button class="minus-button" data-color="blue">&minus;</button>
-  </div>
-</div>
+      <!-- Register -->
+      <div id="registerSection">
+        <h2 class="modal-title">Welcome</h2>
+        <p class="modal-subtitle">Enter your details to get started.</p>
+        <form id="registerForm" class="form-stack">
+          <div class="form-group">
+            <label for="userBirthdate" class="form-label">Date of birth</label>
+            <input type="date" id="userBirthdate" class="form-input" required>
+            <div id="birthdateError" style="display:none; color:var(--accent-danger); margin-top:var(--space-xs); font-size:var(--font-size-sm);"></div>
+          </div>
+          <div class="form-group">
+            <label for="userEmail" class="form-label">Email (for reminders and ID recovery)</label>
+            <input type="email" id="userEmail" class="form-input" required placeholder="you@example.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="emailOptIn">
+              <input type="checkbox" id="emailOptIn" checked>
+              I want daily reminder emails
+            </label>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Gender</label>
+            <div class="toggle-group">
+              <input type="radio" name="gender" id="genderFemale" value="female" class="sr-only">
+              <label for="genderFemale" class="toggle-btn">Female</label>
+              <input type="radio" name="gender" id="genderMale" value="male" class="sr-only">
+              <label for="genderMale" class="toggle-btn">Male</label>
+            </div>
+            <select id="userGender" required style="display:none;">
+              <option value="">Select…</option>
+              <option value="female">Female</option>
+              <option value="male">Male</option>
+            </select>
+          </div>
+          <button type="submit" class="btn btn-primary btn-full btn-lg">Start Color Vision Test</button>
+        </form>
+        <div class="modal-divider"></div>
+        <p class="modal-alt-text">Already have an ID? <button id="showLoginBtn" type="button" class="btn-link">Log in</button></p>
+      </div>
 
-<div id="stats">
-  <p>&Delta;E (CIEDE2000): <span id="deltaE">-</span></p>
-</div>
+      <!-- Color test placeholder (hidden, kept for selector compat) -->
+      <div id="colorTestSection" style="display:none;"></div>
 
-<div id="controls">
-  <button id="startBtn">Start</button>
-  <button id="stopBtn" disabled>Stop</button>
-  <button id="skipBtn" disabled>Skip</button>
-  <button id="restartBtn" disabled>Restart</button>
-  <button id="retryBtn" disabled>Retry</button>
-</div>
+      <!-- Login -->
+      <div id="loginSection" style="display:none;">
+        <h2 class="modal-title">Log in</h2>
+        <form id="loginForm" class="form-stack">
+          <div class="form-group">
+            <label for="loginId" class="form-label">Enter your ID</label>
+            <input type="text" id="loginId" class="form-input form-input-mono" maxlength="6" minlength="6" required placeholder="ABC123" style="text-transform:uppercase">
+          </div>
+          <button type="submit" class="btn btn-primary btn-full btn-lg">Log in</button>
+        </form>
+        <div class="modal-divider"></div>
+        <p class="modal-alt-text">Forgot your ID?</p>
+        <form id="recoverIdForm" class="form-stack">
+          <div class="form-group">
+            <label for="recoverEmail" class="form-label">Email used at registration</label>
+            <input type="email" id="recoverEmail" class="form-input" placeholder="you@example.com" required>
+          </div>
+          <button type="submit" class="btn btn-secondary btn-full">Email me my ID</button>
+        </form>
+        <div class="modal-divider"></div>
+        <p class="modal-alt-text">New user? <button id="showRegisterBtn" type="button" class="btn-link">Register</button></p>
+      </div>
 
-<p class="timer-line">&#9201; Time: <span id="timer">0.0</span> sec</p>
-<button id="exportBtn">Download CSV</button>
+      <!-- ID display -->
+      <div id="idDisplaySection" style="display:none;">
+        <h2 class="modal-title">Your ID</h2>
+        <p class="generated-id" id="generatedId"></p>
+        <p style="text-align:center; color:var(--text-secondary);">Please memorize this ID. You will need it to log in next time.</p>
+        <button id="continueBtn" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-lg);">Continue</button>
+      </div>
+
+      <!-- Post-register: push opt-in CTA -->
+      <div id="postRegisterSection" style="display:none;">
+        <div style="text-align:center;margin-bottom:var(--space-md);">
+          <div style="font-size:2.5rem;margin-bottom:12px;">🔔</div>
+          <h2 class="modal-title">Enable daily reminders?</h2>
+          <p class="modal-subtitle">Get notified when the daily challenge goes live — one tap, turn off any time.</p>
+        </div>
+        <button id="postRegPushBtn" class="btn btn-primary btn-full btn-lg"
+                onclick="window._postRegPushOptIn && window._postRegPushOptIn()">
+          Enable reminders
+        </button>
+        <button class="btn btn-secondary btn-full" style="margin-top:8px;"
+                onclick="window.location.href='/ishihara-test'">
+          Not now
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Display-setup instructions modal (one-shot, post-login) ======== -->
+  <div id="instructionsModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <h2 class="modal-title">Before you start</h2>
+      <p class="modal-subtitle">A few quick checks so your screen shows colors faithfully.</p>
+      <ul style="margin: 0 0 var(--space-md); padding-left: 1.2rem; line-height: 1.55; color: var(--text-primary);">
+        <li><strong>Turn off Night Shift / True Tone / Night Light</strong> and any blue-light filter (in your operating system).</li>
+        <li><strong>Use steady, indirect ambient lighting.</strong> Avoid direct sunlight on the screen and reflective glare.</li>
+        <li><strong>Set display brightness to about 50&ndash;75%.</strong></li>
+        <li>For best results, use full-screen mode.</li>
+      </ul>
+      <button id="instructionsFullscreenBtn" type="button" class="btn btn-secondary btn-full" style="margin-bottom: var(--space-sm);">
+        Enter full-screen
+      </button>
+      <button id="instructionsAckBtn" type="button" class="btn btn-primary btn-full btn-lg">
+        I have done this &mdash; start
+      </button>
+    </div>
+  </div>
+
+  <!-- ======== Skip Perception Modal ======== -->
+  <div id="skipPerceptionModal" class="skip-modal-overlay">
+    <div class="skip-modal-panel">
+      <h2 class="skip-modal-title">Can you see a difference?</h2>
+      <div class="skip-choices">
+        <button type="button" id="skipPerceptionIdentical" class="skip-choice skip-choice--neutral">No difference</button>
+        <button type="button" id="skipPerceptionAcceptable" class="skip-choice skip-choice--accept">Small difference — acceptable</button>
+        <button type="button" id="skipPerceptionUnacceptable" class="skip-choice skip-choice--reject">Difference — not acceptable</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== Instructional Video Modal ======== -->
+  <div id="videoModal" class="modal-overlay" style="display:none;">
+    <div class="video-modal-inner">
+      <button id="closeVideoBtn" class="video-close" type="button" aria-label="Close video">&times;</button>
+      <div class="video-aspect">
+        <iframe id="videoFrame" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
+      </div>
+    </div>
+  </div>
+
+  <!-- ======== App Header ======== -->
+  <header class="app-header">
+    <div class="app-header-inner">
+      <div class="progress-indicator" id="progressIndicator">
+        <span class="progress-text" id="progressText"></span>
+        <div class="progress-segments" id="progressSegments"></div>
+      </div>
+      <div class="header-right">
+        <!-- Gamification progress strip -->
+        <div class="progress-strip" id="progressStrip" style="display:none;"></div>
+        <div class="user-badge" id="userInfo" style="display:none;">
+          <span class="user-badge-label">ID:</span>
+          <span class="user-badge-id" id="userIdDisplay"></span>
+        </div>
+        <a href="/results" class="btn-icon" aria-label="View results">&#128202; <span class="help-label">Results</span></a>
+        <a href="/leaderboard" class="btn-icon" aria-label="View leaderboard">&#127942; <span class="help-label">Leaderboard</span></a>
+        <button id="showVideoBtn" class="btn-icon" type="button" aria-label="Watch instructional video">&#9658; <span class="help-label">Help</span></button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ======== Main App ======== -->
+  <div class="app-row">
+    <div class="main-content" id="mainContent">
+
+      <div class="mixing-workspace">
+        <div class="mixing-canvas-zone">
+          <!-- Swatches (full-bleed canvas) -->
+          <div class="swatches-container" id="swatchesContainer">
+            <div class="color-pair">
+              <div id="targetColor" class="color-half"></div>
+              <div id="currentMix" class="color-half" style="background-color:rgb(255,255,255);"></div>
+            </div>
+
+            <!-- Floating top chip: match bar + compact RGB readout -->
+            <div class="canvas-top-chip" id="canvasTopChip">
+              <div class="match-bar-wrap" id="matchBarContainer" style="display:none;">
+                <div class="match-bar">
+                  <div class="match-bar-fill" id="matchBarFill"></div>
+                </div>
+                <span class="match-bar-label" id="matchBarLabel"></span>
+              </div>
+              <span id="mixedRgbValues" class="rgb-readout">RGB: [255, 255, 255]</span>
+            </div>
+
+            <!-- Hidden labels (kept for legacy selectors) -->
+            <div class="swatch-labels-row" aria-hidden="true">
+              <span>Match this color</span>
+              <span>Your mix</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Floating bottom dock: recipe strip → palette → controls -->
+      <div class="floating-dock" id="floatingDock">
+        <!-- Recipe strip: stacked-bar visualization of current mix recipe -->
+        <div class="recipe-strip" id="recipeStrip" aria-hidden="true">
+          <span class="recipe-seg" data-color="white" style="flex-basis:0%;"></span>
+          <span class="recipe-seg" data-color="black" style="flex-basis:0%;"></span>
+          <span class="recipe-seg" data-color="red" style="flex-basis:0%;"></span>
+          <span class="recipe-seg" data-color="yellow" style="flex-basis:0%;"></span>
+          <span class="recipe-seg" data-color="blue" style="flex-basis:0%;"></span>
+        </div>
+
+        <!-- Palette -->
+        <div id="palette" class="palette">
+          <div class="color-control">
+            <span class="drop-badge" data-badge-for="white">0</span>
+            <button class="color-circle" data-color="white" style="background:white;" type="button" aria-label="Add white drop">0</button>
+            <button class="minus-button" data-color="white" type="button" aria-label="Remove white drop">−</button>
+            <span class="color-name">White</span>
+          </div>
+          <div class="color-control">
+            <span class="drop-badge" data-badge-for="black">0</span>
+            <button class="color-circle" data-color="black" style="background:black;" type="button" aria-label="Add black drop">0</button>
+            <button class="minus-button" data-color="black" type="button" aria-label="Remove black drop">−</button>
+            <span class="color-name">Black</span>
+          </div>
+          <div class="color-control">
+            <span class="drop-badge" data-badge-for="red">0</span>
+            <button class="color-circle" data-color="red" style="background:red;" type="button" aria-label="Add red drop">0</button>
+            <button class="minus-button" data-color="red" type="button" aria-label="Remove red drop">−</button>
+            <span class="color-name">Red</span>
+          </div>
+          <div class="color-control">
+            <span class="drop-badge" data-badge-for="yellow">0</span>
+            <button class="color-circle" data-color="yellow" style="background:yellow;" type="button" aria-label="Add yellow drop">0</button>
+            <button class="minus-button" data-color="yellow" type="button" aria-label="Remove yellow drop">−</button>
+            <span class="color-name">Yellow</span>
+          </div>
+          <div class="color-control">
+            <span class="drop-badge" data-badge-for="blue">0</span>
+            <button class="color-circle" data-color="blue" style="background:blue;" type="button" aria-label="Add blue drop">0</button>
+            <button class="minus-button" data-color="blue" type="button" aria-label="Remove blue drop">−</button>
+            <span class="color-name">Blue</span>
+          </div>
+        </div>
+
+        <!-- Controls + timer -->
+        <div id="controls" class="controls-bar">
+          <span class="timer-display" id="timerDisplay">⏱ <span id="timer">0.0</span>s</span>
+          <button id="startBtn" class="btn btn-primary btn-lg">Start</button>
+          <button id="stopBtn" class="btn btn-primary btn-lg" disabled style="display:none;" aria-hidden="true"></button>
+          <button id="skipBtn" class="btn btn-secondary btn-lg" disabled style="display:none;">Skip</button>
+          <button id="retryBtn" class="btn btn-tertiary" disabled style="display:none;">Start over</button>
+
+          <div class="overflow-menu" id="overflowMenu">
+            <button class="btn-icon overflow-trigger" id="overflowTrigger" type="button" aria-label="More options">⋮</button>
+            <div class="overflow-dropdown" id="overflowDropdown">
+              <button id="restartBtn" class="overflow-item" type="button" disabled>Restart all</button>
+              <button id="switchUserBtn" class="overflow-item" type="button">Switch user</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="stats"></div>
+
+      <button id="pushOptInBtn" class="push-optin-btn" type="button"
+              onclick="window.requestPushPermission && window.requestPushPermission()"
+              title="Get notified when the daily challenge starts">
+        🔔 Enable daily reminders
+      </button>
+      <div id="emailVerifyNotice" class="next-action-cta" style="display:none;">
+        <span class="na-icon">✉️</span>
+        <span class="na-label">Email not verified</span>
+        <span class="na-reason">Please verify your email to receive reminder emails.</span>
+        <button id="resendVerifyBtn" class="btn btn-secondary" type="button">Resend verification email</button>
+      </div>
+
+      <!-- Next-action CTA (populated by renderNextAction after saves/progress load) -->
+      <div id="nextActionCta" class="next-action-cta" style="display:none;"></div>
+
+      <!-- PWA install affordance -->
+      <div id="pwaInstallCta" class="pwa-install-cta" style="display:none;">
+        <div class="pwa-install-body">
+          <span class="pwa-install-icon">📲</span>
+          <div class="pwa-install-text">
+            <strong>Install ShadeMatch</strong>
+            <span>Quick access from your home screen</span>
+            <span id="pwaIosHint" class="pwa-ios-hint" style="display:none;">
+              Tap <strong>Share</strong> → <strong>Add to Home Screen</strong>
+            </span>
+          </div>
+        </div>
+        <div class="pwa-install-actions">
+          <button id="pwaInstallBtn" class="btn btn-primary" style="font-size:0.8rem;padding:6px 14px;"
+                  onclick="window.triggerPwaInstall && window.triggerPwaInstall()">
+            Install
+          </button>
+          <button class="btn btn-secondary" style="font-size:0.8rem;padding:6px 10px;"
+                  onclick="window.dismissPwaInstall && window.dismissPwaInstall()">
+            ✕
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Sidebar drawer trigger (floating, all breakpoints) -->
+  <button id="sidebarDrawerBtn" class="sidebar-drawer-trigger" type="button" aria-label="Open color guide">
+    <span aria-hidden="true">🎨</span>
+    <span class="sidebar-drawer-trigger-label">Color guide</span>
+  </button>
+  <div class="sidebar-drawer-backdrop" id="sidebarDrawerBackdrop"></div>
+  <div class="sidebar-drawer" id="sidebarDrawer">
+    <div class="drawer-handle"></div>
+    <div class="sidebar-card">
+      <h2>Color Relationships</h2>
+      <div class="hex-diagram">
+        <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
+          <line x1="150" y1="38" x2="150" y2="238" stroke="var(--border-strong)" stroke-width="2" stroke-dasharray="6,6" />
+          <line x1="53" y1="73" x2="247" y2="173" stroke="var(--border-strong)" stroke-width="2" stroke-dasharray="6,6" />
+          <line x1="53" y1="173" x2="247" y2="73" stroke="var(--border-strong)" stroke-width="2" stroke-dasharray="6,6" />
+        </svg>
+        <div class="hex-dot" style="left:50%;top:20px;transform:translateX(-50%);background:red;"></div>
+        <div class="hex-dot" style="left:225px;top:55px;background:purple;"></div>
+        <div class="hex-dot" style="left:225px;top:155px;background:blue;"></div>
+        <div class="hex-dot" style="left:50%;top:220px;transform:translateX(-50%);background:green;"></div>
+        <div class="hex-dot" style="left:35px;top:155px;background:yellow;"></div>
+        <div class="hex-dot" style="left:35px;top:55px;background:orange;"></div>
+        <span class="hex-label" style="top:-18px;left:50%;transform:translateX(-50%);">Red</span>
+        <span class="hex-label" style="top:35px;left:0;">Orange</span>
+        <span class="hex-label" style="top:35px;right:0;">Purple</span>
+        <span class="hex-label" style="top:185px;left:0;">Yellow</span>
+        <span class="hex-label" style="top:185px;right:0;">Blue</span>
+        <span class="hex-label" style="top:260px;left:50%;transform:translateX(-50%);">Green</span>
+      </div>
+      <div class="sidebar-info">
+        <p>Primary: Red, Yellow, Blue</p>
+        <p>Secondary: Orange (R+Y), Green (Y+B), Purple (R+B)</p>
+        <p><em>Complementary mixes tend toward grey.</em></p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  /* ---- Gender toggle → hidden select sync ---- */
+  document.querySelectorAll('input[name="gender"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      document.getElementById('userGender').value = radio.value;
+    });
+  });
+
+  /* ---- Overflow menu toggle ---- */
+  (function() {
+    var trigger = document.getElementById('overflowTrigger');
+    var dropdown = document.getElementById('overflowDropdown');
+    if (!trigger || !dropdown) return;
+    trigger.addEventListener('click', function(e) {
+      e.stopPropagation();
+      dropdown.classList.toggle('is-open');
+    });
+    document.addEventListener('click', function() {
+      dropdown.classList.remove('is-open');
+    });
+  })();
+
+  /* ---- Sidebar drawer (mobile) ---- */
+  (function() {
+    var btn = document.getElementById('sidebarDrawerBtn');
+    var drawer = document.getElementById('sidebarDrawer');
+    var backdrop = document.getElementById('sidebarDrawerBackdrop');
+    if (!btn || !drawer || !backdrop) return;
+    function openDrawer() { drawer.classList.add('is-open'); backdrop.classList.add('is-open'); }
+    function closeDrawer() { drawer.classList.remove('is-open'); backdrop.classList.remove('is-open'); }
+    btn.addEventListener('click', openDrawer);
+    backdrop.addEventListener('click', closeDrawer);
+  })();
+
+  function generateId() {
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    var id = '';
+    for (var i = 0; i < 6; i++) id += chars.charAt(Math.floor(Math.random() * chars.length));
+    return id;
+  }
+
+  function showSection(section) {
+    document.getElementById('registerSection').style.display = section === 'register' ? '' : 'none';
+    document.getElementById('loginSection').style.display = section === 'login' ? '' : 'none';
+    document.getElementById('idDisplaySection').style.display = section === 'idDisplay' ? '' : 'none';
+    document.getElementById('colorTestSection').style.display = 'none';
+    var pr = document.getElementById('postRegisterSection');
+    if (pr) pr.style.display = section === 'postRegister' ? '' : 'none';
+  }
+
+  function showUserModal() {
+    var modal = document.getElementById('userModal');
+    modal.style.display = 'flex';
+    showSection('login');
+  }
+
+  window.addEventListener('DOMContentLoaded', function() {
+    var modal = document.getElementById('userModal');
+    var videoModal = document.getElementById('videoModal');
+    var storedId = localStorage.getItem('userId');
+    var storedBirthdate = localStorage.getItem('userBirthdate');
+    var storedGender = localStorage.getItem('userGender');
+
+    /* ===== Research informed consent (shown before registration) ===== */
+    var researchConsentModal = document.getElementById('researchConsentModal');
+    var RESEARCH_CONSENT_VERSION = researchConsentModal
+      ? (researchConsentModal.getAttribute('data-consent-version') || '') : '';
+    var VIDEO_SRC = 'https://www.youtube.com/embed/4MAaDDelYMA?autoplay=1&rel=0&modestbranding=1';
+    // Consent is held in memory for the current page session only (NOT
+    // localStorage), so it can never be silently reused by a different person on
+    // a shared device and a fresh visit always re-shows the screen.
+    var researchConsentAgreement = null;
+
+    window.getStoredResearchConsent = function() {
+      return (researchConsentAgreement &&
+              researchConsentAgreement.version === RESEARCH_CONSENT_VERSION)
+        ? researchConsentAgreement : null;
+    };
+
+    // Show the consent modal; calls onAgree() once the participant ticks the
+    // box and clicks "begin". Records the agreement (version + timestamp) for
+    // this page session so the register POST can carry it to the server.
+    window.showResearchConsentModal = function(onAgree) {
+      var checkbox = document.getElementById('researchConsentCheckbox');
+      var btn = document.getElementById('researchConsentBtn');
+      if (!researchConsentModal || !checkbox || !btn) { if (onAgree) onAgree(); return; }
+      checkbox.checked = false;
+      btn.disabled = true;
+      checkbox.onchange = function() { btn.disabled = !checkbox.checked; };
+      btn.onclick = function() {
+        if (!checkbox.checked) return;
+        researchConsentAgreement = {
+          version: RESEARCH_CONSENT_VERSION,
+          agreedAt: new Date().toISOString()
+        };
+        researchConsentModal.style.display = 'none';
+        if (onAgree) onAgree(researchConsentAgreement.agreedAt);
+      };
+      researchConsentModal.style.display = 'flex';
+    };
+
+    // Reveal the registration form for a new (unregistered) user, gating it
+    // behind research consent if not already agreed this page session.
+    function revealRegistration() {
+      if (!localStorage.getItem('userId') && !window.getStoredResearchConsent()) {
+        window.showResearchConsentModal(function() {
+          modal.style.display = 'flex';
+          showSection('register');
+        });
+        return;
+      }
+      modal.style.display = 'flex';
+      showSection('register');
+    }
+
+    // Show the instructional video on first visit, then the registration form;
+    // on return visits go straight to registration.
+    function proceedToRegistrationFlow() {
+      if (!localStorage.getItem('videoShown')) {
+        videoModal.style.display = 'flex';
+        document.getElementById('videoFrame').src = VIDEO_SRC;
+        localStorage.setItem('videoShown', 'true');
+      } else {
+        revealRegistration();
+      }
+    }
+
+    // Back-fill for a logged-in (cached userId) participant who never hits
+    // /login again: ask the server whether consent is on record and, if not,
+    // show the consent screen and record it before play. Calls done() once the
+    // consent state is resolved (recorded already, just agreed, or unreachable).
+    function ensureConsentForLoggedInUser(userId, done) {
+      var finish = function() { if (done) done(); };
+      fetch('/research-consent/status?user_id=' + encodeURIComponent(userId))
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d && d.status === 'success' && d.consent_recorded === false &&
+              typeof window.showResearchConsentModal === 'function') {
+            window.showResearchConsentModal(function() {
+              var consent = window.getStoredResearchConsent() || {};
+              fetch('/research-consent', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  user_id: userId,
+                  consent_version: consent.version || '',
+                  consent_agreed_at: consent.agreedAt || null
+                })
+              }).catch(function() {}).then(finish);
+            });
+          } else { finish(); }
+        })
+        .catch(finish);  // fail-open: never block play on a flaky network
+    }
+
+    /* Video modal */
+    document.getElementById('showVideoBtn').onclick = function() {
+      videoModal.style.display = 'flex';
+      document.getElementById('videoFrame').src = VIDEO_SRC;
+    };
+
+    function closeVideoAndProceed() {
+      videoModal.style.display = 'none';
+      document.getElementById('videoFrame').src = '';
+      if (storedId) { modal.style.display = 'none'; }
+      else { revealRegistration(); }
+    }
+    document.getElementById('closeVideoBtn').onclick = closeVideoAndProceed;
+
+    if (storedBirthdate && storedGender && !storedId) {
+      localStorage.removeItem('userBirthdate');
+      localStorage.removeItem('userGender');
+    }
+
+    if (storedId) {
+      // Logged-in returning user: no registration modal. First make sure consent
+      // is on record (back-fill for cached logins), then show the intro video
+      // once, shortly after.
+      modal.style.display = 'none';
+      ensureConsentForLoggedInUser(storedId, function() {
+        if (!localStorage.getItem('videoShown')) {
+          setTimeout(function() {
+            videoModal.style.display = 'flex';
+            document.getElementById('videoFrame').src = VIDEO_SRC;
+            localStorage.setItem('videoShown', 'true');
+          }, 1000);
+        }
+      });
+    } else {
+      // New / unregistered user: consent is the FIRST screen, shown immediately.
+      // It is a full-screen overlay (nothing is exposed behind it) and the
+      // instructional video follows only after consent is given.
+      modal.style.display = 'none';
+      window.showResearchConsentModal(proceedToRegistrationFlow);
+    }
+
+    document.getElementById('switchUserBtn').onclick = function() {
+      var currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
+      var currentTimer = parseFloat(document.getElementById('timer').textContent);
+      var dropCounts = window.shadeMatchDropCounts || { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
+      var targetRgb = window.shadeMatchTargetRgb || [255, 255, 255];
+      if (!isNaN(currentDeltaE) && !isNaN(currentTimer)) {
+        var totalDrops = Object.values(dropCounts).reduce(function(a, b) { return a + b; }, 0);
+        if ((totalDrops > 0 || currentDeltaE !== 0) && !window.currentSessionSaved) {
+          var sessionData = {
+            user_id: localStorage.getItem('userId'),
+            target_r: targetRgb[0], target_g: targetRgb[1], target_b: targetRgb[2],
+            drop_white: dropCounts.white || 0, drop_black: dropCounts.black || 0,
+            drop_red: dropCounts.red || 0, drop_yellow: dropCounts.yellow || 0,
+            drop_blue: dropCounts.blue || 0,
+            delta_e: currentDeltaE, time_sec: currentTimer,
+            timestamp: new Date().toISOString()
+          };
+          fetch('/save_session', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sessionData)
+          }).catch(function() {});
+        }
+      }
+      document.getElementById('overflowDropdown').classList.remove('is-open');
+      showUserModal();
+    };
+
+      document.getElementById('continueBtn').onclick = function() {
+      showSection('login');
+      var loginInput = document.getElementById('loginId');
+      var pendingId = localStorage.getItem('pendingVerifyUserId');
+      if (loginInput && pendingId) {
+        loginInput.value = pendingId;
+      }
+    };
+
+    /* Post-register push opt-in — reuses the same subscribe logic */
+    window._postRegPushOptIn = async function() {
+      var btn = document.getElementById('postRegPushBtn');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Setting up…'; }
+      try {
+        await window.requestPushPermission();
+      } catch(e) {}
+      window.location.href = '/ishihara-test';
+    };
+
+    document.getElementById('showLoginBtn').onclick = function() { showSection('login'); };
+    document.getElementById('showRegisterBtn').onclick = function() { showSection('register'); };
+
+    document.getElementById('registerForm').onsubmit = function(e) {
+      e.preventDefault();
+      var birthdate = document.getElementById('userBirthdate').value;
+      var email = document.getElementById('userEmail').value;
+      var emailOptIn = document.getElementById('emailOptIn').checked;
+      var gender = document.getElementById('userGender').value;
+      if (!gender) {
+        var checked = document.querySelector('input[name="gender"]:checked');
+        if (checked) { gender = checked.value; document.getElementById('userGender').value = gender; }
+      }
+      if (!gender) { alert('Please select a gender.'); return; }
+
+      if (birthdate) {
+        // Minimum participant age — keep in sync with MIN_PARTICIPANT_AGE on the server.
+        var MIN_AGE = 18;
+        var bd = new Date(birthdate);
+        var now = new Date();
+        var age = now.getFullYear() - bd.getFullYear();
+        var mDiff = now.getMonth() - bd.getMonth();
+        if (mDiff < 0 || (mDiff === 0 && now.getDate() < bd.getDate())) age--;
+        if (age < MIN_AGE) {
+          var ed = document.getElementById('birthdateError');
+          if (ed) { ed.textContent = 'You must be at least ' + MIN_AGE + ' years old to participate.'; ed.style.display = 'block'; }
+          return;
+        }
+      }
+      var errorDiv = document.getElementById('birthdateError');
+      if (errorDiv) errorDiv.style.display = 'none';
+
+      var researchConsent = (window.getStoredResearchConsent && window.getStoredResearchConsent()) || {};
+      fetch('/register', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          birthdate: birthdate,
+          gender: gender,
+          email: email,
+          email_opt_in_reminders: emailOptIn,
+          consent_version: researchConsent.version || '',
+          consent_agreed_at: researchConsent.agreedAt || null
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.status === 'success') {
+          localStorage.setItem('pendingVerifyUserId', data.userId);
+          var idEl = document.getElementById('generatedId');
+          if (idEl) idEl.textContent = data.userId;
+          showSection('idDisplay');
+          alert('Registration successful. Please verify your email before logging in.');
+        } else {
+          var ed = document.getElementById('birthdateError');
+          if (ed) { ed.textContent = data.message; ed.style.display = 'block'; }
+        }
+      })
+      .catch(function() {
+        var ed = document.getElementById('birthdateError');
+        if (ed) { ed.textContent = 'An error occurred. Please try again.'; ed.style.display = 'block'; }
+      });
+    };
+
+    var recoverForm = document.getElementById('recoverIdForm');
+    if (recoverForm) {
+      recoverForm.onsubmit = function(e) {
+        e.preventDefault();
+        var recoverEmail = document.getElementById('recoverEmail').value;
+        fetch('/email/recover-id', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: recoverEmail })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          if (data.status === 'success') {
+            alert('If the email exists, we sent an ID recovery email.');
+          } else {
+            alert(data.message || 'Could not send recovery email.');
+          }
+        }).catch(function() {
+          alert('Could not send recovery email.');
+        });
+      };
+    }
+
+    calculateMixedColor();
+
+    /* beforeunload beacon */
+    window.addEventListener('beforeunload', function() {
+      var currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
+      var currentTimer = parseFloat(document.getElementById('timer').textContent);
+      var dropCounts = window.shadeMatchDropCounts || { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
+      var targetRgb = window.shadeMatchTargetRgb || [255, 255, 255];
+      if (!isNaN(currentDeltaE) && !isNaN(currentTimer)) {
+        var totalDrops = Object.values(dropCounts).reduce(function(a, b) { return a + b; }, 0);
+        if ((totalDrops > 0 || currentDeltaE !== 0) && !window.currentSessionSaved) {
+          var sessionData = {
+            user_id: localStorage.getItem('userId'),
+            target_r: targetRgb[0], target_g: targetRgb[1], target_b: targetRgb[2],
+            drop_white: dropCounts.white || 0, drop_black: dropCounts.black || 0,
+            drop_red: dropCounts.red || 0, drop_yellow: dropCounts.yellow || 0,
+            drop_blue: dropCounts.blue || 0,
+            delta_e: currentDeltaE, time_sec: currentTimer,
+            timestamp: new Date().toISOString()
+          };
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon('/save_session', JSON.stringify(sessionData));
+          } else {
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/save_session', false);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            xhr.send(JSON.stringify(sessionData));
+          }
+        }
+      }
+    });
+  });
+
+  function logoutUser() {
+    localStorage.removeItem('userId');
+    localStorage.removeItem('userBirthdate');
+    localStorage.removeItem('userGender');
+    location.reload();
+  }
+
+  /* Show push opt-in after SW is ready, user is logged in, and not already subscribed */
+  window.addEventListener('DOMContentLoaded', function() {
+    var pushBtn = document.getElementById('pushOptInBtn');
+    if (!pushBtn || !('Notification' in window) || !('serviceWorker' in navigator)) return;
+    var uid = localStorage.getItem('userId');
+    if (!uid) return;
+    if (Notification.permission === 'granted' || localStorage.getItem('pushSubscribed')) return;
+    /* Only show once SW is confirmed registered */
+    navigator.serviceWorker.ready.then(function() {
+      if (Notification.permission !== 'denied') {
+        pushBtn.style.display = 'flex';
+      }
+    }).catch(function() {});
+
+    var emailVerifyNotice = document.getElementById('emailVerifyNotice');
+    var uid = localStorage.getItem('userId');
+    var email = localStorage.getItem('userEmail');
+    var verified = localStorage.getItem('userEmailVerified') === '1';
+    var optedIn = localStorage.getItem('emailOptInReminders') === '1';
+    if (emailVerifyNotice && uid && email && optedIn && !verified) {
+      emailVerifyNotice.style.display = 'flex';
+    }
+    var resendBtn = document.getElementById('resendVerifyBtn');
+    if (resendBtn) {
+      resendBtn.onclick = function() {
+        fetch('/email/verification/request', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: uid })
+        }).then(function(r) { return r.json(); }).then(function(data) {
+          if (data.status === 'success') {
+            alert('Verification email sent.');
+          } else {
+            alert(data.message || 'Could not send verification email.');
+          }
+        }).catch(function() {
+          alert('Could not send verification email.');
+        });
+      };
+    }
+  });
+
+  /* Display-setup instructions modal — shown once per browser per logged-in user */
+  window.addEventListener('DOMContentLoaded', function() {
+    var modal = document.getElementById('instructionsModal');
+    if (!modal) return;
+    var ackBtn = document.getElementById('instructionsAckBtn');
+    var fsBtn = document.getElementById('instructionsFullscreenBtn');
+    var STORAGE_KEY = 'shadeMatchInstructionsAckV1';
+
+    function fireEvent(event, extra) {
+      try {
+        if (typeof window.shadeMatchTrackEvent === 'function') {
+          window.shadeMatchTrackEvent(event, extra || {});
+        }
+      } catch (err) { /* analytics is best-effort */ }
+    }
+
+    function maybeShowInstructions() {
+      var uid = localStorage.getItem('userId');
+      if (!uid) return;
+      if (localStorage.getItem(STORAGE_KEY) === '1') return;
+      modal.style.display = 'flex';
+    }
+
+    if (fsBtn) {
+      fsBtn.addEventListener('click', function() {
+        var el = document.documentElement;
+        var req = el.requestFullscreen
+          || el.webkitRequestFullscreen
+          || el.msRequestFullscreen;
+        if (typeof req === 'function') {
+          try { req.call(el); } catch (err) { /* ignore */ }
+        }
+      });
+    }
+
+    if (ackBtn) {
+      ackBtn.addEventListener('click', function() {
+        try { localStorage.setItem(STORAGE_KEY, '1'); } catch (e) { /* ignore */ }
+        fireEvent('instruction_acknowledged', {
+          fullscreen: !!(document.fullscreenElement || document.webkitFullscreenElement)
+        });
+        modal.style.display = 'none';
+      });
+    }
+
+    /* Defer slightly so the registration / login modal has a chance to settle. */
+    setTimeout(maybeShowInstructions, 600);
+  });
+
+  function calculateMixedColor() {
+    var colors = { white: [255,255,255], black: [0,0,0], red: [255,0,0], yellow: [255,255,0], blue: [0,0,255] };
+    var totalDrops = 0;
+    var mixedColor = [0, 0, 0];
+    Object.keys(colors).forEach(function(color) {
+      var el = document.querySelector('.color-circle[data-color="' + color + '"]');
+      var drops = el ? parseInt(el.textContent) || 0 : 0;
+      totalDrops += drops;
+      mixedColor = mixedColor.map(function(val, i) { return val + (colors[color][i] * drops); });
+    });
+    if (totalDrops > 0) { mixedColor = mixedColor.map(function(val) { return Math.round(val / totalDrops); }); }
+    else { mixedColor = [255, 255, 255]; }
+    var cm = document.getElementById('currentMix');
+    if (cm) cm.style.backgroundColor = 'rgb(' + mixedColor.join(',') + ')';
+    var rv = document.getElementById('mixedRgbValues');
+    if (rv) rv.textContent = 'RGB: [' + mixedColor.join(', ') + ']';
+    return mixedColor;
+  }
+  </script>
+{% endblock %}
+
+{% block extra_js %}
+  <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260508-qc2"></script>
+
+  <footer class="app-footer">
+    <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>
+    <p class="footer-copy">© 2024 König János, Labancz Laura</p>
+  </footer>
 {% endblock %}

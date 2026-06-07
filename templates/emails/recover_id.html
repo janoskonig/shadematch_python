@@ -1,0 +1,42 @@
+{% extends 'emails/_base.html' %}
+
+{% block preheader %}Use the secure link below to look up your ShadeMatch player ID.{% endblock %}
+{% block header_eyebrow %}Player ID recovery{% endblock %}
+
+{% block body %}
+  <p style="margin:0 0 8px; font-size:12px; font-weight:800; letter-spacing:1.6px; color:#4A90D9; text-transform:uppercase;">Recover your ID</p>
+  <h1 class="sm-h1" style="margin:0 0 14px; font-size:30px; line-height:1.18; font-weight:800; color:#2D2D2D;">
+    Let's get you back to mixing
+  </h1>
+  <p style="margin:0 0 22px; font-size:16px; line-height:1.6; color:#3A3A3A;">
+    We received a request to recover your {{ brand_name }} player ID for this email address. Tap the button to view your ID securely.
+  </p>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 20px;">
+    <tr>
+      <td align="center" bgcolor="#4A90D9" style="background-color:#4A90D9; border-radius:12px;">
+        <a href="{{ recovery_url }}" style="display:inline-block; padding:15px 30px; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-size:16px; font-weight:800; color:#FFFFFF; text-decoration:none; border-radius:12px;">
+          Show me my player ID →
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="margin:14px 0 4px; font-size:13px; color:#6B6B6B;">If the button doesn't work, paste this link into your browser:</p>
+  <p style="margin:0 0 22px; font-size:13px; word-break:break-all;">
+    <a href="{{ recovery_url }}" style="color:#4A90D9; text-decoration:underline;">{{ recovery_url }}</a>
+  </p>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+      <td style="padding:16px 18px; background:#FFF6E5; border:1px solid #F4E2BB; border-radius:12px; font-size:14px; line-height:1.55; color:#7A5A1A;">
+        <strong>Heads up:</strong> this link expires in <strong>{{ ttl_minutes }} minutes</strong>. For your security, we'll never ask you to share it.
+      </td>
+    </tr>
+  </table>
+
+  <hr style="border:none; border-top:1px solid #EFEAE2; margin:28px 0 20px;">
+  <p style="margin:0; font-size:13px; color:#6B6B6B;">
+    Didn't request this? You can safely ignore this email — your account stays untouched and the link will expire on its own.
+  </p>
+{% endblock %}

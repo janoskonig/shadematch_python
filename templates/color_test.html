@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+
+{% block title %}Ishihara Color Vision Test{% endblock %}
+
+{% block extra_head %}
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  body { padding: var(--space-md); }
+
+  .test-container { max-width: 800px; width: 100%; margin: 0 auto; text-align: center; }
+
+  .ct-header { margin-bottom: var(--space-xl); }
+  .ct-header h1 { font-size: var(--font-size-2xl); font-weight: 300; margin-bottom: var(--space-sm); }
+  .ct-header p { color: var(--text-secondary); }
+  .test-info { margin-top: var(--space-md); font-size: var(--font-size-sm); color: var(--text-secondary); }
+
+  .progress-bar {
+    background: var(--border); height: 6px;
+    border-radius: 3px; margin-bottom: var(--space-xl);
+  }
+  .progress-fill {
+    background: linear-gradient(90deg, var(--accent-success), #8BC34A);
+    height: 100%; width: 0%; border-radius: 3px;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .progress-fill { transition: width 0.3s ease; }
+  }
+
+  .plate-container { margin: var(--space-xl) auto; }
+  .ishihara-plate {
+    width: 360px; height: 360px; margin: 0 auto var(--space-lg);
+    border-radius: 50%; background-size: contain;
+    background-position: center; background-repeat: no-repeat;
+    background-color: #f8f9fa; box-shadow: var(--shadow-lg);
+    border: 6px solid var(--border);
+  }
+  .ishihara-plate img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+
+  .question { font-size: var(--font-size-lg); margin-bottom: var(--space-lg); color: var(--text-primary); font-weight: 600; }
+
+  .options {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: var(--space-sm); max-width: 700px; margin: 0 auto var(--space-lg);
+  }
+  .option {
+    background: var(--bg-primary); border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: var(--space-md); cursor: pointer;
+    font-size: 1rem; font-weight: 600; color: var(--text-primary);
+    text-align: center; min-height: 56px;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: manipulation;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .option { transition: all 0.15s ease; }
+  }
+  .option:hover { background: var(--surface); border-color: var(--accent-primary); }
+  .option.selected { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
+  .option.correct { background: var(--accent-success); color: var(--text-on-accent); border-color: var(--accent-success); }
+  .option.incorrect { background: var(--accent-danger); color: var(--text-on-accent); border-color: var(--accent-danger); }
+
+  .navigation {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: var(--space-xl);
+  }
+  .nav-btn {
+    min-height: var(--touch-min); padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-full); cursor: pointer; font-size: 1rem;
+    font-weight: 700; border: 2px solid var(--border-strong);
+    background: var(--surface); color: var(--text-primary);
+    touch-action: manipulation;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .nav-btn { transition: all 0.15s; }
+  }
+  .nav-btn:hover:not(:disabled) { background: var(--bg-primary); }
+  .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .nav-btn.primary { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
+  .nav-btn.primary:hover:not(:disabled) { background: #3a7bc8; }
+
+  .results { display: none; padding: var(--space-xl); text-align: center; }
+  .results h2 { color: var(--text-primary); margin-bottom: var(--space-md); font-size: var(--font-size-2xl); }
+  .score-display { font-size: 3em; font-weight: 900; color: var(--accent-primary); margin: var(--space-md) 0; }
+  .result-message { font-size: var(--font-size-lg); color: var(--text-secondary); margin-bottom: var(--space-lg); line-height: 1.6; }
+  .continue-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: var(--touch-min); padding: var(--space-md) var(--space-xl);
+    border-radius: var(--radius-full); border: none;
+    background: var(--accent-success); color: var(--text-on-accent);
+    font-weight: 700; font-size: 1rem; cursor: pointer;
+    text-decoration: none; touch-action: manipulation;
+  }
+  .continue-btn:hover { background: #4ea84e; }
+
+  .loading { text-align: center; padding: var(--space-xl); color: var(--text-secondary); }
+  .spinner {
+    border: 4px solid var(--border); border-top: 4px solid var(--accent-primary);
+    border-radius: 50%; width: 40px; height: 40px;
+    animation: spin 1s linear infinite; margin: var(--space-md) auto;
+  }
+  @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+  @media (max-width: 768px) {
+    .ishihara-plate { width: 280px; height: 280px; }
+    .options { grid-template-columns: repeat(2, 1fr); gap: var(--space-sm); max-width: 400px; }
+    .option { padding: var(--space-sm); }
+    .ct-header h1 { font-size: var(--font-size-xl); }
+  }
+  @media (max-width: 480px) {
+    .options { grid-template-columns: 1fr; max-width: 250px; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <div class="test-container">
+    <div class="ct-header">
+      <h1>Ishihara Color Vision Test</h1>
+      <p>Identify the number or pattern you see in each circle</p>
+      <div class="test-info">
+        <span id="timer">Time: 00:00</span> |
+        <span id="currentPlate">Loading...</span>
+      </div>
+    </div>
+
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <p>Loading test data...</p>
+    </div>
+
+    <div class="plate-container" id="plateContainer" style="display: none;">
+      <div class="ishihara-plate" id="plate"></div>
+      <div class="question" id="question"></div>
+      <div class="options" id="options"></div>
+
+      <div class="navigation">
+        <button class="nav-btn" id="prevBtn" type="button" disabled>Previous</button>
+        <button class="nav-btn primary" id="nextBtn" type="button">Next</button>
+      </div>
+    </div>
+
+    <div class="results" id="results">
+      <h2>Test Complete!</h2>
+      <div class="score-display" id="scoreDisplay"></div>
+      <div class="result-message" id="resultMessage"></div>
+      <a href="/" class="continue-btn">Continue to App</a>
+    </div>
+  </div>
+
+  <script>
+    let ishiharaPlates = [];
+    let currentPlateIndex = 0;
+    let userAnswers = new Array(25).fill(null);
+    let testCompleted = false;
+    let startTime = null;
+    let timerInterval = null;
+
+    async function loadTestData() {
+      try {
+        const response = await fetch('/static/ishihara_test_data.csv?v=' + Date.now());
+        const csvText = await response.text();
+        ishiharaPlates = parseCSV(csvText);
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('plateContainer').style.display = 'block';
+        initTest();
+      } catch (error) {
+        document.getElementById('loading').innerHTML =
+          '<p style="color:var(--accent-danger);">Error loading. Please refresh.</p>' +
+          '<button onclick="location.reload()" class="btn btn-primary" style="margin-top:var(--space-md);">Refresh</button>';
+      }
+    }
+
+    function parseCSV(csvText) {
+      const lines = csvText.trim().split('\n');
+      const plates = [];
+      const maxPlates = 5;
+      for (let i = 1; i <= maxPlates && i < lines.length; i++) {
+        const v = lines[i].split(',');
+        plates.push({
+          id: parseInt(v[0]), image_file: v[1], correct_answer: v[7],
+          options: [v[2], v[3], v[4], v[5], v[6]].filter(o => o && o.trim() !== ''),
+          question_text: 'What do you see in this plate?'
+        });
+      }
+      return plates;
+    }
+
+    function initTest() {
+      currentPlateIndex = 0;
+      userAnswers = new Array(ishiharaPlates.length).fill(null);
+      testCompleted = false; startTime = new Date();
+      startTimerFn(); showPlate(currentPlateIndex); updateProgress();
+    }
+
+    function startTimerFn() { if (timerInterval) clearInterval(timerInterval); timerInterval = setInterval(updateTimer, 1000); }
+    function updateTimer() {
+      if (!startTime) return;
+      const e = Math.floor((new Date() - startTime) / 1000);
+      document.getElementById('timer').textContent = 'Time: ' + Math.floor(e/60).toString().padStart(2,'0') + ':' + (e%60).toString().padStart(2,'0');
+    }
+    function stopTimerFn() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
+
+    function showPlate(index) {
+      const p = ishiharaPlates[index];
+      document.getElementById('plate').innerHTML = '<img src="/ishihara/' + p.image_file + '" alt="Plate ' + p.id + '" style="width:100%;height:100%;object-fit:contain;border-radius:50%;" onerror="this.style.display=\'none\'">';
+      document.getElementById('question').textContent = 'Plate ' + p.id + ': ' + p.question_text;
+      const optEl = document.getElementById('options');
+      optEl.innerHTML = '';
+      p.options.forEach(opt => {
+        const btn = document.createElement('button');
+        btn.className = 'option'; btn.type = 'button';
+        btn.textContent = opt; btn.onclick = () => selectOption(opt);
+        if (userAnswers[index] === opt) btn.classList.add('selected');
+        optEl.appendChild(btn);
+      });
+      updateNavigationButtons();
+      document.getElementById('currentPlate').textContent = 'Plate ' + p.id + ' of ' + ishiharaPlates.length;
+    }
+
+    function selectOption(sel) {
+      userAnswers[currentPlateIndex] = sel;
+      document.querySelectorAll('.option').forEach(o => {
+        o.classList.remove('selected','correct','incorrect');
+        if (o.textContent == sel) o.classList.add('selected');
+      });
+      document.getElementById('nextBtn').disabled = false;
+    }
+
+    function updateNavigationButtons() {
+      document.getElementById('prevBtn').disabled = currentPlateIndex === 0;
+      const nb = document.getElementById('nextBtn');
+      nb.textContent = currentPlateIndex === ishiharaPlates.length - 1 ? 'Finish Test' : 'Next';
+      nb.disabled = userAnswers[currentPlateIndex] === null;
+    }
+
+    function updateProgress() {
+      document.getElementById('progressFill').style.width = ((currentPlateIndex + 1) / ishiharaPlates.length * 100) + '%';
+    }
+
+    function nextPlate() {
+      if (currentPlateIndex < ishiharaPlates.length - 1) { currentPlateIndex++; showPlate(currentPlateIndex); updateProgress(); }
+      else finishTest();
+    }
+    function prevPlate() {
+      if (currentPlateIndex > 0) { currentPlateIndex--; showPlate(currentPlateIndex); updateProgress(); }
+    }
+
+    function finishTest() {
+      stopTimerFn();
+      const correct = userAnswers.filter((a,i) => a === ishiharaPlates[i].correct_answer).length;
+      const score = Math.round((correct / ishiharaPlates.length) * 100);
+      const t = startTime ? Math.floor((new Date() - startTime) / 1000) : 0;
+      document.getElementById('scoreDisplay').textContent = score + '%';
+      document.getElementById('resultMessage').innerHTML =
+        getResultMessage(score) + '<br><br><strong>Results:</strong><br>Correct: ' + correct + '/' + ishiharaPlates.length +
+        '<br>Time: ' + Math.floor(t/60) + ':' + (t%60).toString().padStart(2,'0');
+      document.getElementById('plateContainer').style.display = 'none';
+      document.getElementById('results').style.display = 'block';
+      testCompleted = true;
+      checkTestResults();
+    }
+
+    function hasPassedTest(s) { return s >= 90; }
+    function getResultMessage(s) {
+      if (s >= 90) return "Excellent color vision!";
+      if (s >= 80) return "Good color vision with minor difficulties.";
+      if (s >= 70) return "Moderate deficiency detected.";
+      if (s >= 60) return "Significant deficiency detected.";
+      return "Severe deficiency detected.";
+    }
+
+    function checkTestResults() {
+      const correct = userAnswers.filter((a,i) => a === ishiharaPlates[i].correct_answer).length;
+      const score = Math.round((correct / ishiharaPlates.length) * 100);
+      if (hasPassedTest(score)) { displayTestSuccess(score); registerUserAfterTest(); }
+      else displayTestFailure(score);
+    }
+
+    function displayTestSuccess(score) {
+      const rm = document.getElementById('resultMessage');
+      rm.innerHTML += '<br><br><div style="background:#E8F5E9;border:2px solid var(--accent-success);border-radius:var(--radius-md);padding:var(--space-lg);text-align:center;">' +
+        '<h3 style="color:var(--accent-success);margin:0 0 var(--space-sm);">Test Passed!</h3>' +
+        '<p>Score: <strong>' + score + '%</strong></p></div>';
+    }
+    function displayTestFailure(score) {
+      const rm = document.getElementById('resultMessage');
+      rm.innerHTML += '<br><br><div style="background:#FFEBEE;border:2px solid var(--accent-danger);border-radius:var(--radius-md);padding:var(--space-lg);text-align:center;">' +
+        '<h3 style="color:var(--accent-danger);margin:0 0 var(--space-sm);">Test Failed</h3>' +
+        '<p>Score: <strong>' + score + '%</strong> (90% required)</p></div>';
+    }
+
+    async function registerUserAfterTest() {
+      try {
+        const bd = localStorage.getItem('userBirthdate');
+        const g = localStorage.getItem('userGender');
+        const email = localStorage.getItem('userEmail');
+        const emailOptIn = localStorage.getItem('emailOptInReminders') === '1';
+        if (!bd || !g) return;
+        if (!email) {
+          const rm = document.getElementById('resultMessage');
+          rm.innerHTML += '<br><br><p style="color:var(--accent-danger);font-weight:700;">Use the home page to register with your email first.</p>';
+          return;
+        }
+        const r = await fetch('/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            birthdate: bd,
+            gender: g,
+            email,
+            email_opt_in_reminders: emailOptIn,
+          }),
+        });
+        const d = await r.json();
+        if (d.status === 'success') {
+          localStorage.setItem('userId', d.userId);
+          displayUserID(d.userId);
+          const cb = document.querySelector('.continue-btn');
+          if (cb) { cb.textContent = 'Continue to Color Mixing'; }
+        } else if (d.message) {
+          const rm = document.getElementById('resultMessage');
+          rm.innerHTML += '<br><br><p style="color:var(--accent-danger);">' + d.message + '</p>';
+        }
+      } catch (err) { console.error(err); }
+    }
+
+    function displayUserID(userId) {
+      const rm = document.getElementById('resultMessage');
+      rm.innerHTML += '<br><br><div style="background:#E8F5E9;border:2px solid var(--accent-success);border-radius:var(--radius-md);padding:var(--space-lg);text-align:center;">' +
+        '<h3 style="color:var(--accent-success);">Your User ID</h3>' +
+        '<div style="font-size:2em;font-weight:900;color:var(--accent-primary);letter-spacing:3px;font-family:monospace;">' + userId + '</div>' +
+        '<p style="color:var(--text-secondary);font-size:var(--font-size-sm);">Save this ID!</p></div>';
+    }
+
+    document.getElementById('nextBtn').addEventListener('click', nextPlate);
+    document.getElementById('prevBtn').addEventListener('click', prevPlate);
+    document.addEventListener('DOMContentLoaded', loadTestData);
+  </script>
+{% endblock %}

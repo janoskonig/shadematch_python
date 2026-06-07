@@ -1,0 +1,31 @@
+                            OLS Regression Results                            
+==============================================================================
+Dep. Variable:      log_final_delta_e   R-squared:                       0.453
+Model:                            OLS   Adj. R-squared:                  0.437
+Method:                 Least Squares   F-statistic:                     4.663
+Date:                Mon, 27 Apr 2026   Prob (F-statistic):           6.37e-05
+Time:                        06:09:08   Log-Likelihood:                -152.86
+No. Observations:                 252   AIC:                             321.7
+Df Residuals:                     244   BIC:                             350.0
+Df Model:                           7                                         
+Covariance Type:                  HC3                                         
+================================================================================================
+                                   coef    std err          z      P>|z|      [0.025      0.975]
+------------------------------------------------------------------------------------------------
+Intercept                        0.2708      0.080      3.382      0.001       0.114       0.428
+C(color_type)[T.lab]            -0.0411      0.078     -0.526      0.599      -0.194       0.112
+C(color_type)[T.skin]           -1.3498      0.862     -1.566      0.117      -3.039       0.340
+z_attempt_no                    -0.0471      0.029     -1.601      0.109      -0.105       0.011
+z_log_duration_sec              -0.1506      0.323     -0.466      0.641      -0.784       0.483
+z_log_num_steps                  0.2654      0.286      0.927      0.354      -0.296       0.827
+z_target_recipe_n_components    -0.0281      0.031     -0.896      0.370      -0.089       0.033
+z_similarity                    -0.4775      0.253     -1.885      0.059      -0.974       0.019
+==============================================================================
+Omnibus:                       88.693   Durbin-Watson:                   1.245
+Prob(Omnibus):                  0.000   Jarque-Bera (JB):             2360.818
+Skew:                           0.722   Prob(JB):                         0.00
+Kurtosis:                      17.925   Cond. No.                         14.0
+==============================================================================
+
+Notes:
+[1] Standard Errors are heteroscedasticity robust (HC3)

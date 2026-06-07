@@ -1,0 +1,402 @@
+{% extends "base.html" %}
+
+{% block title %}Ishihara Color Vision Test{% endblock %}
+
+{% block extra_head %}
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    body { padding: var(--space-md); }
+
+    .test-container {
+      max-width: 800px; margin: 0 auto;
+      background: var(--surface);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+    }
+    .ish-header {
+      background: linear-gradient(135deg, #3a5a8c 0%, #4a7ab5 100%);
+      color: var(--text-on-accent);
+      padding: var(--space-xl); text-align: center;
+    }
+    .ish-header h1 { font-size: var(--font-size-2xl); font-weight: 300; margin-bottom: var(--space-sm); }
+    .ish-header p { font-size: 1rem; opacity: 0.9; }
+    .ish-header .test-info { margin-top: var(--space-md); font-size: var(--font-size-sm); opacity: 0.8; }
+
+    .ish-warning {
+      background: #FFF8E1; border: 1px solid #FFE082;
+      border-radius: var(--radius-sm); padding: var(--space-md);
+      margin: var(--space-sm) 0; color: #6D4C00; font-size: var(--font-size-sm);
+    }
+
+    .progress-bar {
+      background: var(--border); height: 6px; position: relative;
+    }
+    .progress-fill {
+      background: linear-gradient(90deg, var(--accent-success), #8BC34A);
+      height: 100%; width: 0%; border-radius: 3px;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .progress-fill { transition: width 0.3s ease; }
+    }
+
+    .plate-container { padding: var(--space-xl); text-align: center; }
+    .plate {
+      width: 320px; height: 320px; margin: 0 auto var(--space-lg);
+      border-radius: 50%; background-size: contain;
+      background-position: center; background-repeat: no-repeat;
+      background-color: #f8f9fa; box-shadow: var(--shadow-lg);
+      border: 6px solid var(--border); position: relative;
+    }
+    .plate img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+
+    .question {
+      font-size: var(--font-size-lg); margin-bottom: var(--space-lg);
+      color: var(--text-primary); font-weight: 600;
+    }
+
+    .options {
+      display: flex; flex-wrap: nowrap; gap: var(--space-sm);
+      max-width: 800px; margin: 0 auto; justify-content: center;
+    }
+    .option {
+      background: var(--bg-primary); border: 2px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: var(--space-md) var(--space-md);
+      cursor: pointer; font-size: 1rem; font-weight: 600;
+      flex: 1; min-width: 0; text-align: center;
+      color: var(--text-primary); min-height: 56px;
+      display: flex; align-items: center; justify-content: center;
+      touch-action: manipulation;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .option { transition: all 0.15s ease; }
+    }
+    .option:hover { background: var(--surface); border-color: var(--accent-primary); }
+    .option.selected { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
+    .option.correct { background: var(--accent-success); color: var(--text-on-accent); border-color: var(--accent-success); }
+    .option.incorrect { background: var(--accent-danger); color: var(--text-on-accent); border-color: var(--accent-danger); }
+
+    .navigation {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-top: var(--space-xl); padding: 0 var(--space-md);
+    }
+    .nav-btn {
+      min-height: var(--touch-min); padding: var(--space-sm) var(--space-lg);
+      border-radius: var(--radius-full); cursor: pointer; font-size: 1rem;
+      font-weight: 700; border: 2px solid var(--border-strong);
+      background: var(--surface); color: var(--text-primary);
+      touch-action: manipulation;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .nav-btn { transition: all 0.15s ease; }
+    }
+    .nav-btn:hover:not(:disabled) { background: var(--bg-primary); }
+    .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .nav-btn.primary { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
+    .nav-btn.primary:hover:not(:disabled) { background: #3a7bc8; }
+
+    .results { display: none; padding: var(--space-xl); text-align: center; }
+    .results h2 { color: var(--text-primary); margin-bottom: var(--space-md); font-size: var(--font-size-2xl); }
+    .score-display { font-size: 3em; font-weight: 900; color: var(--accent-primary); margin: var(--space-md) 0; }
+    .result-message { font-size: var(--font-size-lg); color: var(--text-secondary); margin-bottom: var(--space-lg); line-height: 1.6; }
+
+    .restart-btn, .home-btn {
+      min-height: var(--touch-min); padding: var(--space-md) var(--space-xl);
+      border-radius: var(--radius-full); cursor: pointer; font-size: 1rem;
+      font-weight: 700; border: none; touch-action: manipulation;
+    }
+    .restart-btn { background: var(--accent-success); color: var(--text-on-accent); }
+    .restart-btn:hover { background: #4ea84e; }
+    .home-btn { background: var(--surface); color: var(--text-primary); border: 2px solid var(--border-strong); margin-left: var(--space-md); }
+    .home-btn:hover { background: var(--bg-primary); }
+
+    .loading { text-align: center; padding: var(--space-xl); color: var(--text-secondary); }
+    .spinner {
+      border: 4px solid var(--border); border-top: 4px solid var(--accent-primary);
+      border-radius: 50%; width: 40px; height: 40px;
+      animation: spin 1s linear infinite; margin: var(--space-md) auto;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+    @media (max-width: 768px) {
+      .plate { width: 260px; height: 260px; }
+      .options { flex-wrap: wrap; gap: var(--space-sm); }
+      .option { flex: 1; min-width: calc(50% - 4px); padding: var(--space-sm) var(--space-sm); }
+      .ish-header h1 { font-size: var(--font-size-xl); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <div class="test-container">
+        <div class="ish-header">
+            <h1>Ishihara Color Vision Test</h1>
+            <p>Identify the number or pattern you see in each circle</p>
+            <div class="ish-warning">
+                <strong>Note:</strong> This test is currently limited to 5 plates for testing purposes.
+            </div>
+            <div class="test-info">
+                <span id="timer">Time: 00:00</span> |
+                <span id="currentPlate">Loading...</span>
+            </div>
+        </div>
+
+        <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <p>Loading test data...</p>
+        </div>
+
+        <div class="plate-container" id="plateContainer" style="display: none;">
+            <div class="plate" id="plate"></div>
+            <div class="question" id="question"></div>
+            <div class="options" id="options"></div>
+
+            <div class="navigation">
+                <button class="nav-btn" id="prevBtn" type="button" disabled>Previous</button>
+                <button class="nav-btn primary" id="nextBtn" type="button">Next</button>
+            </div>
+        </div>
+
+        <div class="results" id="results">
+            <h2>Test Complete!</h2>
+            <div class="score-display" id="scoreDisplay"></div>
+            <div class="result-message" id="resultMessage"></div>
+            <button class="restart-btn" id="restartBtn" type="button">Take Test Again</button>
+            <button class="home-btn" id="homeBtn" type="button">Go Home</button>
+        </div>
+    </div>
+
+    <script>
+        let ishiharaPlates = [];
+        let currentPlateIndex = 0;
+        let userAnswers = new Array(25).fill(null);
+        let testCompleted = false;
+        let startTime = null;
+        let timerInterval = null;
+
+        async function loadTestData() {
+            try {
+                const response = await fetch('/static/ishihara_test_data.csv?v=' + Date.now());
+                const csvText = await response.text();
+                ishiharaPlates = parseCSV(csvText);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('plateContainer').style.display = 'block';
+                initTest();
+            } catch (error) {
+                console.error('Error loading test data:', error);
+                document.getElementById('loading').innerHTML =
+                    '<p style="color:var(--accent-danger);">Error loading test data. Please refresh the page.</p>' +
+                    '<button onclick="location.reload()" class="btn btn-primary" style="margin-top:var(--space-md);">Refresh</button>';
+            }
+        }
+
+        function parseCSV(csvText) {
+            const lines = csvText.trim().split('\n');
+            const plates = [];
+            const maxPlates = 5;
+            for (let i = 1; i <= maxPlates && i < lines.length; i++) {
+                const values = lines[i].split(',');
+                plates.push({
+                    id: parseInt(values[0]),
+                    image_file: values[1],
+                    correct_answer: values[7],
+                    options: [values[2], values[3], values[4], values[5], values[6]].filter(opt => opt && opt.trim() !== ''),
+                    question_text: 'What do you see in this plate?'
+                });
+            }
+            return plates;
+        }
+
+        function initTest() {
+            currentPlateIndex = 0;
+            userAnswers = new Array(ishiharaPlates.length).fill(null);
+            testCompleted = false;
+            startTime = new Date();
+            startTimerFn();
+            showPlate(currentPlateIndex);
+            updateProgress();
+        }
+
+        function startTimerFn() { if (timerInterval) clearInterval(timerInterval); timerInterval = setInterval(updateTimer, 1000); }
+        function updateTimer() {
+            if (!startTime) return;
+            const elapsed = Math.floor((new Date() - startTime) / 1000);
+            document.getElementById('timer').textContent = 'Time: ' + Math.floor(elapsed / 60).toString().padStart(2, '0') + ':' + (elapsed % 60).toString().padStart(2, '0');
+        }
+        function stopTimerFn() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
+
+        function showPlate(index) {
+            const plate = ishiharaPlates[index];
+            document.getElementById('plate').innerHTML = '<img src="/ishihara/' + plate.image_file + '" alt="Ishihara Plate ' + plate.id + '" onerror="this.style.display=\'none\'">';
+            document.getElementById('question').textContent = 'Plate ' + plate.id + ': ' + plate.question_text;
+            const optionsEl = document.getElementById('options');
+            optionsEl.innerHTML = '';
+            plate.options.forEach(option => {
+                const btn = document.createElement('button');
+                btn.className = 'option';
+                btn.type = 'button';
+                btn.textContent = option;
+                btn.onclick = () => selectOption(option);
+                if (userAnswers[index] === option) btn.classList.add('selected');
+                optionsEl.appendChild(btn);
+            });
+            updateNavigationButtons();
+            document.getElementById('currentPlate').textContent = 'Plate ' + plate.id + ' of ' + ishiharaPlates.length;
+        }
+
+        function selectOption(selectedOption) {
+            userAnswers[currentPlateIndex] = selectedOption;
+            document.querySelectorAll('.option').forEach(opt => {
+                opt.classList.remove('selected', 'correct', 'incorrect');
+                if (opt.textContent == selectedOption) opt.classList.add('selected');
+            });
+            document.getElementById('nextBtn').disabled = false;
+        }
+
+        function updateNavigationButtons() {
+            document.getElementById('prevBtn').disabled = currentPlateIndex === 0;
+            const nextBtn = document.getElementById('nextBtn');
+            nextBtn.textContent = currentPlateIndex === ishiharaPlates.length - 1 ? 'Finish Test' : 'Next';
+            nextBtn.disabled = userAnswers[currentPlateIndex] === null;
+        }
+
+        function updateProgress() {
+            document.getElementById('progressFill').style.width = ((currentPlateIndex + 1) / ishiharaPlates.length * 100) + '%';
+        }
+
+        function nextPlate() {
+            if (currentPlateIndex < ishiharaPlates.length - 1) { currentPlateIndex++; showPlate(currentPlateIndex); updateProgress(); }
+            else finishTest();
+        }
+        function prevPlate() {
+            if (currentPlateIndex > 0) { currentPlateIndex--; showPlate(currentPlateIndex); updateProgress(); }
+        }
+
+        function finishTest() {
+            stopTimerFn();
+            const correctAnswers = userAnswers.filter((a, i) => a === ishiharaPlates[i].correct_answer).length;
+            const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
+            const totalTime = startTime ? Math.floor((new Date() - startTime) / 1000) : 0;
+            document.getElementById('scoreDisplay').textContent = score + '%';
+            document.getElementById('resultMessage').innerHTML =
+                getResultMessage(score) + '<br><br><strong>Results:</strong><br>' +
+                '• Correct: ' + correctAnswers + '/' + ishiharaPlates.length + '<br>' +
+                '• Time: ' + Math.floor(totalTime / 60) + ':' + (totalTime % 60).toString().padStart(2, '0') + '<br>' +
+                '• Avg per plate: ' + Math.round(totalTime / ishiharaPlates.length) + 's';
+            document.getElementById('plateContainer').style.display = 'none';
+            document.getElementById('results').style.display = 'block';
+            testCompleted = true;
+            checkTestResults();
+        }
+
+        function getResultMessage(score) {
+            if (score >= 90) return "Excellent color vision! You have normal color perception.";
+            if (score >= 80) return "Good color vision with minor difficulties.";
+            if (score >= 70) return "Moderate color vision deficiency detected.";
+            if (score >= 60) return "Significant color vision deficiency detected.";
+            return "Severe color vision deficiency detected.";
+        }
+        function hasPassedTest(score) { return score >= 90; }
+
+        function checkTestResults() {
+            const correctAnswers = userAnswers.filter((a, i) => a === ishiharaPlates[i].correct_answer).length;
+            const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
+            if (hasPassedTest(score)) { displayTestSuccess(score); registerUserAfterTest(); }
+            else displayTestFailure(score);
+        }
+
+        function displayTestSuccess(score) {
+            const rm = document.getElementById('resultMessage');
+            rm.innerHTML += '<br><br><div style="background:#E8F5E9;border:2px solid var(--accent-success);border-radius:var(--radius-md);padding:var(--space-lg);margin:var(--space-md) 0;text-align:center;">' +
+                '<h3 style="color:var(--accent-success);margin:0 0 var(--space-sm) 0;">Test Passed!</h3>' +
+                '<p style="margin:var(--space-sm) 0;color:var(--text-primary);">Your score of <strong>' + score + '%</strong> meets the threshold. You can proceed.</p></div>';
+        }
+
+        function displayTestFailure(score) {
+            const rm = document.getElementById('resultMessage');
+            rm.innerHTML += '<br><br><div style="background:#FFEBEE;border:2px solid var(--accent-danger);border-radius:var(--radius-md);padding:var(--space-lg);margin:var(--space-md) 0;text-align:center;">' +
+                '<h3 style="color:var(--accent-danger);margin:0 0 var(--space-sm) 0;">Test Failed — Access Denied</h3>' +
+                '<p style="margin:var(--space-sm) 0;color:var(--text-primary);">Your score of <strong>' + score + '%</strong> is below the required 90%.</p>' +
+                '<p style="margin:var(--space-sm) 0;color:var(--text-secondary);">Only users with normal color vision can participate.</p></div>';
+        }
+
+        async function registerUserAfterTest() {
+            try {
+                const birthdate = localStorage.getItem('userBirthdate');
+                const gender = localStorage.getItem('userGender');
+                const email = localStorage.getItem('userEmail');
+                const emailOptIn = localStorage.getItem('emailOptInReminders') === '1';
+                if (!birthdate || !gender) return;
+                const existingUserId = localStorage.getItem('userId');
+                if (existingUserId) { displayUserID(existingUserId); return; }
+                if (!email) {
+                    const rm = document.getElementById('resultMessage');
+                    rm.innerHTML += '<br><br><p style="color:var(--accent-danger);font-weight:700;">Please go back to the home page and complete registration with your email, then take this test again.</p>';
+                    return;
+                }
+                const response = await fetch('/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        birthdate,
+                        gender,
+                        email,
+                        email_opt_in_reminders: emailOptIn,
+                    }),
+                });
+                const data = await response.json();
+                if (data.status === 'success') {
+                    localStorage.setItem('userId', data.userId);
+                    displayUserID(data.userId);
+                } else if (data.message) {
+                    const rm = document.getElementById('resultMessage');
+                    rm.innerHTML += '<br><br><p style="color:var(--accent-danger);">' + data.message + '</p>';
+                }
+            } catch (error) { console.error('Error registering user:', error); }
+        }
+
+        function displayUserID(userId) {
+            const rm = document.getElementById('resultMessage');
+            rm.innerHTML += '<br><br><div style="background:#E8F5E9;border:2px solid var(--accent-success);border-radius:var(--radius-md);padding:var(--space-lg);margin:var(--space-md) 0;text-align:center;">' +
+                '<h3 style="color:var(--accent-success);margin:0 0 var(--space-sm) 0;">Your User ID</h3>' +
+                '<div style="font-size:2em;font-weight:900;color:var(--accent-primary);letter-spacing:3px;margin:var(--space-sm) 0;font-family:monospace;">' + userId + '</div>' +
+                '<p style="color:var(--text-secondary);font-size:var(--font-size-sm);">Save this ID to access your results later!</p>' +
+                '<button onclick="proceedToMainPage()" class="btn btn-primary btn-lg" style="margin-top:var(--space-md);">Start Color Matching</button></div>';
+        }
+
+        function proceedToMainPage() {
+            const userId = localStorage.getItem('userId');
+            if (userId) { localStorage.setItem('justRegistered', 'true'); window.location.href = '/'; }
+            else alert('Error: User ID not found.');
+        }
+
+        document.getElementById('nextBtn').addEventListener('click', nextPlate);
+        document.getElementById('prevBtn').addEventListener('click', prevPlate);
+        document.getElementById('restartBtn').addEventListener('click', function() {
+            stopTimerFn();
+            document.getElementById('results').style.display = 'none';
+            document.getElementById('plateContainer').style.display = 'block';
+            testCompleted = false;
+            document.getElementById('timer').textContent = 'Time: 00:00';
+            initTest();
+        });
+        document.getElementById('homeBtn').addEventListener('click', () => {
+            const correctAnswers = userAnswers.filter((a, i) => a === ishiharaPlates[i].correct_answer).length;
+            const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
+            if (hasPassedTest(score)) window.location.href = '/';
+            else alert('You must pass the Ishihara test to access other features.');
+        });
+
+        document.addEventListener('DOMContentLoaded', loadTestData);
+    </script>
+{% endblock %}

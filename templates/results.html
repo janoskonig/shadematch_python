@@ -1,0 +1,890 @@
+{% extends "base.html" %}
+
+{% block title %}Your Color Matching Results{% endblock %}
+
+{% block extra_css %}
+<style>
+  body { padding: var(--space-md); }
+  .results-container { max-width: 1100px; margin: 0 auto; }
+
+  /* ── Back link ─────────────────────────────────────────── */
+  .back-link {
+    display: inline-flex; align-items: center; gap: var(--space-sm);
+    text-decoration: none; color: var(--accent-primary); font-weight: 700;
+    margin-bottom: var(--space-lg); font-size: var(--font-size-sm);
+  }
+  .back-link:hover { text-decoration: underline; }
+
+  /* ── User input ─────────────────────────────────────────── */
+  .user-input-section {
+    background: var(--surface); padding: var(--space-md) var(--space-lg);
+    border-radius: var(--radius-lg); margin-bottom: var(--space-md);
+    text-align: center; box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+  }
+  .user-input-section input {
+    min-height: var(--touch-min); padding: var(--space-sm) var(--space-md);
+    border: 2px solid var(--border); border-radius: var(--radius-md);
+    font-size: 1rem; color: var(--text-primary); background: var(--surface);
+    margin-right: var(--space-sm); font-family: monospace;
+    letter-spacing: 2px; text-transform: uppercase;
+  }
+  .user-input-section input:focus { border-color: var(--accent-primary); outline: none; }
+  .user-input-section button {
+    min-height: var(--touch-min); padding: var(--space-sm) var(--space-lg);
+    border-radius: var(--radius-full); border: none; cursor: pointer;
+    font-weight: 700; font-size: 1rem;
+    background: var(--accent-primary); color: var(--text-on-accent);
+    touch-action: manipulation;
+  }
+  .user-input-section button:hover { background: #3a7bc8; }
+  .welcome-message { font-weight: 700; font-size: var(--font-size-lg); color: var(--text-primary); }
+
+  /* ── Mastered banner ────────────────────────────────────── */
+  .mastered-banner {
+    background: linear-gradient(135deg, #00b894, #00cec9);
+    color: #fff; border-radius: var(--radius-lg);
+    padding: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md);
+    text-align: center; font-weight: 700; font-size: 1rem;
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* ── Progress card ──────────────────────────────────────── */
+  .progress-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md) var(--space-lg);
+    margin-bottom: var(--space-md);
+    box-shadow: var(--shadow-sm);
+  }
+  .progress-card-title {
+    font-size: var(--font-size-sm); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-secondary); margin: 0 0 var(--space-sm);
+  }
+  /* Hero stats: 4 primary metrics in a row */
+  .progress-stats-primary {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: var(--space-sm);
+    margin-bottom: var(--space-sm);
+  }
+  /* Secondary stats: smaller streak / best / freezes */
+  .progress-stats-secondary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-md);
+    margin-bottom: var(--space-sm);
+    padding: 6px var(--space-sm);
+    background: var(--bg-primary);
+    border-radius: var(--radius-md);
+    font-size: 0.82rem;
+  }
+  .ps-mini {
+    display: inline-flex; align-items: baseline; gap: 4px;
+    color: var(--text-secondary); font-weight: 600;
+  }
+  .ps-mini-val { color: var(--text-primary); font-weight: 800; font-size: 0.95rem; }
+  .ps-stat {
+    min-width: 0;
+    text-align: center;
+    background: var(--bg-primary); border-radius: var(--radius-md);
+    padding: var(--space-xs) var(--space-sm);
+  }
+  .ps-stat--primary { border: 2px solid var(--accent-primary); }
+  .ps-stat-val {
+    font-size: 1.35rem; font-weight: 900;
+    overflow-wrap: anywhere;
+    line-height: 1.15;
+  }
+  .ps-stat-lbl {
+    font-size: 0.65rem; color: var(--text-secondary); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.03em;
+    white-space: normal;
+    line-height: 1.2;
+    margin-top: 2px;
+  }
+
+  /* Quota progress bar (primary) */
+  .quota-bar-wrap {
+    background: var(--border); border-radius: 6px;
+    height: 10px; overflow: hidden; margin-bottom: var(--space-xs);
+  }
+  .quota-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00b894, #55efc4);
+    border-radius: 6px;
+    transition: width 0.6s ease;
+  }
+  .quota-bar-label {
+    display: flex; justify-content: space-between;
+    font-size: 0.72rem; color: var(--text-secondary);
+  }
+
+  /* XP bar (secondary, smaller) */
+  .xp-bar-wrap {
+    background: var(--border); border-radius: 4px;
+    height: 5px; overflow: hidden; margin-bottom: var(--space-xs);
+    margin-top: var(--space-sm);
+  }
+  .xp-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 4px;
+    transition: width 0.6s ease;
+  }
+  .xp-bar-label {
+    display: flex; justify-content: space-between;
+    font-size: 0.68rem; color: var(--text-secondary);
+  }
+
+  .coverage-row {
+    display: flex; align-items: center; gap: var(--space-sm);
+    margin-top: var(--space-md);
+    font-size: var(--font-size-sm);
+  }
+  .coverage-label { color: var(--text-secondary); white-space: nowrap; }
+  .coverage-bar-wrap {
+    flex: 1; background: var(--border); border-radius: 4px; height: 8px; overflow: hidden;
+  }
+  .coverage-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00b894, #55efc4);
+    border-radius: 4px;
+    transition: width 0.6s ease;
+  }
+  .coverage-pct { font-weight: 700; white-space: nowrap; }
+
+  /* ── Collapsible card (shared) ───────────────────────────── */
+  .collapsible-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: var(--space-md);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+  }
+  .collapsible-toggle {
+    width: 100%;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-lg);
+    background: transparent; border: none; cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    color: var(--text-primary);
+    min-height: var(--touch-min);
+  }
+  .collapsible-toggle:hover { background: var(--bg-primary); }
+  .collapsible-title {
+    font-size: var(--font-size-sm); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-secondary);
+  }
+  .collapsible-meta {
+    font-size: 0.78rem; color: var(--text-secondary); font-weight: 600;
+    margin-left: auto; margin-right: var(--space-sm);
+    white-space: nowrap;
+  }
+  .collapsible-chevron {
+    color: var(--text-secondary);
+    transition: transform 0.2s ease;
+    flex-shrink: 0;
+  }
+  .collapsible-card[data-open="true"] .collapsible-chevron {
+    transform: rotate(180deg);
+  }
+  .collapsible-body {
+    display: none;
+    padding: 0 var(--space-lg) var(--space-md);
+    border-top: 1px solid var(--border);
+  }
+  .collapsible-card[data-open="true"] .collapsible-body { display: block; }
+
+  /* ── Awards ─────────────────────────────────────────────── */
+  .awards-section { margin-bottom: var(--space-md); }
+  .awards-title {
+    font-size: var(--font-size-sm); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-secondary); margin-bottom: var(--space-sm);
+  }
+  .awards-grid {
+    display: flex; flex-wrap: wrap; gap: 6px;
+  }
+  .award-badge {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg-primary); border: 1px solid var(--border);
+    border-radius: var(--radius-full); padding: 4px 10px;
+    font-size: 0.75rem; font-weight: 700; color: var(--text-primary);
+  }
+  .award-badge--quota-major {
+    border-color: #00b894; background: #e8fff8;
+    box-shadow: 0 0 0 1px #00b894;
+  }
+  .award-badge--daily { border-color: #f9ca24; background: #fffdf0; }
+  .award-badge--streak { border-color: #ff6b6b; background: #fff5f5; }
+  .award-badge--level { border-color: #667eea; background: #f0f2ff; }
+  .award-badge--coverage { border-color: #00b894; background: #f0fff8; }
+  .award-badge--achievement { border-color: #fdcb6e; background: #fffcf0; }
+  .no-awards { color: var(--text-secondary); font-size: var(--font-size-sm); }
+
+  /* ── Color stats ─────────────────────────────────────────── */
+  .color-stats-section { margin-bottom: var(--space-md); }
+  .color-stat-bar-row {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 6px;
+    font-size: 0.78rem;
+  }
+  .csr-swatch {
+    width: 18px; height: 18px; border-radius: 3px;
+    border: 1px solid var(--border); flex-shrink: 0;
+  }
+  .csr-label { width: 100px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+  .csr-bar-wrap {
+    flex: 1; background: var(--border); border-radius: 3px; height: 7px; overflow: hidden;
+  }
+  .csr-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #667eea, #764ba2);
+    border-radius: 3px;
+  }
+  .csr-count { width: 50px; text-align: right; font-weight: 700; color: var(--text-primary); flex-shrink: 0; }
+
+  /* ── Session table ───────────────────────────────────────── */
+  .results-section {
+    background: var(--surface); padding: var(--space-md) var(--space-lg);
+    border-radius: var(--radius-lg); box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border);
+  }
+  .results-summary {
+    display: flex; flex-wrap: wrap; justify-content: space-around;
+    gap: var(--space-sm) var(--space-md);
+    margin-bottom: var(--space-md); padding: var(--space-sm) var(--space-md);
+    background: var(--bg-primary); border-radius: var(--radius-md);
+  }
+  .summary-item { text-align: center; min-width: 0; flex: 1 1 90px; }
+  .summary-number { font-size: 1.6em; font-weight: 900; color: var(--accent-primary); line-height: 1.1; overflow-wrap: anywhere; }
+  .summary-label { font-size: 0.72rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
+
+  /* Show-more toggle button (sessions, etc.) */
+  .show-more-btn {
+    display: block; margin: var(--space-md) auto 0;
+    padding: var(--space-xs) var(--space-lg);
+    background: var(--bg-primary); border: 1px solid var(--border);
+    border-radius: var(--radius-full); cursor: pointer;
+    font-family: inherit; font-weight: 700; font-size: 0.85rem;
+    color: var(--accent-primary);
+    min-height: var(--touch-min);
+  }
+  .show-more-btn:hover { background: var(--surface); }
+  .results-table-row.is-hidden,
+  .result-card.is-hidden { display: none; }
+
+  .results-table {
+    width: 100%; border-collapse: collapse; margin-top: var(--space-md);
+    border-radius: var(--radius-md); overflow: hidden;
+  }
+  .results-table th, .results-table td {
+    padding: var(--space-md) var(--space-sm);
+    text-align: left; border-bottom: 1px solid var(--border);
+  }
+  .results-table th {
+    background: var(--bg-primary); color: var(--text-primary);
+    font-weight: 700; font-size: var(--font-size-sm);
+    text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .results-table tr:hover { background: rgba(74,144,217,0.04); }
+  .color-preview {
+    width: 30px; height: 20px; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); display: inline-block; margin-right: var(--space-sm);
+    vertical-align: middle;
+  }
+  .status-skipped { color: var(--accent-warning); font-weight: 700; }
+  .status-completed { color: var(--accent-success); font-weight: 700; }
+  .no-results { text-align: center; padding: var(--space-2xl); color: var(--text-secondary); }
+  .loading { text-align: center; padding: var(--space-2xl); color: var(--text-secondary); }
+  .error-message {
+    background: #FFEBEE; color: var(--accent-danger);
+    padding: var(--space-md); border-radius: var(--radius-md);
+    margin: var(--space-md) 0; text-align: center; font-weight: 600;
+    border: 1px solid var(--accent-danger);
+  }
+
+  .result-cards { display: none; }
+
+  @media (max-width: 768px) {
+    .results-table { display: none; }
+    .result-cards { display: flex; flex-direction: column; gap: var(--space-md); margin-top: var(--space-md); }
+    .result-card {
+      background: var(--bg-primary); border-radius: var(--radius-md);
+      padding: var(--space-md); border: 1px solid var(--border);
+    }
+    .result-card-header { display: flex; align-items: center; gap: var(--space-sm); margin-bottom: var(--space-sm); }
+    .result-card-swatch { width: 40px; height: 40px; border-radius: var(--radius-sm); border: 1px solid var(--border); flex-shrink: 0; }
+    .result-card-title { font-weight: 700; font-size: var(--font-size-sm); }
+    .result-card-meta {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: var(--space-xs); font-size: var(--font-size-sm); color: var(--text-secondary);
+    }
+    .result-card-meta strong { color: var(--text-primary); }
+    .summary-item { margin: 0 var(--space-sm); }
+    .progress-stats-primary { gap: var(--space-xs); }
+    .ps-stat { padding: 4px var(--space-xs); }
+    .ps-stat-val { font-size: 1.05rem; }
+    .ps-stat-lbl { font-size: 0.6rem; letter-spacing: 0.02em; }
+  }
+
+  @media (max-width: 600px) {
+    body { padding: var(--space-sm); }
+    .user-input-section { padding: var(--space-sm) var(--space-md); }
+    #user-input-form { display: flex; flex-direction: column; align-items: stretch; gap: var(--space-sm); }
+    .user-input-section input { margin-right: 0; width: 100%; }
+    .user-input-section button { width: 100%; }
+    .results-summary { padding: var(--space-sm) var(--space-xs); }
+    .summary-number { font-size: 1.4em; }
+    .progress-stats-primary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-xs); }
+    .ps-stat { padding: var(--space-xs); }
+    .ps-stat-val { font-size: 1.05rem; }
+    .progress-stats-secondary { gap: var(--space-sm); font-size: 0.78rem; }
+    .results-section { padding: var(--space-sm) var(--space-md); }
+    .progress-card { padding: var(--space-sm) var(--space-md); }
+    .collapsible-toggle { padding: var(--space-sm) var(--space-md); }
+    .collapsible-body { padding: 0 var(--space-md) var(--space-sm); }
+    .back-link { margin-bottom: var(--space-sm); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  <main class="results-container" id="results-main">
+
+    <a href="/" class="back-link">← Back to Color Mixing</a>
+
+    <!-- User input / welcome -->
+    <section class="user-input-section" aria-label="Account and user ID">
+      <div id="stored-user-info" style="display:none;">
+        <p id="welcome-message" class="welcome-message">Welcome back! Loading your results…</p>
+        <button onclick="clearUserAndReload()" type="button" style="margin-top:var(--space-sm);">Switch User</button>
+      </div>
+      <div id="user-input-form">
+        <p style="margin-bottom:var(--space-md); color:var(--text-secondary);">Enter your 6-character user ID to view your results:</p>
+        <input type="text" id="userIdInput" placeholder="e.g., ABC123" maxlength="6">
+        <button onclick="loadUserResults()" type="button">View Results</button>
+      </div>
+    </section>
+
+    <!-- Gamification profile card (injected by JS) -->
+    <div id="profileSection" style="display:none;">
+      <!-- Mastered banner (shown only when is_maxed_out) -->
+      <div id="masteredBanner" class="mastered-banner" style="display:none;">
+        🎊 All Colors Mastered — Palette Complete!
+      </div>
+
+      <!-- Progress card -->
+      <section class="progress-card" id="progressCard" aria-labelledby="progressHeading">
+        <h2 id="progressHeading" class="progress-card-title">Your Progress</h2>
+
+        <!-- 4 hero stats -->
+        <div class="progress-stats-primary" id="progressStatsPrimary"></div>
+
+        <!-- Compact secondary stats (streak / best / freezes) -->
+        <div class="progress-stats-secondary" id="progressStatsSecondary"></div>
+
+        <!-- Primary: quota progress bar -->
+        <div class="quota-bar-wrap"><div class="quota-bar-fill" id="quotaBarFill"></div></div>
+        <div class="quota-bar-label" id="quotaBarLabel"></div>
+
+        <!-- Secondary: XP progress bar -->
+        <div class="xp-bar-wrap"><div class="xp-bar-fill" id="xpBarFill"></div></div>
+        <div class="xp-bar-label" id="xpBarLabel"></div>
+      </section>
+
+      <!-- Awards (collapsible) -->
+      <section class="collapsible-card" id="awardsCard" data-open="true" style="display:none;" aria-labelledby="awardsHeading">
+        <button type="button" class="collapsible-toggle" aria-expanded="true" aria-controls="awardsBody"
+                onclick="toggleCollapsible('awardsCard', this)">
+          <span class="collapsible-title" id="awardsHeading">Badges &amp; Awards</span>
+          <span class="collapsible-meta" id="awardsCount"></span>
+          <svg class="collapsible-chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="collapsible-body" id="awardsBody">
+          <div class="awards-grid" id="awardsGrid"></div>
+        </div>
+      </section>
+
+      <!-- Per-color coverage bars (collapsible, collapsed by default) -->
+      <section class="collapsible-card" id="colorStatsCard" data-open="false" style="display:none;" aria-labelledby="coverageHeading">
+        <button type="button" class="collapsible-toggle" aria-expanded="false" aria-controls="colorStatsBody"
+                onclick="toggleCollapsible('colorStatsCard', this)">
+          <span class="collapsible-title" id="coverageHeading">Color Coverage</span>
+          <span class="collapsible-meta" id="coverageMeta"></span>
+          <svg class="collapsible-chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="collapsible-body" id="colorStatsBody">
+          <div id="colorStatsList"></div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Session history -->
+    <section class="results-section" aria-labelledby="sessionsHeading">
+      <h2 id="sessionsHeading" class="sr-only">Session history</h2>
+      <div id="results-content">
+        <div class="loading">Enter your user ID above to view your results</div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    window.addEventListener('DOMContentLoaded', function () {
+      const storedUserId = localStorage.getItem('userId');
+      if (storedUserId) {
+        document.getElementById('stored-user-info').style.display = 'block';
+        document.getElementById('user-input-form').style.display = 'none';
+        document.getElementById('welcome-message').textContent = 'Welcome back, ' + storedUserId + '!';
+        loadUserResults(storedUserId);
+        loadUserProfile(storedUserId);
+      }
+    });
+
+    // ── Profile loader ────────────────────────────────────────
+    async function loadUserProfile(userId) {
+      try {
+        const res = await fetch('/api/user-profile', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId }),
+        });
+        const data = await res.json();
+        if (data.status !== 'success') return;
+
+        const cq = data.coverage_quota != null ? data.coverage_quota : 10;
+        const covHead = document.getElementById('coverageHeading');
+        if (covHead) covHead.textContent = 'Color Coverage';
+
+        renderProgressCard(data.progress, data.coverage_quota);
+        renderAwards(data.awards, cq);
+        renderColorStats(data.color_stats, data.coverage_quota);
+        document.getElementById('profileSection').style.display = '';
+      } catch (e) {
+        console.error('Profile load error:', e);
+      }
+    }
+
+    function renderProgressCard(p, quota) {
+      const primary = document.getElementById('progressStatsPrimary');
+      const secondary = document.getElementById('progressStatsSecondary');
+      const rankColor = p.rank_color || '#ccc';
+
+      const completedColors = p.completed_colors != null ? p.completed_colors : 0;
+      const totalColors = p.total_tracked_colors != null ? p.total_tracked_colors : '?';
+      const covPct = p.catalog_coverage_pct != null ? p.catalog_coverage_pct : 0;
+
+      primary.innerHTML = `
+        <div class="ps-stat ps-stat--primary">
+          <div class="ps-stat-val">${completedColors}/${totalColors}</div>
+          <div class="ps-stat-lbl">Colors Done</div>
+        </div>
+        <div class="ps-stat ps-stat--primary">
+          <div class="ps-stat-val">${covPct.toFixed(1)}%</div>
+          <div class="ps-stat-lbl">Coverage</div>
+        </div>
+        <div class="ps-stat">
+          <div class="ps-stat-val" style="color:${rankColor}">${p.rank}</div>
+          <div class="ps-stat-lbl">Rank</div>
+        </div>
+        <div class="ps-stat">
+          <div class="ps-stat-val">${p.level_name}</div>
+          <div class="ps-stat-lbl">Level</div>
+        </div>
+      `;
+
+      secondary.innerHTML = `
+        <span class="ps-mini" title="Current streak">🔥 <span class="ps-mini-val">${p.current_streak}</span> streak</span>
+        <span class="ps-mini" title="Longest streak">🏆 <span class="ps-mini-val">${p.longest_streak}</span> best</span>
+        <span class="ps-mini" title="Streak freezes available">🧊 <span class="ps-mini-val">${p.streak_freeze_available}</span> freezes</span>
+      `;
+
+      // Mastered banner
+      const masteredBanner = document.getElementById('masteredBanner');
+      if (masteredBanner) {
+        masteredBanner.style.display = p.is_maxed_out ? '' : 'none';
+      }
+
+      // Primary bar: quota coverage
+      const quotaBarPct = p.level_progress_pct != null ? p.level_progress_pct : covPct;
+      document.getElementById('quotaBarFill').style.width = quotaBarPct + '%';
+      if (p.is_maxed_out) {
+        document.getElementById('quotaBarLabel').innerHTML =
+          '<span>All colors mastered</span><span>100%</span>';
+      } else {
+        const remAttempts = p.remaining_attempts_total != null ? p.remaining_attempts_total.toLocaleString() : '—';
+        document.getElementById('quotaBarLabel').innerHTML =
+          `<span>${completedColors}/${totalColors} colors at quota</span>` +
+          `<span>${remAttempts} attempts remaining</span>`;
+      }
+
+      // Secondary bar: XP (reinforcement)
+      const xpPct = p.xp_to_next_level > 0
+        ? Math.round(p.xp_in_level / (p.xp_in_level + p.xp_to_next_level) * 100)
+        : 100;
+      document.getElementById('xpBarFill').style.width = xpPct + '%';
+      document.getElementById('xpBarLabel').innerHTML =
+        `<span>XP: ${(p.xp || 0).toLocaleString()}</span>` +
+        (p.xp_to_next_level > 0 ? `<span>+${p.xp_to_next_level} to next level</span>` : '<span>Max XP level</span>');
+    }
+
+    function awardTypeClass(key, meta, majorThreshold) {
+      const majorT = majorThreshold != null && majorThreshold > 0 ? majorThreshold : 10;
+      // Quota-major awards get a distinct style
+      const quotaMajorKeys = ['all_colors_complete'];
+      if (quotaMajorKeys.includes(key)) return 'award-badge--quota-major';
+      if (key.startsWith('quota_milestone_')) return 'award-badge--quota-major';
+      if (key.startsWith('coverage_') && meta && meta.threshold === majorT) return 'award-badge--quota-major';
+      if (key.startsWith('daily_champion')) return 'award-badge--daily';
+      if (key.startsWith('daily_mission_')) return 'award-badge--daily';
+      if (key === 'daily_fastest_match') return 'award-badge--daily';
+      if (key === 'daily_fewest_steps') return 'award-badge--daily';
+      if (key.startsWith('streak_')) return 'award-badge--streak';
+      if (key.startsWith('level_')) return 'award-badge--level';
+      if (key.startsWith('coverage_')) return 'award-badge--coverage';
+      return 'award-badge--achievement';
+    }
+
+    function awardIcon(key, meta, majorThreshold) {
+      const majorT = majorThreshold != null && majorThreshold > 0 ? majorThreshold : 10;
+      if (key === 'all_colors_complete') return '🎊';
+      if (key.startsWith('quota_milestone_')) return '🏆';
+      if (key.startsWith('coverage_') && meta && meta.threshold === majorT) return '✅';
+      if (key.startsWith('daily_champion')) return '🏆';
+      if (key === 'daily_fastest_match') return '⚡';
+      if (key === 'daily_fewest_steps') return '🪄';
+      if (key.startsWith('daily_mission_precision_hit')) return '🎯';
+      if (key.startsWith('daily_mission_fast_finish')) return '⚡';
+      if (key.startsWith('daily_mission_efficient_mixer')) return '🧪';
+      if (key.startsWith('daily_mission_')) return '📆';
+      if (key.startsWith('streak_')) return '🔥';
+      if (key.startsWith('level_')) return '⬆️';
+      if (key.startsWith('coverage_')) return '🎨';
+      if (key === 'first_perfect_match') return '🎯';
+      return '🏅';
+    }
+
+    function awardLabel(key, meta, majorThreshold) {
+      const majorT = majorThreshold != null && majorThreshold > 0 ? majorThreshold : 10;
+      if (key === 'all_colors_complete') return 'All Colors Mastered!';
+      if (key.startsWith('quota_milestone_')) {
+        const pct = meta && meta.pct ? meta.pct : key.replace('quota_milestone_', '').replace('pct', '');
+        return pct + '% Coverage Milestone';
+      }
+      if (key.startsWith('daily_champion')) return 'Daily Champion' + (meta && meta.date ? ' ' + meta.date : '');
+      if (key === 'daily_fastest_match') return 'Fastest Color Match of the Day';
+      if (key === 'daily_fewest_steps') return 'Fewest Steps of the Day';
+      if (key === 'daily_mission_precision_hit') return 'Daily Mission: Precision Hit';
+      if (key === 'daily_mission_fast_finish') return 'Daily Mission: Fast Finish';
+      if (key === 'daily_mission_efficient_mixer') return 'Daily Mission: Efficient Mixer';
+      if (key.startsWith('streak_')) return (meta && meta.days ? meta.days : '?') + '-Day Streak';
+      if (key.startsWith('level_')) return 'Level ' + (meta && meta.level ? meta.level : '?');
+      if (key.startsWith('coverage_')) {
+        const t = meta && meta.threshold ? meta.threshold : '?';
+        if (meta && meta.threshold === majorT) return 'Color mastered (' + majorT + ' attempts)';
+        return t + ' attempts milestone';
+      }
+      if (key === 'first_perfect_match') return 'First Perfect Match';
+      return key.replace(/_/g, ' ');
+    }
+
+    function renderAwards(awards, coverageQuota) {
+      const majorT = coverageQuota != null && coverageQuota > 0 ? coverageQuota : 10;
+      const grid = document.getElementById('awardsGrid');
+      const card = document.getElementById('awardsCard');
+      const meta = document.getElementById('awardsCount');
+      card.style.display = '';
+      if (!awards || awards.length === 0) {
+        grid.innerHTML = '<span class="no-awards">No badges yet — keep playing!</span>';
+        if (meta) meta.textContent = '0';
+        return;
+      }
+      if (meta) meta.textContent = String(awards.length);
+      // Sort: quota-major first, then by unlocked_at desc
+      const sorted = [...awards].sort((a, b) => {
+        const aMajor = awardTypeClass(a.key, a.metadata, majorT) === 'award-badge--quota-major' ? 0 : 1;
+        const bMajor = awardTypeClass(b.key, b.metadata, majorT) === 'award-badge--quota-major' ? 0 : 1;
+        return aMajor - bMajor;
+      });
+      grid.innerHTML = sorted.map(a => {
+        const cls = awardTypeClass(a.key, a.metadata, majorT);
+        const icon = awardIcon(a.key, a.metadata, majorT);
+        const label = awardLabel(a.key, a.metadata, majorT);
+        return `<div class="award-badge ${cls}">${icon} ${label}</div>`;
+      }).join('');
+    }
+
+    function renderColorStats(colorStats, quota) {
+      const list = document.getElementById('colorStatsList');
+      const card = document.getElementById('colorStatsCard');
+      const meta = document.getElementById('coverageMeta');
+      if (!colorStats || colorStats.length === 0) return;
+
+      const q = quota != null && quota > 0 ? quota : 10;
+      const completed = colorStats.filter(s => s.attempt_count >= q).length;
+      if (meta) meta.textContent = `${completed}/${colorStats.length} at quota · ${q} per color`;
+
+      // Sort: at-quota colors last, then by remaining ascending (nearest to done first)
+      const sorted = [...colorStats].sort((a, b) => {
+        const aRem = Math.max(0, q - a.attempt_count);
+        const bRem = Math.max(0, q - b.attempt_count);
+        if (aRem === 0 && bRem === 0) return 0;
+        if (aRem === 0) return 1;
+        if (bRem === 0) return -1;
+        return aRem - bRem;
+      });
+
+      list.innerHTML = sorted.map(s => {
+        const pct = Math.min(100, Math.round(s.attempt_count / q * 100));
+        const remaining = Math.max(0, q - s.attempt_count);
+        const atQuota = s.attempt_count >= q;
+        const barColor = atQuota ? '#00b894' : '#667eea';
+        const countLabel = atQuota
+          ? `${s.attempt_count}/${q} ✅`
+          : `${s.attempt_count}/${q}`;
+        return `<div class="color-stat-bar-row">
+          <span class="csr-label">Color #${s.target_color_id}</span>
+          <div class="csr-bar-wrap"><div class="csr-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
+          <span class="csr-count">${countLabel}</span>
+        </div>`;
+      }).join('');
+
+      card.style.display = '';
+    }
+
+    // Collapsible toggle (used by Awards and Color Coverage cards)
+    function toggleCollapsible(cardId, btn) {
+      const card = document.getElementById(cardId);
+      if (!card) return;
+      const isOpen = card.getAttribute('data-open') === 'true';
+      const next = !isOpen;
+      card.setAttribute('data-open', String(next));
+      if (btn) btn.setAttribute('aria-expanded', String(next));
+    }
+
+    // ── Session results ───────────────────────────────────────
+    function loadUserResults(userId) {
+      const userIdToUse = userId || document.getElementById('userIdInput').value.toUpperCase();
+      if (!userIdToUse || userIdToUse.length !== 6) { showError('Please enter a valid 6-character user ID'); return; }
+      document.getElementById('results-content').innerHTML = '<div class="loading">Loading your results…</div>';
+
+      if (!userId) {
+        loadUserProfile(userIdToUse);
+      }
+
+      fetch('/get_user_results', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userIdToUse }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          if (data.status === 'success') displayResults(data.results, data.total_sessions);
+          else showError(data.message || 'Failed to load results');
+        })
+        .catch(() => showError('Failed to load results. Please try again.'));
+    }
+
+    var INITIAL_SESSIONS_VISIBLE = 8;
+    // Per-session cap (seconds) for aggregating elapsed time. Caps abandoned tabs
+    // so totals/averages stay realistic. Mirrors the leaderboard cap on the server.
+    var SESSION_TIME_CAP_SEC = 1800;
+
+    function fmtDuration(seconds) {
+      if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) return '0s';
+      if (seconds < 60) return seconds.toFixed(1) + 's';
+      if (seconds < 3600) {
+        const m = Math.floor(seconds / 60);
+        const s = Math.round(seconds - m * 60);
+        return s === 0 ? `${m}m` : `${m}m ${s}s`;
+      }
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds - h * 3600) / 60);
+      return m === 0 ? `${h}h` : `${h}h ${m}m`;
+    }
+
+    function fmtSecondsShort(seconds) {
+      if (typeof seconds !== 'number' || !isFinite(seconds) || seconds <= 0) return '—';
+      return seconds.toFixed(seconds < 10 ? 1 : 0) + 's';
+    }
+
+    function median(arr) {
+      if (!arr.length) return null;
+      const sorted = [...arr].sort((a, b) => a - b);
+      const mid = Math.floor(sorted.length / 2);
+      return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+
+    // A row counts as "Completed" when the user reached a perfect match OR
+    // explicitly skipped while rating the result as visually identical /
+    // acceptable small difference. Skips marked unacceptable (big difference)
+    // and legacy 'stopped' rows do not qualify. We fall back to the legacy
+    // !skipped heuristic only when match_category is missing on old rows.
+    var COMPLETED_MATCH_CATEGORIES = ['perfect', 'no_perceivable_difference', 'acceptable_difference'];
+    function isCompletedResult(r) {
+      if (r && r.match_category) {
+        return COMPLETED_MATCH_CATEGORIES.indexOf(r.match_category) >= 0;
+      }
+      return r && !r.skipped;
+    }
+
+    function displayResults(results, totalSessions) {
+      if (results.length === 0) {
+        document.getElementById('results-content').innerHTML = '<div class="no-results">No results found for this user ID.</div>';
+        return;
+      }
+      const completed = results.filter(isCompletedResult).length;
+      const skipped = results.length - completed;
+
+      // Elapsed-time aggregates. We cap each session at 30 min so abandoned tabs
+      // don't blow up the totals; matches the server-side cap on the leaderboard.
+      const allTimes = results
+        .map(r => (typeof r.time_sec === 'number' ? r.time_sec : null))
+        .filter(t => t != null);
+      const cappedTimes = allTimes.map(t => Math.min(t, SESSION_TIME_CAP_SEC));
+      const matchedTimes = results
+        .filter(r => isCompletedResult(r) && typeof r.time_sec === 'number' && r.time_sec <= SESSION_TIME_CAP_SEC)
+        .map(r => r.time_sec);
+
+      const totalTime = cappedTimes.reduce((a, b) => a + b, 0);
+      const avgMatchTime = matchedTimes.length
+        ? matchedTimes.reduce((a, b) => a + b, 0) / matchedTimes.length
+        : null;
+      const medianMatchTime = median(matchedTimes);
+
+      function fmtCat(val, legacySkip, isSkipped) {
+        if (val) {
+          const labels = {
+            perfect: 'Perfect', perfect_match: 'Perfect',
+            no_perceivable_difference: 'No perceivable difference',
+            acceptable_difference: 'Acceptable difference',
+            big_difference: 'Big difference',
+            stopped: 'Stopped',
+          };
+          return labels[val] || val;
+        }
+        if (isSkipped && legacySkip) {
+          return ({ identical: 'Identical', acceptable: 'Acceptable', unacceptable: 'Not acceptable' }[legacySkip] || legacySkip) + ' (legacy)';
+        }
+        return '—';
+      }
+
+      const summaryHTML = '<div class="results-summary">' +
+        '<div class="summary-item"><div class="summary-number">' + totalSessions + '</div><div class="summary-label">Total</div></div>' +
+        '<div class="summary-item"><div class="summary-number">' + completed + '</div><div class="summary-label">Completed</div></div>' +
+        '<div class="summary-item"><div class="summary-number">' + skipped + '</div><div class="summary-label">Skipped</div></div>' +
+        '<div class="summary-item" title="Sum of elapsed time across all rounds. Each round capped at 30 min to ignore abandoned tabs.">' +
+          '<div class="summary-number">' + fmtDuration(totalTime) + '</div>' +
+          '<div class="summary-label">Total Time</div></div>' +
+        '<div class="summary-item" title="Average elapsed time per completed match (rounds &le; 30 min).">' +
+          '<div class="summary-number">' + fmtSecondsShort(avgMatchTime) + '</div>' +
+          '<div class="summary-label">Avg / Match</div></div>' +
+        '<div class="summary-item" title="Median elapsed time per completed match.">' +
+          '<div class="summary-number">' + fmtSecondsShort(medianMatchTime) + '</div>' +
+          '<div class="summary-label">Median / Match</div></div>' +
+        '</div>';
+
+      let tableHTML = '<table class="results-table"><thead><tr>' +
+        '<th>Date</th><th>Target</th><th>Drops</th><th>Outcome</th><th>Time</th><th>Status</th></tr></thead><tbody>';
+      let cardsHTML = '<div class="result-cards">';
+
+      results.forEach((r, idx) => {
+        const rgb = r.target_color.match(/\d+/g);
+        const rgbStr = rgb ? rgb.join(',') : '128,128,128';
+        const drops = [
+          r.drops.white > 0 ? 'W:' + r.drops.white : '',
+          r.drops.black > 0 ? 'B:' + r.drops.black : '',
+          r.drops.red > 0 ? 'R:' + r.drops.red : '',
+          r.drops.yellow > 0 ? 'Y:' + r.drops.yellow : '',
+          r.drops.blue > 0 ? 'Bl:' + r.drops.blue : '',
+        ].filter(Boolean).join(' ') || 'None';
+
+        const cat = fmtCat(r.match_category, r.skip_perception, r.skipped);
+        const isCompleted = isCompletedResult(r);
+        const statusClass = isCompleted ? 'status-completed' : 'status-skipped';
+        const statusText = isCompleted ? 'Completed' : 'Skipped';
+        const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A';
+        const hiddenClass = idx >= INITIAL_SESSIONS_VISIBLE ? ' is-hidden' : '';
+
+        tableHTML += `<tr class="results-table-row${hiddenClass}"><td>${ts}</td>
+          <td><div class="color-preview" style="background-color:rgb(${rgbStr})"></div>${r.target_color}</td>
+          <td>${drops}</td><td>${cat}</td>
+          <td>${typeof r.time_sec === 'number' ? r.time_sec.toFixed(1) : r.time_sec}s</td>
+          <td class="${statusClass}">${statusText}</td></tr>`;
+
+        cardsHTML += `<div class="result-card${hiddenClass}">
+          <div class="result-card-header">
+            <div class="result-card-swatch" style="background-color:rgb(${rgbStr})"></div>
+            <div>
+              <div class="result-card-title">${r.target_color}</div>
+              <div style="font-size:0.8rem;color:var(--text-secondary);">${ts}</div>
+            </div>
+          </div>
+          <div class="result-card-meta">
+            <div><strong>Drops:</strong> ${drops}</div>
+            <div><strong>Time:</strong> ${typeof r.time_sec === 'number' ? r.time_sec.toFixed(1) : r.time_sec}s</div>
+            <div><strong>Outcome:</strong> ${cat}</div>
+            <div class="${statusClass}">${statusText}</div>
+          </div>
+        </div>`;
+      });
+
+      tableHTML += '</tbody></table>';
+      cardsHTML += '</div>';
+
+      const hiddenCount = Math.max(0, results.length - INITIAL_SESSIONS_VISIBLE);
+      const showMoreHTML = hiddenCount > 0
+        ? `<button type="button" class="show-more-btn" id="showMoreSessionsBtn"
+                   onclick="toggleSessionRows()">Show all ${results.length} sessions</button>`
+        : '';
+
+      document.getElementById('results-content').innerHTML = summaryHTML + tableHTML + cardsHTML + showMoreHTML;
+    }
+
+    function toggleSessionRows() {
+      const btn = document.getElementById('showMoreSessionsBtn');
+      const hiddenRows = document.querySelectorAll('.results-table-row.is-hidden, .result-card.is-hidden');
+      if (hiddenRows.length > 0) {
+        hiddenRows.forEach(el => el.classList.remove('is-hidden'));
+        if (btn) btn.textContent = 'Show fewer';
+        btn.dataset.expanded = 'true';
+      } else {
+        // Re-hide rows beyond the initial visible count
+        document.querySelectorAll('.results-table-row').forEach((el, i) => {
+          if (i >= INITIAL_SESSIONS_VISIBLE) el.classList.add('is-hidden');
+        });
+        document.querySelectorAll('.result-card').forEach((el, i) => {
+          if (i >= INITIAL_SESSIONS_VISIBLE) el.classList.add('is-hidden');
+        });
+        const total = document.querySelectorAll('.results-table-row').length;
+        if (btn) btn.textContent = 'Show all ' + total + ' sessions';
+        btn.dataset.expanded = 'false';
+      }
+    }
+
+    function showError(message) {
+      document.getElementById('results-content').innerHTML = '<div class="error-message">' + message + '</div>';
+    }
+
+    function clearUserAndReload() {
+      localStorage.removeItem('userId');
+      localStorage.removeItem('userBirthdate');
+      localStorage.removeItem('userGender');
+      location.reload();
+    }
+
+    document.getElementById('userIdInput').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') loadUserResults();
+    });
+  </script>
+{% endblock %}
