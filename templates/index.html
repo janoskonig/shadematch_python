@@ -136,6 +136,35 @@
 
 {% block content %}
   <!-- ======== Registration / Login Modal ======== -->
+  <!-- ======== Research informed-consent modal (blocking, pre-registration) ======== -->
+  <div id="researchConsentModal" class="modal-overlay" style="display:none; z-index:10010;" data-consent-version="{{ research_consent_version }}">
+    <div class="modal-card">
+      <img src="{{ url_for('static', filename='img/semmelweis-logo.png') }}"
+           alt="Semmelweis University"
+           style="display:block; max-height:52px; width:auto; margin:0 auto var(--space-md);"
+           onerror="this.style.display='none'">
+      <h2 class="modal-title">Before you take part</h2>
+      <div id="researchConsentText" style="line-height: 1.55; color: var(--text-primary); max-height: 48vh; overflow-y: auto; margin-bottom: var(--space-md); text-align: left;">
+        <p style="margin: 0 0 var(--space-md);">{{ research_consent_intro }}</p>
+        <ul style="margin: 0; padding-left: 1.2rem;">
+          {% for title, body in research_consent_items %}
+          <li style="margin-bottom: var(--space-sm);"><strong>{{ title }}.</strong> {{ body }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      <p class="modal-alt-text" style="text-align: left; margin-bottom: var(--space-md);">
+        Read our <a href="/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a> for full details.
+      </p>
+      <label class="form-label" for="researchConsentCheckbox" style="display:flex; align-items:flex-start; gap:8px; text-align:left; margin-bottom: var(--space-md); cursor:pointer;">
+        <input type="checkbox" id="researchConsentCheckbox" style="margin-top:3px; flex-shrink:0;">
+        <span>I have read and understood the information above and I voluntarily agree to take part.</span>
+      </label>
+      <button id="researchConsentBtn" type="button" class="btn btn-primary btn-full btn-lg" disabled>
+        I understand &mdash; begin
+      </button>
+    </div>
+  </div>
+
   <div id="userModal" class="modal-overlay">
     <div class="modal-card">
 
@@ -535,17 +564,108 @@
     var storedBirthdate = localStorage.getItem('userBirthdate');
     var storedGender = localStorage.getItem('userGender');
 
+    /* ===== Research informed consent (shown before registration) ===== */
+    var researchConsentModal = document.getElementById('researchConsentModal');
+    var RESEARCH_CONSENT_VERSION = researchConsentModal
+      ? (researchConsentModal.getAttribute('data-consent-version') || '') : '';
+    var VIDEO_SRC = 'https://www.youtube.com/embed/4MAaDDelYMA?autoplay=1&rel=0&modestbranding=1';
+    // Consent is held in memory for the current page session only (NOT
+    // localStorage), so it can never be silently reused by a different person on
+    // a shared device and a fresh visit always re-shows the screen.
+    var researchConsentAgreement = null;
+
+    window.getStoredResearchConsent = function() {
+      return (researchConsentAgreement &&
+              researchConsentAgreement.version === RESEARCH_CONSENT_VERSION)
+        ? researchConsentAgreement : null;
+    };
+
+    // Show the consent modal; calls onAgree() once the participant ticks the
+    // box and clicks "begin". Records the agreement (version + timestamp) for
+    // this page session so the register POST can carry it to the server.
+    window.showResearchConsentModal = function(onAgree) {
+      var checkbox = document.getElementById('researchConsentCheckbox');
+      var btn = document.getElementById('researchConsentBtn');
+      if (!researchConsentModal || !checkbox || !btn) { if (onAgree) onAgree(); return; }
+      checkbox.checked = false;
+      btn.disabled = true;
+      checkbox.onchange = function() { btn.disabled = !checkbox.checked; };
+      btn.onclick = function() {
+        if (!checkbox.checked) return;
+        researchConsentAgreement = {
+          version: RESEARCH_CONSENT_VERSION,
+          agreedAt: new Date().toISOString()
+        };
+        researchConsentModal.style.display = 'none';
+        if (onAgree) onAgree(researchConsentAgreement.agreedAt);
+      };
+      researchConsentModal.style.display = 'flex';
+    };
+
+    // Reveal the registration form for a new (unregistered) user, gating it
+    // behind research consent if not already agreed this page session.
+    function revealRegistration() {
+      if (!localStorage.getItem('userId') && !window.getStoredResearchConsent()) {
+        window.showResearchConsentModal(function() {
+          modal.style.display = 'flex';
+          showSection('register');
+        });
+        return;
+      }
+      modal.style.display = 'flex';
+      showSection('register');
+    }
+
+    // Show the instructional video on first visit, then the registration form;
+    // on return visits go straight to registration.
+    function proceedToRegistrationFlow() {
+      if (!localStorage.getItem('videoShown')) {
+        videoModal.style.display = 'flex';
+        document.getElementById('videoFrame').src = VIDEO_SRC;
+        localStorage.setItem('videoShown', 'true');
+      } else {
+        revealRegistration();
+      }
+    }
+
+    // Back-fill for a logged-in (cached userId) participant who never hits
+    // /login again: ask the server whether consent is on record and, if not,
+    // show the consent screen and record it before play. Calls done() once the
+    // consent state is resolved (recorded already, just agreed, or unreachable).
+    function ensureConsentForLoggedInUser(userId, done) {
+      var finish = function() { if (done) done(); };
+      fetch('/research-consent/status?user_id=' + encodeURIComponent(userId))
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          if (d && d.status === 'success' && d.consent_recorded === false &&
+              typeof window.showResearchConsentModal === 'function') {
+            window.showResearchConsentModal(function() {
+              var consent = window.getStoredResearchConsent() || {};
+              fetch('/research-consent', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  user_id: userId,
+                  consent_version: consent.version || '',
+                  consent_agreed_at: consent.agreedAt || null
+                })
+              }).catch(function() {}).then(finish);
+            });
+          } else { finish(); }
+        })
+        .catch(finish);  // fail-open: never block play on a flaky network
+    }
+
     /* Video modal */
     document.getElementById('showVideoBtn').onclick = function() {
       videoModal.style.display = 'flex';
-      document.getElementById('videoFrame').src = 'https://www.youtube.com/embed/4MAaDDelYMA?autoplay=1&rel=0&modestbranding=1';
+      document.getElementById('videoFrame').src = VIDEO_SRC;
     };
 
     function closeVideoAndProceed() {
       videoModal.style.display = 'none';
       document.getElementById('videoFrame').src = '';
       if (storedId) { modal.style.display = 'none'; }
-      else { modal.style.display = 'flex'; showSection('register'); }
+      else { revealRegistration(); }
     }
     document.getElementById('closeVideoBtn').onclick = closeVideoAndProceed;
 
@@ -554,16 +674,26 @@
       localStorage.removeItem('userGender');
     }
 
-    var videoShown = localStorage.getItem('videoShown');
-    if (!videoShown) {
-      setTimeout(function() {
-        videoModal.style.display = 'flex';
-        document.getElementById('videoFrame').src = 'https://www.youtube.com/embed/4MAaDDelYMA?autoplay=1&rel=0&modestbranding=1';
-        localStorage.setItem('videoShown', 'true');
-      }, 1000);
+    if (storedId) {
+      // Logged-in returning user: no registration modal. First make sure consent
+      // is on record (back-fill for cached logins), then show the intro video
+      // once, shortly after.
+      modal.style.display = 'none';
+      ensureConsentForLoggedInUser(storedId, function() {
+        if (!localStorage.getItem('videoShown')) {
+          setTimeout(function() {
+            videoModal.style.display = 'flex';
+            document.getElementById('videoFrame').src = VIDEO_SRC;
+            localStorage.setItem('videoShown', 'true');
+          }, 1000);
+        }
+      });
     } else {
-      if (storedId) { modal.style.display = 'none'; }
-      else { modal.style.display = 'flex'; showSection('register'); }
+      // New / unregistered user: consent is the FIRST screen, shown immediately.
+      // It is a full-screen overlay (nothing is exposed behind it) and the
+      // instructional video follows only after consent is given.
+      modal.style.display = 'none';
+      window.showResearchConsentModal(proceedToRegistrationFlow);
     }
 
     document.getElementById('switchUserBtn').onclick = function() {
@@ -628,23 +758,32 @@
       if (!gender) { alert('Please select a gender.'); return; }
 
       if (birthdate) {
-        var birthYear = new Date(birthdate).getFullYear();
-        if (birthYear >= 2015) {
+        // Minimum participant age — keep in sync with MIN_PARTICIPANT_AGE on the server.
+        var MIN_AGE = 18;
+        var bd = new Date(birthdate);
+        var now = new Date();
+        var age = now.getFullYear() - bd.getFullYear();
+        var mDiff = now.getMonth() - bd.getMonth();
+        if (mDiff < 0 || (mDiff === 0 && now.getDate() < bd.getDate())) age--;
+        if (age < MIN_AGE) {
           var ed = document.getElementById('birthdateError');
-          if (ed) { ed.textContent = 'You must be born before 2015 to participate.'; ed.style.display = 'block'; }
+          if (ed) { ed.textContent = 'You must be at least ' + MIN_AGE + ' years old to participate.'; ed.style.display = 'block'; }
           return;
         }
       }
       var errorDiv = document.getElementById('birthdateError');
       if (errorDiv) errorDiv.style.display = 'none';
 
+      var researchConsent = (window.getStoredResearchConsent && window.getStoredResearchConsent()) || {};
       fetch('/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           birthdate: birthdate,
           gender: gender,
           email: email,
-          email_opt_in_reminders: emailOptIn
+          email_opt_in_reminders: emailOptIn,
+          consent_version: researchConsent.version || '',
+          consent_agreed_at: researchConsent.agreedAt || null
         })
       })
       .then(function(r) { return r.json(); })

@@ -1432,22 +1432,47 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         const data = await response.json();
         if (data.status === 'success') {
-          localStorage.removeItem('pendingVerifyUserId');
-          localStorage.setItem('userId', userId);
-          localStorage.setItem('userBirthdate', data.birthdate);
-          localStorage.setItem('userGender', data.gender);
-          if (data.email) localStorage.setItem('userEmail', data.email);
-          localStorage.setItem('userEmailVerified', data.email_verified ? '1' : '0');
-          localStorage.setItem('emailOptInReminders', data.email_opt_in_reminders ? '1' : '0');
-          window.currentUserId = userId;
-          document.getElementById('userModal').style.display = 'none';
-          resetMix();
-          resetTimerDisplay();
-          disableColorMixing();
-          displayUserId();
-          loadAndRenderProgress();
-          if (window.location && typeof window.location.reload === 'function') {
-            window.location.reload();
+          const finishLogin = function () {
+            localStorage.removeItem('pendingVerifyUserId');
+            localStorage.setItem('userId', userId);
+            localStorage.setItem('userBirthdate', data.birthdate);
+            localStorage.setItem('userGender', data.gender);
+            if (data.email) localStorage.setItem('userEmail', data.email);
+            localStorage.setItem('userEmailVerified', data.email_verified ? '1' : '0');
+            localStorage.setItem('emailOptInReminders', data.email_opt_in_reminders ? '1' : '0');
+            window.currentUserId = userId;
+            document.getElementById('userModal').style.display = 'none';
+            resetMix();
+            resetTimerDisplay();
+            disableColorMixing();
+            displayUserId();
+            loadAndRenderProgress();
+            if (window.location && typeof window.location.reload === 'function') {
+              window.location.reload();
+            }
+          };
+
+          // Back-fill: a participant who registered before consent capture
+          // existed (consent_recorded === false) must agree before playing.
+          if (data.consent_recorded === false && typeof window.showResearchConsentModal === 'function') {
+            document.getElementById('userModal').style.display = 'none';
+            window.showResearchConsentModal(async function () {
+              const consent = (window.getStoredResearchConsent && window.getStoredResearchConsent()) || {};
+              try {
+                await fetch('/research-consent', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    user_id: userId,
+                    consent_version: consent.version || '',
+                    consent_agreed_at: consent.agreedAt || null,
+                  }),
+                });
+              } catch {}
+              finishLogin();
+            });
+          } else {
+            finishLogin();
           }
         } else if (data.code === 'EMAIL_NOT_VERIFIED') {
           const resend = confirm('Your email is not verified yet. Resend verification email now?');

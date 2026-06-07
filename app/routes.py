@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, request, jsonify, send_from_directory, Response, current_app, redirect, url_for
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 import copy
 import hashlib
 import random as _random
@@ -13,6 +13,7 @@ from .models import (
     UserProgress, UserTargetColorStats, UserAward,
     DailyChallengeRun, DailyChallengeWinner, PushSubscription,
     AnalyticsEvent, MixingAttempt, MixingAttemptEvent, EmailVerificationToken,
+    ConsentRecord,
 )
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb, reverse_engineer_recipe
@@ -66,6 +67,46 @@ EMAIL_REGEX = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 EMAIL_VERIFY_TTL_HOURS = 24
 EMAIL_RECOVERY_TTL_MINUTES = 20
 _RATE_LIMIT_BUCKETS = {}
+
+# Minimum participant age (years). Keep in sync with the client-side check in
+# templates/index.html and the consent wording.
+MIN_PARTICIPANT_AGE = 18
+
+# ── Research informed consent ────────────────────────────────────────────────
+# Bump RESEARCH_CONSENT_VERSION whenever the consent content changes in a way
+# that affects what participants agreed to; existing participants are then
+# re-prompted on their next login (see /login -> consent_recorded).
+#
+# The content is defined once as structured data (intro + labelled items) so the
+# UI can render it as a readable list, while RESEARCH_CONSENT_TEXT — the exact
+# string that is hashed into each audit record — is derived from that same data.
+RESEARCH_CONSENT_VERSION = '1.0'
+RESEARCH_CONTACT_EMAIL = 'konig.janos@semmelweis.hu'
+RESEARCH_CONSENT_INTRO = (
+    "You are about to take part in a scientific study of colour vision and "
+    "colour matching, conducted by Semmelweis University. Please read this "
+    "before you begin."
+)
+RESEARCH_CONSENT_ITEMS = [
+    ("Purpose", "We study how people perceive and match colours. Your gameplay "
+        "data (colour matches and timing) and the details you provide (date of "
+        "birth and gender) are used for research and may be published in "
+        "anonymous, aggregated form in scientific journals."),
+    ("Anonymity", "You are identified only by a random 6-character ID. We do not "
+        "collect your name. Your email is used only for ID recovery and optional "
+        "reminders and is never published."),
+    ("Voluntary", "Taking part is entirely voluntary. You may stop at any time "
+        "and skip any task, without giving a reason and without any consequence."),
+    ("Withdrawal", "You may request deletion of your data at any time by "
+        f"emailing {RESEARCH_CONTACT_EMAIL}."),
+    ("Data handling", "See our Privacy Policy for full details."),
+    ("Ethics approval", "This study was approved by the Semmelweis University "
+        "Regional and Institutional Committee of Science and Research Ethics "
+        "(SE RKEB 167/2025)."),
+]
+RESEARCH_CONSENT_TEXT = RESEARCH_CONSENT_INTRO + "\n\n" + "\n".join(
+    f"{title}. {body}" for title, body in RESEARCH_CONSENT_ITEMS
+)
 
 # A session "counts as completed" when the user either reached a perfect match
 # OR explicitly skipped while rating the result as visually identical or as an
@@ -155,6 +196,52 @@ def _issue_email_token(user_id, purpose, ttl_minutes):
     return token_plain, expiry
 
 
+def _research_consent_text_hash():
+    return _sha256(RESEARCH_CONSENT_TEXT)
+
+
+def _parse_consent_ts(raw):
+    """Parse a client ISO timestamp for the agreement moment; fall back to now.
+
+    Returns a naive UTC datetime. Any timezone offset in the input is converted
+    to UTC before the tzinfo is dropped, so values stay comparable with the
+    server-side naive-UTC `created_at`.
+    """
+    if raw:
+        try:
+            parsed = datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
+            if parsed.tzinfo is not None:
+                parsed = parsed.astimezone(timezone.utc).replace(tzinfo=None)
+            return parsed
+        except (ValueError, TypeError):
+            pass
+    return datetime.utcnow()
+
+
+def _record_consent(user_id, *, version, locale=None, user_agent=None, consented_at=None):
+    """Insert a ConsentRecord for this user+version unless one already exists.
+
+    Adds the row to the session but does NOT commit — callers commit so the
+    write can join the surrounding transaction. Returns the row (existing or new).
+    """
+    existing = ConsentRecord.query.filter_by(
+        user_id=user_id, consent_version=version
+    ).first()
+    if existing:
+        return existing
+    record = ConsentRecord(
+        user_id=user_id,
+        purpose='research_informed_consent',
+        consent_version=version,
+        consent_text_hash=_research_consent_text_hash(),
+        locale=(locale or None),
+        user_agent=(user_agent[:255] if user_agent else None),
+        consented_at=consented_at or datetime.utcnow(),
+    )
+    db.session.add(record)
+    return record
+
+
 def refresh_db_connection():
     try:
         db.session.execute(db.text('SELECT 1'))
@@ -177,7 +264,12 @@ def _catalog_size():
 
 @main.route('/')
 def index():
-    return render_template('index.html')
+    return render_template(
+        'index.html',
+        research_consent_intro=RESEARCH_CONSENT_INTRO,
+        research_consent_items=RESEARCH_CONSENT_ITEMS,
+        research_consent_version=RESEARCH_CONSENT_VERSION,
+    )
 
 
 @main.route('/lab')
@@ -388,15 +480,30 @@ def spectral():
 @main.route('/register', methods=['POST'])
 def register():
     data = request.get_json() or {}
-    birthdate = datetime.strptime(data['birthdate'], '%Y-%m-%d').date()
-    gender = data['gender']
+    birthdate_raw = (data.get('birthdate') or '').strip()
+    gender = (data.get('gender') or '').strip().lower()
     email = _normalize_email(data.get('email'))
     email_opt_in_reminders = bool(data.get('email_opt_in_reminders', False))
+    consent_version = (data.get('consent_version') or '').strip()
 
-    if birthdate.year >= 2015:
-        return jsonify({'status': 'error', 'message': 'You must be born before 2015 to participate.'}), 400
+    if not birthdate_raw:
+        return jsonify({'status': 'error', 'message': 'Date of birth is required.'}), 400
+    try:
+        birthdate = datetime.strptime(birthdate_raw, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        return jsonify({'status': 'error', 'message': 'Invalid date of birth.'}), 400
+    # Allowed gender values — keep in sync with the radio options in index.html.
+    if gender not in ('female', 'male'):
+        return jsonify({'status': 'error', 'message': 'Please select a valid gender.'}), 400
+
+    today = date.today()
+    age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
+    if age < MIN_PARTICIPANT_AGE:
+        return jsonify({'status': 'error', 'message': f'You must be at least {MIN_PARTICIPANT_AGE} years old to participate.'}), 400
     if not email:
         return jsonify({'status': 'error', 'message': 'A valid email is required to register.'}), 400
+    if consent_version != RESEARCH_CONSENT_VERSION:
+        return jsonify({'status': 'error', 'message': 'Research consent is required to take part.'}), 400
     if email and User.query.filter_by(email=email).first():
         return jsonify({'status': 'error', 'message': 'This email is already in use'}), 409
 
@@ -411,8 +518,21 @@ def register():
         email=email,
         email_opt_in_reminders=email_opt_in_reminders,
     )
+    # Persist the user and the consent audit record in a single transaction so
+    # we can never end up with a registered user that has no consent row.
     db.session.add(user)
-    db.session.commit()
+    _record_consent(
+        user_id=user.id,
+        version=consent_version,
+        locale=(data.get('locale') or None),
+        user_agent=request.headers.get('User-Agent'),
+        consented_at=_parse_consent_ts(data.get('consent_agreed_at')),
+    )
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': 'Registration failed, please try again.'}), 409
 
     if email:
         try:
@@ -453,6 +573,11 @@ def login():
                     'user_id': user.id,
                     'email': user.email,
                 }), 403
+            consent_recorded = bool(
+                ConsentRecord.query.filter_by(
+                    user_id=user.id, consent_version=RESEARCH_CONSENT_VERSION
+                ).first()
+            )
             return jsonify({
                 'status': 'success',
                 'birthdate': user.birthdate.isoformat(),
@@ -460,15 +585,83 @@ def login():
                 'email': user.email,
                 'email_verified': bool(user.email_verified_at),
                 'email_opt_in_reminders': bool(user.email_opt_in_reminders),
+                'consent_recorded': consent_recorded,
             })
 
         session = MixingSession.query.filter_by(user_id=user_id).first()
         if session:
-            return jsonify({'status': 'success', 'birthdate': '2000-01-01', 'gender': 'male'})
+            # Legacy accountless user (has gameplay rows but no User record).
+            # We cannot persist a consent row for them (no users.id to reference),
+            # so report consent as not recorded — the client shows the consent
+            # screen each login so they actively agree before playing.
+            return jsonify({
+                'status': 'success',
+                'birthdate': '2000-01-01',
+                'gender': 'male',
+                'consent_recorded': False,
+            })
 
         return jsonify({'status': 'error', 'message': 'Invalid user ID'}), 404
     except Exception as e:
         return jsonify({'status': 'error', 'message': 'Database error'}), 500
+
+
+@main.route('/research-consent', methods=['POST'])
+def research_consent():
+    """Record research informed consent for an already-registered participant
+    (used to back-fill users who registered before consent capture existed)."""
+    data = request.get_json() or {}
+    user_id = (data.get('user_id') or data.get('userId') or '').strip().upper()
+    consent_version = (data.get('consent_version') or '').strip()
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
+    if consent_version != RESEARCH_CONSENT_VERSION:
+        return jsonify({'status': 'error', 'message': 'Unknown consent version'}), 400
+    # Throttle to make it impractical to forge consent rows by enumerating IDs.
+    if not _rate_limit_allow(f'consent:{request.remote_addr}:{user_id}', max_hits=5, window_sec=3600):
+        return jsonify({'status': 'error', 'message': 'Too many requests'}), 429
+    user = User.query.get(user_id)
+    # Only a real, email-verified participant can record consent — same bearer
+    # bar the rest of the app uses — so records cannot be fabricated for
+    # arbitrary or unverified IDs.
+    if not user or not user.email_verified_at:
+        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+    _record_consent(
+        user_id=user.id,
+        version=consent_version,
+        locale=(data.get('locale') or None),
+        user_agent=request.headers.get('User-Agent'),
+        consented_at=_parse_consent_ts(data.get('consent_agreed_at')),
+    )
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Concurrent request already inserted the same (user, version) row.
+        db.session.rollback()
+    return jsonify({'status': 'success'})
+
+
+@main.route('/research-consent/status', methods=['GET'])
+def research_consent_status():
+    """Whether the given participant already has a consent record for the
+    current version. Used at page load to back-fill participants who stay logged
+    in (cached userId) and never hit /login again."""
+    user_id = (request.args.get('user_id') or '').strip().upper()
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
+    user = User.query.get(user_id)
+    if user and user.email_verified_at:
+        recorded = bool(
+            ConsentRecord.query.filter_by(
+                user_id=user.id, consent_version=RESEARCH_CONSENT_VERSION
+            ).first()
+        )
+        return jsonify({'status': 'success', 'consent_recorded': recorded})
+    # Legacy accountless session (gameplay rows but no verified user): no row can
+    # be stored, so prompt each session. Unknown IDs: nothing to prompt for.
+    if MixingSession.query.filter_by(user_id=user_id).first():
+        return jsonify({'status': 'success', 'consent_recorded': False})
+    return jsonify({'status': 'success', 'consent_recorded': True})
 
 
 @main.route('/email/verification/request', methods=['POST'])

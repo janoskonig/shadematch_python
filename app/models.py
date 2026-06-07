@@ -245,6 +245,30 @@ class EmailVerificationToken(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
+class ConsentRecord(db.Model):
+    """Auditable record that a participant gave research informed consent.
+
+    Written atomically at /register for new participants, and via
+    /research-consent for participants who registered before consent
+    capture existed. One row per (user_id, consent_version) agreement.
+    """
+    __tablename__ = 'consent_records'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(6), db.ForeignKey('users.id'), nullable=False, index=True)
+    purpose = db.Column(db.String(64), nullable=False, default='research_informed_consent')
+    consent_version = db.Column(db.String(32), nullable=False)
+    consent_text_hash = db.Column(db.String(64), nullable=True)  # sha256 of exact text shown
+    locale = db.Column(db.String(8), nullable=True)
+    user_agent = db.Column(db.String(255), nullable=True)
+    consented_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)  # agreement moment
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)    # row write
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'consent_version', name='uq_consent_user_version'),
+    )
+
+
 class AnalyticsEvent(db.Model):
     """
     Lightweight client-side event log.

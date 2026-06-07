@@ -3,7 +3,7 @@ import os
 from datetime import date, datetime
 
 from app import create_app, db
-from app.models import User, Session, MixingSession, TargetColor
+from app.models import User, Session, MixingSession, TargetColor, ConsentRecord
 
 # Create a Flask application instance
 app = create_app()
