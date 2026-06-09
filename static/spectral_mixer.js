@@ -104,6 +104,7 @@ class SpectralMixer {
         this.currentRgb = [255, 255, 255];
         this.target = null;          // { id, rgb, name }
         this.deltaReqId = 0;         // latest-wins guard for async ΔE responses
+        this.scoreTimer = null;      // debounce handle for /calculate during drags
         this.bestDeltaE = null;      // closest ΔE reached on the current shade
 
         // Leveling over the ported catalog (Mixbox) targets.
@@ -368,6 +369,7 @@ class SpectralMixer {
         }
         this.updateRecipeStrip(total);
         this.drawMixedSpectrum(reflectances, rgb);
+        drawSpectrumOverlay('mixSpectrumOverlay', reflectances, rgb);
         this.scoreAgainstTarget(total);
     }
 
@@ -404,6 +406,11 @@ class SpectralMixer {
 
         const [r, g, b] = this.target.rgb;
         if (this.targetSwatch) this.targetSwatch.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+        // Overlay the target's reflectance on its window. This is a metameric reconstruction
+        // from the target's sRGB (the catalog has no measured spectrum), so it's drawn dashed
+        // to distinguish it from the solid, true mix curve it sits beside.
+        try { drawSpectrumOverlay('targetSpectrumOverlay', new spectral.Color(this.target.rgb).R, this.target.rgb, { dash: 'dot' }); }
+        catch (_) { /* engine missing — skip overlay */ }
         if (this.matchBar.container) this.matchBar.container.style.display = 'none';
         if (this.status) {
             this.status.classList.remove('is-win');
@@ -488,9 +495,19 @@ class SpectralMixer {
     scoreAgainstTarget(total) {
         if (!this.target) return;
         if (total === 0) {
+            if (this.scoreTimer) { clearTimeout(this.scoreTimer); this.scoreTimer = null; }
+            this.deltaReqId += 1;   // cancel any in-flight response
             if (this.matchBar.container) this.matchBar.container.style.display = 'none';
             return;
         }
+        // Debounce: a dial drag fires updateMixedColor on every pointermove, which would
+        // otherwise POST /calculate dozens of times a second. Coalesce to the latest value.
+        if (this.scoreTimer) clearTimeout(this.scoreTimer);
+        this.scoreTimer = setTimeout(() => { this.scoreTimer = null; this.requestDeltaE(); }, 120);
+    }
+
+    requestDeltaE() {
+        if (!this.target) return;
         const mixed = this.currentRgb;
         const id = (this.deltaReqId += 1);
         fetch('/calculate', {
@@ -541,7 +558,9 @@ class SpectralMixer {
         const div = document.getElementById('mixedSpectrum');
         if (!div) return;
         const [r, g, b] = rgb;
-        Plotly.newPlot(div, [{
+        // react (not newPlot): a dial drag redraws this every frame, so reuse the trace
+        // in place instead of tearing the plot down and rebuilding it each time.
+        Plotly.react(div, [{
             x: WAVELENGTHS,
             y: reflectances,
             type: 'scatter',
@@ -592,6 +611,32 @@ function spectrumLayout(title) {
         paper_bgcolor: 'rgba(0,0,0,0)',
         plot_bgcolor: 'rgba(0,0,0,0)',
     };
+}
+
+// Transparent reflectance curve drawn on top of a colour window. Line colour is chosen
+// to contrast with the swatch underneath. Static (decorative) and axis-free.
+//
+// `dash` marks a curve that is a metameric reconstruction (a reflectance inferred from
+// an sRGB), not a true mixed spectrum — drawn dashed so it never reads as equivalent to
+// the solid, genuine mix curve next to it.
+function drawSpectrumOverlay(divId, reflectances, swatchRgb, { dash = 'solid' } = {}) {
+    const div = document.getElementById(divId);
+    if (!div || !reflectances || typeof Plotly === 'undefined') return;
+    const [r, g, b] = swatchRgb || [255, 255, 255];
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    const line = lum > 140 ? 'rgba(20,20,20,0.85)' : 'rgba(255,255,255,0.92)';
+    Plotly.react(div, [{
+        x: WAVELENGTHS, y: reflectances, type: 'scatter', mode: 'lines',
+        line: { color: line, width: 2.5, shape: 'spline', dash: dash }, hoverinfo: 'skip',
+    }], {
+        margin: { t: 10, r: 8, b: 8, l: 8 },
+        paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+        xaxis: { visible: false, range: [380, 750], fixedrange: true },
+        // Top headroom (>1) so a flat reflectance≈1 curve (e.g. the empty white mix)
+        // isn't pinned against the frame and half-clipped by its own line width.
+        yaxis: { visible: false, range: [0, 1.08], fixedrange: true },
+        showlegend: false,
+    }, { displayModeBar: false, responsive: true, staticPlot: true });
 }
 
 document.addEventListener('DOMContentLoaded', function () {

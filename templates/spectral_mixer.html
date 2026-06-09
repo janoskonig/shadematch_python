@@ -32,7 +32,12 @@
   box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.06));
   overflow: hidden; margin-bottom: 10px;
 }
-.spectral-half { flex: 1; min-width: 0; }   /* no inner border — the two touch */
+.spectral-half { flex: 1; min-width: 0; position: relative; }   /* no inner border — the two touch */
+/* Reflectance-spectrum curve drawn on top of each colour window. */
+.spectral-overlay { position: absolute; inset: 0; pointer-events: none; }
+.spectral-overlay .js-plotly-plot,
+.spectral-overlay .plot-container,
+.spectral-overlay .svg-container { width: 100% !important; height: 100% !important; }
 .spectral-status {
   margin: 10px 0 0; min-height: 1.4em; font-weight: 700; font-size: 0.95rem;
   color: var(--text-secondary); text-align: center;
@@ -191,9 +196,13 @@ input.drop-badge:focus {
   <div class="spectral-pair-labels" aria-hidden="true"><span>Match this</span><span>Your mix</span></div>
   <div class="spectral-pair" aria-live="polite">
     <div id="targetColor" class="spectral-half" role="img" aria-label="Target color"
-         style="background-color:rgb(255,255,255);"></div>
+         style="background-color:rgb(255,255,255);">
+      <div id="targetSpectrumOverlay" class="spectral-overlay" aria-hidden="true"></div>
+    </div>
     <div id="currentMix" class="spectral-half" role="img" aria-label="Current mixed color"
-         style="background-color:rgb(255,255,255);"></div>
+         style="background-color:rgb(255,255,255);">
+      <div id="mixSpectrumOverlay" class="spectral-overlay" aria-hidden="true"></div>
+    </div>
   </div>
 
   <!-- Match bar (same behavior as the main game) -->
@@ -320,5 +329,5 @@ input.drop-badge:focus {
   const spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
 </script>
 <script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
-<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260609p-indep"></script>
+<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260609s-overlay"></script>
 {% endblock %}
