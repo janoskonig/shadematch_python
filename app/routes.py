@@ -269,7 +269,6 @@ def index():
         research_consent_intro=RESEARCH_CONSENT_INTRO,
         research_consent_items=RESEARCH_CONSENT_ITEMS,
         research_consent_version=RESEARCH_CONSENT_VERSION,
-        spectrum_plots=build_spectrum_plots(),
     )
 
 
@@ -1177,11 +1176,15 @@ def _normalize_input_mode(value):
 
 
 def _extract_mixing_config(payload):
-    """Pull (mixing_model, input_mode) from a request payload, normalised."""
+    """Pull (mixing_model, input_mode) from a request payload, normalised.
+
+    Untagged writers (the classic mixbox + integer game) default to mixbox/integer,
+    so every recorded row carries a model + input. Explicit tags (the lab) override.
+    """
     payload = payload or {}
     return (
-        _normalize_mixing_model(payload.get('mixing_model')),
-        _normalize_input_mode(payload.get('input_mode')),
+        _normalize_mixing_model(payload.get('mixing_model')) or 'mixbox',
+        _normalize_input_mode(payload.get('input_mode')) or 'integer',
     )
 
 

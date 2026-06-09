@@ -5,44 +5,6 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
 <style>
-/* ── Mixing configuration selector (in the overflow menu) ────── */
-.overflow-section { padding: 8px 12px; border-top: 1px solid var(--border); }
-.overflow-section-label {
-  display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--text-secondary); font-weight: 700; margin-bottom: 6px;
-}
-.seg-group {
-  display: inline-flex; border: 1px solid var(--border); border-radius: 999px;
-  overflow: hidden; background: var(--surface);
-}
-.seg-btn {
-  border: 0; background: transparent; cursor: pointer;
-  padding: 5px 12px; font-size: 0.82rem; font-weight: 700; color: var(--text-secondary);
-}
-.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
-.seg-btn.is-active { background: var(--accent-primary, #4caf50); color: #fff; }
-.seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-.seg-locked { opacity: 0.6; }
-
-/* Dialer input on the game palette (uses shared .dial styles in components.css). */
-#palette.mode-integer .dial-ring { display: none; }
-#palette.mode-dialer .minus-button { display: none; }
-/* Integer mode: the dial just wraps the disc, so the game keeps its existing
-   responsive disc sizing (no enlargement / overflow on small phones). */
-#palette.mode-integer .dial { width: auto; height: auto; }
-/* Dialer mode: fixed dial with a pinned (smaller) disc so the ring hugs it; both
-   shrink on small phones so all five fit without horizontal scroll. */
-#palette.mode-dialer .dial { width: 64px; height: 64px; }
-#palette.mode-dialer .color-circle { width: 48px; height: 48px; }
-@media (max-width: 360px) {
-  #palette.mode-dialer .dial { width: 52px; height: 52px; }
-  #palette.mode-dialer .color-circle { width: 38px; height: 38px; }
-}
-@media (min-width: 640px) {
-  #palette.mode-dialer .dial { width: 72px; height: 72px; }
-  #palette.mode-dialer .color-circle { width: 56px; height: 56px; }
-}
-
 /* ── Progress strip ────────────────────────────────────────── */
 .progress-strip {
   display: flex;
@@ -443,20 +405,6 @@
             <div class="overflow-dropdown" id="overflowDropdown">
               <button id="restartBtn" class="overflow-item" type="button" disabled>Restart all</button>
               <button id="switchUserBtn" class="overflow-item" type="button">Switch user</button>
-              <div class="overflow-section" role="group" aria-label="Mixing model">
-                <span class="overflow-section-label">Mixing model</span>
-                <div class="seg-group" id="gameModelSeg">
-                  <button type="button" class="seg-btn is-active" data-model="mixbox">Mixbox</button>
-                  <button type="button" class="seg-btn" data-model="spectral">Spectral</button>
-                </div>
-              </div>
-              <div class="overflow-section" role="group" aria-label="Input mode">
-                <span class="overflow-section-label">Input</span>
-                <div class="seg-group" id="gameInputSeg">
-                  <button type="button" class="seg-btn is-active" data-input="integer">Integer</button>
-                  <button type="button" class="seg-btn" data-input="dialer">Dialer</button>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -611,27 +559,16 @@
       ? (researchConsentModal.getAttribute('data-consent-version') || '') : '';
     // Interactive spotlight walkthrough (replaces the old intro video). Steps that
     // don't resolve to a visible element are skipped automatically by the guide.
-    function openOverflowMenu() {
-      var d = document.getElementById('overflowDropdown');
-      if (d) d.classList.add('is-open');
-    }
-    function closeOverflowMenu() {
-      var d = document.getElementById('overflowDropdown');
-      if (d) d.classList.remove('is-open');
-    }
     var GAME_GUIDE_STEPS = [
-      { el: '#targetColor', title: 'Match this colour', body: 'The left panel is the target shade you need to reproduce.', before: closeOverflowMenu },
-      { el: '#currentMix', title: 'Your mix', body: 'The right panel updates live as you add pigments — get it as close to the target as you can.', before: closeOverflowMenu },
-      { el: '#palette', title: 'Add pigments', body: 'Tap a pigment to add a drop, and use the − button to remove one. The strip above shows your recipe.', before: closeOverflowMenu },
-      { el: '#startBtn', title: 'Start when ready', body: 'Press Start to begin — the timer runs while you mix, and a close enough match completes the shade.', before: closeOverflowMenu },
-      { el: '#gameModelSeg', title: 'Mixing model', body: 'How colours combine: Mixbox (realistic pigment mixing, the default) or Spectral (Kubelka–Munk reflectance mixing). Tap to switch.', before: openOverflowMenu },
-      { el: '#gameInputSeg', title: 'Input mode', body: 'Integer adds whole drops with the buttons; Dialer lets you drag each pigment’s knob for a continuous amount.', before: openOverflowMenu },
-      { el: '#showGuideBtn', title: 'Replay anytime', body: 'Tap Guide to see this walkthrough again whenever you like. The ⋮ menu also holds these settings, restart and switch user.', before: closeOverflowMenu }
+      { el: '#targetColor', title: 'Match this colour', body: 'The left panel is the target shade you need to reproduce.' },
+      { el: '#currentMix', title: 'Your mix', body: 'The right panel updates live as you add pigments — get it as close to the target as you can.' },
+      { el: '#palette', title: 'Add pigments', body: 'Tap a pigment to add a drop, and use the − button to remove one. The strip above shows your recipe.' },
+      { el: '#startBtn', title: 'Start when ready', body: 'Press Start to begin — the timer runs while you mix, and a close enough match completes the shade.' },
+      { el: '#showGuideBtn', title: 'Replay anytime', body: 'Tap Guide to see this walkthrough again whenever you like.' }
     ];
     function launchGuide(onDone) {
-      var done = function() { closeOverflowMenu(); if (onDone) onDone(); };
-      if (window.SpotlightGuide) { window.SpotlightGuide.start(GAME_GUIDE_STEPS, { onDone: done }); }
-      else { done(); }
+      if (window.SpotlightGuide) { window.SpotlightGuide.start(GAME_GUIDE_STEPS, { onDone: onDone }); }
+      else if (onDone) { onDone(); }
     }
     // Auto-run only once nothing is blocking the board (consent / display-setup / etc.).
     function launchGuideWhenClear() {
@@ -1046,16 +983,9 @@
 {% endblock %}
 
 {% block extra_js %}
-  <script>
-    // Measured base reflectance spectra (for the spectral mixing model option).
-    window.spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
-  </script>
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260609b"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
-  <script src="{{ url_for('static', filename='mixing-core.js') }}?v=20260609"></script>
-  <script src="{{ url_for('static', filename='dialer.js') }}?v=20260609d"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260609g-step01"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260609q-classic"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>
