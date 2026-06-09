@@ -17,7 +17,7 @@
     var ARC = C * 0.75;            // 270° usable sweep
     var PX_PER_UNIT = 4;           // vertical drag px per 1.0 (≈400px sweeps a 0–100 range)
     var THRESHOLD = 4;             // px before a press counts as a drag (vs a tap)
-    var STEP = 0.01;               // value grid (fine 0.01 increments)
+    var STEP = 0.1;                // value grid (0.1 increments)
 
     function ringSVG(key) {
         return '<svg class="dial-ring" viewBox="0 0 100 100">' +

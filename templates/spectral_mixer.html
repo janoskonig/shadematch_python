@@ -171,10 +171,10 @@ input.drop-badge:focus {
 
   <p class="spectral-hint">
     Reproduce each target shade with the measured pigments (Kubelka–Munk mixing). Tap a pigment
-    for a whole drop, or drag its dial for a continuous amount. Exact RGB isn't always reachable
-    spectrally — get as close as you can, then judge the match to advance.
-    <br><strong>Keyboard:</strong> Tab / Shift+Tab to move between colours; type a value, or
-    ↑/↓ to step (Shift+↑/↓ = 0.01).
+    for a whole drop, or drag its dial for a continuous amount (0–100). Exact RGB isn't always
+    reachable spectrally — get as close as you can, then judge the match to advance.
+    <br><strong>Keyboard:</strong> ←/→ to move between colours; ↑/↓ to change the amount
+    (Shift+↑/↓ = 0.1); or type a value.
   </p>
 
   <!-- Leveling progress -->
@@ -320,5 +320,5 @@ input.drop-badge:focus {
   const spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
 </script>
 <script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
-<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260609l-kbd"></script>
+<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260609p-indep"></script>
 {% endblock %}

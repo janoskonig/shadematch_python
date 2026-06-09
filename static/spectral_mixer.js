@@ -42,10 +42,10 @@ const isPerfectMatch = (deltaE) => Number.isFinite(deltaE) && deltaE <= MATCH_PE
 // Per-pigment "relative amount": a continuous 0–100 scale in fine 0.01 increments
 // (dial drag / keyboard); also nudged ±1 by tap / ± buttons.
 const AMOUNT_MAX = 100;
-const AMOUNT_STEP = 0.01;
+const AMOUNT_STEP = 0.1;
 const roundStep = (v) => Math.round(v / AMOUNT_STEP) * AMOUNT_STEP;
-// Round to the 0.01 grid and drop float noise / trailing zeros: 0.01, 99.9, 37.42, 100.
-const formatAmount = (n) => String(Math.round(n * 100) / 100);
+// Round to the 0.1 grid and drop float noise / trailing zeros: 0.1, 99.9, 37.5, 100.
+const formatAmount = (n) => String(Math.round(n * 10) / 10);
 
 // Dial geometry. The SVG is rotated 135° in CSS so the 270° arc opens at the bottom.
 const DIAL_R = 44;
@@ -147,7 +147,16 @@ class SpectralMixer {
         return lum > 210 ? '#8a8580' : `rgb(${r}, ${g}, ${b})`;
     }
 
-    // Clamp + snap to the 0.01 grid and push the new amount everywhere.
+    // Move keyboard focus to the previous/next pigment's value field (wraps around).
+    focusAdjacentPigment(key, dir) {
+        const i = PALETTE_ORDER.indexOf(key);
+        if (i < 0) return;
+        const next = PALETTE_ORDER[(i + dir + PALETTE_ORDER.length) % PALETTE_ORDER.length];
+        const el = this.palette.querySelector(`input.drop-badge[data-badge-for="${next}"]`);
+        if (el) { el.focus(); el.select(); }
+    }
+
+    // Independent per-pigment amount, 0–100 on the 0.1 grid.
     setAmount(key, value) {
         const v = Math.max(0, Math.min(AMOUNT_MAX, roundStep(value)));
         this.relativeAmounts[key] = v;
@@ -253,6 +262,8 @@ class SpectralMixer {
                 if (e.key === 'Enter') { e.preventDefault(); commit(); input.blur(); }
                 else if (e.key === 'ArrowUp') { e.preventDefault(); this.setAmount(key, this.relativeAmounts[key] + step); }
                 else if (e.key === 'ArrowDown') { e.preventDefault(); this.setAmount(key, this.relativeAmounts[key] - step); }
+                else if (e.key === 'ArrowRight') { e.preventDefault(); this.focusAdjacentPigment(key, +1); }
+                else if (e.key === 'ArrowLeft') { e.preventDefault(); this.focusAdjacentPigment(key, -1); }
             });
         });
 

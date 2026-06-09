@@ -27,7 +27,7 @@
   let dialApi = null;
 
   function formatAmount(n) {
-    return String(Math.round(n * 100) / 100);   // 0.01 grid, trimmed (0.01, 99.9, 37.42, 100)
+    return String(Math.round(n * 10) / 10);   // 0.1 grid, trimmed (0.1, 99.9, 37.5, 100)
   }
 
   const pigmentOrder = ['red', 'yellow', 'white', 'blue', 'black'];
