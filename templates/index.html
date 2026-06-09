@@ -5,6 +5,44 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
 <style>
+/* ── Mixing configuration selector (in the overflow menu) ────── */
+.overflow-section { padding: 8px 12px; border-top: 1px solid var(--border); }
+.overflow-section-label {
+  display: block; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-secondary); font-weight: 700; margin-bottom: 6px;
+}
+.seg-group {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 999px;
+  overflow: hidden; background: var(--surface);
+}
+.seg-btn {
+  border: 0; background: transparent; cursor: pointer;
+  padding: 5px 12px; font-size: 0.82rem; font-weight: 700; color: var(--text-secondary);
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.seg-btn.is-active { background: var(--accent-primary, #4caf50); color: #fff; }
+.seg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.seg-locked { opacity: 0.6; }
+
+/* Dialer input on the game palette (uses shared .dial styles in components.css). */
+#palette.mode-integer .dial-ring { display: none; }
+#palette.mode-dialer .minus-button { display: none; }
+/* Integer mode: the dial just wraps the disc, so the game keeps its existing
+   responsive disc sizing (no enlargement / overflow on small phones). */
+#palette.mode-integer .dial { width: auto; height: auto; }
+/* Dialer mode: fixed dial with a pinned (smaller) disc so the ring hugs it; both
+   shrink on small phones so all five fit without horizontal scroll. */
+#palette.mode-dialer .dial { width: 64px; height: 64px; }
+#palette.mode-dialer .color-circle { width: 48px; height: 48px; }
+@media (max-width: 360px) {
+  #palette.mode-dialer .dial { width: 52px; height: 52px; }
+  #palette.mode-dialer .color-circle { width: 38px; height: 38px; }
+}
+@media (min-width: 640px) {
+  #palette.mode-dialer .dial { width: 72px; height: 72px; }
+  #palette.mode-dialer .color-circle { width: 56px; height: 56px; }
+}
+
 /* ── Progress strip ────────────────────────────────────────── */
 .progress-strip {
   display: flex;
@@ -415,6 +453,20 @@
             <div class="overflow-dropdown" id="overflowDropdown">
               <button id="restartBtn" class="overflow-item" type="button" disabled>Restart all</button>
               <button id="switchUserBtn" class="overflow-item" type="button">Switch user</button>
+              <div class="overflow-section" role="group" aria-label="Mixing model">
+                <span class="overflow-section-label">Mixing model</span>
+                <div class="seg-group" id="gameModelSeg">
+                  <button type="button" class="seg-btn is-active" data-model="mixbox">Mixbox</button>
+                  <button type="button" class="seg-btn" data-model="spectral">Spectral</button>
+                </div>
+              </div>
+              <div class="overflow-section" role="group" aria-label="Input mode">
+                <span class="overflow-section-label">Input</span>
+                <div class="seg-group" id="gameInputSeg">
+                  <button type="button" class="seg-btn is-active" data-input="integer">Integer</button>
+                  <button type="button" class="seg-btn" data-input="dialer">Dialer</button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -979,8 +1031,15 @@
 {% endblock %}
 
 {% block extra_js %}
+  <script>
+    // Measured base reflectance spectra (for the spectral mixing model option).
+    window.spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
+  </script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260508-qc2"></script>
+  <script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
+  <script src="{{ url_for('static', filename='mixing-core.js') }}?v=20260609"></script>
+  <script src="{{ url_for('static', filename='dialer.js') }}?v=20260609"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260609d-modes"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>

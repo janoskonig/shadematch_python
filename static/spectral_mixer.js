@@ -1,421 +1,448 @@
-// JavaScript syntax and concepts explained in Python terms:
-// - 'class' is similar to Python classes, used to define a blueprint for objects
-// - 'constructor()' is like Python's __init__ method, called when creating a new object
-// - 'this' is like Python's 'self', refers to the current object instance
-// - 'const' and 'let' are like Python variables, but 'const' cannot be reassigned
-// - '=>' is an arrow function, similar to Python lambda functions
-// - '{}' creates an object (like Python dictionaries)
-// - '[]' creates an array (like Python lists)
-// - 'document.querySelector()' is like Python's DOM manipulation
-// - 'addEventListener()' is like Python's event handling
-// - 'console.log()' is like Python's print()
-// - 'Math' is like Python's math module
-// - 'Plotly' is a JavaScript library for plotting (similar to matplotlib in Python)
+/**
+ * Spectral mixer (laboratory mode).
+ *
+ * Same mixing controls as the main app (click a pigment to add a drop, minus to
+ * remove), but the engine is a spectral Kubelka–Munk pigment-mixing *simulation*
+ * based on measured reflectance spectra of the base pigments — NOT literal physical
+ * paint mixing. Real paint also depends on concentration, layer thickness, binder,
+ * particle size, opacity and substrate, none of which are modelled here. The
+ * per-pigment count is therefore a relative digital pigment amount, not a real drop.
+ *
+ * All color science is delegated to the spectral.js engine (static/spectral.js,
+ * Ronald van Wijnen, MIT): Kubelka–Munk mixing in K/S space and reflectance→XYZ
+ * convolution against the CIE observer weighted by the D65 illuminant. This file
+ * resamples the measured base spectra onto the engine grid, wires the (main-app)
+ * palette UI, and draws the Plotly spectra. It reimplements none of that math.
+ *
+ * Depends on:
+ *   - window.spectral  (static/spectral.js) — must load BEFORE this file.
+ *   - spectrum_plots   (injected by /spectral) — measured base reflectances,
+ *                        keyed white/black/red/yellow/blue.
+ *   - Plotly           (CDN) — spectrum charts.
+ */
 
-// Spectral color mixing implementation
+// Fail fast if the engine isn't present (template ordering / SW cache mistakes).
+if (!window.spectral || !window.spectral.Color || !window.spectral.mix) {
+    throw new Error('spectral.js engine not loaded — include static/spectral.js before spectral_mixer.js');
+}
+
+// Canonical 38-bin reflectance grid used by spectral.js: 380–750 nm @10 nm.
+// Defined once and reused for resampling, new spectral.Color(R38), and plotting.
+const WAVELENGTHS = Array.from({ length: 38 }, (_, i) => 380 + i * 10);
+
+const PALETTE_ORDER = ['white', 'black', 'red', 'yellow', 'blue'];
+const PALETTE_LABEL = { white: 'White', black: 'Black', red: 'Red', yellow: 'Yellow', blue: 'Blue' };
+
+// Same strict win threshold as the main game. Targets are generated from a pigment
+// recipe mixed by the same engine, and the engine's mix is ratio-invariant, so an
+// exact integer-drop solution (ΔE → 0) always exists.
+const MATCH_PERFECT_DELTA_E = 0.01;
+const isPerfectMatch = (deltaE) => Number.isFinite(deltaE) && deltaE <= MATCH_PERFECT_DELTA_E;
+
+// Per-pigment "relative amount" is continuous (dial drag) but also nudged ±1 by tap / buttons.
+const AMOUNT_MAX = 10;
+const formatAmount = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+
+// Dial geometry. The SVG is rotated 135° in CSS so the 270° arc opens at the bottom.
+const DIAL_R = 44;
+const DIAL_C = 2 * Math.PI * DIAL_R;   // full circumference (px in viewBox units)
+const DIAL_ARC = DIAL_C * 0.75;        // 270° usable sweep
+const DRAG_PX_PER_UNIT = 16;           // vertical px of drag per 1.0 of amount
+const DRAG_THRESHOLD = 4;              // px before a press counts as a drag (vs a tap)
+
 class SpectralMixer {
     constructor() {
-        // Dynamically determine wavelengths and sample size from pigment data
-        const firstColor = Object.keys(spectrum_plots)[0];
-        this.wavelengths = spectrum_plots[firstColor].wavelengths;
-        this.SIZE = this.wavelengths.length;
-        this.GAMMA = 2.4;
-        
-        // Initialize drop counts for all available pigments
-        this.dropCounts = {};
-        Object.keys(spectrum_plots).forEach(color => {
-            this.dropCounts[color] = 0;
+        // bases[color] = { name, swatch, raw:{wavelengths,reflectances}, R38, color }
+        this.bases = {};
+        this.relativeAmounts = {};
+
+        PALETTE_ORDER.forEach((key) => {
+            const data = spectrum_plots[key];
+            if (!data) { console.error(`No measured spectrum for base "${key}"`); return; }
+            const R38 = resampleToGrid(data.wavelengths, data.reflectances);
+            const color = new spectral.Color(R38);
+            this.bases[key] = {
+                name: data.name || key,
+                swatch: color.sRGB,
+                raw: { wavelengths: data.wavelengths, reflectances: data.reflectances },
+                R38: R38,
+                color: color,
+            };
+            this.relativeAmounts[key] = 0;
         });
-        
+
+        this.currentMix = document.getElementById('currentMix');
+        this.targetSwatch = document.getElementById('targetColor');
+        this.colorCodesLine = document.getElementById('colorCodesLine');
+        this.palette = document.getElementById('spectralPalette');
+        this.status = document.getElementById('spectralStatus');
+        this.matchBar = {
+            container: document.getElementById('matchBarContainer'),
+            fill: document.getElementById('matchBarFill'),
+            label: document.getElementById('matchBarLabel'),
+        };
+
+        this.currentRgb = [255, 255, 255];
+        this.target = null;      // { rgb, recipe }
+        this.solved = false;
+        this.deltaReqId = 0;     // latest-wins guard for async ΔE responses
+
+        this.setupDials();
         this.initializeControls();
-        this.initializePlots();
+        this.initializeBasePlots();
+        this.newTarget();
     }
 
-    // Kubelka-Munk functions from spectral_by_wijnen.js
-    KS(R) {
-        return (1 - R) ** 2 / (2 * R);
+    // Paint the static dial parts: the 270° track and each ring's pigment colour.
+    setupDials() {
+        if (!this.palette) return;
+        PALETTE_ORDER.forEach((key) => {
+            const dial = this.palette.querySelector(`.dial[data-color="${key}"]`);
+            if (!dial) return;
+            const track = dial.querySelector('.dial-track');
+            const fill = dial.querySelector('.dial-fill');
+            if (track) track.style.strokeDasharray = `${DIAL_ARC.toFixed(2)} ${DIAL_C.toFixed(2)}`;
+            if (fill) {
+                fill.style.stroke = this.dialColor(key);
+                fill.style.strokeDasharray = `0 ${DIAL_C.toFixed(2)}`;
+                fill.style.display = 'none';
+            }
+        });
     }
 
-    KM(KS) {
-        return 1 + KS - (KS ** 2 + 2 * KS) ** 0.5;
+    // Ring colour = the pigment's own sRGB, but force a visible grey for near-white pigments.
+    dialColor(key) {
+        const [r, g, b] = this.bases[key] ? this.bases[key].swatch : [120, 120, 120];
+        const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+        return lum > 210 ? '#8a8580' : `rgb(${r}, ${g}, ${b})`;
     }
 
-    // Color space conversion functions
-    uncompand(x) {
-        return x > 0.04045 ? ((x + 0.055) / 1.055) ** this.GAMMA : x / 12.92;
+    // Clamp + round to 0.1 and push the new amount everywhere.
+    setAmount(key, value) {
+        const v = Math.max(0, Math.min(AMOUNT_MAX, Math.round(value * 10) / 10));
+        this.relativeAmounts[key] = v;
+        this.syncControl(key);
+        this.updateMixedColor();
     }
 
-    compand(x) {
-        return x > 0.0031308 ? 1.055 * x ** (1.0 / this.GAMMA) - 0.055 : x * 12.92;
+    // Whole-drop nudge from tap / ± buttons (bumps the badge).
+    nudge(key, delta, { bump = false } = {}) {
+        const v = Math.max(0, Math.min(AMOUNT_MAX, this.relativeAmounts[key] + delta));
+        this.relativeAmounts[key] = Math.round(v * 10) / 10;
+        this.syncControl(key, { bump });
+        this.updateMixedColor();
     }
-
-    sRGB_to_lRGB(sRGB) {
-        return sRGB.map(x => this.uncompand(x / 255));
-    }
-
-    lRGB_to_sRGB(lRGB) {
-        return lRGB.map(x => Math.round(this.compand(x) * 255));
-    }
-
-    // Matrix multiplication utility
-    mulMatVec(m, v) {
-        return m.map(row => row.reduce((acc, val, i) => acc + val * v[i], 0));
-    }
-
-    // Color space conversion matrices from spectral_by_wijnen.js
-    CONVERSION = {
-        RGB_XYZ: [
-            [0.41239079926595934, 0.357584339383878, 0.1804807884018343],
-            [0.21263900587151027, 0.715168678767756, 0.07219231536073371],
-            [0.01933081871559182, 0.11919477979462598, 0.9505321522496607]
-        ],
-        XYZ_RGB: [
-            [3.2409699419045226, -1.537383177570094, -0.4986107602930034],
-            [-0.9692436362808796, 1.8759675015077202, 0.04155505740717559],
-            [0.05563007969699366, -0.20397695888897652, 1.0569715142428786]
-        ]
-    };
-
-    // CIE Color Matching Functions from spectral_by_wijnen.js
-    CIE = {
-        CMF: [
-            [0.0000646919989576, 0.0002194098998132, 0.0011205743509343, /* ... rest of the values ... */],
-            [0.000001844289444, 0.0000062053235865, 0.0000310096046799, /* ... rest of the values ... */],
-            [0.000305017147638, 0.0010368066663574, 0.0053131363323992, /* ... rest of the values ... */]
-        ]
-    };
 
     initializeControls() {
-        console.log('Initializing controls');
-        
-        // Initialize controls for all available pigments
-        Object.keys(this.dropCounts).forEach(color => {
-            const control = document.querySelector(`.color-control[data-color="${color}"]`);
-            if (!control) {
-                console.error(`Could not find control for ${color}`);
-                return;
-            }
+        if (!this.palette) return;
 
-            const buttons = {
-                plus: control.querySelector('.drop-button:last-child'),
-                minus: control.querySelector('.drop-button:first-child'),
-                circle: control.querySelector('.color-circle')
-            };
-
-            if (buttons.plus && buttons.minus && buttons.circle) {
-                buttons.plus.addEventListener('click', () => {
-                    this.dropCounts[color]++;
-                    buttons.circle.textContent = this.dropCounts[color];
-                    this.updateMixedColor();
-                });
-
-                buttons.minus.addEventListener('click', () => {
-                    if (this.dropCounts[color] > 0) {
-                        this.dropCounts[color]--;
-                        buttons.circle.textContent = this.dropCounts[color];
-                        this.updateMixedColor();
-                    }
-                });
-
-                // Set initial color from spectrum_plots
-                const plotData = spectrum_plots[color];
-                if (plotData) {
-                    const [r, g, b] = plotData.rgb;
-                    buttons.circle.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
-                    buttons.circle.style.color = this.getContrastColor(r, g, b);
-                    buttons.circle.textContent = '0';
-                }
-            }
+        // Tap the disc → add a whole drop. A tap that followed a dial drag is suppressed.
+        this.palette.querySelectorAll('.color-circle').forEach((circle) => {
+            const key = circle.dataset.color;
+            circle.addEventListener('click', () => {
+                const dial = circle.closest('.dial');
+                if (dial && dial._suppressTap) { dial._suppressTap = false; return; }
+                this.nudge(key, +1, { bump: true });
+                circle.classList.add('is-tapped');
+                setTimeout(() => circle.classList.remove('is-tapped'), 150);
+                if (navigator.vibrate) navigator.vibrate(12);
+            });
         });
 
-        // Initialize mixed color circle
-        this.mixedCircle = document.querySelector('.mixed-color .color-circle');
-        if (this.mixedCircle) {
-            this.updateMixedColor();
+        this.palette.querySelectorAll('.minus-button').forEach((button) => {
+            const key = button.dataset.color;
+            button.addEventListener('click', () => {
+                if (this.relativeAmounts[key] <= 0) return;
+                this.nudge(key, -1, { bump: true });
+            });
+        });
+
+        // Dial: drag up/down for a continuous amount (shares relativeAmounts with tap/±).
+        this.palette.querySelectorAll('.dial').forEach((dial) => {
+            const key = dial.dataset.color;
+            let startY = 0;
+            let startAmount = 0;
+            let active = false;
+            let dragging = false;
+
+            dial.addEventListener('pointerdown', (e) => {
+                startY = e.clientY;
+                startAmount = this.relativeAmounts[key];
+                active = true;
+                dragging = false;
+                dial._suppressTap = false;
+                try { dial.setPointerCapture(e.pointerId); } catch (_) { /* synthetic / unsupported */ }
+            });
+            dial.addEventListener('pointermove', (e) => {
+                if (!active) return;
+                const dy = startY - e.clientY;                 // drag up = increase
+                if (!dragging && Math.abs(dy) > DRAG_THRESHOLD) dragging = true;
+                if (dragging) {
+                    this.setAmount(key, startAmount + dy / DRAG_PX_PER_UNIT);
+                    e.preventDefault();
+                }
+            });
+            const endDrag = (e) => {
+                if (!active) return;
+                active = false;
+                try { dial.releasePointerCapture(e.pointerId); } catch (_) { /* no-op */ }
+                if (dragging) {
+                    dial._suppressTap = true;                  // swallow the synthetic click
+                    setTimeout(() => { dial._suppressTap = false; }, 400);
+                }
+                dragging = false;
+            };
+            dial.addEventListener('pointerup', endDrag);
+            dial.addEventListener('pointercancel', endDrag);
+
+            // Keyboard (role="slider"): arrows nudge by 0.5, Home/End jump to the ends.
+            dial.addEventListener('keydown', (e) => {
+                let handled = true;
+                if (e.key === 'ArrowUp' || e.key === 'ArrowRight') this.setAmount(key, this.relativeAmounts[key] + 0.5);
+                else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') this.setAmount(key, this.relativeAmounts[key] - 0.5);
+                else if (e.key === 'Home') this.setAmount(key, 0);
+                else if (e.key === 'End') this.setAmount(key, AMOUNT_MAX);
+                else handled = false;
+                if (handled) e.preventDefault();
+            });
+        });
+
+        const reset = document.getElementById('spectralResetBtn');
+        if (reset) {
+            reset.addEventListener('click', () => this.resetMix());
+        }
+        const newTarget = document.getElementById('newTargetBtn');
+        if (newTarget) {
+            newTarget.addEventListener('click', () => this.newTarget());
         }
     }
 
-    initializePlots() {
-        // Initialize individual color plots for all pigments
-        Object.entries(spectrum_plots).forEach(([color, data]) => {
-            const plotDiv = document.getElementById(`${color}Spectrum`);
-            if (!plotDiv) return;
+    resetMix() {
+        PALETTE_ORDER.forEach((key) => { this.relativeAmounts[key] = 0; this.syncControl(key); });
+        this.updateMixedColor();
+    }
 
-            const [r, g, b] = data.rgb;
-            console.log(`${color} RGB:`, r, g, b);
+    // Reflect a pigment's amount on its badge and dial ring (kept in sync).
+    syncControl(key, { bump = false } = {}) {
+        const n = this.relativeAmounts[key];
+        const txt = formatAmount(n);
+        const badge = this.palette.querySelector(`.drop-badge[data-badge-for="${key}"]`);
+        const fill = this.palette.querySelector(`.dial-fill[data-fill-for="${key}"]`);
+        const dial = this.palette.querySelector(`.dial[data-color="${key}"]`);
+        if (badge) {
+            badge.textContent = txt;
+            if (bump) {
+                badge.classList.add('is-bumped');
+                setTimeout(() => badge.classList.remove('is-bumped'), 150);
+            }
+        }
+        if (fill) {
+            const frac = Math.max(0, Math.min(1, n / AMOUNT_MAX));
+            fill.style.strokeDasharray = `${(frac * DIAL_ARC).toFixed(2)} ${DIAL_C.toFixed(2)}`;
+            fill.style.display = frac > 0 ? '' : 'none';  // hide the round-cap dot at zero
+        }
+        if (dial) dial.setAttribute('aria-valuenow', String(n));
+    }
 
-            const trace = {
-                x: data.wavelengths,
-                y: data.reflectances,
+    initializeBasePlots() {
+        Object.entries(this.bases).forEach(([key, base]) => {
+            const div = document.getElementById(`spectrumPlot-${key}`);
+            if (!div) return;
+            const [r, g, b] = base.swatch;
+            // Full-resolution measured curve, titled with the real pigment name.
+            Plotly.newPlot(div, [{
+                x: base.raw.wavelengths,
+                y: base.raw.reflectances,
                 type: 'scatter',
                 mode: 'lines',
-                name: data.name || color.charAt(0).toUpperCase() + color.slice(1),
-                line: {
-                    color: `rgb(${r}, ${g}, ${b})`,
-                    width: 2
-                }
-            };
-
-            const layout = {
-                title: `${data.name || color.charAt(0).toUpperCase() + color.slice(1)} Spectrum`,
-                xaxis: {
-                    title: 'Wavelength (nm)',
-                    range: [400, 700],
-                    showgrid: true,
-                    gridcolor: '#ddd'
-                },
-                yaxis: {
-                    title: 'Reflectance',
-                    range: [0, 1],
-                    showgrid: true,
-                    gridcolor: '#ddd'
-                },
-                margin: { t: 30, r: 20, b: 40, l: 50 },
-                paper_bgcolor: 'white',
-                plot_bgcolor: 'white'
-            };
-
-            Plotly.newPlot(plotDiv, [trace], layout);
+                name: base.name,
+                line: { color: `rgb(${r}, ${g}, ${b})`, width: 2 },
+            }], spectrumLayout(base.name), { displayModeBar: false, responsive: true });
         });
-
-        // Initialize mixed spectrum plot
-        const mixedPlotDiv = document.getElementById('mixedSpectrum');
-        if (mixedPlotDiv) {
-            this.updateMixedColor();
-        }
     }
 
     updateMixedColor() {
-        console.log('Updating mixed color...');
-        console.log('Drop counts:', this.dropCounts);
+        const entries = Object.entries(this.relativeAmounts).filter(([, n]) => n > 0);
+        const total = entries.reduce((acc, [, n]) => acc + n, 0);
 
-        // Calculate total drops
-        const totalDrops = Object.values(this.dropCounts).reduce((a, b) => a + b, 0);
-        if (totalDrops === 0) {
-            if (this.mixedCircle) {
-                this.mixedCircle.style.backgroundColor = 'rgb(255, 255, 255)';
-                this.mixedCircle.style.color = '#000000';
-            }
-            // Plot white spectrum
-            const mixedPlotDiv = document.getElementById('mixedSpectrum');
-            if (mixedPlotDiv) {
-                Plotly.newPlot(mixedPlotDiv, [{
-                    x: this.wavelengths,
-                    y: Array(this.SIZE).fill(1),
-                    type: 'scatter',
-                    mode: 'lines',
-                    name: 'Mixed',
-                    line: { color: 'rgb(255,255,255)', width: 2 }
-                }], {
-                    title: 'Mixed Spectrum',
-                    xaxis: { title: 'Wavelength (nm)', range: [400, 700], showgrid: true, gridcolor: '#ddd' },
-                    yaxis: { title: 'Reflectance', range: [0, 1], showgrid: true, gridcolor: '#ddd' },
-                    margin: { t: 30, r: 20, b: 40, l: 50 },
-                    paper_bgcolor: 'white', plot_bgcolor: 'white'
-                });
-            }
+        let rgb;
+        let reflectances;
+        if (total === 0) {
+            rgb = [255, 255, 255];
+            reflectances = WAVELENGTHS.map(() => 1);
+        } else {
+            // Kubelka–Munk subtractive mixing, done entirely by the engine.
+            // factor = relative digital pigment amount (not a real drop).
+            const mixArgs = entries.map(([key, relativeAmount]) => [this.bases[key].color, relativeAmount]);
+            const mixed = spectral.mix(...mixArgs);
+            rgb = mixed.sRGB;
+            reflectances = mixed.R;
+        }
+
+        const [r, g, b] = rgb;
+        this.currentRgb = rgb;
+        if (this.currentMix) this.currentMix.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+        if (this.colorCodesLine) {
+            const hex = '#' + [r, g, b].map((v) => v.toString(16).toUpperCase().padStart(2, '0')).join('');
+            this.colorCodesLine.textContent = `rgb(${r}, ${g}, ${b}) · R${r} G${g} B${b} · ${hex}`;
+        }
+        this.updateRecipeStrip(total);
+        this.drawMixedSpectrum(reflectances, rgb);
+        this.scoreAgainstTarget(total);
+    }
+
+    // ── Game: target generation & matching ──────────────────────────────────
+
+    // Random recipe of 2–3 pigments, small counts — keeps the exact-match ratio
+    // discoverable. Mixed by the engine so the target is reachable by construction.
+    generateRecipe() {
+        const pool = PALETTE_ORDER.slice();
+        for (let i = pool.length - 1; i > 0; i -= 1) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [pool[i], pool[j]] = [pool[j], pool[i]];
+        }
+        const k = 2 + Math.floor(Math.random() * 2); // 2 or 3 pigments
+        const recipe = {};
+        pool.slice(0, k).forEach((key) => { recipe[key] = 1 + Math.floor(Math.random() * 4); }); // 1..4
+        return recipe;
+    }
+
+    newTarget() {
+        const recipe = this.generateRecipe();
+        const mixArgs = Object.entries(recipe).map(([key, n]) => [this.bases[key].color, n]);
+        const rgb = spectral.mix(...mixArgs).sRGB;
+        this.target = { rgb, recipe };
+        this.solved = false;
+
+        if (this.targetSwatch) this.targetSwatch.style.backgroundColor = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+        if (this.matchBar.container) this.matchBar.container.style.display = 'none';
+        if (this.status) {
+            this.status.textContent = 'Match the target by mixing pigments.';
+            this.status.classList.remove('is-win');
+        }
+        this.resetMix();
+    }
+
+    scoreAgainstTarget(total) {
+        if (!this.target) return;
+        if (total === 0) {
+            // Nothing mixed yet — keep the bar hidden until the player acts.
+            if (this.matchBar.container) this.matchBar.container.style.display = 'none';
             return;
         }
+        const mixed = this.currentRgb;
+        const id = (this.deltaReqId += 1);
+        fetch('/calculate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ target: this.target.rgb, mixed }),
+        })
+            .then((res) => res.json())
+            .then((data) => {
+                if (id !== this.deltaReqId) return; // a newer action superseded this one
+                const de = Number(data && data.delta_e);
+                if (!Number.isFinite(de)) return;
+                this.updateMatchBar(de);
+                if (isPerfectMatch(de) && !this.solved) this.onWin(de);
+            })
+            .catch(() => { /* offline / transient — leave the bar as-is */ });
+    }
 
-        // Wijnen's Kubelka-Munk mixing
-        let mixedKS = Array(this.SIZE).fill(0);
-        let totalWeight = 0;
-        // 1. Compute weighted sum of K/S for each pigment
-        Object.entries(this.dropCounts).forEach(([color, drops]) => {
-            if (drops > 0) {
-                const data = spectrum_plots[color];
-                if (data) {
-                    totalWeight += drops;
-                }
-            }
-        });
-        if (totalWeight === 0) totalWeight = 1; // avoid division by zero
-        Object.entries(this.dropCounts).forEach(([color, drops]) => {
-            if (drops > 0) {
-                const data = spectrum_plots[color];
-                if (data) {
-                    const weight = drops / totalWeight;
-                    for (let i = 0; i < this.SIZE; i++) {
-                        const R = Math.max(0.0001, Math.min(0.9999, data.reflectances[i])); // avoid div by zero
-                        mixedKS[i] += this.KS(R) * weight;
-                    }
-                }
-            }
-        });
-        // 2. Convert mixed K/S back to reflectance using Kubelka-Munk inversion
-        let mixedSpectrum = mixedKS.map(KS => {
-            const sqrt = Math.sqrt(KS * KS + 2 * KS);
-            return Math.max(0, Math.min(1, 1 + KS - sqrt));
-        });
-        // 3. Convert mixed spectrum to RGB
-        const [r, g, b] = this.spectrumToRGB(mixedSpectrum);
-        // Update mixed color circle
-        if (this.mixedCircle) {
-            this.mixedCircle.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
-            this.mixedCircle.style.color = this.getContrastColor(r, g, b);
+    // Mirrors the main game's match bar (exponential decay, K=3).
+    updateMatchBar(deltaE) {
+        const { container, fill, label } = this.matchBar;
+        if (!container || !fill || !label) return;
+        container.style.display = '';
+
+        if (isPerfectMatch(deltaE)) {
+            fill.style.width = '100%';
+            fill.style.backgroundColor = 'var(--accent-success)';
+            label.textContent = 'Match!';
+            return;
         }
-        // Update mixed spectrum plot
-        const mixedPlotDiv = document.getElementById('mixedSpectrum');
-        if (mixedPlotDiv) {
-            const trace = {
-                x: this.wavelengths,
-                y: mixedSpectrum,
-                type: 'scatter',
-                mode: 'lines',
-                name: 'Mixed',
-                line: {
-                    color: `rgb(${r}, ${g}, ${b})`,
-                    width: 2
-                }
-            };
-            const layout = {
-                title: 'Mixed Spectrum',
-                xaxis: {
-                    title: 'Wavelength (nm)',
-                    range: [400, 700],
-                    showgrid: true,
-                    gridcolor: '#ddd'
-                },
-                yaxis: {
-                    title: 'Reflectance',
-                    range: [0, 1],
-                    showgrid: true,
-                    gridcolor: '#ddd'
-                },
-                margin: { t: 30, r: 20, b: 40, l: 50 },
-                paper_bgcolor: 'white',
-                plot_bgcolor: 'white'
-            };
-            Plotly.newPlot(mixedPlotDiv, [trace], layout);
+        const K = 3;
+        const progress = Math.max(0, Math.min(99, 100 * Math.exp(-deltaE / K)));
+        fill.style.width = progress + '%';
+        if (progress < 19) { fill.style.backgroundColor = 'var(--accent-danger)'; label.textContent = 'Far'; }
+        else if (progress < 51) { fill.style.backgroundColor = 'var(--accent-warning)'; label.textContent = 'Closer'; }
+        else if (progress < 85) { fill.style.backgroundColor = '#8BC34A'; label.textContent = 'Very close'; }
+        else { fill.style.backgroundColor = '#8BC34A'; label.textContent = 'Nearly there!'; }
+    }
+
+    onWin(deltaE) {
+        this.solved = true;
+        if (navigator.vibrate) navigator.vibrate([15, 40, 15]);
+        if (this.status) {
+            this.status.textContent = `Matched! ΔE ${deltaE.toFixed(2)} 🎉`;
+            this.status.classList.add('is-win');
         }
     }
 
-    // Linear interpolation utility
-    interpolateArray(x, y, xq) {
-        // x: original x values (wavelengths), y: original y values (reflectances), xq: query x values
-        let yq = [];
-        for (let i = 0; i < xq.length; i++) {
-            const xi = xq[i];
-            if (xi <= x[0]) {
-                yq.push(y[0]);
-            } else if (xi >= x[x.length - 1]) {
-                yq.push(y[y.length - 1]);
-            } else {
-                let j = 1;
-                while (x[j] < xi) j++;
-                const x0 = x[j - 1], x1 = x[j];
-                const y0 = y[j - 1], y1 = y[j];
-                yq.push(y0 + (y1 - y0) * (xi - x0) / (x1 - x0));
-            }
-        }
-        return yq;
+    updateRecipeStrip(total) {
+        PALETTE_ORDER.forEach((key) => {
+            const seg = document.querySelector(`#recipeStrip .recipe-seg[data-color="${key}"]`);
+            if (seg) seg.style.flexGrow = total > 0 ? this.relativeAmounts[key] : 0;
+        });
     }
 
-    spectrumToRGB(spectrum) {
-        // CIE 1931 color matching functions (31 points, 400–700 nm, 10 nm steps)
-        const x_bar = [0.0143,0.0435,0.1344,0.2839,0.3483,0.3362,0.2908,0.1954,0.0956,0.0320,0.0049,0.0093,0.0633,0.1655,0.2904,0.4334,0.5945,0.7621,0.9163,1.0263,1.0622,1.0026,0.8544,0.6424,0.4479,0.2835,0.1649,0.0874,0.0468,0.0227,0.0114];
-        const y_bar = [0.0004,0.0012,0.0040,0.0116,0.023,0.038,0.060,0.091,0.139,0.208,0.323,0.503,0.710,0.862,0.954,0.995,0.995,0.952,0.870,0.757,0.631,0.503,0.381,0.265,0.175,0.107,0.061,0.032,0.017,0.0082,0.0041];
-        const z_bar = [0.0679,0.2074,0.6456,1.3856,1.7471,1.7721,1.6692,1.2876,0.8130,0.4652,0.2720,0.1582,0.0782,0.0422,0.0203,0.0087,0.0039,0.0021,0.0017,0.0011,0.0008,0.0003,0.0002,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000,0.0000];
-        const cmf_wavelengths = Array.from({length: 31}, (_, i) => 400 + i * 10);
-        // Resample spectrum to match CMF wavelengths
-        const resampled = this.interpolateArray(this.wavelengths, spectrum, cmf_wavelengths);
-        // Calculate XYZ values
-        let X = 0, Y = 0, Z = 0;
-        for (let i = 0; i < 31; i++) {
-            X += resampled[i] * x_bar[i];
-            Y += resampled[i] * y_bar[i];
-            Z += resampled[i] * z_bar[i];
-        }
-        // Normalize
-        const sum = X + Y + Z;
-        if (sum > 0) {
-            X /= sum;
-            Y /= sum;
-            Z /= sum;
-        }
-        // Convert XYZ to linear RGB
-        const lRGB = this.mulMatVec(this.CONVERSION.XYZ_RGB, [X, Y, Z]);
-        // Convert linear RGB to sRGB with gamma correction
-        return this.lRGB_to_sRGB(lRGB);
-    }
-
-    getContrastColor(r, g, b) {
-        // Calculate relative luminance
-        const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-        return luminance > 0.5 ? '#000000' : '#ffffff';
+    drawMixedSpectrum(reflectances, rgb) {
+        const div = document.getElementById('mixedSpectrum');
+        if (!div) return;
+        const [r, g, b] = rgb;
+        Plotly.newPlot(div, [{
+            x: WAVELENGTHS,
+            y: reflectances,
+            type: 'scatter',
+            mode: 'lines',
+            name: 'Mixed',
+            line: { color: `rgb(${r}, ${g}, ${b})`, width: 2 },
+        }], spectrumLayout('Mixed Spectrum'), { displayModeBar: false, responsive: true });
     }
 }
 
-// Initialize the spectral mixer when the page loads
-document.addEventListener('DOMContentLoaded', function() {
-    console.log('Initializing spectral mixer...');
-    console.log('Spectrum plots:', spectrum_plots);
-    
-    // Check for user ID in localStorage and display it
-    const storedUserId = localStorage.getItem('userId');
-    const userInfoDiv = document.getElementById('userInfo');
-    const userIdDisplay = document.getElementById('userIdDisplay');
-    
-    if (storedUserId && userInfoDiv && userIdDisplay) {
-        userIdDisplay.textContent = storedUserId;
-        userInfoDiv.style.display = 'block';
-        console.log('User ID displayed:', storedUserId);
-    } else {
-        console.log('No user ID found in localStorage');
-    }
-    
-    // Initialize plots for each available pigment
-    Object.keys(spectrum_plots).forEach(color => {
-        console.log(`Initializing ${color}...`);
-        const plotDiv = document.getElementById(`${color}Spectrum`);
-        if (!plotDiv) {
-            console.error(`Could not find plot div for ${color}`);
-            return;
+/**
+ * Linearly interpolate a measured (wavelengths, reflectances) curve onto the
+ * canonical WAVELENGTHS grid.
+ *
+ * Outside the measured range we HOLD the nearest measured endpoint value (never
+ * fall to zero) — pragmatic and adequate for visible-range rendering, but an
+ * approximation at the band edges where our CSVs (~405–730 nm) don't reach.
+ * Each result is clamped to [1e-4, 1.0] because Kubelka–Munk K/S = (1−R)²/(2R)
+ * diverges at R=0 and is 0 at R=1.
+ */
+function resampleToGrid(wavelengths, reflectances) {
+    const x = wavelengths;
+    const y = reflectances;
+    const last = x.length - 1;
+    return WAVELENGTHS.map((xi) => {
+        let v;
+        if (xi <= x[0]) {
+            v = y[0];
+        } else if (xi >= x[last]) {
+            v = y[last];
+        } else {
+            let j = 1;
+            while (x[j] < xi) j += 1;
+            const x0 = x[j - 1], x1 = x[j];
+            const y0 = y[j - 1], y1 = y[j];
+            v = y0 + (y1 - y0) * (xi - x0) / (x1 - x0);
         }
-
-        const plotData = spectrum_plots[color];
-        if (!plotData) {
-            console.error(`No data found for ${color}`);
-            return;
-        }
-
-        const [r, g, b] = plotData.rgb;
-        console.log(`${color} RGB:`, r, g, b);
-
-        const trace = {
-            x: plotData.wavelengths,
-            y: plotData.reflectances,
-            type: 'scatter',
-            mode: 'lines',
-            name: plotData.name || color.charAt(0).toUpperCase() + color.slice(1),
-            line: {
-                color: `rgb(${r}, ${g}, ${b})`,
-                width: 2
-            }
-        };
-
-        const layout = {
-            title: `${plotData.name || color.charAt(0).toUpperCase() + color.slice(1)} Spectrum`,
-            xaxis: {
-                title: 'Wavelength (nm)',
-                range: [400, 700],
-                showgrid: true,
-                gridcolor: '#ddd'
-            },
-            yaxis: {
-                title: 'Reflectance',
-                range: [0, 1],
-                showgrid: true,
-                gridcolor: '#ddd'
-            },
-            margin: { t: 30, r: 20, b: 40, l: 50 },
-            paper_bgcolor: 'white',
-            plot_bgcolor: 'white'
-        };
-
-        Plotly.newPlot(plotDiv, [trace], layout);
+        return Math.max(1e-4, Math.min(1, v));
     });
+}
 
-    // Initialize the spectral mixer
-    window.spectralMixer = new SpectralMixer();
-}); 
+function spectrumLayout(title) {
+    return {
+        title: { text: title, font: { size: 13 } },
+        xaxis: { title: 'Wavelength (nm)', range: [380, 750], showgrid: true, gridcolor: '#eee' },
+        yaxis: { title: 'Reflectance', range: [0, 1], showgrid: true, gridcolor: '#eee' },
+        margin: { t: 30, r: 12, b: 36, l: 44 },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+    };
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    // eslint-disable-next-line no-new
+    new SpectralMixer();
+});

@@ -345,3 +345,25 @@ input[type="radio"]:checked + .toggle-btn {
   position: absolute; inset: 0; width: 100%; height: 100%;
   border: none; border-radius: var(--radius-md);
 }
+
+/* ── Pigment dial (shared by /lab, /spectral and the game's dialer input) ──── */
+.dial {
+  position: relative;
+  width: 62px; height: 62px;
+  display: grid; place-items: center;
+  touch-action: none;            /* vertical drag adjusts, never scrolls */
+  cursor: ns-resize;
+}
+.dial-ring {
+  position: absolute; inset: 0;
+  transform: rotate(135deg);     /* 270° dial, gap centred at the bottom */
+  pointer-events: none; overflow: visible;
+}
+.dial-track { fill: none; stroke: var(--border); stroke-width: 7; }
+.dial-fill  { fill: none; stroke-width: 7; stroke-linecap: round; }
+@media (prefers-reduced-motion: no-preference) {
+  .dial-fill { transition: stroke-dasharray 0.08s linear; }
+}
+
+/* Gate the dialer the same way the game gates the discs (before Start / after finish). */
+.mixing-disabled .dial { pointer-events: none; opacity: 0.4; filter: grayscale(0.5); }

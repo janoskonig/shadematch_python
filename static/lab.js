@@ -1,5 +1,9 @@
 /**
- * Standalone mix lab: same Mixbox latent mixing as main.js, no game / telemetry.
+ * Standalone mix lab. Free mixer (no game / telemetry) with two switchable dimensions:
+ *   - mixing model: 'mixbox' or 'spectral' (Kubelka–Munk, via spectral.js)
+ *   - input mode:   'integer' (drop buttons) or 'dialer' (continuous knobs)
+ * Mixing is delegated to the shared MixingCore; the dial UI to the shared Dialer.
+ * Saves to the catalog are tagged with the chosen model + input.
  */
 (function () {
   const baseColors = {
@@ -10,8 +14,22 @@
     blue: [0, 0, 255],
   };
 
+  const PALETTE_KEYS = ['white', 'black', 'red', 'yellow', 'blue'];
+  const DIAL_MAX = 10;
+
+  // dropCounts holds the per-pigment amount (whole in integer mode, fractional in dialer mode).
   let dropCounts = { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
   let currentRgb = [255, 255, 255];
+
+  let mixingModel = (localStorage.getItem('lab_mixing_model') === 'spectral') ? 'spectral' : 'mixbox';
+  let inputMode = (localStorage.getItem('lab_input_mode') === 'dialer') ? 'dialer' : 'integer';
+  let core = null;
+  let dialApi = null;
+
+  function formatAmount(n) {
+    return Number.isInteger(n) ? String(n) : n.toFixed(1);
+  }
+
   const pigmentOrder = ['red', 'yellow', 'white', 'blue', 'black'];
   const pigmentHex = {
     red: '#ef4444',
@@ -43,48 +61,31 @@
     if (sw) sw.style.backgroundColor = 'rgb(' + r + ',' + g + ',' + b + ')';
   }
 
-  function updateBadge(color, count) {
+  // Reflect one pigment's amount on its badge, disc text and dial ring.
+  function renderPigment(color, opts) {
+    const n = dropCounts[color] || 0;
+    const txt = formatAmount(n);
     const badge = document.querySelector('#labPalette .drop-badge[data-badge-for="' + color + '"]');
     if (badge) {
-      badge.textContent = count;
-      badge.classList.add('is-bumped');
-      setTimeout(function () { badge.classList.remove('is-bumped'); }, 150);
-    }
-  }
-
-  function resetAllBadges() {
-    document.querySelectorAll('#labPalette .drop-badge').forEach(function (b) {
-      b.textContent = '0';
-    });
-  }
-
-  function updateMixed() {
-    const totalDrops = Object.values(dropCounts).reduce(function (a, b) { return a + b; }, 0);
-    if (totalDrops === 0) {
-      currentRgb = [255, 255, 255];
-      document.querySelectorAll('#labPalette .color-circle').forEach(function (c) {
-        c.textContent = '0';
-      });
-      resetAllBadges();
-      updateRgbPanel(currentRgb);
-      return currentRgb;
-    }
-
-    if (typeof mixbox === 'undefined' || !mixbox.rgbToLatent || !mixbox.latentToRgb) {
-      console.error('mixbox.js not loaded');
-      return currentRgb;
-    }
-
-    const zMix = new Array(mixbox.LATENT_SIZE).fill(0);
-    for (const color in dropCounts) {
-      const count = dropCounts[color];
-      if (count > 0) {
-        const rgb = baseColors[color];
-        const z = mixbox.rgbToLatent(rgb[0], rgb[1], rgb[2]);
-        for (let i = 0; i < zMix.length; i++) zMix[i] += (count / totalDrops) * z[i];
+      badge.textContent = txt;
+      if (opts && opts.bump) {
+        badge.classList.add('is-bumped');
+        setTimeout(function () { badge.classList.remove('is-bumped'); }, 150);
       }
     }
-    currentRgb = mixbox.latentToRgb(zMix).map(Math.round);
+    const circle = document.querySelector('#labPalette .color-circle[data-color="' + color + '"]');
+    if (circle) circle.textContent = txt;
+    if (dialApi) dialApi.render(color, n);
+  }
+
+  function renderAllPigments() {
+    PALETTE_KEYS.forEach(function (k) { renderPigment(k); });
+  }
+
+  // Mix via the shared core (branches on the selected model). Returns the mixed RGB.
+  function updateMixed() {
+    const result = core ? core.mix(mixingModel, dropCounts) : { rgb: [255, 255, 255] };
+    currentRgb = result.rgb;
     updateRgbPanel(currentRgb);
     return currentRgb;
   }
@@ -372,26 +373,122 @@
     el.style.color = isError ? 'var(--accent-danger, #c0392b)' : 'var(--text-secondary)';
   }
 
+  function setMixingModel(model) {
+    mixingModel = (model === 'spectral') ? 'spectral' : 'mixbox';
+    localStorage.setItem('lab_mixing_model', mixingModel);
+    syncSegUI();
+    updateMixed();
+  }
+
+  function setInputMode(mode) {
+    inputMode = (mode === 'dialer') ? 'dialer' : 'integer';
+    localStorage.setItem('lab_input_mode', inputMode);
+    applyModeClasses();
+    syncSegUI();
+  }
+
+  function applyModeClasses() {
+    const palette = document.getElementById('labPalette');
+    if (!palette) return;
+    palette.classList.toggle('mode-integer', inputMode === 'integer');
+    palette.classList.toggle('mode-dialer', inputMode === 'dialer');
+  }
+
+  function syncSegUI() {
+    document.querySelectorAll('#labModelSeg .seg-btn').forEach(function (b) {
+      b.classList.toggle('is-active', b.dataset.model === mixingModel);
+    });
+    document.querySelectorAll('#labInputSeg .seg-btn').forEach(function (b) {
+      b.classList.toggle('is-active', b.dataset.input === inputMode);
+    });
+  }
+
+  // Move each .color-circle inside a .dial wrapper with a ring (used by dialer mode;
+  // harmless and hidden in integer mode).
+  function wrapCirclesInDials(palette) {
+    palette.querySelectorAll('.color-control').forEach(function (ctrl) {
+      const circle = ctrl.querySelector('.color-circle');
+      if (!circle || circle.closest('.dial')) return;
+      const key = circle.dataset.color;
+      const dial = document.createElement('div');
+      dial.className = 'dial';
+      dial.dataset.color = key;
+      dial.setAttribute('role', 'slider');
+      dial.setAttribute('tabindex', '0');
+      dial.setAttribute('aria-label', key + ' amount');
+      dial.setAttribute('aria-valuemin', '0');
+      dial.setAttribute('aria-valuemax', String(DIAL_MAX));
+      dial.setAttribute('aria-valuenow', '0');
+      circle.parentNode.insertBefore(dial, circle);
+      dial.innerHTML = Dialer.ringSVG(key);
+      dial.appendChild(circle);
+    });
+  }
+
+  function nudge(color, delta) {
+    dropCounts[color] = Math.max(0, (dropCounts[color] || 0) + delta);
+    renderPigment(color, { bump: true });
+    updateMixed();
+  }
+
+  function setAmount(color, value) {
+    dropCounts[color] = Math.max(0, Math.min(DIAL_MAX, value));
+    renderPigment(color);
+    updateMixed();
+  }
+
   document.addEventListener('DOMContentLoaded', function () {
     const palette = document.getElementById('labPalette');
     if (!palette) return;
 
-    updateRgbPanel(currentRgb);
+    core = new MixingCore({ baseRGB: baseColors, spectrumPlots: window.spectrum_plots });
+
+    wrapCirclesInDials(palette);
+    dialApi = Dialer.attach(palette, {
+      max: DIAL_MAX,
+      getAmount: function (key) { return dropCounts[key] || 0; },
+      colorFor: function (key) {
+        const s = core.spectraSwatch && core.spectraSwatch[key];
+        const rgb = s || baseColors[key];
+        const lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+        return lum > 210 ? '#8a8580' : 'rgb(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ')';
+      },
+      onTap: function (key) {
+        if (inputMode !== 'dialer') return;
+        const c = document.querySelector('#labPalette .color-circle[data-color="' + key + '"]');
+        if (c) { c.classList.add('is-tapped'); setTimeout(function () { c.classList.remove('is-tapped'); }, 200); }
+        nudge(key, +1);
+        enqueueLivePoint('add', key);
+      },
+      onInput: function (key, v) { if (inputMode === 'dialer') setAmount(key, v); },
+      onCommit: function (key) { if (inputMode === 'dialer') enqueueLivePoint('set', key); },
+    });
+
+    applyModeClasses();
+    syncSegUI();
+    renderAllPigments();
+    updateMixed();
     setTargetMeta();
     renderLivePlot();
     loadTargets();
 
+    document.querySelectorAll('#labModelSeg .seg-btn').forEach(function (b) {
+      b.addEventListener('click', function () { setMixingModel(b.dataset.model); });
+    });
+    document.querySelectorAll('#labInputSeg .seg-btn').forEach(function (b) {
+      b.addEventListener('click', function () { setInputMode(b.dataset.input); });
+    });
+
+    // Integer mode: tap disc = +1 (dialer mode handles taps via the Dialer).
     palette.querySelectorAll('.color-circle').forEach(function (circle) {
       circle.addEventListener('click', function (e) {
         e.preventDefault();
+        if (inputMode !== 'integer') return;
         const color = circle.dataset.color;
-        dropCounts[color]++;
-        circle.textContent = dropCounts[color];
-        updateBadge(color, dropCounts[color]);
+        nudge(color, +1);
         circle.classList.add('is-tapped');
         setTimeout(function () { circle.classList.remove('is-tapped'); }, 200);
         if (navigator.vibrate) navigator.vibrate(15);
-        updateMixed();
         enqueueLivePoint('add', color);
       });
     });
@@ -400,12 +497,8 @@
       button.addEventListener('click', function (e) {
         e.preventDefault();
         const color = button.dataset.color;
-        if (dropCounts[color] <= 0) return;
-        dropCounts[color]--;
-        const circle = palette.querySelector('.color-circle[data-color="' + color + '"]');
-        if (circle) circle.textContent = dropCounts[color];
-        updateBadge(color, dropCounts[color]);
-        updateMixed();
+        if ((dropCounts[color] || 0) <= 0) return;
+        nudge(color, -1);
         enqueueLivePoint('remove', color);
       });
     });
@@ -414,10 +507,7 @@
     if (resetBtn) {
       resetBtn.addEventListener('click', function () {
         dropCounts = { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
-        palette.querySelectorAll('.color-circle').forEach(function (c) {
-          c.textContent = '0';
-        });
-        resetAllBadges();
+        renderAllPigments();
         currentRgb = [255, 255, 255];
         updateRgbPanel(currentRgb);
         setStatus('');
@@ -431,31 +521,31 @@
         var rgb = updateMixed();
         var nameInput = document.getElementById('labColorName');
         var name = nameInput ? nameInput.value : '';
+        var allWhole = PALETTE_KEYS.every(function (k) { return Number.isInteger(dropCounts[k] || 0); });
+        var payload = {
+          r: rgb[0], g: rgb[1], b: rgb[2], name: name,
+          mixing_model: mixingModel, input_mode: inputMode,
+        };
+        // Only integer-mode whole-drop recipes map to the catalog's integer drop columns.
+        if (inputMode === 'integer' && allWhole) {
+          payload.drops = {
+            white: dropCounts.white | 0, black: dropCounts.black | 0,
+            red: dropCounts.red | 0, yellow: dropCounts.yellow | 0, blue: dropCounts.blue | 0,
+          };
+        }
         saveBtn.disabled = true;
         setStatus('Saving…');
         fetch('/api/lab/save-target-color', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            r: rgb[0],
-            g: rgb[1],
-            b: rgb[2],
-            name: name,
-            drops: {
-              white: dropCounts.white | 0,
-              black: dropCounts.black | 0,
-              red: dropCounts.red | 0,
-              yellow: dropCounts.yellow | 0,
-              blue: dropCounts.blue | 0,
-            },
-          }),
+          body: JSON.stringify(payload),
         })
           .then(function (res) { return res.json().then(function (data) { return { res: res, data: data }; }); })
           .then(function (_ref) {
             var res = _ref.res;
             var data = _ref.data;
             if (res.ok && data.status === 'success' && data.target_color) {
-              setStatus('Saved as “' + data.target_color.name + '” (catalog id ' + data.target_color.id + ').', false);
+              setStatus('Saved as “' + data.target_color.name + '” (' + mixingModel + ' · ' + inputMode + ', catalog id ' + data.target_color.id + ').', false);
             } else {
               setStatus((data && data.message) || 'Save failed.', true);
             }

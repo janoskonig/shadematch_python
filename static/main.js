@@ -36,6 +36,16 @@ const CLIENT_SESSION_ID = (() => {
 
 const MIXING_TELEMETRY_ENDPOINT = '/api/mixing-attempt/ingest';
 const MIXING_START_UPDATE_ENDPOINT = '/api/mixing-attempt/start-or-update';
+
+// Player-switchable mixing configuration. 'mixbox' = Mixbox; 'spectral' = Kubelka–Munk.
+// 'integer' = drop buttons; 'dialer' = continuous knobs. Defaults reproduce the
+// classic game exactly. Persisted across sessions.
+window.gameMixingModel = (localStorage.getItem('game_mixing_model') === 'spectral') ? 'spectral' : 'mixbox';
+window.gameInputMode = (localStorage.getItem('game_input_mode') === 'dialer') ? 'dialer' : 'integer';
+
+function formatAmount(n) {
+  return Number.isInteger(n) ? String(n) : Number(n).toFixed(1);
+}
 const APP_VERSION = document.documentElement?.dataset?.appVersion || null;
 
 let telemetryAttempt = null;
@@ -90,12 +100,13 @@ function getTimerSec() {
 }
 
 function cloneDrops() {
+  // Preserve fractional amounts (dialer mode); integer mode stays whole.
   return {
-    white: dropCounts.white | 0,
-    black: dropCounts.black | 0,
-    red: dropCounts.red | 0,
-    yellow: dropCounts.yellow | 0,
-    blue: dropCounts.blue | 0,
+    white: +dropCounts.white || 0,
+    black: +dropCounts.black || 0,
+    red: +dropCounts.red || 0,
+    yellow: +dropCounts.yellow || 0,
+    blue: +dropCounts.blue || 0,
   };
 }
 
@@ -115,6 +126,7 @@ function buildMixSnapshot({ mixedRgbOverride, deltaEOverride, timerSecOverride }
 function actionTypeFromEventType(eventType, metadata = null) {
   if (eventType === 'action_add') return 'add';
   if (eventType === 'action_remove') return 'remove';
+  if (eventType === 'action_set') return 'set';
   if (eventType === 'boundary_reset') return 'reset';
   if (eventType === 'boundary_skip') return 'skip';
   if (eventType === 'boundary_save') {
@@ -126,7 +138,7 @@ function actionTypeFromEventType(eventType, metadata = null) {
 }
 
 function isDecisionAction(actionType) {
-  return ['add', 'remove', 'reset', 'stop', 'skip', 'success'].includes(actionType);
+  return ['add', 'remove', 'set', 'reset', 'stop', 'skip', 'success'].includes(actionType);
 }
 
 function rgbFields(snapshot, prefix) {
@@ -148,11 +160,11 @@ function serializeAttemptHeader(attempt) {
     target_r: attempt.target_rgb[0],
     target_g: attempt.target_rgb[1],
     target_b: attempt.target_rgb[2],
-    initial_drop_white: attempt.initial_snapshot.drops.white,
-    initial_drop_black: attempt.initial_snapshot.drops.black,
-    initial_drop_red: attempt.initial_snapshot.drops.red,
-    initial_drop_yellow: attempt.initial_snapshot.drops.yellow,
-    initial_drop_blue: attempt.initial_snapshot.drops.blue,
+    initial_drop_white: Math.round(attempt.initial_snapshot.drops.white),
+    initial_drop_black: Math.round(attempt.initial_snapshot.drops.black),
+    initial_drop_red: Math.round(attempt.initial_snapshot.drops.red),
+    initial_drop_yellow: Math.round(attempt.initial_snapshot.drops.yellow),
+    initial_drop_blue: Math.round(attempt.initial_snapshot.drops.blue),
     initial_mixed_r: attempt.initial_snapshot.mixed_rgb[0],
     initial_mixed_g: attempt.initial_snapshot.mixed_rgb[1],
     initial_mixed_b: attempt.initial_snapshot.mixed_rgb[2],
@@ -165,6 +177,8 @@ function serializeAttemptHeader(attempt) {
     num_steps: attempt.decisionStepIndex,
     app_version: APP_VERSION,
     client_env_json: attempt.client_env_json || null,
+    mixing_model: window.gameMixingModel,
+    input_mode: window.gameInputMode,
   };
 }
 
@@ -773,16 +787,30 @@ function setControlState(state) {
 }
 
 // ── Mixing enable/disable ─────────────────────────────────────────────────
+// Lock the model/input selector while an attempt is active so a single attempt is
+// never recorded under two conditions (the attempt header is first-write-wins).
+function setMixingSelectorsLocked(locked) {
+  document.querySelectorAll('#gameModelSeg .seg-btn, #gameInputSeg .seg-btn').forEach((b) => {
+    b.disabled = locked;
+  });
+  document.querySelectorAll('#gameModelSeg, #gameInputSeg').forEach((g) => {
+    g.classList.toggle('seg-locked', locked);
+  });
+}
+
 function disableColorMixing() {
   const mc = document.getElementById('mainContent');
   if (mc) mc.classList.add('mixing-disabled');
+  setMixingSelectorsLocked(false);   // between attempts → free to switch condition
 }
 window.disableColorMixing = disableColorMixing;
 
 function enableColorMixing() {
   const mc = document.getElementById('mainContent');
   if (mc) mc.classList.remove('mixing-disabled');
+  setMixingSelectorsLocked(true);    // attempt in progress → lock the condition
 }
+window.enableColorMixing = enableColorMixing;
 
 window.currentUserBirthdate = localStorage.getItem('userBirthdate');
 window.currentUserGender = localStorage.getItem('userGender');
@@ -792,6 +820,12 @@ let dropCounts = { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
 window.shadeMatchDropCounts = dropCounts;
 let currentTargetColor = null;
 let targetColor = [255, 255, 255];
+let dialApi = null;   // set once the dialer is attached (see palette setup)
+
+function renderAllDials() {
+  if (!dialApi) return;
+  ['white', 'black', 'red', 'yellow', 'blue'].forEach((k) => dialApi.render(k, dropCounts[k] || 0));
+}
 
 function resetMix() {
   document.querySelectorAll('.color-circle').forEach(circle => { circle.textContent = '0'; });
@@ -803,6 +837,7 @@ function resetMix() {
   dropCounts = { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
   window.shadeMatchDropCounts = dropCounts;
   resetAllBadges();
+  renderAllDials();
   updateRecipeStrip(dropCounts);
 
   const matchContainer = document.getElementById('matchBarContainer');
@@ -862,12 +897,14 @@ async function saveSessionToServer(session) {
       user_id: window.currentUserId,
       target_color_id: session.target_color_id ?? null,
       target_r: session.target[0], target_g: session.target[1], target_b: session.target[2],
-      drop_white: session.drops.white, drop_black: session.drops.black,
-      drop_red: session.drops.red, drop_yellow: session.drops.yellow, drop_blue: session.drops.blue,
+      drop_white: Math.round(session.drops.white || 0), drop_black: Math.round(session.drops.black || 0),
+      drop_red: Math.round(session.drops.red || 0), drop_yellow: Math.round(session.drops.yellow || 0),
+      drop_blue: Math.round(session.drops.blue || 0),
       mixed_r: mix[0], mixed_g: mix[1], mixed_b: mix[2],
       delta_e: session.deltaE, time_sec: session.time,
       timestamp: session.timestamp, skipped: session.skipped || false,
       attempt_ended_client_ts_ms: session.attempt_ended_client_ts_ms ?? null,
+      mixing_model: window.gameMixingModel, input_mode: window.gameInputMode,
     };
   } else {
     sessionData = {
@@ -880,6 +917,7 @@ async function saveSessionToServer(session) {
       delta_e: session.delta_e, time_sec: session.time_sec,
       timestamp: session.timestamp, skipped: session.skipped || false,
       attempt_ended_client_ts_ms: session.attempt_ended_client_ts_ms ?? null,
+      mixing_model: window.gameMixingModel, input_mode: window.gameInputMode,
     };
     const mix = Array.isArray(session.mixed_rgb) && session.mixed_rgb.length === 3
       ? session.mixed_rgb
@@ -917,6 +955,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     white: [255, 255, 255], black: [0, 0, 0],
     red: [255, 0, 0], yellow: [255, 255, 0], blue: [0, 0, 255],
   };
+
+  // Shared mixing core: branches Mixbox (rgb) vs Kubelka–Munk (spectral) by window.gameMixingModel.
+  const mixCore = new MixingCore({ baseRGB: baseColors, spectrumPlots: window.spectrum_plots });
 
   let fullCatalog = [];
   const targetColors = [];
@@ -1114,17 +1155,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       return { stepId, mixedRGB: [...currentMixedRgb], deltaEResolvedAtEmit: null };
     }
 
-    let zMix = new Array(mixbox.LATENT_SIZE).fill(0);
-    for (let color in dropCounts) {
-      const count = dropCounts[color];
-      if (count > 0) {
-        const [r, g, b] = baseColors[color];
-        const z = mixbox.rgbToLatent(r, g, b);
-        for (let i = 0; i < zMix.length; i++) zMix[i] += (count / totalDrops) * z[i];
-      }
-    }
-
-    currentMixedRgb = mixbox.latentToRgb(zMix).map(Math.round);
+    currentMixedRgb = mixCore.mix(window.gameMixingModel, dropCounts).rgb;
     updateBox('currentMix', currentMixedRgb);
     document.getElementById('mixedRgbValues').textContent = `RGB: [${currentMixedRgb.join(', ')}]`;
 
@@ -1226,8 +1257,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         user_id: window.currentUserId,
         target_color_id: currentTargetColor.id,
         target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
-        drop_white: dropCounts.white || 0, drop_black: dropCounts.black || 0,
-        drop_red: dropCounts.red || 0, drop_yellow: dropCounts.yellow || 0, drop_blue: dropCounts.blue || 0,
+        drop_white: Math.round(dropCounts.white || 0), drop_black: Math.round(dropCounts.black || 0),
+        drop_red: Math.round(dropCounts.red || 0), drop_yellow: Math.round(dropCounts.yellow || 0),
+        drop_blue: Math.round(dropCounts.blue || 0),
         mixed_r: currentMixedRgb[0],
         mixed_g: currentMixedRgb[1],
         mixed_b: currentMixedRgb[2],
@@ -1236,6 +1268,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         delta_e: currentDeltaE,
         skip_perception: skipPerception,
         attempt_ended_client_ts_ms: nowClientTsMs(),
+        mixing_model: window.gameMixingModel, input_mode: window.gameInputMode,
       };
       await flushTelemetry({
         finalize: true,
@@ -1334,87 +1367,182 @@ document.addEventListener('DOMContentLoaded', async () => {
     beginAttemptForCurrentTarget();
   });
 
-  // ── Palette interaction ────────────────────────────────────────────────
+  // ── Palette interaction (integer drops + dialer knobs) ─────────────────
   let _firstInteractionFired = false;
+  const _dragBefore = {};
+
+  function setDropDisplay(color, opts) {
+    const n = dropCounts[color] || 0;
+    const txt = formatAmount(n);
+    const circle = document.querySelector(`.color-circle[data-color="${color}"]`);
+    if (circle) circle.textContent = txt;
+    const badge = document.querySelector(`.drop-badge[data-badge-for="${color}"]`);
+    if (badge) {
+      badge.textContent = txt;
+      if (opts && opts.bump) {               // bounce only on discrete actions, not per drag tick
+        badge.classList.add('is-bumped');
+        setTimeout(() => badge.classList.remove('is-bumped'), 150);
+      }
+    }
+    if (dialApi) dialApi.render(color, n);
+  }
+
+  // Brief press feedback on the disc — shared by integer click and dialer tap.
+  function pressDisc(color) {
+    const circle = document.querySelector(`.color-circle[data-color="${color}"]`);
+    if (!circle) return;
+    circle.classList.add('is-tapped');
+    setTimeout(() => circle.classList.remove('is-tapped'), 200);
+  }
+
+  function latchFirstActionTs(clickTs) {
+    if (telemetryAttempt && telemetryAttempt.first_action_client_ts_ms == null) {
+      telemetryAttempt.first_action_client_ts_ms = clickTs;
+      postAttemptHeaderUpdate();
+    }
+  }
+
+  function performAdd(color, interaction) {
+    const clickTs = nowClientTsMs();
+    const beforeSnapshot = buildMixSnapshot();
+    dropCounts[color] = (dropCounts[color] || 0) + 1;
+    setDropDisplay(color, { bump: true });
+    pressDisc(color);
+    if (!_firstInteractionFired) {
+      _firstInteractionFired = true;
+      trackEvent('first_palette_interaction', { color });
+    }
+    if (navigator.vibrate) navigator.vibrate(15);
+    latchFirstActionTs(clickTs);
+    const mixResult = updateCurrentMix();
+    const afterSnapshot = buildMixSnapshot({ mixedRgbOverride: mixResult?.mixedRGB, deltaEOverride: null });
+    enqueueTelemetryEvent({
+      event_type: 'action_add', action_color: color, client_ts_ms: clickTs,
+      state_before_json: beforeSnapshot, state_after_json: afterSnapshot,
+      metadata_json: { step_id: mixResult?.stepId ?? null, interaction: interaction || 'click_add' },
+    });
+  }
+
+  function performRemove(color) {
+    if ((dropCounts[color] || 0) <= 0) return;
+    const clickTs = nowClientTsMs();
+    const beforeSnapshot = buildMixSnapshot();
+    dropCounts[color] = Math.max(0, (dropCounts[color] || 0) - 1);
+    setDropDisplay(color, { bump: true });
+    latchFirstActionTs(clickTs);
+    const mixResult = updateCurrentMix();
+    const afterSnapshot = buildMixSnapshot({ mixedRgbOverride: mixResult?.mixedRGB, deltaEOverride: null });
+    enqueueTelemetryEvent({
+      event_type: 'action_remove', action_color: color, client_ts_ms: clickTs,
+      state_before_json: beforeSnapshot, state_after_json: afterSnapshot,
+      metadata_json: { step_id: mixResult?.stepId ?? null, interaction: 'click_remove' },
+    });
+  }
+
+  // Dialer drag: update continuously (no per-move telemetry); capture pre-drag state.
+  function performSet(color, value) {
+    if (!_dragBefore[color]) _dragBefore[color] = buildMixSnapshot();
+    dropCounts[color] = Math.max(0, Math.min(10, value));
+    setDropDisplay(color);
+    updateCurrentMix();
+  }
+
+  // Dialer drag settled: emit a single action_set event for the gesture.
+  function commitSet(color) {
+    const beforeSnapshot = _dragBefore[color] || buildMixSnapshot();
+    _dragBefore[color] = null;
+    const clickTs = nowClientTsMs();
+    if (!_firstInteractionFired) { _firstInteractionFired = true; trackEvent('first_palette_interaction', { color }); }
+    latchFirstActionTs(clickTs);
+    const mixResult = updateCurrentMix();
+    const afterSnapshot = buildMixSnapshot({ mixedRgbOverride: mixResult?.mixedRGB, deltaEOverride: null });
+    enqueueTelemetryEvent({
+      event_type: 'action_set', action_color: color, client_ts_ms: clickTs,
+      state_before_json: beforeSnapshot, state_after_json: afterSnapshot,
+      metadata_json: { step_id: mixResult?.stepId ?? null, interaction: 'dial_set' },
+    });
+  }
+
+  // Integer mode: tap disc = +1 (dialer taps are handled by the Dialer).
   document.querySelectorAll('.color-circle').forEach(circle => {
     circle.addEventListener('click', (e) => {
       e.preventDefault();
-      const color = circle.dataset.color;
-      const clickTs = nowClientTsMs();
-      const beforeSnapshot = buildMixSnapshot();
-      dropCounts[color]++;
-      circle.textContent = dropCounts[color];
-      updateBadge(color, dropCounts[color]);
-
-      if (!_firstInteractionFired) {
-        _firstInteractionFired = true;
-        trackEvent('first_palette_interaction', { color });
-      }
-
-      circle.classList.add('is-tapped');
-      setTimeout(() => circle.classList.remove('is-tapped'), 200);
-      if (navigator.vibrate) navigator.vibrate(15);
-
-      const mixResult = updateCurrentMix();
-      const afterSnapshot = buildMixSnapshot({
-        mixedRgbOverride: mixResult?.mixedRGB,
-        deltaEOverride: null,
-      });
-
-      if (telemetryAttempt && telemetryAttempt.first_action_client_ts_ms == null) {
-        telemetryAttempt.first_action_client_ts_ms = clickTs;
-        postAttemptHeaderUpdate();
-      }
-
-      enqueueTelemetryEvent({
-        event_type: 'action_add',
-        action_color: color,
-        client_ts_ms: clickTs,
-        state_before_json: beforeSnapshot,
-        state_after_json: afterSnapshot,
-        metadata_json: {
-          step_id: mixResult?.stepId ?? null,
-          interaction: 'click_add',
-        },
-      });
+      if (window.gameInputMode !== 'integer') return;
+      performAdd(circle.dataset.color, 'click_add');
     });
   });
 
   document.querySelectorAll('.minus-button').forEach(button => {
     button.addEventListener('click', (e) => {
       e.preventDefault();
-      const color = button.dataset.color;
-      if (dropCounts[color] > 0) {
-        const clickTs = nowClientTsMs();
-        const beforeSnapshot = buildMixSnapshot();
-        dropCounts[color]--;
-        document.querySelector(`.color-circle[data-color='${color}']`).textContent = dropCounts[color];
-        updateBadge(color, dropCounts[color]);
-        const mixResult = updateCurrentMix();
-        const afterSnapshot = buildMixSnapshot({
-          mixedRgbOverride: mixResult?.mixedRGB,
-          deltaEOverride: null,
-        });
-
-        if (telemetryAttempt && telemetryAttempt.first_action_client_ts_ms == null) {
-          telemetryAttempt.first_action_client_ts_ms = clickTs;
-          postAttemptHeaderUpdate();
-        }
-
-        enqueueTelemetryEvent({
-          event_type: 'action_remove',
-          action_color: color,
-          client_ts_ms: clickTs,
-          state_before_json: beforeSnapshot,
-          state_after_json: afterSnapshot,
-          metadata_json: {
-            step_id: mixResult?.stepId ?? null,
-            interaction: 'click_remove',
-          },
-        });
-      }
+      performRemove(button.dataset.color);
     });
   });
+
+  // Wrap discs in dials + attach the shared Dialer (used in dialer mode).
+  const gamePalette = document.getElementById('palette');
+  if (gamePalette && window.Dialer) {
+    gamePalette.querySelectorAll('.color-control').forEach((ctrl) => {
+      const circle = ctrl.querySelector('.color-circle');
+      if (!circle || circle.closest('.dial')) return;
+      const key = circle.dataset.color;
+      const dial = document.createElement('div');
+      dial.className = 'dial';
+      dial.dataset.color = key;
+      dial.setAttribute('role', 'slider');
+      dial.setAttribute('tabindex', '0');
+      dial.setAttribute('aria-label', key + ' amount');
+      dial.setAttribute('aria-valuemin', '0');
+      dial.setAttribute('aria-valuemax', '10');
+      dial.setAttribute('aria-valuenow', '0');
+      circle.parentNode.insertBefore(dial, circle);
+      dial.innerHTML = window.Dialer.ringSVG(key);
+      dial.appendChild(circle);
+    });
+    dialApi = window.Dialer.attach(gamePalette, {
+      max: 10,
+      getAmount: (key) => dropCounts[key] || 0,
+      colorFor: (key) => {
+        const s = mixCore.spectraSwatch && mixCore.spectraSwatch[key];
+        const rgb = s || baseColors[key];
+        const lum = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2];
+        return lum > 210 ? '#8a8580' : `rgb(${rgb[0]},${rgb[1]},${rgb[2]})`;
+      },
+      onTap: (key) => { if (window.gameInputMode === 'dialer') performAdd(key, 'dial_tap'); },
+      onInput: (key, v) => { if (window.gameInputMode === 'dialer') performSet(key, v); },
+      onCommit: (key) => { if (window.gameInputMode === 'dialer') commitSet(key); },
+    });
+  }
+
+  function applyGameModeClasses() {
+    if (!gamePalette) return;
+    gamePalette.classList.toggle('mode-integer', window.gameInputMode === 'integer');
+    gamePalette.classList.toggle('mode-dialer', window.gameInputMode === 'dialer');
+  }
+  function syncGameSegUI() {
+    document.querySelectorAll('#gameModelSeg .seg-btn').forEach((b) => b.classList.toggle('is-active', b.dataset.model === window.gameMixingModel));
+    document.querySelectorAll('#gameInputSeg .seg-btn').forEach((b) => b.classList.toggle('is-active', b.dataset.input === window.gameInputMode));
+  }
+  document.querySelectorAll('#gameModelSeg .seg-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      window.gameMixingModel = (b.dataset.model === 'spectral') ? 'spectral' : 'mixbox';
+      localStorage.setItem('game_mixing_model', window.gameMixingModel);
+      syncGameSegUI();
+      updateCurrentMix();
+    });
+  });
+  document.querySelectorAll('#gameInputSeg .seg-btn').forEach((b) => {
+    b.addEventListener('click', () => {
+      window.gameInputMode = (b.dataset.input === 'dialer') ? 'dialer' : 'integer';
+      localStorage.setItem('game_input_mode', window.gameInputMode);
+      applyGameModeClasses();
+      syncGameSegUI();
+    });
+  });
+
+  applyGameModeClasses();
+  syncGameSegUI();
+  renderAllDials();
 });
 
 // ── Login form handler ────────────────────────────────────────────────────

@@ -269,12 +269,13 @@ def index():
         research_consent_intro=RESEARCH_CONSENT_INTRO,
         research_consent_items=RESEARCH_CONSENT_ITEMS,
         research_consent_version=RESEARCH_CONSENT_VERSION,
+        spectrum_plots=build_spectrum_plots(),
     )
 
 
 @main.route('/lab')
 def lab_page():
-    return render_template('lab.html')
+    return render_template('lab.html', spectrum_plots=build_spectrum_plots())
 
 
 @main.route('/performance')
@@ -430,49 +431,109 @@ def stat_attempt_timeline_data():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+# Fixed mapping of the 5 game primaries to measured pigment reflectance files.
+# Keys match the base colors used by the main game (white/black/red/yellow/blue);
+# values are files under static/pigments/. Retune here to swap pigments.
+SPECTRAL_BASE_PIGMENTS = [
+    ('white', 'titanium white.txt'),
+    ('black', 'aniline_black.csv'),
+    ('red', 'cadmium_red.csv'),
+    ('yellow', 'cadmium_yellow.csv'),
+    ('blue', 'ultramarine_blue.csv'),
+]
+
+
+def _load_pigment_spectrum(file_path):
+    """Load a single measured pigment reflectance curve as (wavelengths, reflectances).
+
+    Handles both formats found in static/pigments/:
+      - .csv : 'Wavelength' column + one column per measured sample channel (0-1),
+               averaged across channels.
+      - .txt : space-delimited 2-column 'wavelength reflectance' with reflectance
+               in 0-100, divided by 100 here.
+
+    Reflectances are validated to lie in [0, 1]; anything outside raises loudly
+    rather than being silently rescaled, because a quiet scaling bug here yields
+    plausible-but-wrong colors — the worst failure mode for a research tool.
+    """
+    if file_path.endswith('.csv'):
+        df = pd.read_csv(file_path)
+        wavelengths = df['Wavelength'].tolist()
+        reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
+    else:
+        data = []
+        with open(file_path, 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) == 2:
+                    try:
+                        data.append([float(parts[0]), float(parts[1]) / 100.0])
+                    except ValueError:
+                        continue
+        data = sorted(data, key=lambda x: x[0])
+        wavelengths = [r[0] for r in data]
+        reflectances = [r[1] for r in data]
+
+    if not reflectances:
+        raise ValueError(f"No reflectance samples parsed from {file_path}")
+
+    lo, hi = min(reflectances), max(reflectances)
+    # Tiny float overshoot tolerance only; real out-of-range data must fail.
+    if lo < -1e-6 or hi > 1.0 + 1e-6:
+        raise ValueError(
+            f"Reflectance out of [0,1] range in {os.path.basename(file_path)}: "
+            f"min={lo:.4f}, max={hi:.4f}. Refusing to silently normalize — "
+            f"fix the source units/parsing instead."
+        )
+    return wavelengths, reflectances
+
+
+_SPECTRUM_PLOTS_CACHE = None
+
+
+def build_spectrum_plots():
+    """Measured base-pigment reflectance spectra keyed by palette colour.
+
+    Shared by /spectral, /lab and the main game so any page can run the spectral
+    (Kubelka–Munk) mixing engine on the same base spectra.
+
+    The result is cached after the first successful build (the underlying files are
+    static), and a load failure returns {} (logged) rather than raising — so a missing
+    or malformed pigment file degrades to Mixbox-only instead of 500ing the home page.
+    """
+    global _SPECTRUM_PLOTS_CACHE
+    if _SPECTRUM_PLOTS_CACHE is not None:
+        return _SPECTRUM_PLOTS_CACHE
+
+    try:
+        wavelengths, x_bar, y_bar, z_bar = load_cie_data()
+        pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
+        spectrum_plots = {}
+
+        for color_key, filename in SPECTRAL_BASE_PIGMENTS:
+            file_path = os.path.join(pigments_dir, filename)
+            pigment_wavelengths, reflectances = _load_pigment_spectrum(file_path)
+
+            # Server-side measured swatch color (used only for the base circle/plot line).
+            X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
+            rgb = xyz_to_rgb(X, Y, Z)
+            spectrum_plots[color_key] = {
+                'wavelengths': pigment_wavelengths,
+                'reflectances': reflectances,
+                'rgb': rgb.tolist(),
+                'name': os.path.splitext(filename)[0].replace('_', ' ').title(),
+            }
+
+        _SPECTRUM_PLOTS_CACHE = spectrum_plots
+        return spectrum_plots
+    except Exception:
+        current_app.logger.exception('build_spectrum_plots failed; serving without spectral data')
+        return {}
+
+
 @main.route('/spectral')
 def spectral():
-    wavelengths, x_bar, y_bar, z_bar = load_cie_data()
-    pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
-    spectrum_plots = {}
-
-    for filename in os.listdir(pigments_dir):
-        if filename.endswith(('.csv', '.txt')):
-            file_path = os.path.join(pigments_dir, filename)
-            try:
-                if filename.endswith('.csv'):
-                    df = pd.read_csv(file_path)
-                    pigment_wavelengths = df['Wavelength'].tolist()
-                    reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
-                else:
-                    data = []
-                    with open(file_path, 'r') as f:
-                        for line in f:
-                            parts = line.strip().split()
-                            if len(parts) == 2:
-                                try:
-                                    data.append([float(parts[0]), float(parts[1]) / 100.0])
-                                except ValueError:
-                                    continue
-                    if not data:
-                        continue
-                    data = sorted(data, key=lambda x: x[0])
-                    pigment_wavelengths = [r[0] for r in data]
-                    reflectances = [r[1] for r in data]
-
-                X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
-                rgb = xyz_to_rgb(X, Y, Z)
-                color_key = os.path.splitext(filename)[0].lower()
-                spectrum_plots[color_key] = {
-                    'wavelengths': pigment_wavelengths,
-                    'reflectances': reflectances,
-                    'rgb': rgb.tolist(),
-                    'name': os.path.splitext(filename)[0].replace('_', ' ').title(),
-                }
-            except Exception as e:
-                print(f"Error loading {filename}: {e}")
-
-    return render_template('spectral_mixer.html', spectrum_plots=spectrum_plots)
+    return render_template('spectral_mixer.html', spectrum_plots=build_spectrum_plots())
 
 
 # ── Auth ───────────────────────────────────────────────────────────────────
@@ -893,6 +954,10 @@ def _target_color_public_dict(tc):
     drops = _target_color_drops_for_api(tc)
     if drops is not None:
         entry['drops'] = drops
+    if tc.mixing_model:
+        entry['mixing_model'] = tc.mixing_model
+    if tc.input_mode:
+        entry['input_mode'] = tc.input_mode
     return entry
 
 
@@ -1000,6 +1065,7 @@ def lab_save_target_color():
     next_order = (int(max_order) if max_order is not None else -1) + 1
 
     drops_tuple = _parse_lab_drops_payload(data)
+    mixing_model, input_mode = _extract_mixing_config(data)
 
     def _build_row():
         kwargs = dict(
@@ -1010,6 +1076,8 @@ def lab_save_target_color():
             g=g,
             b=b,
             catalog_order=next_order,
+            mixing_model=mixing_model,
+            input_mode=input_mode,
         )
         if drops_tuple is not None:
             dw, dbn, dr, dy, dbl = drops_tuple
@@ -1060,6 +1128,7 @@ def calculate():
 MIXING_EVENT_TYPES = frozenset({
     'action_add',
     'action_remove',
+    'action_set',          # dialer: set a pigment to a continuous amount
     'boundary_start',
     'boundary_target_shown',
     'boundary_save',
@@ -1079,6 +1148,41 @@ MIXING_END_REASONS = frozenset({
 })
 
 PALETTE_COLORS = ('white', 'black', 'red', 'yellow', 'blue')
+
+MIXING_MODELS = frozenset({'mixbox', 'spectral'})
+INPUT_MODES = frozenset({'integer', 'dialer'})
+
+
+def _normalize_mixing_model(value):
+    """Return 'mixbox'/'spectral' if recognised, else None (column is nullable).
+
+    'rgb' is accepted as a legacy alias for 'mixbox'.
+    """
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v == 'rgb':
+            return 'mixbox'
+        if v in MIXING_MODELS:
+            return v
+    return None
+
+
+def _normalize_input_mode(value):
+    """Return 'integer'/'dialer' if recognised, else None (column is nullable)."""
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in INPUT_MODES:
+            return v
+    return None
+
+
+def _extract_mixing_config(payload):
+    """Pull (mixing_model, input_mode) from a request payload, normalised."""
+    payload = payload or {}
+    return (
+        _normalize_mixing_model(payload.get('mixing_model')),
+        _normalize_input_mode(payload.get('input_mode')),
+    )
 
 
 def _normalize_user_id_value(value):
@@ -1178,6 +1282,8 @@ def _derive_action_type(event_type, metadata_json):
         return 'add'
     if event_type == 'action_remove':
         return 'remove'
+    if event_type == 'action_set':
+        return 'set'
     if event_type == 'boundary_reset':
         return 'reset'
     if event_type == 'boundary_skip':
@@ -1192,7 +1298,7 @@ def _derive_action_type(event_type, metadata_json):
 
 
 def _is_decision_event(action_type):
-    return action_type in {'add', 'remove', 'reset', 'stop', 'skip', 'success'}
+    return action_type in {'add', 'remove', 'set', 'reset', 'stop', 'skip', 'success'}
 
 
 def _state_from_gameplay_payload(data):
@@ -1230,8 +1336,12 @@ def _validate_snapshot(snapshot):
     for color in PALETTE_COLORS:
         if color not in drops:
             return False, f'snapshot.drops.{color} is required'
-        if not isinstance(drops[color], int):
-            return False, f'snapshot.drops.{color} must be int'
+        # Accept floats too: dialer input produces continuous (fractional) amounts.
+        value = drops[color]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return False, f'snapshot.drops.{color} must be a number'
+        if value < 0:
+            return False, f'snapshot.drops.{color} must be >= 0'
 
     if not (isinstance(mixed_rgb, list) and len(mixed_rgb) == 3 and all(isinstance(v, int) for v in mixed_rgb)):
         return False, 'snapshot.mixed_rgb must be [r,g,b] ints'
@@ -1317,8 +1427,8 @@ def _normalize_event_payload(raw, attempt_uuid_default=None):
 
     derived_action_type = _derive_action_type(event_type, metadata_json)
     action_type = raw.get('action_type') or derived_action_type
-    if action_type is not None and action_type not in {'add', 'remove', 'reset', 'stop', 'skip', 'success'}:
-        raise ValueError('action_type must be one of add|remove|reset|stop|skip|success or null')
+    if action_type is not None and action_type not in {'add', 'remove', 'set', 'reset', 'stop', 'skip', 'success'}:
+        raise ValueError('action_type must be one of add|remove|set|reset|stop|skip|success or null')
 
     amount = _coerce_int_or_none(raw.get('amount'))
     if amount is None and action_type in {'add', 'remove'}:
@@ -1423,6 +1533,13 @@ def _upsert_attempt_header(payload, *, authenticated_user_id=None):
         # way so a no-user payload from a logged-in client still gets stamped.
         row.user_id = authenticated_user_id
 
+    # Mixing configuration (first-write-wins).
+    mixing_model, input_mode = _extract_mixing_config(payload)
+    if mixing_model is not None and row.mixing_model is None:
+        row.mixing_model = mixing_model
+    if input_mode is not None and row.input_mode is None:
+        row.input_mode = input_mode
+
     final_delta_e = _coerce_float_or_none(payload.get('final_delta_e'))
     if final_delta_e is not None:
         row.final_delta_e = final_delta_e
@@ -1502,6 +1619,11 @@ def _ingest_mixing_events(attempt_uuid, raw_events):
 
     normalized = [_normalize_event_payload(e, attempt_uuid_default=attempt_uuid) for e in raw_events]
     seqs = [e['seq'] for e in normalized]
+
+    # Denormalise the attempt's mixing config onto each event (default mixbox/integer).
+    _attempt = MixingAttempt.query.get(attempt_uuid)
+    _ev_model = (_attempt.mixing_model if _attempt else None) or 'mixbox'
+    _ev_input = (_attempt.input_mode if _attempt else None) or 'integer'
 
     if seqs != sorted(seqs):
         raise ValueError('events must be sorted by seq ascending')
@@ -1601,6 +1723,8 @@ def _ingest_mixing_events(attempt_uuid, raw_events):
             ev['step_index'] = None
             ev['time_since_prev_step_ms'] = None
 
+        ev['mixing_model'] = _ev_model
+        ev['input_mode'] = _ev_input
         to_insert.append(MixingAttemptEvent(**ev))
         next_expected_new_seq += 1
 
@@ -1632,6 +1756,8 @@ def _ensure_terminal_telemetry_from_gameplay(data, end_reason, *, authenticated_
         'attempt_ended_client_ts_ms': _coerce_int_or_none(data.get('attempt_ended_client_ts_ms')),
         'end_reason': end_reason,
         'final_delta_e': _coerce_float_or_none(data.get('delta_e')),
+        'mixing_model': data.get('mixing_model'),
+        'input_mode': data.get('input_mode'),
     }
     _upsert_attempt_header(header_payload, authenticated_user_id=user_id)
 
@@ -1693,6 +1819,8 @@ def _ensure_terminal_telemetry_from_gameplay(data, end_reason, *, authenticated_
         mix_after_r=state['mixed_rgb'][0],
         mix_after_g=state['mixed_rgb'][1],
         mix_after_b=state['mixed_rgb'][2],
+        mixing_model=_normalize_mixing_model(data.get('mixing_model')) or 'mixbox',
+        input_mode=_normalize_input_mode(data.get('input_mode')) or 'integer',
     )
     db.session.add(synthetic_event)
     _refresh_mixing_attempt_num_steps(attempt_uuid)
@@ -1825,6 +1953,7 @@ def save_session():
 
         skipped = data.get('skipped', False)
         mc = derive_match_category(data.get('delta_e'), skipped, skip_perception=None)
+        mixing_model, input_mode = _extract_mixing_config(data)
 
         session = MixingSession(
             attempt_uuid=attempt_uuid,
@@ -1838,6 +1967,8 @@ def save_session():
             timestamp=datetime.fromisoformat(data['timestamp']),
             skipped=skipped,
             match_category=mc,
+            mixing_model=mixing_model,
+            input_mode=input_mode,
         )
         db.session.add(session)
 
@@ -1913,6 +2044,7 @@ def save_skip():
         skip_perception = raw_perception if raw_perception in allowed_skip else None
 
         mc = derive_match_category(delta_e, True, skip_perception=skip_perception)
+        mixing_model, input_mode = _extract_mixing_config(data)
 
         session = MixingSession(
             attempt_uuid=attempt_uuid,
@@ -1928,6 +2060,8 @@ def save_skip():
             skipped=True,
             skip_perception=skip_perception,
             match_category=mc,
+            mixing_model=mixing_model,
+            input_mode=input_mode,
         )
         db.session.add(session)
 

@@ -66,6 +66,32 @@
   border: 1px solid var(--border); font-size: 0.95rem; background: var(--bg);
 }
 .lab-hint { font-size: 0.8rem; color: var(--text-secondary); margin-top: 8px; }
+
+/* Mixing-configuration segmented controls (model + input). */
+.lab-config { display: flex; flex-wrap: wrap; gap: 14px; margin: 4px 0 16px; }
+.seg { display: inline-flex; align-items: center; gap: 8px; }
+.seg-label {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-secondary); font-weight: 700;
+}
+.seg-group {
+  display: inline-flex; border: 1px solid var(--border); border-radius: 999px;
+  overflow: hidden; background: var(--surface);
+}
+.seg-btn {
+  border: 0; background: transparent; cursor: pointer;
+  padding: 6px 14px; font-size: 0.85rem; font-weight: 700; color: var(--text-secondary);
+}
+.seg-btn + .seg-btn { border-left: 1px solid var(--border); }
+.seg-btn.is-active { background: var(--accent-primary, #4caf50); color: #fff; }
+
+/* Dialer ring sizing on the lab palette (uses shared .dial styles in components.css). */
+#labPalette.mode-integer .dial-ring { display: none; }
+#labPalette.mode-dialer .minus-button { display: none; }
+#labPalette.mode-dialer .color-name { margin-top: 8px; }
+#labPalette .dial { width: 62px; height: 62px; }
+@media (min-width: 480px) { #labPalette .dial { width: 74px; height: 74px; } }
+@media (min-width: 640px) { #labPalette .dial { width: 84px; height: 84px; } }
 .lab-live-card {
   margin-top: 16px;
   border: 1px solid var(--border);
@@ -133,21 +159,21 @@
   flex-wrap: nowrap;
   justify-content: center;
   align-items: flex-end;
-  gap: 8px;
   overflow-x: auto;
   overflow-y: visible;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   margin: var(--space-md) 0;
   padding: var(--space-sm) 4px var(--space-xs);
+  gap: 4px;   /* tightened so five dials fit across a phone */
 }
 #labPalette .color-control {
   flex: 0 0 auto;
   min-width: 0;
 }
 #labPalette .color-circle {
-  width: 56px;
-  height: 56px;
+  width: 44px;
+  height: 44px;
   border-width: 2px;
 }
 #labPalette .minus-button {
@@ -164,12 +190,17 @@
   text-align: center;
 }
 @media (min-width: 480px) {
-  #labPalette .color-circle { width: 64px; height: 64px; }
+  #labPalette.palette { gap: 8px; }
+  #labPalette .color-circle { width: 54px; height: 54px; }
   #labPalette .color-name { max-width: none; font-size: var(--font-size-sm, 0.8rem); }
 }
 @media (min-width: 640px) {
   #labPalette.palette { gap: 12px; }
-  #labPalette .color-circle { width: 72px; height: 72px; }
+  #labPalette .color-circle { width: 64px; height: 64px; }
+}
+@media (max-width: 360px) {
+  #labPalette .dial { width: 52px; height: 52px; }
+  #labPalette .color-circle { width: 38px; height: 38px; }
 }
 @media (max-width: 980px) {
   .lab-layout {
@@ -186,9 +217,28 @@
     <a href="/" class="btn btn-secondary">← Main app</a>
   </header>
 
-  <p class="lab-hint" style="margin-top:0;margin-bottom:16px;">
-    Same pigment mixing as the game (Mixbox). RGB updates live; you can save the mix into the server <code>target_colors</code> catalog.
+  <p class="lab-hint" style="margin-top:0;margin-bottom:12px;">
+    Free mixer. Pick the mixing model (Mixbox, or spectral Kubelka–Munk) and the input
+    mode (integer drops, or continuous dials). RGB updates live; saving the mix into the server
+    <code>target_colors</code> catalog tags it with the chosen model + input.
   </p>
+
+  <div class="lab-config" role="group" aria-label="Mixing configuration">
+    <div class="seg">
+      <span class="seg-label">Model</span>
+      <div class="seg-group" id="labModelSeg">
+        <button type="button" class="seg-btn is-active" data-model="mixbox">Mixbox</button>
+        <button type="button" class="seg-btn" data-model="spectral">Spectral</button>
+      </div>
+    </div>
+    <div class="seg">
+      <span class="seg-label">Input</span>
+      <div class="seg-group" id="labInputSeg">
+        <button type="button" class="seg-btn is-active" data-input="integer">Integer</button>
+        <button type="button" class="seg-btn" data-input="dialer">Dialer</button>
+      </div>
+    </div>
+  </div>
 
   <div class="lab-layout">
     <div class="lab-main">
@@ -276,6 +326,13 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+  // Measured base reflectance spectra (keyed white/black/red/yellow/blue), for spectral mixing.
+  window.spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
+</script>
 <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-<script src="{{ url_for('static', filename='lab.js') }}?v=20260509-liveplot1"></script>
+<script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
+<script src="{{ url_for('static', filename='mixing-core.js') }}?v=20260609"></script>
+<script src="{{ url_for('static', filename='dialer.js') }}?v=20260609"></script>
+<script src="{{ url_for('static', filename='lab.js') }}?v=20260609c-modes"></script>
 {% endblock %}
