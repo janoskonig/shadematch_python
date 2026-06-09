@@ -39,16 +39,35 @@ const PALETTE_LABEL = { white: 'White', black: 'Black', red: 'Red', yellow: 'Yel
 const MATCH_PERFECT_DELTA_E = 0.01;
 const isPerfectMatch = (deltaE) => Number.isFinite(deltaE) && deltaE <= MATCH_PERFECT_DELTA_E;
 
-// Per-pigment "relative amount" is continuous (dial drag) but also nudged ±1 by tap / buttons.
-const AMOUNT_MAX = 10;
-const formatAmount = (n) => (Number.isInteger(n) ? String(n) : n.toFixed(1));
+// Per-pigment "relative amount": a continuous 0–100 scale in fine 0.01 increments
+// (dial drag / keyboard); also nudged ±1 by tap / ± buttons.
+const AMOUNT_MAX = 100;
+const AMOUNT_STEP = 0.01;
+const roundStep = (v) => Math.round(v / AMOUNT_STEP) * AMOUNT_STEP;
+// Round to the 0.01 grid and drop float noise / trailing zeros: 0.01, 99.9, 37.42, 100.
+const formatAmount = (n) => String(Math.round(n * 100) / 100);
 
 // Dial geometry. The SVG is rotated 135° in CSS so the 270° arc opens at the bottom.
 const DIAL_R = 44;
 const DIAL_C = 2 * Math.PI * DIAL_R;   // full circumference (px in viewBox units)
 const DIAL_ARC = DIAL_C * 0.75;        // 270° usable sweep
-const DRAG_PX_PER_UNIT = 16;           // vertical px of drag per 1.0 of amount
+const DRAG_PX_PER_UNIT = 4;            // vertical px per 1.0 (≈400px sweeps the full 0–100)
 const DRAG_THRESHOLD = 4;              // px before a press counts as a drag (vs a tap)
+
+// Leveling over the ported (Mixbox) catalog targets. Progress is local to the device.
+const SPECTRAL_COMPLETED_KEY = 'spectral_completed';
+const SPECTRAL_INDEX_KEY = 'spectral_shade_index';
+const SHADES_PER_LEVEL = 8;
+
+function loadCompletedSet() {
+    try {
+        const a = JSON.parse(localStorage.getItem(SPECTRAL_COMPLETED_KEY) || '[]');
+        return new Set(Array.isArray(a) ? a : []);
+    } catch (_) { return new Set(); }
+}
+function saveCompletedSet(set) {
+    try { localStorage.setItem(SPECTRAL_COMPLETED_KEY, JSON.stringify(Array.from(set))); } catch (_) { /* ignore */ }
+}
 
 class SpectralMixer {
     constructor() {
@@ -83,14 +102,25 @@ class SpectralMixer {
         };
 
         this.currentRgb = [255, 255, 255];
-        this.target = null;      // { rgb, recipe }
-        this.solved = false;
-        this.deltaReqId = 0;     // latest-wins guard for async ΔE responses
+        this.target = null;          // { id, rgb, name }
+        this.deltaReqId = 0;         // latest-wins guard for async ΔE responses
+        this.bestDeltaE = null;      // closest ΔE reached on the current shade
+
+        // Leveling over the ported catalog (Mixbox) targets.
+        this.catalog = [];
+        this.shadeIndex = 0;
+        this.completed = loadCompletedSet();
+
+        this.shadeLabel = document.getElementById('shadeLabel');
+        this.shadeName = document.getElementById('shadeName');
+        this.levelLabel = document.getElementById('levelLabel');
+        this.progressFill = document.getElementById('spectralProgressFill');
+        this.perceptionModal = document.getElementById('perceptionModal');
 
         this.setupDials();
         this.initializeControls();
         this.initializeBasePlots();
-        this.newTarget();
+        this.loadCatalog();
     }
 
     // Paint the static dial parts: the 270° track and each ring's pigment colour.
@@ -117,9 +147,9 @@ class SpectralMixer {
         return lum > 210 ? '#8a8580' : `rgb(${r}, ${g}, ${b})`;
     }
 
-    // Clamp + round to 0.1 and push the new amount everywhere.
+    // Clamp + snap to the 0.01 grid and push the new amount everywhere.
     setAmount(key, value) {
-        const v = Math.max(0, Math.min(AMOUNT_MAX, Math.round(value * 10) / 10));
+        const v = Math.max(0, Math.min(AMOUNT_MAX, roundStep(value)));
         this.relativeAmounts[key] = v;
         this.syncControl(key);
         this.updateMixedColor();
@@ -128,7 +158,7 @@ class SpectralMixer {
     // Whole-drop nudge from tap / ± buttons (bumps the badge).
     nudge(key, delta, { bump = false } = {}) {
         const v = Math.max(0, Math.min(AMOUNT_MAX, this.relativeAmounts[key] + delta));
-        this.relativeAmounts[key] = Math.round(v * 10) / 10;
+        this.relativeAmounts[key] = roundStep(v);
         this.syncControl(key, { bump });
         this.updateMixedColor();
     }
@@ -195,11 +225,12 @@ class SpectralMixer {
             dial.addEventListener('pointerup', endDrag);
             dial.addEventListener('pointercancel', endDrag);
 
-            // Keyboard (role="slider"): arrows nudge by 0.5, Home/End jump to the ends.
+            // Keyboard (role="slider"): arrows ±1, Shift+arrow ±0.01 (fine), Home/End to ends.
             dial.addEventListener('keydown', (e) => {
                 let handled = true;
-                if (e.key === 'ArrowUp' || e.key === 'ArrowRight') this.setAmount(key, this.relativeAmounts[key] + 0.5);
-                else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') this.setAmount(key, this.relativeAmounts[key] - 0.5);
+                const step = e.shiftKey ? AMOUNT_STEP : 1;
+                if (e.key === 'ArrowUp' || e.key === 'ArrowRight') this.setAmount(key, this.relativeAmounts[key] + step);
+                else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') this.setAmount(key, this.relativeAmounts[key] - step);
                 else if (e.key === 'Home') this.setAmount(key, 0);
                 else if (e.key === 'End') this.setAmount(key, AMOUNT_MAX);
                 else handled = false;
@@ -207,13 +238,48 @@ class SpectralMixer {
             });
         });
 
+        // Editable value badges — type a precise amount; ↑/↓ step, Shift+↑/↓ = 0.01.
+        this.palette.querySelectorAll('.drop-badge').forEach((input) => {
+            if (input.tagName !== 'INPUT') return;
+            const key = input.dataset.badgeFor;
+            const commit = () => {
+                const v = parseFloat(input.value);
+                this.setAmount(key, Number.isFinite(v) ? v : 0);
+            };
+            input.addEventListener('focus', () => input.select());
+            input.addEventListener('change', commit);
+            input.addEventListener('keydown', (e) => {
+                const step = e.shiftKey ? AMOUNT_STEP : 1;
+                if (e.key === 'Enter') { e.preventDefault(); commit(); input.blur(); }
+                else if (e.key === 'ArrowUp') { e.preventDefault(); this.setAmount(key, this.relativeAmounts[key] + step); }
+                else if (e.key === 'ArrowDown') { e.preventDefault(); this.setAmount(key, this.relativeAmounts[key] - step); }
+            });
+        });
+
+        // Keep Tab order clean: the value field is the one keyboard stop per pigment
+        // (Tab / Shift+Tab changes colour). The dial stays mouse/touch-only, and the
+        // − button is reachable but skipped by Tab (type 0 or ↓ on the field instead).
+        this.palette.querySelectorAll('.dial').forEach((d) => { d.removeAttribute('tabindex'); d.removeAttribute('role'); });
+        this.palette.querySelectorAll('.minus-button, .color-circle').forEach((b) => { b.tabIndex = -1; });
+
         const reset = document.getElementById('spectralResetBtn');
-        if (reset) {
-            reset.addEventListener('click', () => this.resetMix());
-        }
-        const newTarget = document.getElementById('newTargetBtn');
-        if (newTarget) {
-            newTarget.addEventListener('click', () => this.newTarget());
+        if (reset) reset.addEventListener('click', () => this.resetMix());
+
+        const judge = document.getElementById('spectralJudgeBtn');
+        if (judge) judge.addEventListener('click', () => this.openPerception());
+
+        const skip = document.getElementById('spectralSkipBtn');
+        if (skip) skip.addEventListener('click', () => this.nextShade());
+
+        if (this.perceptionModal) {
+            this.perceptionModal.querySelectorAll('[data-perc]').forEach((btn) => {
+                btn.addEventListener('click', () => this.judge(btn.dataset.perc));
+            });
+            const cancel = document.getElementById('perceptionCancel');
+            if (cancel) cancel.addEventListener('click', () => this.closePerception());
+            this.perceptionModal.addEventListener('click', (e) => {
+                if (e.target === this.perceptionModal) this.closePerception();
+            });
         }
     }
 
@@ -230,7 +296,10 @@ class SpectralMixer {
         const fill = this.palette.querySelector(`.dial-fill[data-fill-for="${key}"]`);
         const dial = this.palette.querySelector(`.dial[data-color="${key}"]`);
         if (badge) {
-            badge.textContent = txt;
+            // Editable input badge: write .value (typing only commits on change, so this
+            // never fights mid-edit, and ↑/↓ in the field still reflect immediately).
+            if (badge.tagName === 'INPUT') badge.value = txt;
+            else badge.textContent = txt;
             if (bump) {
                 badge.classList.add('is-bumped');
                 setTimeout(() => badge.classList.remove('is-bumped'), 150);
@@ -291,42 +360,123 @@ class SpectralMixer {
         this.scoreAgainstTarget(total);
     }
 
-    // ── Game: target generation & matching ──────────────────────────────────
+    // ── Leveling over the ported catalog (Mixbox) targets ───────────────────
 
-    // Random recipe of 2–3 pigments, small counts — keeps the exact-match ratio
-    // discoverable. Mixed by the engine so the target is reachable by construction.
-    generateRecipe() {
-        const pool = PALETTE_ORDER.slice();
-        for (let i = pool.length - 1; i > 0; i -= 1) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [pool[i], pool[j]] = [pool[j], pool[i]];
-        }
-        const k = 2 + Math.floor(Math.random() * 2); // 2 or 3 pigments
-        const recipe = {};
-        pool.slice(0, k).forEach((key) => { recipe[key] = 1 + Math.floor(Math.random() * 4); }); // 1..4
-        return recipe;
+    loadCatalog() {
+        fetch('/api/target-colors')
+            .then((res) => res.json())
+            .then((data) => {
+                const rows = (data && data.status === 'success' && Array.isArray(data.colors)) ? data.colors : [];
+                this.catalog = rows.filter((r) => Array.isArray(r.rgb) && r.rgb.length === 3);
+                if (!this.catalog.length) {
+                    if (this.status) this.status.textContent = 'No target colours available.';
+                    return;
+                }
+                // Resume at the saved shade, else the first not-yet-completed one.
+                let idx = parseInt(localStorage.getItem(SPECTRAL_INDEX_KEY) || '', 10);
+                if (!Number.isInteger(idx) || idx < 0 || idx >= this.catalog.length) {
+                    idx = this.catalog.findIndex((t) => !this.completed.has(t.id));
+                    if (idx < 0) idx = 0;
+                }
+                this.loadShade(idx);
+            })
+            .catch(() => { if (this.status) this.status.textContent = 'Could not load target colours.'; });
     }
 
-    newTarget() {
-        const recipe = this.generateRecipe();
-        const mixArgs = Object.entries(recipe).map(([key, n]) => [this.bases[key].color, n]);
-        const rgb = spectral.mix(...mixArgs).sRGB;
-        this.target = { rgb, recipe };
-        this.solved = false;
+    loadShade(index) {
+        if (!this.catalog.length) return;
+        this.shadeIndex = Math.max(0, Math.min(this.catalog.length - 1, index));
+        try { localStorage.setItem(SPECTRAL_INDEX_KEY, String(this.shadeIndex)); } catch (_) { /* ignore */ }
+        const t = this.catalog[this.shadeIndex];
+        this.target = { id: t.id, rgb: t.rgb.slice(0, 3), name: t.name || ('Shade ' + (this.shadeIndex + 1)) };
+        this.bestDeltaE = null;
 
-        if (this.targetSwatch) this.targetSwatch.style.backgroundColor = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+        const [r, g, b] = this.target.rgb;
+        if (this.targetSwatch) this.targetSwatch.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
         if (this.matchBar.container) this.matchBar.container.style.display = 'none';
         if (this.status) {
-            this.status.textContent = 'Match the target by mixing pigments.';
             this.status.classList.remove('is-win');
+            this.status.textContent = this.completed.has(t.id)
+                ? 'Already matched — mix again or skip ahead.'
+                : 'Mix to match, then tap “Judge match”.';
         }
         this.resetMix();
+        this.updateProgressUI();
+    }
+
+    nextShade() {
+        const n = this.catalog.length;
+        if (!n) return;
+        for (let step = 1; step <= n; step += 1) {
+            const i = (this.shadeIndex + step) % n;
+            if (!this.completed.has(this.catalog[i].id)) { this.loadShade(i); return; }
+        }
+        this.loadShade((this.shadeIndex + 1) % n);   // all done → just advance
+    }
+
+    levelInfo() {
+        const done = this.completed.size;
+        const total = this.catalog.length || 1;
+        return { done, total, level: Math.floor(done / SHADES_PER_LEVEL) + 1 };
+    }
+
+    updateProgressUI() {
+        const { done, total, level } = this.levelInfo();
+        if (this.shadeLabel) this.shadeLabel.textContent = `Shade ${this.shadeIndex + 1} of ${total}`;
+        if (this.shadeName && this.target) {
+            this.shadeName.textContent = this.completed.has(this.target.id) ? `${this.target.name} ✓` : this.target.name;
+        }
+        if (this.levelLabel) this.levelLabel.textContent = `Level ${level} · ${done}/${total}`;
+        if (this.progressFill) this.progressFill.style.width = (100 * done / total).toFixed(1) + '%';
+    }
+
+    openPerception() {
+        if (!this.target || !this.perceptionModal) return;
+        const [tr, tg, tb] = this.target.rgb;
+        const [mr, mg, mb] = this.currentRgb;
+        const pt = document.getElementById('percTarget');
+        const pm = document.getElementById('percMix');
+        if (pt) pt.style.backgroundColor = `rgb(${tr}, ${tg}, ${tb})`;
+        if (pm) pm.style.backgroundColor = `rgb(${mr}, ${mg}, ${mb})`;
+        const meta = document.getElementById('perceptionMeta');
+        if (meta) {
+            meta.textContent = (this.bestDeltaE != null)
+                ? `Your closest so far: ΔE ${this.bestDeltaE.toFixed(1)}. Compare your mix (right) to the target (left).`
+                : 'Compare your mix (right) to the target (left).';
+        }
+        this.perceptionModal.style.display = 'flex';
+    }
+
+    closePerception() {
+        if (this.perceptionModal) this.perceptionModal.style.display = 'none';
+    }
+
+    // Perceptual self-report — the completion path (ΔE≈0 isn't reachable spectrally).
+    judge(perception) {
+        this.closePerception();
+        if (!this.target) return;
+        if (perception === 'identical' || perception === 'acceptable') {
+            this.completed.add(this.target.id);
+            saveCompletedSet(this.completed);
+            if (this.status) {
+                this.status.textContent = perception === 'identical'
+                    ? '✓ No perceptible difference — shade complete!'
+                    : '✓ Acceptable match — shade complete!';
+                this.status.classList.add('is-win');
+            }
+            this.updateProgressUI();
+            setTimeout(() => this.nextShade(), 900);
+        } else {
+            if (this.status) {
+                this.status.classList.remove('is-win');
+                this.status.textContent = 'Still too different — keep mixing or skip.';
+            }
+        }
     }
 
     scoreAgainstTarget(total) {
         if (!this.target) return;
         if (total === 0) {
-            // Nothing mixed yet — keep the bar hidden until the player acts.
             if (this.matchBar.container) this.matchBar.container.style.display = 'none';
             return;
         }
@@ -342,13 +492,13 @@ class SpectralMixer {
                 if (id !== this.deltaReqId) return; // a newer action superseded this one
                 const de = Number(data && data.delta_e);
                 if (!Number.isFinite(de)) return;
+                if (this.bestDeltaE == null || de < this.bestDeltaE) this.bestDeltaE = de;
                 this.updateMatchBar(de);
-                if (isPerfectMatch(de) && !this.solved) this.onWin(de);
             })
             .catch(() => { /* offline / transient — leave the bar as-is */ });
     }
 
-    // Mirrors the main game's match bar (exponential decay, K=3).
+    // Closeness feedback only (exponential decay, K=3). Completion is the perceptual judgment.
     updateMatchBar(deltaE) {
         const { container, fill, label } = this.matchBar;
         if (!container || !fill || !label) return;
@@ -357,7 +507,7 @@ class SpectralMixer {
         if (isPerfectMatch(deltaE)) {
             fill.style.width = '100%';
             fill.style.backgroundColor = 'var(--accent-success)';
-            label.textContent = 'Match!';
+            label.textContent = 'Exact!';
             return;
         }
         const K = 3;
@@ -367,15 +517,6 @@ class SpectralMixer {
         else if (progress < 51) { fill.style.backgroundColor = 'var(--accent-warning)'; label.textContent = 'Closer'; }
         else if (progress < 85) { fill.style.backgroundColor = '#8BC34A'; label.textContent = 'Very close'; }
         else { fill.style.backgroundColor = '#8BC34A'; label.textContent = 'Nearly there!'; }
-    }
-
-    onWin(deltaE) {
-        this.solved = true;
-        if (navigator.vibrate) navigator.vibrate([15, 40, 15]);
-        if (this.status) {
-            this.status.textContent = `Matched! ΔE ${deltaE.toFixed(2)} 🎉`;
-            this.status.classList.add('is-win');
-        }
     }
 
     updateRecipeStrip(total) {

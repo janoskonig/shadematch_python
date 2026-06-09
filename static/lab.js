@@ -15,7 +15,7 @@
   };
 
   const PALETTE_KEYS = ['white', 'black', 'red', 'yellow', 'blue'];
-  const DIAL_MAX = 10;
+  const DIAL_MAX = 100;   // continuous dialer scale, 0–100 in 0.01 increments
 
   // dropCounts holds the per-pigment amount (whole in integer mode, fractional in dialer mode).
   let dropCounts = { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
@@ -27,7 +27,7 @@
   let dialApi = null;
 
   function formatAmount(n) {
-    return Number.isInteger(n) ? String(n) : n.toFixed(1);
+    return String(Math.round(n * 100) / 100);   // 0.01 grid, trimmed (0.01, 99.9, 37.42, 100)
   }
 
   const pigmentOrder = ['red', 'yellow', 'white', 'blue', 'black'];
@@ -383,6 +383,12 @@
   function setInputMode(mode) {
     inputMode = (mode === 'dialer') ? 'dialer' : 'integer';
     localStorage.setItem('lab_input_mode', inputMode);
+    if (inputMode === 'integer') {
+      // Snap any fractional (dialer) amounts to whole drops so integer mode stays integer.
+      PALETTE_KEYS.forEach(function (k) { dropCounts[k] = Math.round(dropCounts[k] || 0); });
+      renderAllPigments();
+      updateMixed();
+    }
     applyModeClasses();
     syncSegUI();
   }

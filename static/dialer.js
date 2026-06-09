@@ -15,8 +15,9 @@
     var R = 44;
     var C = 2 * Math.PI * R;       // full circumference (viewBox units)
     var ARC = C * 0.75;            // 270° usable sweep
-    var PX_PER_UNIT = 16;          // vertical drag px per 1.0 of amount
+    var PX_PER_UNIT = 4;           // vertical drag px per 1.0 (≈400px sweeps a 0–100 range)
     var THRESHOLD = 4;             // px before a press counts as a drag (vs a tap)
+    var STEP = 0.01;               // value grid (fine 0.01 increments)
 
     function ringSVG(key) {
         return '<svg class="dial-ring" viewBox="0 0 100 100">' +
@@ -27,15 +28,15 @@
 
     /**
      * attach(paletteEl, opts) → { render(key, value) }
-     * opts: { max=10, colorFor(key)->cssColor, getAmount(key)->number,
+     * opts: { max=100, colorFor(key)->cssColor, getAmount(key)->number,
      *         onInput(key, value), onTap(key) }
      */
     function attach(paletteEl, opts) {
         opts = opts || {};
-        var max = opts.max || 10;
+        var max = opts.max || 100;
 
         function clampRound(v) {
-            return Math.max(0, Math.min(max, Math.round(v * 10) / 10));
+            return Math.max(0, Math.min(max, Math.round(v / STEP) * STEP));
         }
         function setVal(key, v) { if (opts.onInput) opts.onInput(key, clampRound(v)); }
 
@@ -88,8 +89,9 @@
             dial.addEventListener('keydown', function (e) {
                 var cur = opts.getAmount ? opts.getAmount(key) : 0;
                 var handled = true;
-                if (e.key === 'ArrowUp' || e.key === 'ArrowRight') setVal(key, cur + 0.5);
-                else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') setVal(key, cur - 0.5);
+                var stepKb = e.shiftKey ? STEP : 1;   // Shift = fine 0.01
+                if (e.key === 'ArrowUp' || e.key === 'ArrowRight') setVal(key, cur + stepKb);
+                else if (e.key === 'ArrowDown' || e.key === 'ArrowLeft') setVal(key, cur - stepKb);
                 else if (e.key === 'Home') setVal(key, 0);
                 else if (e.key === 'End') setVal(key, max);
                 else handled = false;

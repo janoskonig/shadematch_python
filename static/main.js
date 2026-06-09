@@ -44,7 +44,7 @@ window.gameMixingModel = (localStorage.getItem('game_mixing_model') === 'spectra
 window.gameInputMode = (localStorage.getItem('game_input_mode') === 'dialer') ? 'dialer' : 'integer';
 
 function formatAmount(n) {
-  return Number.isInteger(n) ? String(n) : Number(n).toFixed(1);
+  return String(Math.round(n * 100) / 100);   // 0.01 grid, trimmed (0.01, 99.9, 37.42, 100)
 }
 const APP_VERSION = document.documentElement?.dataset?.appVersion || null;
 
@@ -1442,7 +1442,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Dialer drag: update continuously (no per-move telemetry); capture pre-drag state.
   function performSet(color, value) {
     if (!_dragBefore[color]) _dragBefore[color] = buildMixSnapshot();
-    dropCounts[color] = Math.max(0, Math.min(10, value));
+    dropCounts[color] = Math.max(0, Math.min(100, value));
     setDropDisplay(color);
     updateCurrentMix();
   }
@@ -1493,14 +1493,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       dial.setAttribute('tabindex', '0');
       dial.setAttribute('aria-label', key + ' amount');
       dial.setAttribute('aria-valuemin', '0');
-      dial.setAttribute('aria-valuemax', '10');
+      dial.setAttribute('aria-valuemax', '100');
       dial.setAttribute('aria-valuenow', '0');
       circle.parentNode.insertBefore(dial, circle);
       dial.innerHTML = window.Dialer.ringSVG(key);
       dial.appendChild(circle);
     });
     dialApi = window.Dialer.attach(gamePalette, {
-      max: 10,
+      max: 100,
       getAmount: (key) => dropCounts[key] || 0,
       colorFor: (key) => {
         const s = mixCore.spectraSwatch && mixCore.spectraSwatch[key];
@@ -1535,6 +1535,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     b.addEventListener('click', () => {
       window.gameInputMode = (b.dataset.input === 'dialer') ? 'dialer' : 'integer';
       localStorage.setItem('game_input_mode', window.gameInputMode);
+      if (window.gameInputMode === 'integer') {
+        // Snap fractional (dialer) amounts to whole drops so integer mode stays integer.
+        ['white', 'black', 'red', 'yellow', 'blue'].forEach((k) => {
+          dropCounts[k] = Math.round(dropCounts[k] || 0);
+          setDropDisplay(k);
+        });
+        updateCurrentMix();
+      }
       applyGameModeClasses();
       syncGameSegUI();
     });

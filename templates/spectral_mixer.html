@@ -102,6 +102,59 @@
   border-radius: var(--radius-md, 10px); padding: 8px;
 }
 .mixed-spectrum-card .plot { width: 100%; height: 300px; }
+
+/* Leveling progress header */
+.spectral-progress { margin: 0 0 14px; }
+.spectral-progress-row {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 6px;
+}
+.spectral-progress-row .shade-label { font-weight: 800; color: var(--text-primary); }
+.spectral-progress-row .shade-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.spectral-progress-row .level-label {
+  margin-left: auto; font-weight: 800; color: var(--accent-primary, #4caf50);
+}
+.spectral-progress-track {
+  height: 8px; border-radius: 999px; background: var(--border); overflow: hidden;
+}
+.spectral-progress-fill {
+  height: 100%; width: 0; background: var(--accent-primary, #4caf50);
+  transition: width 0.3s ease;
+}
+
+/* Perceptual-judgment modal */
+.spectral-modal {
+  position: fixed; inset: 0; z-index: 11000;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  background: rgba(15, 23, 42, 0.55);
+}
+.spectral-modal-card {
+  background: var(--surface, #fff); color: var(--text-primary, #111);
+  border-radius: 16px; padding: 20px; max-width: 420px; width: 100%;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4);
+}
+.spectral-modal-card h2 { margin: 0 0 4px; font-size: 1.1rem; font-weight: 800; }
+.spectral-modal-card .modal-meta { margin: 0 0 14px; font-size: 0.85rem; color: var(--text-secondary); }
+.perc-pair {
+  display: flex; height: 84px; border-radius: 10px; overflow: hidden;
+  border: 1px solid var(--border); margin-bottom: 16px;
+}
+.perc-pair > div { flex: 1; }
+.perc-btns { display: flex; flex-direction: column; gap: 8px; }
+.perc-btns .btn { width: 100%; }
+.perc-cancel { margin-top: 10px; width: 100%; }
+
+/* Editable value badge — type a precise 0–100 amount; ↑/↓ step, Shift+↑/↓ = 0.01. */
+input.drop-badge {
+  display: inline-block; width: 54px; text-align: center;
+  padding: 0 4px; cursor: text; -moz-appearance: textfield;
+}
+input.drop-badge::-webkit-outer-spin-button,
+input.drop-badge::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+input.drop-badge:focus {
+  outline: 2px solid var(--accent-primary, #4caf50); outline-offset: 1px;
+  background: var(--bg, #fff);
+}
 </style>
 {% endblock %}
 
@@ -117,10 +170,22 @@
   </header>
 
   <p class="spectral-hint">
-    Kubelka–Munk pigment-mixing simulation using measured reflectance spectra of the base
-    pigments (converted to CIE XYZ under D65 and rendered to sRGB). Tap a pigment for a whole
-    drop, or drag its dial up/down for a continuous amount — the engine is spectral, not Mixbox.
+    Reproduce each target shade with the measured pigments (Kubelka–Munk mixing). Tap a pigment
+    for a whole drop, or drag its dial for a continuous amount. Exact RGB isn't always reachable
+    spectrally — get as close as you can, then judge the match to advance.
+    <br><strong>Keyboard:</strong> Tab / Shift+Tab to move between colours; type a value, or
+    ↑/↓ to step (Shift+↑/↓ = 0.01).
   </p>
+
+  <!-- Leveling progress -->
+  <div class="spectral-progress">
+    <div class="spectral-progress-row">
+      <span class="shade-label" id="shadeLabel">Shade —</span>
+      <span class="shade-name" id="shadeName"></span>
+      <span class="level-label" id="levelLabel">Level 1</span>
+    </div>
+    <div class="spectral-progress-track"><div class="spectral-progress-fill" id="spectralProgressFill"></div></div>
+  </div>
 
   <!-- Target | current mix: seamless borderless split, like the main app -->
   <div class="spectral-pair-labels" aria-hidden="true"><span>Match this</span><span>Your mix</span></div>
@@ -155,8 +220,9 @@
   <!-- Palette: main-app markup; each disc wrapped in a draggable dial (spectral only) -->
   <div id="spectralPalette" class="palette">
     <div class="color-control">
-      <span class="drop-badge" data-badge-for="white">0</span>
-      <div class="dial" data-color="white" role="slider" aria-label="White amount" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0" tabindex="0">
+      <input class="drop-badge" data-badge-for="white" type="text" inputmode="decimal" value="0" aria-label="White amount" />
+
+      <div class="dial" data-color="white" role="slider" aria-label="White amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
         <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="white" cx="50" cy="50" r="44"></circle></svg>
         <button class="color-circle" data-color="white" style="background:white;" type="button" aria-label="Add white drop">0</button>
       </div>
@@ -164,8 +230,9 @@
       <span class="color-name">White</span>
     </div>
     <div class="color-control">
-      <span class="drop-badge" data-badge-for="black">0</span>
-      <div class="dial" data-color="black" role="slider" aria-label="Black amount" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0" tabindex="0">
+      <input class="drop-badge" data-badge-for="black" type="text" inputmode="decimal" value="0" aria-label="Black amount" />
+
+      <div class="dial" data-color="black" role="slider" aria-label="Black amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
         <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="black" cx="50" cy="50" r="44"></circle></svg>
         <button class="color-circle" data-color="black" style="background:black;color:#fff;" type="button" aria-label="Add black drop">0</button>
       </div>
@@ -173,8 +240,9 @@
       <span class="color-name">Black</span>
     </div>
     <div class="color-control">
-      <span class="drop-badge" data-badge-for="red">0</span>
-      <div class="dial" data-color="red" role="slider" aria-label="Red amount" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0" tabindex="0">
+      <input class="drop-badge" data-badge-for="red" type="text" inputmode="decimal" value="0" aria-label="Red amount" />
+
+      <div class="dial" data-color="red" role="slider" aria-label="Red amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
         <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="red" cx="50" cy="50" r="44"></circle></svg>
         <button class="color-circle" data-color="red" style="background:red;" type="button" aria-label="Add red drop">0</button>
       </div>
@@ -182,8 +250,9 @@
       <span class="color-name">Red</span>
     </div>
     <div class="color-control">
-      <span class="drop-badge" data-badge-for="yellow">0</span>
-      <div class="dial" data-color="yellow" role="slider" aria-label="Yellow amount" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0" tabindex="0">
+      <input class="drop-badge" data-badge-for="yellow" type="text" inputmode="decimal" value="0" aria-label="Yellow amount" />
+
+      <div class="dial" data-color="yellow" role="slider" aria-label="Yellow amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
         <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="yellow" cx="50" cy="50" r="44"></circle></svg>
         <button class="color-circle" data-color="yellow" style="background:yellow;" type="button" aria-label="Add yellow drop">0</button>
       </div>
@@ -191,8 +260,9 @@
       <span class="color-name">Yellow</span>
     </div>
     <div class="color-control">
-      <span class="drop-badge" data-badge-for="blue">0</span>
-      <div class="dial" data-color="blue" role="slider" aria-label="Blue amount" aria-valuemin="0" aria-valuemax="10" aria-valuenow="0" tabindex="0">
+      <input class="drop-badge" data-badge-for="blue" type="text" inputmode="decimal" value="0" aria-label="Blue amount" />
+
+      <div class="dial" data-color="blue" role="slider" aria-label="Blue amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
         <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="blue" cx="50" cy="50" r="44"></circle></svg>
         <button class="color-circle" data-color="blue" style="background:blue;" type="button" aria-label="Add blue drop">0</button>
       </div>
@@ -203,7 +273,26 @@
 
   <div class="controls-bar" style="margin-top:12px;flex-wrap:wrap;justify-content:center;gap:10px;">
     <button type="button" id="spectralResetBtn" class="btn btn-secondary btn-lg">Reset mix</button>
-    <button type="button" id="newTargetBtn" class="btn btn-primary btn-lg">New target</button>
+    <button type="button" id="spectralSkipBtn" class="btn btn-secondary btn-lg">Skip shade</button>
+    <button type="button" id="spectralJudgeBtn" class="btn btn-primary btn-lg">Judge match</button>
+  </div>
+
+  <!-- Perceptual-judgment modal (completion path; ΔE≈0 isn't reachable spectrally) -->
+  <div id="perceptionModal" class="spectral-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="perceptionTitle">
+    <div class="spectral-modal-card">
+      <h2 id="perceptionTitle">Can you see a difference?</h2>
+      <p class="modal-meta" id="perceptionMeta">Compare your mix (right) to the target (left).</p>
+      <div class="perc-pair" aria-hidden="true">
+        <div id="percTarget"></div>
+        <div id="percMix"></div>
+      </div>
+      <div class="perc-btns">
+        <button type="button" class="btn btn-primary btn-lg" data-perc="identical">No difference</button>
+        <button type="button" class="btn btn-secondary btn-lg" data-perc="acceptable">Acceptable difference</button>
+        <button type="button" class="btn btn-secondary btn-lg" data-perc="unacceptable">Too different</button>
+      </div>
+      <button type="button" class="btn btn-tertiary perc-cancel" id="perceptionCancel">Keep mixing</button>
+    </div>
   </div>
 
   <!-- Reflectance spectra (the realistic part the main app doesn't show) -->
@@ -231,5 +320,5 @@
   const spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
 </script>
 <script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
-<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260609g"></script>
+<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260609l-kbd"></script>
 {% endblock %}
