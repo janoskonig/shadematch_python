@@ -160,6 +160,29 @@ input.drop-badge:focus {
   outline: 2px solid var(--accent-primary, #4caf50); outline-offset: 1px;
   background: var(--bg, #fff);
 }
+
+/* Kubelka–Munk parameter lab (debug panel, /spectral only). Hidden until toggled. */
+#kmToggle.is-on { background: var(--accent-primary, #4caf50); color: #fff; }
+.km-panel {
+  margin: 12px 0 4px; padding: 14px 16px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px); box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.06));
+}
+.km-panel h3 { margin: 0 0 4px; font-size: 0.95rem; font-weight: 800; }
+.km-panel .km-note { margin: 0 0 12px; font-size: 0.78rem; color: var(--text-secondary); }
+.km-group { margin-bottom: 14px; }
+.km-group > .km-group-title {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--text-secondary); font-weight: 700; margin-bottom: 6px;
+}
+.km-row { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
+.km-row > label { flex: 0 0 92px; font-size: 0.82rem; }
+.km-row > input[type="range"] { flex: 1; min-width: 0; }
+.km-row > .km-val {
+  flex: 0 0 48px; text-align: right; font-size: 0.82rem;
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace; color: var(--text-secondary);
+}
+.km-panel .km-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
 </style>
 {% endblock %}
 
@@ -284,6 +307,56 @@ input.drop-badge:focus {
     <button type="button" id="spectralResetBtn" class="btn btn-secondary btn-lg">Reset mix</button>
     <button type="button" id="spectralSkipBtn" class="btn btn-secondary btn-lg">Skip shade</button>
     <button type="button" id="spectralJudgeBtn" class="btn btn-primary btn-lg">Judge match</button>
+    <button type="button" id="kmToggle" class="btn btn-secondary btn-lg" aria-expanded="false"
+            aria-controls="kmPanel">KM parameters</button>
+  </div>
+
+  <!-- Kubelka–Munk parameter lab. When open, the live mix is recomputed with these
+       parameters instead of the engine defaults; targets stay as generated. -->
+  <div id="kmPanel" class="km-panel" style="display:none;">
+    <h3>Kubelka–Munk parameters</h3>
+    <p class="km-note">
+      Tweak the mixing model and watch <em>your mix</em> (right swatch) update live. Tinting
+      strengths default to values measured from the Kremer shade ladder; the other knobs
+      default to the stock engine. Targets aren’t regenerated, so changing these can make a
+      shade unreachable — that’s expected while exploring.
+    </p>
+
+    <div class="km-group">
+      <div class="km-group-title">Tinting strength (relative pigment power)</div>
+      <div class="km-row"><label for="km-ts-white">White</label>
+        <input id="km-ts-white" type="range" data-km="ts:white" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:white"></span></div>
+      <div class="km-row"><label for="km-ts-black">Black</label>
+        <input id="km-ts-black" type="range" data-km="ts:black" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:black"></span></div>
+      <div class="km-row"><label for="km-ts-red">Red</label>
+        <input id="km-ts-red" type="range" data-km="ts:red" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:red"></span></div>
+      <div class="km-row"><label for="km-ts-yellow">Yellow</label>
+        <input id="km-ts-yellow" type="range" data-km="ts:yellow" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:yellow"></span></div>
+      <div class="km-row"><label for="km-ts-blue">Blue</label>
+        <input id="km-ts-blue" type="range" data-km="ts:blue" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:blue"></span></div>
+    </div>
+
+    <div class="km-group">
+      <div class="km-group-title">Concentration weight: amount<sup>a</sup> · strength<sup>b</sup> · luminance<sup>c</sup></div>
+      <div class="km-row"><label for="km-concExp">a (amount)</label>
+        <input id="km-concExp" type="range" data-km="concExp" min="0.5" max="4" step="0.1" value="2"><span class="km-val" data-km-val="concExp"></span></div>
+      <div class="km-row"><label for="km-tsExp">b (strength)</label>
+        <input id="km-tsExp" type="range" data-km="tsExp" min="0" max="4" step="0.1" value="2"><span class="km-val" data-km-val="tsExp"></span></div>
+      <div class="km-row"><label for="km-lumExp">c (luminance)</label>
+        <input id="km-lumExp" type="range" data-km="lumExp" min="0" max="3" step="0.1" value="1"><span class="km-val" data-km-val="lumExp"></span></div>
+    </div>
+
+    <div class="km-group">
+      <div class="km-group-title">Saunderson surface-reflection correction</div>
+      <div class="km-row"><label for="km-k1">k₁ (surface)</label>
+        <input id="km-k1" type="range" data-km="k1" min="0" max="0.1" step="0.005" value="0"><span class="km-val" data-km-val="k1"></span></div>
+      <div class="km-row"><label for="km-k2">k₂ (internal)</label>
+        <input id="km-k2" type="range" data-km="k2" min="0" max="0.8" step="0.02" value="0"><span class="km-val" data-km-val="k2"></span></div>
+    </div>
+
+    <div class="km-actions">
+      <button type="button" id="kmReset" class="btn btn-tertiary">Reset to defaults</button>
+    </div>
   </div>
 
   <!-- Perceptual-judgment modal (completion path; ΔE≈0 isn't reachable spectrally) -->
@@ -329,5 +402,5 @@ input.drop-badge:focus {
   const spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
 </script>
 <script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
-<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260609s-overlay"></script>
+<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260610b-masstone"></script>
 {% endblock %}

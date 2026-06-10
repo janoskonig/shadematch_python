@@ -446,8 +446,8 @@ def _load_pigment_spectrum(file_path):
     """Load a single measured pigment reflectance curve as (wavelengths, reflectances).
 
     Handles both formats found in static/pigments/:
-      - .csv : 'Wavelength' column + one column per measured sample channel (0-1),
-               averaged across channels.
+      - .csv : 'Wavelength' column + one column per Kremer shade (sh-1..sh-4, 0-1).
+               We take shade-1 (masstone / full strength) as the base spectrum — see below.
       - .txt : space-delimited 2-column 'wavelength reflectance' with reflectance
                in 0-100, divided by 100 here.
 
@@ -458,7 +458,11 @@ def _load_pigment_spectrum(file_path):
     if file_path.endswith('.csv'):
         df = pd.read_csv(file_path)
         wavelengths = df['Wavelength'].tolist()
-        reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
+        # The four columns (sh-1..sh-4) are the same pigment at four dilution levels on the
+        # printed Kremer card, NOT repeat measurements. Averaging them blends four different
+        # tints into a physically meaningless curve (and silently weakens the pigment). Take
+        # shade-1 — the masstone / full-strength tint (lowest reflectance) — as the base.
+        reflectances = df.iloc[:, 1].tolist()
     else:
         data = []
         with open(file_path, 'r') as f:
