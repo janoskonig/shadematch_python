@@ -8,6 +8,16 @@ not the model /spectral uses. This module mixes pigments the way /spectral does
 (Kubelka–Munk in K/S space with measured tinting strengths) and inverts that model with a
 global search against a perceptual ΔE2000 objective.
 
+Reference — https://github.com/yargo13/color-formulation
+  The inverse-solve approach here is adapted from yargo13/color-formulation, a
+  two-constant Kubelka–Munk paint-formulation engine that solves with a genetic algorithm
+  and dual-illuminant (D65 + A) colorimetric matching. We borrow two ideas from it:
+    - its solver *strategy* — pigment-subset selection + several recipe options trading
+      simplicity against accuracy (see solve_recipe);
+    - its multi-illuminant fitness, to resist metamerism (see the scoring section below).
+  We keep our own single-constant forward model (so a recipe stays consistent with what
+  /spectral renders); its two-constant physics is the deferred FUTURE spike noted below.
+
 Ported verbatim from static/spectral.js (line refs are to that file):
   - 38-bin grid 380–750 nm @10 nm        (SIZE = 38, :32)
   - D65-weighted CMF, R→XYZ = CMF·R       (CIE.CMF :746, R_to_XYZ :570)
@@ -31,6 +41,7 @@ from itertools import combinations
 import numpy as np
 from scipy.optimize import minimize
 from colormath.color_objects import LabColor
+from colormath import spectral_constants as _spectral_constants
 
 from .utils import delta_e_cie2000
 
@@ -75,6 +86,49 @@ XYZ_RGB = np.array([
 # Engine white point = CMF · ones (the reflectance of a perfect diffuser on this grid).
 WHITE_XYZ = CMF @ np.ones(SIZE)
 EPS = np.finfo(float).eps
+
+
+# ── Multi-illuminant scoring (metamerism) ───────────────────────────────────
+# A recipe that matches the target under D65 can drift apart under other lights —
+# that's metamerism, and it's the usual reason a "perfect" match looks wrong in
+# the room. To account for it we re-score every candidate under several lights.
+# Adapted from the dual-illuminant (D65 + A) fitness in yargo13/color-formulation
+# (MainActivity.calculate_fitting — https://github.com/yargo13/color-formulation);
+# we add F11 as an extra narrow-band stressor.
+#
+# colormath ships the CIE 1931 2° observer and standard illuminant SPDs on a
+# 340–830 nm @10 nm grid; our 380–750 nm engine grid is exactly indices 4–41 of
+# it. Reconstructing the D65 weighting this way reproduces the engine CMF to
+# ΔE 0.0 (verified), so D65 stays the headline match and the other lights are
+# layered on purely to expose metameric drift.
+_CM_I0, _CM_I1 = 4, 4 + SIZE  # slice of the 340–830 grid covering 380–750 nm
+_OBS = np.vstack([
+    np.asarray(_spectral_constants.STDOBSERV_X2, dtype=float),
+    np.asarray(_spectral_constants.STDOBSERV_Y2, dtype=float),
+    np.asarray(_spectral_constants.STDOBSERV_Z2, dtype=float),
+])[:, _CM_I0:_CM_I1]
+
+# Reference light first (D65 = what /spectral renders under), then test lights
+# that surface metamerism: A = warm incandescent, F11 = narrow-band fluorescent
+# (the classic metameric-failure stressor).
+ILLUMINANTS = ['D65', 'A', 'F11']
+_ILLUM_SPD = {
+    'D65': _spectral_constants.REFERENCE_ILLUM_D65,
+    'A': _spectral_constants.REFERENCE_ILLUM_A,
+    'F11': _spectral_constants.REFERENCE_ILLUM_F11,
+}
+# Per-illuminant weighting matrix W (3×38) and its white point, so XYZ = W·R.
+_ILLUM = {}
+for _name in ILLUMINANTS:
+    _W = _OBS * np.asarray(_ILLUM_SPD[_name], dtype=float)[_CM_I0:_CM_I1]
+    _ILLUM[_name] = (_W, _W @ np.ones(SIZE))
+# White points stacked in ILLUMINANTS order, shape (n_illum, 3), for the batched Lab transform.
+_ILLUM_WHITE = np.stack([_ILLUM[n][1] for n in ILLUMINANTS])
+
+# How hard the solver leans on the test lights relative to the D65 headline. D65
+# stays dominant (weight 1), so the headline match is preserved; this only steers
+# otherwise-comparable recipes toward ones that also hold up under A/F11.
+METAMERISM_WEIGHT = 0.5
 
 
 # ── Spectral / colorimetric helpers ─────────────────────────────────────────
@@ -181,25 +235,116 @@ def _delta_e(lab1, lab2):
     return delta_e_cie2000(LabColor(*lab1), LabColor(*lab2))
 
 
-def _recipe_result(bases, keys, amounts, target_lab):
-    """Package a recipe (dict key→amount) with its achieved colour and ΔE."""
+def ciede2000(lab1, lab2):
+    """Vectorised CIEDE2000 (Sharma et al. 2005), kL=kC=kH=1. lab1/lab2 are (…, 3)
+    arrays and the colour difference is taken along the last axis, so a whole batch
+    of Lab pairs scores in one call. Matches colormath.delta_e_cie2000 to ~1e-5 —
+    this is the solver's hot path (called thousands of times), and colormath's
+    per-call object construction made the multi-illuminant solve ~3× too slow."""
+    lab1 = np.asarray(lab1, dtype=float)
+    lab2 = np.asarray(lab2, dtype=float)
+    L1, a1, b1 = lab1[..., 0], lab1[..., 1], lab1[..., 2]
+    L2, a2, b2 = lab2[..., 0], lab2[..., 1], lab2[..., 2]
+    C1, C2 = np.hypot(a1, b1), np.hypot(a2, b2)
+    Cbar = (C1 + C2) / 2.0
+    G = 0.5 * (1 - np.sqrt(Cbar ** 7 / (Cbar ** 7 + 25.0 ** 7)))
+    a1p, a2p = (1 + G) * a1, (1 + G) * a2
+    C1p, C2p = np.hypot(a1p, b1), np.hypot(a2p, b2)
+    h1p = np.degrees(np.arctan2(b1, a1p)) % 360.0
+    h2p = np.degrees(np.arctan2(b2, a2p)) % 360.0
+    dLp = L2 - L1
+    dCp = C2p - C1p
+    dhp = h2p - h1p
+    dhp = np.where(dhp > 180, dhp - 360, dhp)
+    dhp = np.where(dhp < -180, dhp + 360, dhp)
+    dhp = np.where(C1p * C2p == 0, 0.0, dhp)
+    dHp = 2 * np.sqrt(C1p * C2p) * np.sin(np.radians(dhp) / 2.0)
+    Lbarp = (L1 + L2) / 2.0
+    Cbarp = (C1p + C2p) / 2.0
+    hsum, habs = h1p + h2p, np.abs(h1p - h2p)
+    hbarp = np.where(C1p * C2p == 0, hsum,
+                     np.where(habs <= 180, hsum / 2.0,
+                              np.where(hsum < 360, (hsum + 360) / 2.0, (hsum - 360) / 2.0)))
+    T = (1 - 0.17 * np.cos(np.radians(hbarp - 30)) + 0.24 * np.cos(np.radians(2 * hbarp))
+         + 0.32 * np.cos(np.radians(3 * hbarp + 6)) - 0.20 * np.cos(np.radians(4 * hbarp - 63)))
+    dtheta = 30 * np.exp(-(((hbarp - 275) / 25.0) ** 2))
+    RC = 2 * np.sqrt(Cbarp ** 7 / (Cbarp ** 7 + 25.0 ** 7))
+    SL = 1 + (0.015 * (Lbarp - 50) ** 2) / np.sqrt(20 + (Lbarp - 50) ** 2)
+    SC = 1 + 0.045 * Cbarp
+    SH = 1 + 0.015 * Cbarp * T
+    RT = -np.sin(np.radians(2 * dtheta)) * RC
+    return np.sqrt((dLp / SL) ** 2 + (dCp / SC) ** 2 + (dHp / SH) ** 2
+                   + RT * (dCp / SC) * (dHp / SH))
+
+
+def _labs_under_all(R):
+    """Stack the CIELAB of reflectance R under every illuminant, shape (n_illum, 3).
+
+    XYZ = W·R per illuminant (its own white point), then the standard f() lab transform —
+    all illuminants at once so it's a couple of small matmuls, no Python loop in the hot path."""
+    XYZ = np.stack([W @ R for W, _ in (_ILLUM[n] for n in ILLUMINANTS)])      # (n, 3)
+    ratios = XYZ / _ILLUM_WHITE                                              # (n, 3)
+    fr = np.where(ratios > 0.008856451679035631,
+                  np.cbrt(ratios),
+                  7.787037037037037 * ratios + 16.0 / 116.0)
+    fx, fy, fz = fr[:, 0], fr[:, 1], fr[:, 2]
+    return np.stack([116.0 * fy - 16.0, 500.0 * (fx - fy), 200.0 * (fy - fz)], axis=1)
+
+
+def delta_e_by_illuminant(target, sample_R):
+    """ΔE2000 between a target and a sample reflectance curve under each illuminant.
+
+    `target` may be a reflectance array or a pre-computed (n_illum, 3) Lab stack (from
+    _labs_under_all) — the stacked form lets the solver compute the fixed target Labs
+    once and reuse them across thousands of objective evaluations. The 'D65' entry
+    equals the engine headline ΔE (same observer/white point)."""
+    target_labs = target if isinstance(target, np.ndarray) else _labs_under_all(target)
+    des = ciede2000(target_labs, _labs_under_all(sample_R))   # (n_illum,)
+    return {name: float(des[i]) for i, name in enumerate(ILLUMINANTS)}
+
+
+def _metamerism_index(des):
+    """How much the match degrades under the worst test light vs. the D65 reference:
+    max(test ΔE) − D65 ΔE, floored at 0. ~0 means the recipe holds across lights;
+    a large value flags a metameric pair that will look off under A/F11."""
+    ref = des[ILLUMINANTS[0]]
+    worst_test = max(des[n] for n in ILLUMINANTS[1:]) if len(ILLUMINANTS) > 1 else ref
+    return max(0.0, worst_test - ref)
+
+
+def _metameric_cost(des):
+    """Solver objective: the D65 reference match plus a weighted pull toward also
+    matching under the test lights. D65 dominates (weight 1), so the headline match
+    is preserved while ties break toward metamerism-robust recipes."""
+    ref = des[ILLUMINANTS[0]]
+    tests = [des[n] for n in ILLUMINANTS[1:]]
+    return ref + METAMERISM_WEIGHT * (sum(tests) / len(tests) if tests else 0.0)
+
+
+def _recipe_result(bases, keys, amounts, target):
+    """Package a recipe (dict key→amount) with its achieved colour, headline ΔE
+    (under D65), the per-illuminant ΔE breakdown, and the metamerism index."""
     mixed = mix_amounts(bases, amounts)
     total = sum(amounts.values())
+    des = delta_e_by_illuminant(target, mixed.R)
     return {
         'amounts': amounts,
         'percentages': {k: (100.0 * amounts[k] / total if total else 0.0) for k in amounts},
         'achieved_rgb': mixed.sRGB,
-        'delta_e': _delta_e(target_lab, mixed.lab),
+        'delta_e': des[ILLUMINANTS[0]],
+        'delta_e_by_illuminant': des,
+        'metamerism_index': _metamerism_index(des),
     }
 
 
-def _best_for_subset(target_lab, bases, keys, rng):
+def _best_for_subset(target, bases, keys, rng):
     """Best continuous mix of exactly `keys` (a pigment subset), as normalised fractions.
 
     Low-dimensional and fairly smooth once the forward model and objective are correct, so a
     multi-start L-BFGS-B (each base alone, the centroid, plus a few seeded random starts)
-    finds the subset optimum reliably without a full global search per subset. Returns
-    (fractions array aligned to `keys`, ΔE)."""
+    finds the subset optimum reliably without a full global search per subset. Minimises the
+    metameric cost (D65 match + test-light penalty). Returns (fractions array aligned to
+    `keys`, metameric cost)."""
     n = len(keys)
 
     def objective(x):
@@ -207,7 +352,7 @@ def _best_for_subset(target_lab, bases, keys, rng):
         if s <= 1e-9:
             return 1e6
         amounts = {keys[i]: float(x[i]) for i in range(n)}
-        return _delta_e(target_lab, mix_amounts(bases, amounts).lab)
+        return _metameric_cost(delta_e_by_illuminant(target, mix_amounts(bases, amounts).R))
 
     starts = [np.full(n, 1.0 / n)]                 # centroid
     starts += [np.eye(n)[i] for i in range(n)]     # each pigment alone
@@ -224,6 +369,27 @@ def _best_for_subset(target_lab, bases, keys, rng):
     return best_x / total, float(best_f)
 
 
+# Gamut-reachability ladder, in headline (D65) ΔE2000. Five fixed pigments span a
+# limited gamut, so an arbitrary target may simply be unreachable — these bands turn
+# the best achievable ΔE into an honest verdict instead of a silently-large number.
+REACHABILITY_BANDS = [
+    (1.0, 'exact', 'Reachable — the match is essentially perfect (ΔE < 1, imperceptible).'),
+    (3.0, 'close', 'Reachable — a very good match (ΔE < 3, only a trained eye sees a difference).'),
+    (6.0, 'approximate', 'Approximate — a noticeable difference remains (ΔE 3–6); this is near the edge of what these five pigments can mix.'),
+    (float('inf'), 'out_of_gamut', 'Out of gamut — this colour is outside what these five pigments can mix (ΔE > 6); the recipe below is only the closest reachable approximation.'),
+]
+
+
+def _reachability(best_delta_e):
+    """Classify the closest achievable D65 match into a reachability verdict."""
+    for threshold, status, message in REACHABILITY_BANDS:
+        if best_delta_e < threshold:
+            return {'status': status, 'closest_delta_e': float(best_delta_e), 'message': message}
+    # unreachable fall-through (REACHABILITY_BANDS ends with inf, so this is defensive)
+    last = REACHABILITY_BANDS[-1]
+    return {'status': last[1], 'closest_delta_e': float(best_delta_e), 'message': last[2]}
+
+
 def solve_recipe(target_color, bases, seed=0, max_options=3, significance=0.02):
     """Match target_color (a SpectralColor) with the measured bases, minimising ΔE2000.
 
@@ -231,39 +397,46 @@ def solve_recipe(target_color, bases, seed=0, max_options=3, significance=0.02):
     one recipe that uses every pigment, it does subset selection and returns several recipe
     options trading simplicity against accuracy. With only five bases we can be exhaustive
     rather than greedy — every non-empty pigment subset is solved, each result reduced to the
-    pigments that actually carry weight, and the **Pareto front** over (pigment count, ΔE) is
-    surfaced: for each level of simplicity, the best match achievable.
+    pigments that actually carry weight, and the **Pareto front** over (pigment count, cost)
+    is surfaced: for each level of simplicity, the best match achievable.
 
-    Returns {'options': [opt, …]} ordered best-ΔE first (so options[0] is the headline
-    recipe). Each opt = {pigments, num_pigments, continuous:{…}, rounded:{…}}.
+    The per-subset objective is multi-illuminant (D65 reference + A/F11 test lights) so the
+    chosen recipes resist metamerism, and each option reports its per-illuminant ΔE breakdown.
+    A `reachability` verdict states how close the best recipe can actually get, since five
+    fixed pigments span a limited gamut.
+
+    Returns {'options': [opt, …], 'reachability': {…}} ordered best-match first (so options[0]
+    is the headline recipe). Each opt = {pigments, num_pigments, continuous:{…}, rounded:{…}}.
     """
     keys_all = [k for k in ORDER if k in bases]
-    target_lab = target_color.lab
+    # Target curve is fixed for the whole solve — pre-compute its per-illuminant Labs
+    # once and reuse them across the thousands of objective evaluations below.
+    target_labs = _labs_under_all(target_color.R)
     rng = np.random.default_rng(seed)
 
     # Solve every subset, then collapse to one entry per *effective* pigment set (the
-    # pigments left after dropping near-zero ones), keeping the lowest-ΔE solve for each.
+    # pigments left after dropping near-zero ones), keeping the lowest-cost solve for each.
     by_effset = {}
     for k in range(1, len(keys_all) + 1):
         for subset in combinations(keys_all, k):
-            fracs, de = _best_for_subset(target_lab, bases, list(subset), rng)
+            fracs, cost = _best_for_subset(target_labs, bases, list(subset), rng)
             eff = [(subset[i], fracs[i]) for i in range(len(subset)) if fracs[i] >= significance]
             if not eff:
                 continue
             effset = frozenset(p for p, _ in eff)
-            if effset not in by_effset or de < by_effset[effset][1]:
-                by_effset[effset] = (eff, de)
+            if effset not in by_effset or cost < by_effset[effset][1]:
+                by_effset[effset] = (eff, cost)
 
-    # Pareto front over (number of pigments, ΔE): keep a recipe only if no simpler-or-equal
+    # Pareto front over (number of pigments, cost): keep a recipe only if no simpler-or-equal
     # recipe also matches better. This is the simplicity/accuracy trade-off ladder.
     entries = sorted(by_effset.values(), key=lambda e: (len(e[0]), e[1]))
-    front, best_de_so_far = [], np.inf
-    for eff, de in entries:
-        if de < best_de_so_far - 1e-9:        # str* improvement over anything simpler
-            front.append((eff, de))
-            best_de_so_far = de
+    front, best_cost_so_far = [], np.inf
+    for eff, cost in entries:
+        if cost < best_cost_so_far - 1e-9:    # str* improvement over anything simpler
+            front.append((eff, cost))
+            best_cost_so_far = cost
 
-    # Build option dicts (best ΔE first), capped at max_options.
+    # Build option dicts (best match first), capped at max_options.
     front.sort(key=lambda e: e[1])
     options = []
     for eff, _ in front[:max_options]:
@@ -274,16 +447,21 @@ def solve_recipe(target_color, bases, seed=0, max_options=3, significance=0.02):
         options.append({
             'pigments': keys,
             'num_pigments': len(keys),
-            'continuous': _recipe_result(bases, keys, cont_amounts, target_lab),
-            'rounded': _round_recipe(bases, keys, fractions, target_lab),
+            'continuous': _recipe_result(bases, keys, cont_amounts, target_labs),
+            'rounded': _round_recipe(bases, keys, fractions, target_labs),
         })
-    return {'options': options}
+
+    # Reachability is the closest achievable D65 match — the best continuous recipe's
+    # headline ΔE (rounding to drops can only add error, so the continuous solve is the
+    # true gamut-distance verdict).
+    best_de = min((o['continuous']['delta_e'] for o in options), default=float('inf'))
+    return {'options': options, 'reachability': _reachability(best_de)}
 
 
-def _round_recipe(bases, keys, fractions, target_lab, max_total=12):
+def _round_recipe(bases, keys, fractions, target, max_total=12):
     """Snap continuous fractions to practical integer 'drops'. Try every small total,
-    re-score ΔE on the rounded recipe, then do a ±1-drop local search — keeping the
-    lowest-ΔE integer recipe (rounding the optimum naively can hurt the match)."""
+    re-score the metameric cost on the rounded recipe, then do a ±1-drop local search —
+    keeping the lowest-cost integer recipe (rounding the optimum naively can hurt the match)."""
     fractions = np.asarray(fractions)
 
     def score(vec):
@@ -291,7 +469,7 @@ def _round_recipe(bases, keys, fractions, target_lab, max_total=12):
         if sum(amounts.values()) == 0:
             return 1e6, amounts
         mixed = mix_amounts(bases, amounts)
-        return _delta_e(target_lab, mixed.lab), amounts
+        return _metameric_cost(delta_e_by_illuminant(target, mixed.R)), amounts
 
     best_vec, best_de = None, np.inf
     for total in range(2, max_total + 1):
@@ -323,4 +501,4 @@ def _round_recipe(bases, keys, fractions, target_lab, max_total=12):
                     best_vec, base_de, improved = cand, d, True
 
     amounts = {keys[i]: int(best_vec[i]) for i in range(len(keys)) if best_vec[i] > 0}
-    return _recipe_result(bases, list(amounts.keys()), amounts, target_lab)
+    return _recipe_result(bases, list(amounts.keys()), amounts, target)

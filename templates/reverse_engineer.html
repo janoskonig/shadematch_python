@@ -212,6 +212,50 @@
             margin: 20px 0;
             text-align: center;
         }
+
+        .reachability {
+            border-radius: 8px;
+            padding: 15px 20px;
+            margin: 0 0 20px 0;
+            font-size: 0.95em;
+            line-height: 1.4;
+            border-left: 5px solid;
+        }
+        .reachability .reach-status {
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-size: 0.8em;
+            display: block;
+            margin-bottom: 4px;
+        }
+        .reach-exact        { background: #e6f7ec; color: #1e7d44; border-color: #2ecc71; }
+        .reach-close        { background: #e9f0ff; color: #2a4d9b; border-color: #667eea; }
+        .reach-approximate  { background: #fff5e6; color: #a36a00; border-color: #f39c12; }
+        .reach-out_of_gamut { background: #ffe6e6; color: #b3322c; border-color: #d63031; }
+
+        .delta-chips {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 15px;
+        }
+        .delta-chip {
+            background: #f0f2ff;
+            color: #4a4a6a;
+            border-radius: 12px;
+            padding: 3px 10px;
+            font-size: 0.82em;
+        }
+        .delta-chip b { color: #333; }
+        .metamerism-note {
+            text-align: center;
+            font-size: 0.82em;
+            margin-top: 10px;
+        }
+        .metamerism-note.good { color: #1e7d44; }
+        .metamerism-note.warn { color: #a36a00; }
         
         .nav-links {
             text-align: center;
@@ -466,6 +510,10 @@
             yellow: 'Cadmium Yellow', blue: 'Ultramarine Blue'
         };
 
+        const ILLUMINANT_LABELS = {
+            D65: 'Daylight (D65)', A: 'Incandescent (A)', F11: 'Fluorescent (F11)'
+        };
+
         function rgbCss(rgb) { return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`; }
 
         function optionTitle(index, opt) {
@@ -512,7 +560,51 @@
                     <div class="color-label">Achieved · ΔE ${opt.rounded.delta_e.toFixed(2)}</div>
                 </div>`;
             card.appendChild(preview);
+
+            card.appendChild(metamerismBlock(opt.rounded));
             return card;
+        }
+
+        // Per-illuminant ΔE chips + a plain-language metamerism verdict. A recipe can match
+        // under daylight (D65) yet drift under warm/fluorescent light — these chips show the
+        // match under each, and the index summarises how much it degrades at worst.
+        function metamerismBlock(recipe) {
+            const wrap = document.createElement('div');
+            const des = recipe.delta_e_by_illuminant || {};
+
+            // Reference light (D65) first, then test lights — explicit order, since the
+            // server's JSON sorts keys alphabetically (A, D65, F11).
+            const order = Object.keys(ILLUMINANT_LABELS).filter(l => l in des);
+            const chips = document.createElement('div');
+            chips.className = 'delta-chips';
+            chips.innerHTML = order
+                .map(light => `<span class="delta-chip">${ILLUMINANT_LABELS[light]} · <b>ΔE ${des[light].toFixed(2)}</b></span>`)
+                .join('');
+            wrap.appendChild(chips);
+
+            const mi = recipe.metamerism_index;
+            if (mi != null) {
+                const note = document.createElement('div');
+                const low = mi < 1.0;
+                note.className = `metamerism-note ${low ? 'good' : 'warn'}`;
+                note.textContent = low
+                    ? `Holds up across lighting (metamerism index ${mi.toFixed(2)}).`
+                    : `Metameric: the match shifts by up to ΔE ${mi.toFixed(2)} under warm/fluorescent light.`;
+                wrap.appendChild(note);
+            }
+            return wrap;
+        }
+
+        // Banner stating how close these five pigments can actually get to the target —
+        // an honest gamut verdict, since an arbitrary colour may simply be unreachable.
+        function reachabilityBanner(reach) {
+            if (!reach) return null;
+            const banner = document.createElement('div');
+            banner.className = `reachability reach-${reach.status}`;
+            banner.innerHTML = `
+                <span class="reach-status">Best achievable · ΔE ${reach.closest_delta_e.toFixed(2)}</span>
+                ${reach.message}`;
+            return banner;
         }
 
         function displayResults(data) {
@@ -526,6 +618,8 @@
                 showError('No recipe could be found for this spectrum.');
                 return;
             }
+            const banner = reachabilityBanner(data.reachability);
+            if (banner) container.appendChild(banner);
             options.forEach((opt, i) => container.appendChild(optionCard(i, opt, targetCss)));
 
             resultsDiv.style.display = 'block';

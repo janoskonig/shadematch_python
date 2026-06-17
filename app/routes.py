@@ -3617,6 +3617,7 @@ def reverse_engineer():
         return jsonify({
             'target_rgb': target.sRGB,
             'options': result['options'],
+            'reachability': result['reachability'],
         })
     except Exception as e:
         import traceback; traceback.print_exc()
