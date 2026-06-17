@@ -16,7 +16,8 @@ from .models import (
     ConsentRecord,
 )
 import string
-from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb, reverse_engineer_recipe
+from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb
+from . import spectral_km
 from . import email_utils
 import pandas as pd
 import os
@@ -3599,28 +3600,24 @@ def reverse_engineer():
         if 'Wavelength' not in spectrum_data.columns or 'Reflectance' not in spectrum_data.columns:
             return jsonify({'error': 'File must have Wavelength and Reflectance columns'}), 400
 
-        pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
-        pigments = {}
-        for filename in os.listdir(pigments_dir):
-            if filename.endswith('.csv'):
-                pigment_name = os.path.splitext(filename)[0].replace('_', ' ').title()
-                pigment_data = pd.read_csv(os.path.join(pigments_dir, filename))
-                refl_cols = [c for c in pigment_data.columns if c != 'Wavelength']
-                pigment_data['Reflectance'] = pigment_data[refl_cols].mean(axis=1)
-                pigments[pigment_name] = {
-                    'wavelengths': pigment_data['Wavelength'].tolist(),
-                    'reflectances': pigment_data['Reflectance'].tolist(),
-                }
+        # Solve against the same five measured bases the /spectral lab mixes with, using the
+        # same Kubelka–Munk engine (app.spectral_km) — so a returned recipe reproduces what
+        # /spectral would render, not the old linear-average model.
+        bases = spectral_km.bases_from_spectrum_plots(build_spectrum_plots())
+        if not bases:
+            return jsonify({'error': 'Base pigment spectra unavailable'}), 500
 
-        wavelengths, x_bar, y_bar, z_bar = load_cie_data()
-        target_xyz = spectrum_to_xyz(
-            spectrum_data['Reflectance'].tolist(),
+        target_R = spectral_km.resample_to_grid(
             spectrum_data['Wavelength'].tolist(),
-            x_bar, y_bar, z_bar,
+            spectrum_data['Reflectance'].tolist(),
         )
-        target_rgb = xyz_to_rgb(*target_xyz)
-        recipe, delta_e = reverse_engineer_recipe(target_xyz, pigments, x_bar, y_bar, z_bar)
-        return jsonify({'recipe': recipe, 'delta_e': delta_e, 'target_rgb': target_rgb.tolist()})
+        target = spectral_km.SpectralColor(target_R)
+        result = spectral_km.solve_recipe(target, bases)
+
+        return jsonify({
+            'target_rgb': target.sRGB,
+            'options': result['options'],
+        })
     except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({'error': str(e)}), 500

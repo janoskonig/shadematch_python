@@ -127,6 +127,13 @@
             margin-bottom: 20px;
             text-align: center;
         }
+
+        .recipe-note {
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+            margin: 10px 0 0 0;
+        }
         
         .pigment-list {
             display: grid;
@@ -397,24 +404,12 @@
             </div>
             
             <div class="results-section" id="results">
-                <div class="recipe-card">
-                    <div class="recipe-title">Recommended Pigment Recipe</div>
-                    
-                    <div class="pigment-list" id="pigmentList">
-                        <!-- Pigment items will be populated here -->
-                    </div>
-                    
-                    <div class="color-preview">
-                        <div>
-                            <div class="color-box" id="targetColor"></div>
-                            <div class="color-label">Target Color</div>
-                        </div>
-                        <div>
-                            <div class="color-box" id="mixedColor"></div>
-                            <div class="color-label">Mixed Color</div>
-                        </div>
-                    </div>
-                </div>
+                <div id="optionsContainer"></div>
+                <p class="recipe-note" id="recipeNote">
+                    Each option trades simplicity for accuracy: the first is the closest match,
+                    the rest use fewer pigments. ΔE is the best these five pigments can reach —
+                    it won't be 0 for an arbitrary target.
+                </p>
             </div>
         </div>
     </div>
@@ -466,31 +461,73 @@
             });
         }
         
+        const PIGMENT_LABELS = {
+            white: 'White', black: 'Black', red: 'Cadmium Red',
+            yellow: 'Cadmium Yellow', blue: 'Ultramarine Blue'
+        };
+
+        function rgbCss(rgb) { return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`; }
+
+        function optionTitle(index, opt) {
+            const pigs = `${opt.num_pigments} pigment${opt.num_pigments === 1 ? '' : 's'}`;
+            if (index === 0) return `Best match · ${pigs}`;
+            return `Simpler alternative · ${pigs}`;
+        }
+
+        // One card per recipe option: pigments as "N drops (P%)", target vs achieved swatch.
+        function optionCard(index, opt, targetCss) {
+            const card = document.createElement('div');
+            card.className = 'recipe-card';
+
+            const title = document.createElement('div');
+            title.className = 'recipe-title';
+            title.textContent = optionTitle(index, opt);
+            card.appendChild(title);
+
+            const list = document.createElement('div');
+            list.className = 'pigment-list';
+            const pct = opt.continuous.percentages;
+            Object.entries(opt.rounded.amounts)
+                .sort((a, b) => b[1] - a[1])
+                .forEach(([pigment, drops]) => {
+                    const item = document.createElement('div');
+                    item.className = 'pigment-item';
+                    const share = pct[pigment] != null ? ` · ${pct[pigment].toFixed(0)}%` : '';
+                    item.innerHTML = `
+                        <div class="pigment-name">${PIGMENT_LABELS[pigment] || pigment}</div>
+                        <div class="pigment-drops">${drops} drop${drops === 1 ? '' : 's'}${share}</div>`;
+                    list.appendChild(item);
+                });
+            card.appendChild(list);
+
+            const preview = document.createElement('div');
+            preview.className = 'color-preview';
+            preview.innerHTML = `
+                <div>
+                    <div class="color-box" style="background-color:${targetCss}"></div>
+                    <div class="color-label">Target</div>
+                </div>
+                <div>
+                    <div class="color-box" style="background-color:${rgbCss(opt.rounded.achieved_rgb)}"></div>
+                    <div class="color-label">Achieved · ΔE ${opt.rounded.delta_e.toFixed(2)}</div>
+                </div>`;
+            card.appendChild(preview);
+            return card;
+        }
+
         function displayResults(data) {
             const resultsDiv = document.getElementById('results');
-            const pigmentList = document.getElementById('pigmentList');
-            
-            // Clear previous results
-            pigmentList.innerHTML = '';
-            
-            // Display pigment recipe
-            Object.entries(data.recipe).forEach(([pigment, drops]) => {
-                const pigmentItem = document.createElement('div');
-                pigmentItem.className = 'pigment-item';
-                pigmentItem.innerHTML = `
-                    <div class="pigment-name">${pigment}</div>
-                    <div class="pigment-drops">${drops} drops</div>
-                `;
-                pigmentList.appendChild(pigmentItem);
-            });
-            
-            // Display colors
-            const targetColor = document.getElementById('targetColor');
-            const mixedColor = document.getElementById('mixedColor');
-            
-            targetColor.style.backgroundColor = `rgb(${data.target_rgb[0]}, ${data.target_rgb[1]}, ${data.target_rgb[2]})`;
-            mixedColor.style.backgroundColor = `rgb(${data.target_rgb[0]}, ${data.target_rgb[1]}, ${data.target_rgb[2]})`; // Using target for now
-            
+            const container = document.getElementById('optionsContainer');
+            const targetCss = rgbCss(data.target_rgb);
+
+            container.innerHTML = '';
+            const options = data.options || [];
+            if (!options.length) {
+                showError('No recipe could be found for this spectrum.');
+                return;
+            }
+            options.forEach((opt, i) => container.appendChild(optionCard(i, opt, targetCss)));
+
             resultsDiv.style.display = 'block';
         }
         
