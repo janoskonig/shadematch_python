@@ -41,6 +41,9 @@ class TargetColor(db.Model):
     drop_red = db.Column(db.Integer, nullable=True)
     drop_yellow = db.Column(db.Integer, nullable=True)
     drop_blue = db.Column(db.Integer, nullable=True)
+    # Which mixing model + input mode produced this saved recipe (lab tagging).
+    mixing_model = db.Column(db.String(16), nullable=True)   # 'rgb' | 'spectral'
+    input_mode = db.Column(db.String(16), nullable=True)     # 'integer' | 'dialer'
 
 
 class MixingSession(db.Model):
@@ -65,6 +68,9 @@ class MixingSession(db.Model):
     skip_perception = db.Column(db.String(32), nullable=True)
     # perfect | no_perceivable_difference | acceptable_difference | big_difference | stopped
     match_category = db.Column(db.String(40), nullable=True)
+    # Mixing configuration used for this attempt.
+    mixing_model = db.Column(db.String(16), nullable=True)   # 'rgb' | 'spectral'
+    input_mode = db.Column(db.String(16), nullable=True)     # 'integer' | 'dialer'
 
 
 class MixingAttempt(db.Model):
@@ -102,6 +108,9 @@ class MixingAttempt(db.Model):
     # fullscreen, locale, timezone, ...) — first-write-wins per attempt so we
     # capture the environment at attempt-start time and ignore later updates.
     client_env_json = db.Column(db.JSON, nullable=True)
+    # Mixing configuration used for this attempt.
+    mixing_model = db.Column(db.String(16), nullable=True)   # 'rgb' | 'spectral'
+    input_mode = db.Column(db.String(16), nullable=True)     # 'integer' | 'dialer'
 
 
 class MixingAttemptEvent(db.Model):
@@ -133,6 +142,9 @@ class MixingAttemptEvent(db.Model):
     mix_after_r = db.Column(db.SmallInteger, nullable=True)
     mix_after_g = db.Column(db.SmallInteger, nullable=True)
     mix_after_b = db.Column(db.SmallInteger, nullable=True)
+    # Mixing configuration (denormalised from the parent attempt for easy per-event analysis).
+    mixing_model = db.Column(db.String(16), nullable=True)   # 'mixbox' | 'spectral'
+    input_mode = db.Column(db.String(16), nullable=True)     # 'integer' | 'dialer'
 
     __table_args__ = (
         db.UniqueConstraint('attempt_uuid', 'seq', name='uq_mixing_attempt_events_attempt_seq'),

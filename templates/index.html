@@ -293,16 +293,6 @@
     </div>
   </div>
 
-  <!-- ======== Instructional Video Modal ======== -->
-  <div id="videoModal" class="modal-overlay" style="display:none;">
-    <div class="video-modal-inner">
-      <button id="closeVideoBtn" class="video-close" type="button" aria-label="Close video">&times;</button>
-      <div class="video-aspect">
-        <iframe id="videoFrame" src="" allow="autoplay; encrypted-media" allowfullscreen></iframe>
-      </div>
-    </div>
-  </div>
-
   <!-- ======== App Header ======== -->
   <header class="app-header">
     <div class="app-header-inner">
@@ -319,7 +309,7 @@
         </div>
         <a href="/results" class="btn-icon" aria-label="View results">&#128202; <span class="help-label">Results</span></a>
         <a href="/leaderboard" class="btn-icon" aria-label="View leaderboard">&#127942; <span class="help-label">Leaderboard</span></a>
-        <button id="showVideoBtn" class="btn-icon" type="button" aria-label="Watch instructional video">&#9658; <span class="help-label">Help</span></button>
+        <button id="showGuideBtn" class="btn-icon" type="button" aria-label="Show the quick guide">&#128161; <span class="help-label">Guide</span></button>
       </div>
     </div>
   </header>
@@ -559,7 +549,6 @@
 
   window.addEventListener('DOMContentLoaded', function() {
     var modal = document.getElementById('userModal');
-    var videoModal = document.getElementById('videoModal');
     var storedId = localStorage.getItem('userId');
     var storedBirthdate = localStorage.getItem('userBirthdate');
     var storedGender = localStorage.getItem('userGender');
@@ -568,7 +557,35 @@
     var researchConsentModal = document.getElementById('researchConsentModal');
     var RESEARCH_CONSENT_VERSION = researchConsentModal
       ? (researchConsentModal.getAttribute('data-consent-version') || '') : '';
-    var VIDEO_SRC = 'https://www.youtube.com/embed/4MAaDDelYMA?autoplay=1&rel=0&modestbranding=1';
+    // Interactive spotlight walkthrough (replaces the old intro video). Steps that
+    // don't resolve to a visible element are skipped automatically by the guide.
+    var GAME_GUIDE_STEPS = [
+      { el: '#targetColor', title: 'Match this colour', body: 'The left panel is the target shade you need to reproduce.' },
+      { el: '#currentMix', title: 'Your mix', body: 'The right panel updates live as you add pigments — get it as close to the target as you can.' },
+      { el: '#palette', title: 'Add pigments', body: 'Tap a pigment to add a drop, and use the − button to remove one. The strip above shows your recipe.' },
+      { el: '#startBtn', title: 'Start when ready', body: 'Press Start to begin — the timer runs while you mix, and a close enough match completes the shade.' },
+      { el: '#showGuideBtn', title: 'Replay anytime', body: 'Tap Guide to see this walkthrough again whenever you like.' }
+    ];
+    function launchGuide(onDone) {
+      if (window.SpotlightGuide) { window.SpotlightGuide.start(GAME_GUIDE_STEPS, { onDone: onDone }); }
+      else if (onDone) { onDone(); }
+    }
+    // Auto-run only once nothing is blocking the board (consent / display-setup / etc.).
+    function launchGuideWhenClear() {
+      var blocked = function() {
+        var modals = document.querySelectorAll('.modal-overlay, .skip-modal-overlay');
+        for (var i = 0; i < modals.length; i++) {
+          if (getComputedStyle(modals[i]).display !== 'none') return true;
+        }
+        return false;
+      };
+      var tries = 0;
+      (function attempt() {
+        if (!blocked()) { launchGuide(); return; }
+        if (tries++ > 40) return;   // give up after ~20s rather than nag forever
+        setTimeout(attempt, 500);
+      })();
+    }
     // Consent is held in memory for the current page session only (NOT
     // localStorage), so it can never be silently reused by a different person on
     // a shared device and a fresh visit always re-shows the screen.
@@ -616,13 +633,12 @@
       showSection('register');
     }
 
-    // Show the instructional video on first visit, then the registration form;
+    // Run the spotlight guide on first visit, then the registration form;
     // on return visits go straight to registration.
     function proceedToRegistrationFlow() {
-      if (!localStorage.getItem('videoShown')) {
-        videoModal.style.display = 'flex';
-        document.getElementById('videoFrame').src = VIDEO_SRC;
-        localStorage.setItem('videoShown', 'true');
+      if (!localStorage.getItem('guideShown')) {
+        localStorage.setItem('guideShown', 'true');
+        launchGuide(revealRegistration);
       } else {
         revealRegistration();
       }
@@ -655,19 +671,10 @@
         .catch(finish);  // fail-open: never block play on a flaky network
     }
 
-    /* Video modal */
-    document.getElementById('showVideoBtn').onclick = function() {
-      videoModal.style.display = 'flex';
-      document.getElementById('videoFrame').src = VIDEO_SRC;
+    /* Guide (on-demand replay) */
+    document.getElementById('showGuideBtn').onclick = function() {
+      launchGuide();
     };
-
-    function closeVideoAndProceed() {
-      videoModal.style.display = 'none';
-      document.getElementById('videoFrame').src = '';
-      if (storedId) { modal.style.display = 'none'; }
-      else { revealRegistration(); }
-    }
-    document.getElementById('closeVideoBtn').onclick = closeVideoAndProceed;
 
     if (storedBirthdate && storedGender && !storedId) {
       localStorage.removeItem('userBirthdate');
@@ -676,16 +683,13 @@
 
     if (storedId) {
       // Logged-in returning user: no registration modal. First make sure consent
-      // is on record (back-fill for cached logins), then show the intro video
+      // is on record (back-fill for cached logins), then run the spotlight guide
       // once, shortly after.
       modal.style.display = 'none';
       ensureConsentForLoggedInUser(storedId, function() {
-        if (!localStorage.getItem('videoShown')) {
-          setTimeout(function() {
-            videoModal.style.display = 'flex';
-            document.getElementById('videoFrame').src = VIDEO_SRC;
-            localStorage.setItem('videoShown', 'true');
-          }, 1000);
+        if (!localStorage.getItem('guideShown')) {
+          localStorage.setItem('guideShown', 'true');
+          setTimeout(launchGuideWhenClear, 1000);
         }
       });
     } else {
@@ -979,8 +983,9 @@
 {% endblock %}
 
 {% block extra_js %}
+  <script src="{{ url_for('static', filename='guide.js') }}?v=20260609b"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260508-qc2"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260609q-classic"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>

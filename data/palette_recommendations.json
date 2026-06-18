@@ -1,0 +1,1564 @@
+{
+  "method": "CIELAB convex-hull volume of KM mixtures (pure + pairwise), greedy growth seeded by the gamut-optimal W/K/R/Y/B",
+  "grid_nm": [
+    380,
+    390,
+    400,
+    410,
+    420,
+    430,
+    440,
+    450,
+    460,
+    470,
+    480,
+    490,
+    500,
+    510,
+    520,
+    530,
+    540,
+    550,
+    560,
+    570,
+    580,
+    590,
+    600,
+    610,
+    620,
+    630,
+    640,
+    650,
+    660,
+    670,
+    680,
+    690,
+    700,
+    710,
+    720,
+    730,
+    740,
+    750
+  ],
+  "shipped_baseline": {
+    "volume": 59104.6,
+    "pigments": [
+      {
+        "pnumber": "white",
+        "name": "titanium white",
+        "group": "White",
+        "family": "neutral",
+        "hue": 231.8,
+        "chroma": 2.14,
+        "lab": [
+          94.67,
+          -1.324,
+          -1.68
+        ],
+        "srgb": [
+          235,
+          241,
+          243
+        ]
+      },
+      {
+        "pnumber": 24100,
+        "name": "aniline black",
+        "group": "Organic-Brown-Green",
+        "family": "neutral",
+        "hue": 295.9,
+        "chroma": 4.07,
+        "lab": [
+          23.429,
+          1.779,
+          -3.659
+        ],
+        "srgb": [
+          56,
+          55,
+          61
+        ]
+      },
+      {
+        "pnumber": 21120,
+        "name": "cadmium red no.1, light",
+        "group": "Cadmium",
+        "family": "orange",
+        "hue": 22.9,
+        "chroma": 43.13,
+        "lab": [
+          37.615,
+          39.715,
+          16.813
+        ],
+        "srgb": [
+          151,
+          57,
+          63
+        ]
+      },
+      {
+        "pnumber": 21010,
+        "name": "cadmium yellow lemon no.1",
+        "group": "Cadmium",
+        "family": "green",
+        "hue": 118.3,
+        "chroma": 36.06,
+        "lab": [
+          57.204,
+          -17.109,
+          31.744
+        ],
+        "srgb": [
+          127,
+          144,
+          80
+        ]
+      },
+      {
+        "pnumber": 45010,
+        "name": "ultramarine blue, dark",
+        "group": "",
+        "family": "blue",
+        "hue": 285.8,
+        "chroma": 27.45,
+        "lab": [
+          26.905,
+          7.487,
+          -26.414
+        ],
+        "srgb": [
+          48,
+          62,
+          104
+        ]
+      }
+    ]
+  },
+  "best_RYBWK": {
+    "volume": 116634.9,
+    "pigments": [
+      {
+        "role": "white",
+        "pnumber": "white",
+        "name": "titanium white",
+        "group": "White",
+        "family": "neutral",
+        "hue": 231.8,
+        "chroma": 2.14,
+        "lab": [
+          94.67,
+          -1.324,
+          -1.68
+        ],
+        "srgb": [
+          235,
+          241,
+          243
+        ]
+      },
+      {
+        "role": "black",
+        "pnumber": 41050,
+        "name": "cassel brown, wood stain",
+        "group": "Earth-Brown-Black",
+        "family": "neutral",
+        "hue": 323.7,
+        "chroma": 2.89,
+        "lab": [
+          22.875,
+          2.329,
+          -1.711
+        ],
+        "srgb": [
+          57,
+          54,
+          57
+        ]
+      },
+      {
+        "role": "red",
+        "pnumber": 21100,
+        "name": "cadmium orange no.1, medium",
+        "group": "Cadmium",
+        "family": "orange",
+        "hue": 36.6,
+        "chroma": 53.96,
+        "lab": [
+          46.945,
+          43.319,
+          32.177
+        ],
+        "srgb": [
+          186,
+          76,
+          60
+        ]
+      },
+      {
+        "role": "yellow",
+        "pnumber": 43915,
+        "name": "bismuth-vanadate yellow, light",
+        "group": "Yellow-3",
+        "family": "yellow",
+        "hue": 106.5,
+        "chroma": 58.01,
+        "lab": [
+          70.955,
+          -16.445,
+          55.633
+        ],
+        "srgb": [
+          175,
+          180,
+          66
+        ]
+      },
+      {
+        "role": "blue",
+        "pnumber": 45701,
+        "name": "cobalt blue dark, greenish",
+        "group": "",
+        "family": "blue",
+        "hue": 280.0,
+        "chroma": 45.24,
+        "lab": [
+          37.535,
+          7.847,
+          -44.556
+        ],
+        "srgb": [
+          25,
+          89,
+          161
+        ]
+      }
+    ]
+  },
+  "greedy_sequence": [
+    {
+      "role": "white",
+      "pnumber": "white",
+      "name": "titanium white",
+      "group": "White",
+      "family": "neutral",
+      "hue": 231.8,
+      "chroma": 2.14,
+      "lab": [
+        94.67,
+        -1.324,
+        -1.68
+      ],
+      "srgb": [
+        235,
+        241,
+        243
+      ]
+    },
+    {
+      "role": "black",
+      "pnumber": 41050,
+      "name": "cassel brown, wood stain",
+      "group": "Earth-Brown-Black",
+      "family": "neutral",
+      "hue": 323.7,
+      "chroma": 2.89,
+      "lab": [
+        22.875,
+        2.329,
+        -1.711
+      ],
+      "srgb": [
+        57,
+        54,
+        57
+      ]
+    },
+    {
+      "role": "red",
+      "pnumber": 21100,
+      "name": "cadmium orange no.1, medium",
+      "group": "Cadmium",
+      "family": "orange",
+      "hue": 36.6,
+      "chroma": 53.96,
+      "lab": [
+        46.945,
+        43.319,
+        32.177
+      ],
+      "srgb": [
+        186,
+        76,
+        60
+      ]
+    },
+    {
+      "role": "yellow",
+      "pnumber": 43915,
+      "name": "bismuth-vanadate yellow, light",
+      "group": "Yellow-3",
+      "family": "yellow",
+      "hue": 106.5,
+      "chroma": 58.01,
+      "lab": [
+        70.955,
+        -16.445,
+        55.633
+      ],
+      "srgb": [
+        175,
+        180,
+        66
+      ]
+    },
+    {
+      "role": "blue",
+      "pnumber": 45701,
+      "name": "cobalt blue dark, greenish",
+      "group": "",
+      "family": "blue",
+      "hue": 280.0,
+      "chroma": 45.24,
+      "lab": [
+        37.535,
+        7.847,
+        -44.556
+      ],
+      "srgb": [
+        25,
+        89,
+        161
+      ]
+    },
+    {
+      "role": "p6",
+      "pnumber": 45750,
+      "name": "cobalt blue turquoise, light",
+      "group": "",
+      "family": "cyan",
+      "hue": 214.9,
+      "chroma": 30.18,
+      "lab": [
+        46.56,
+        -24.766,
+        -17.251
+      ],
+      "srgb": [
+        0,
+        123,
+        138
+      ]
+    },
+    {
+      "role": "p7",
+      "pnumber": 55125,
+      "name": "studio pigment egg yolk yellow",
+      "group": "Yellow-4",
+      "family": "yellow",
+      "hue": 82.1,
+      "chroma": 81.19,
+      "lab": [
+        84.289,
+        11.207,
+        80.415
+      ],
+      "srgb": [
+        255,
+        199,
+        37
+      ]
+    },
+    {
+      "role": "p8",
+      "pnumber": 56450,
+      "name": "fluorescent pigment violet",
+      "group": "Blue-2",
+      "family": "violet",
+      "hue": 327.4,
+      "chroma": 37.23,
+      "lab": [
+        27.669,
+        31.379,
+        -20.042
+      ],
+      "srgb": [
+        97,
+        46,
+        96
+      ]
+    },
+    {
+      "role": "p9",
+      "pnumber": 44510,
+      "name": "cadmium green, dark",
+      "group": "Cadmium",
+      "family": "green",
+      "hue": 157.2,
+      "chroma": 37.23,
+      "lab": [
+        38.555,
+        -34.314,
+        14.453
+      ],
+      "srgb": [
+        17,
+        104,
+        66
+      ]
+    },
+    {
+      "role": "p10",
+      "pnumber": 55100,
+      "name": "studio pigment yellow",
+      "group": "Yellow-4",
+      "family": "yellow",
+      "hue": 99.2,
+      "chroma": 57.44,
+      "lab": [
+        91.423,
+        -9.163,
+        56.708
+      ],
+      "srgb": [
+        248,
+        233,
+        118
+      ]
+    },
+    {
+      "role": "p11",
+      "pnumber": 21060,
+      "name": "cadmium yellow no.9, dark",
+      "group": "Cadmium",
+      "family": "yellow",
+      "hue": 95.3,
+      "chroma": 50.17,
+      "lab": [
+        59.73,
+        -4.606,
+        49.959
+      ],
+      "srgb": [
+        161,
+        144,
+        51
+      ]
+    },
+    {
+      "role": "p12",
+      "pnumber": 45040,
+      "name": "ultramarine blue, greenish light",
+      "group": "",
+      "family": "blue",
+      "hue": 285.0,
+      "chroma": 29.41,
+      "lab": [
+        25.362,
+        7.631,
+        -28.399
+      ],
+      "srgb": [
+        40,
+        59,
+        103
+      ]
+    },
+    {
+      "role": "p13",
+      "pnumber": 23180,
+      "name": "irgazine\u00ae red DPP BO",
+      "group": "",
+      "family": "orange",
+      "hue": 24.2,
+      "chroma": 38.55,
+      "lab": [
+        34.482,
+        35.176,
+        15.779
+      ],
+      "srgb": [
+        136,
+        55,
+        58
+      ]
+    },
+    {
+      "role": "p14",
+      "pnumber": 21090,
+      "name": "cadmium orange no.0.5, light",
+      "group": "Cadmium",
+      "family": "orange",
+      "hue": 46.4,
+      "chroma": 54.37,
+      "lab": [
+        50.739,
+        37.484,
+        39.377
+      ],
+      "srgb": [
+        192,
+        92,
+        55
+      ]
+    },
+    {
+      "role": "p15",
+      "pnumber": 21110,
+      "name": "cadmium orange no.2, vermilion",
+      "group": "Cadmium",
+      "family": "orange",
+      "hue": 25.0,
+      "chroma": 47.42,
+      "lab": [
+        39.469,
+        42.982,
+        20.035
+      ],
+      "srgb": [
+        161,
+        58,
+        63
+      ]
+    },
+    {
+      "role": "p16",
+      "pnumber": 56400,
+      "name": "fluorescent pigment magenta red",
+      "group": "",
+      "family": "red",
+      "hue": 358.6,
+      "chroma": 31.69,
+      "lab": [
+        38.159,
+        31.683,
+        -0.791
+      ],
+      "srgb": [
+        136,
+        68,
+        92
+      ]
+    }
+  ],
+  "prefix_volumes": {
+    "2": 4.7,
+    "3": 2831.6,
+    "4": 48896.8,
+    "5": 116961.2,
+    "6": 146667.6,
+    "7": 174728.6,
+    "8": 202462.9,
+    "9": 211224.6,
+    "10": 217403.5,
+    "11": 220707.3,
+    "12": 223296.9,
+    "13": 224828.4,
+    "14": 225771.0,
+    "15": 226608.4,
+    "16": 227202.5
+  },
+  "sizes": [
+    5,
+    8,
+    10,
+    12,
+    16
+  ],
+  "palettes": {
+    "5": {
+      "volume": 116961.2,
+      "pigments": [
+        {
+          "role": "white",
+          "pnumber": "white",
+          "name": "titanium white",
+          "group": "White",
+          "family": "neutral",
+          "hue": 231.8,
+          "chroma": 2.14,
+          "lab": [
+            94.67,
+            -1.324,
+            -1.68
+          ],
+          "srgb": [
+            235,
+            241,
+            243
+          ]
+        },
+        {
+          "role": "black",
+          "pnumber": 41050,
+          "name": "cassel brown, wood stain",
+          "group": "Earth-Brown-Black",
+          "family": "neutral",
+          "hue": 323.7,
+          "chroma": 2.89,
+          "lab": [
+            22.875,
+            2.329,
+            -1.711
+          ],
+          "srgb": [
+            57,
+            54,
+            57
+          ]
+        },
+        {
+          "role": "red",
+          "pnumber": 21100,
+          "name": "cadmium orange no.1, medium",
+          "group": "Cadmium",
+          "family": "orange",
+          "hue": 36.6,
+          "chroma": 53.96,
+          "lab": [
+            46.945,
+            43.319,
+            32.177
+          ],
+          "srgb": [
+            186,
+            76,
+            60
+          ]
+        },
+        {
+          "role": "yellow",
+          "pnumber": 43915,
+          "name": "bismuth-vanadate yellow, light",
+          "group": "Yellow-3",
+          "family": "yellow",
+          "hue": 106.5,
+          "chroma": 58.01,
+          "lab": [
+            70.955,
+            -16.445,
+            55.633
+          ],
+          "srgb": [
+            175,
+            180,
+            66
+          ]
+        },
+        {
+          "role": "blue",
+          "pnumber": 45701,
+          "name": "cobalt blue dark, greenish",
+          "group": "",
+          "family": "blue",
+          "hue": 280.0,
+          "chroma": 45.24,
+          "lab": [
+            37.535,
+            7.847,
+            -44.556
+          ],
+          "srgb": [
+            25,
+            89,
+            161
+          ]
+        }
+      ]
+    },
+    "8": {
+      "volume": 202462.9,
+      "pigments": [
+        {
+          "role": "white",
+          "pnumber": "white",
+          "name": "titanium white",
+          "group": "White",
+          "family": "neutral",
+          "hue": 231.8,
+          "chroma": 2.14,
+          "lab": [
+            94.67,
+            -1.324,
+            -1.68
+          ],
+          "srgb": [
+            235,
+            241,
+            243
+          ]
+        },
+        {
+          "role": "black",
+          "pnumber": 41050,
+          "name": "cassel brown, wood stain",
+          "group": "Earth-Brown-Black",
+          "family": "neutral",
+          "hue": 323.7,
+          "chroma": 2.89,
+          "lab": [
+            22.875,
+            2.329,
+            -1.711
+          ],
+          "srgb": [
+            57,
+            54,
+            57
+          ]
+        },
+        {
+          "role": "red",
+          "pnumber": 21100,
+          "name": "cadmium orange no.1, medium",
+          "group": "Cadmium",
+          "family": "orange",
+          "hue": 36.6,
+          "chroma": 53.96,
+          "lab": [
+            46.945,
+            43.319,
+            32.177
+          ],
+          "srgb": [
+            186,
+            76,
+            60
+          ]
+        },
+        {
+          "role": "yellow",
+          "pnumber": 43915,
+          "name": "bismuth-vanadate yellow, light",
+          "group": "Yellow-3",
+          "family": "yellow",
+          "hue": 106.5,
+          "chroma": 58.01,
+          "lab": [
+            70.955,
+            -16.445,
+            55.633
+          ],
+          "srgb": [
+            175,
+            180,
+            66
+          ]
+        },
+        {
+          "role": "blue",
+          "pnumber": 45701,
+          "name": "cobalt blue dark, greenish",
+          "group": "",
+          "family": "blue",
+          "hue": 280.0,
+          "chroma": 45.24,
+          "lab": [
+            37.535,
+            7.847,
+            -44.556
+          ],
+          "srgb": [
+            25,
+            89,
+            161
+          ]
+        },
+        {
+          "role": "p6",
+          "pnumber": 45750,
+          "name": "cobalt blue turquoise, light",
+          "group": "",
+          "family": "cyan",
+          "hue": 214.9,
+          "chroma": 30.18,
+          "lab": [
+            46.56,
+            -24.766,
+            -17.251
+          ],
+          "srgb": [
+            0,
+            123,
+            138
+          ]
+        },
+        {
+          "role": "p7",
+          "pnumber": 55125,
+          "name": "studio pigment egg yolk yellow",
+          "group": "Yellow-4",
+          "family": "yellow",
+          "hue": 82.1,
+          "chroma": 81.19,
+          "lab": [
+            84.289,
+            11.207,
+            80.415
+          ],
+          "srgb": [
+            255,
+            199,
+            37
+          ]
+        },
+        {
+          "role": "p8",
+          "pnumber": 56450,
+          "name": "fluorescent pigment violet",
+          "group": "Blue-2",
+          "family": "violet",
+          "hue": 327.4,
+          "chroma": 37.23,
+          "lab": [
+            27.669,
+            31.379,
+            -20.042
+          ],
+          "srgb": [
+            97,
+            46,
+            96
+          ]
+        }
+      ]
+    },
+    "10": {
+      "volume": 217403.5,
+      "pigments": [
+        {
+          "role": "white",
+          "pnumber": "white",
+          "name": "titanium white",
+          "group": "White",
+          "family": "neutral",
+          "hue": 231.8,
+          "chroma": 2.14,
+          "lab": [
+            94.67,
+            -1.324,
+            -1.68
+          ],
+          "srgb": [
+            235,
+            241,
+            243
+          ]
+        },
+        {
+          "role": "black",
+          "pnumber": 41050,
+          "name": "cassel brown, wood stain",
+          "group": "Earth-Brown-Black",
+          "family": "neutral",
+          "hue": 323.7,
+          "chroma": 2.89,
+          "lab": [
+            22.875,
+            2.329,
+            -1.711
+          ],
+          "srgb": [
+            57,
+            54,
+            57
+          ]
+        },
+        {
+          "role": "red",
+          "pnumber": 21100,
+          "name": "cadmium orange no.1, medium",
+          "group": "Cadmium",
+          "family": "orange",
+          "hue": 36.6,
+          "chroma": 53.96,
+          "lab": [
+            46.945,
+            43.319,
+            32.177
+          ],
+          "srgb": [
+            186,
+            76,
+            60
+          ]
+        },
+        {
+          "role": "yellow",
+          "pnumber": 43915,
+          "name": "bismuth-vanadate yellow, light",
+          "group": "Yellow-3",
+          "family": "yellow",
+          "hue": 106.5,
+          "chroma": 58.01,
+          "lab": [
+            70.955,
+            -16.445,
+            55.633
+          ],
+          "srgb": [
+            175,
+            180,
+            66
+          ]
+        },
+        {
+          "role": "blue",
+          "pnumber": 45701,
+          "name": "cobalt blue dark, greenish",
+          "group": "",
+          "family": "blue",
+          "hue": 280.0,
+          "chroma": 45.24,
+          "lab": [
+            37.535,
+            7.847,
+            -44.556
+          ],
+          "srgb": [
+            25,
+            89,
+            161
+          ]
+        },
+        {
+          "role": "p6",
+          "pnumber": 45750,
+          "name": "cobalt blue turquoise, light",
+          "group": "",
+          "family": "cyan",
+          "hue": 214.9,
+          "chroma": 30.18,
+          "lab": [
+            46.56,
+            -24.766,
+            -17.251
+          ],
+          "srgb": [
+            0,
+            123,
+            138
+          ]
+        },
+        {
+          "role": "p7",
+          "pnumber": 55125,
+          "name": "studio pigment egg yolk yellow",
+          "group": "Yellow-4",
+          "family": "yellow",
+          "hue": 82.1,
+          "chroma": 81.19,
+          "lab": [
+            84.289,
+            11.207,
+            80.415
+          ],
+          "srgb": [
+            255,
+            199,
+            37
+          ]
+        },
+        {
+          "role": "p8",
+          "pnumber": 56450,
+          "name": "fluorescent pigment violet",
+          "group": "Blue-2",
+          "family": "violet",
+          "hue": 327.4,
+          "chroma": 37.23,
+          "lab": [
+            27.669,
+            31.379,
+            -20.042
+          ],
+          "srgb": [
+            97,
+            46,
+            96
+          ]
+        },
+        {
+          "role": "p9",
+          "pnumber": 44510,
+          "name": "cadmium green, dark",
+          "group": "Cadmium",
+          "family": "green",
+          "hue": 157.2,
+          "chroma": 37.23,
+          "lab": [
+            38.555,
+            -34.314,
+            14.453
+          ],
+          "srgb": [
+            17,
+            104,
+            66
+          ]
+        },
+        {
+          "role": "p10",
+          "pnumber": 55100,
+          "name": "studio pigment yellow",
+          "group": "Yellow-4",
+          "family": "yellow",
+          "hue": 99.2,
+          "chroma": 57.44,
+          "lab": [
+            91.423,
+            -9.163,
+            56.708
+          ],
+          "srgb": [
+            248,
+            233,
+            118
+          ]
+        }
+      ]
+    },
+    "12": {
+      "volume": 223296.9,
+      "pigments": [
+        {
+          "role": "white",
+          "pnumber": "white",
+          "name": "titanium white",
+          "group": "White",
+          "family": "neutral",
+          "hue": 231.8,
+          "chroma": 2.14,
+          "lab": [
+            94.67,
+            -1.324,
+            -1.68
+          ],
+          "srgb": [
+            235,
+            241,
+            243
+          ]
+        },
+        {
+          "role": "black",
+          "pnumber": 41050,
+          "name": "cassel brown, wood stain",
+          "group": "Earth-Brown-Black",
+          "family": "neutral",
+          "hue": 323.7,
+          "chroma": 2.89,
+          "lab": [
+            22.875,
+            2.329,
+            -1.711
+          ],
+          "srgb": [
+            57,
+            54,
+            57
+          ]
+        },
+        {
+          "role": "red",
+          "pnumber": 21100,
+          "name": "cadmium orange no.1, medium",
+          "group": "Cadmium",
+          "family": "orange",
+          "hue": 36.6,
+          "chroma": 53.96,
+          "lab": [
+            46.945,
+            43.319,
+            32.177
+          ],
+          "srgb": [
+            186,
+            76,
+            60
+          ]
+        },
+        {
+          "role": "yellow",
+          "pnumber": 43915,
+          "name": "bismuth-vanadate yellow, light",
+          "group": "Yellow-3",
+          "family": "yellow",
+          "hue": 106.5,
+          "chroma": 58.01,
+          "lab": [
+            70.955,
+            -16.445,
+            55.633
+          ],
+          "srgb": [
+            175,
+            180,
+            66
+          ]
+        },
+        {
+          "role": "blue",
+          "pnumber": 45701,
+          "name": "cobalt blue dark, greenish",
+          "group": "",
+          "family": "blue",
+          "hue": 280.0,
+          "chroma": 45.24,
+          "lab": [
+            37.535,
+            7.847,
+            -44.556
+          ],
+          "srgb": [
+            25,
+            89,
+            161
+          ]
+        },
+        {
+          "role": "p6",
+          "pnumber": 45750,
+          "name": "cobalt blue turquoise, light",
+          "group": "",
+          "family": "cyan",
+          "hue": 214.9,
+          "chroma": 30.18,
+          "lab": [
+            46.56,
+            -24.766,
+            -17.251
+          ],
+          "srgb": [
+            0,
+            123,
+            138
+          ]
+        },
+        {
+          "role": "p7",
+          "pnumber": 55125,
+          "name": "studio pigment egg yolk yellow",
+          "group": "Yellow-4",
+          "family": "yellow",
+          "hue": 82.1,
+          "chroma": 81.19,
+          "lab": [
+            84.289,
+            11.207,
+            80.415
+          ],
+          "srgb": [
+            255,
+            199,
+            37
+          ]
+        },
+        {
+          "role": "p8",
+          "pnumber": 56450,
+          "name": "fluorescent pigment violet",
+          "group": "Blue-2",
+          "family": "violet",
+          "hue": 327.4,
+          "chroma": 37.23,
+          "lab": [
+            27.669,
+            31.379,
+            -20.042
+          ],
+          "srgb": [
+            97,
+            46,
+            96
+          ]
+        },
+        {
+          "role": "p9",
+          "pnumber": 44510,
+          "name": "cadmium green, dark",
+          "group": "Cadmium",
+          "family": "green",
+          "hue": 157.2,
+          "chroma": 37.23,
+          "lab": [
+            38.555,
+            -34.314,
+            14.453
+          ],
+          "srgb": [
+            17,
+            104,
+            66
+          ]
+        },
+        {
+          "role": "p10",
+          "pnumber": 55100,
+          "name": "studio pigment yellow",
+          "group": "Yellow-4",
+          "family": "yellow",
+          "hue": 99.2,
+          "chroma": 57.44,
+          "lab": [
+            91.423,
+            -9.163,
+            56.708
+          ],
+          "srgb": [
+            248,
+            233,
+            118
+          ]
+        },
+        {
+          "role": "p11",
+          "pnumber": 21060,
+          "name": "cadmium yellow no.9, dark",
+          "group": "Cadmium",
+          "family": "yellow",
+          "hue": 95.3,
+          "chroma": 50.17,
+          "lab": [
+            59.73,
+            -4.606,
+            49.959
+          ],
+          "srgb": [
+            161,
+            144,
+            51
+          ]
+        },
+        {
+          "role": "p12",
+          "pnumber": 45040,
+          "name": "ultramarine blue, greenish light",
+          "group": "",
+          "family": "blue",
+          "hue": 285.0,
+          "chroma": 29.41,
+          "lab": [
+            25.362,
+            7.631,
+            -28.399
+          ],
+          "srgb": [
+            40,
+            59,
+            103
+          ]
+        }
+      ]
+    },
+    "16": {
+      "volume": 227202.5,
+      "pigments": [
+        {
+          "role": "white",
+          "pnumber": "white",
+          "name": "titanium white",
+          "group": "White",
+          "family": "neutral",
+          "hue": 231.8,
+          "chroma": 2.14,
+          "lab": [
+            94.67,
+            -1.324,
+            -1.68
+          ],
+          "srgb": [
+            235,
+            241,
+            243
+          ]
+        },
+        {
+          "role": "black",
+          "pnumber": 41050,
+          "name": "cassel brown, wood stain",
+          "group": "Earth-Brown-Black",
+          "family": "neutral",
+          "hue": 323.7,
+          "chroma": 2.89,
+          "lab": [
+            22.875,
+            2.329,
+            -1.711
+          ],
+          "srgb": [
+            57,
+            54,
+            57
+          ]
+        },
+        {
+          "role": "red",
+          "pnumber": 21100,
+          "name": "cadmium orange no.1, medium",
+          "group": "Cadmium",
+          "family": "orange",
+          "hue": 36.6,
+          "chroma": 53.96,
+          "lab": [
+            46.945,
+            43.319,
+            32.177
+          ],
+          "srgb": [
+            186,
+            76,
+            60
+          ]
+        },
+        {
+          "role": "yellow",
+          "pnumber": 43915,
+          "name": "bismuth-vanadate yellow, light",
+          "group": "Yellow-3",
+          "family": "yellow",
+          "hue": 106.5,
+          "chroma": 58.01,
+          "lab": [
+            70.955,
+            -16.445,
+            55.633
+          ],
+          "srgb": [
+            175,
+            180,
+            66
+          ]
+        },
+        {
+          "role": "blue",
+          "pnumber": 45701,
+          "name": "cobalt blue dark, greenish",
+          "group": "",
+          "family": "blue",
+          "hue": 280.0,
+          "chroma": 45.24,
+          "lab": [
+            37.535,
+            7.847,
+            -44.556
+          ],
+          "srgb": [
+            25,
+            89,
+            161
+          ]
+        },
+        {
+          "role": "p6",
+          "pnumber": 45750,
+          "name": "cobalt blue turquoise, light",
+          "group": "",
+          "family": "cyan",
+          "hue": 214.9,
+          "chroma": 30.18,
+          "lab": [
+            46.56,
+            -24.766,
+            -17.251
+          ],
+          "srgb": [
+            0,
+            123,
+            138
+          ]
+        },
+        {
+          "role": "p7",
+          "pnumber": 55125,
+          "name": "studio pigment egg yolk yellow",
+          "group": "Yellow-4",
+          "family": "yellow",
+          "hue": 82.1,
+          "chroma": 81.19,
+          "lab": [
+            84.289,
+            11.207,
+            80.415
+          ],
+          "srgb": [
+            255,
+            199,
+            37
+          ]
+        },
+        {
+          "role": "p8",
+          "pnumber": 56450,
+          "name": "fluorescent pigment violet",
+          "group": "Blue-2",
+          "family": "violet",
+          "hue": 327.4,
+          "chroma": 37.23,
+          "lab": [
+            27.669,
+            31.379,
+            -20.042
+          ],
+          "srgb": [
+            97,
+            46,
+            96
+          ]
+        },
+        {
+          "role": "p9",
+          "pnumber": 44510,
+          "name": "cadmium green, dark",
+          "group": "Cadmium",
+          "family": "green",
+          "hue": 157.2,
+          "chroma": 37.23,
+          "lab": [
+            38.555,
+            -34.314,
+            14.453
+          ],
+          "srgb": [
+            17,
+            104,
+            66
+          ]
+        },
+        {
+          "role": "p10",
+          "pnumber": 55100,
+          "name": "studio pigment yellow",
+          "group": "Yellow-4",
+          "family": "yellow",
+          "hue": 99.2,
+          "chroma": 57.44,
+          "lab": [
+            91.423,
+            -9.163,
+            56.708
+          ],
+          "srgb": [
+            248,
+            233,
+            118
+          ]
+        },
+        {
+          "role": "p11",
+          "pnumber": 21060,
+          "name": "cadmium yellow no.9, dark",
+          "group": "Cadmium",
+          "family": "yellow",
+          "hue": 95.3,
+          "chroma": 50.17,
+          "lab": [
+            59.73,
+            -4.606,
+            49.959
+          ],
+          "srgb": [
+            161,
+            144,
+            51
+          ]
+        },
+        {
+          "role": "p12",
+          "pnumber": 45040,
+          "name": "ultramarine blue, greenish light",
+          "group": "",
+          "family": "blue",
+          "hue": 285.0,
+          "chroma": 29.41,
+          "lab": [
+            25.362,
+            7.631,
+            -28.399
+          ],
+          "srgb": [
+            40,
+            59,
+            103
+          ]
+        },
+        {
+          "role": "p13",
+          "pnumber": 23180,
+          "name": "irgazine\u00ae red DPP BO",
+          "group": "",
+          "family": "orange",
+          "hue": 24.2,
+          "chroma": 38.55,
+          "lab": [
+            34.482,
+            35.176,
+            15.779
+          ],
+          "srgb": [
+            136,
+            55,
+            58
+          ]
+        },
+        {
+          "role": "p14",
+          "pnumber": 21090,
+          "name": "cadmium orange no.0.5, light",
+          "group": "Cadmium",
+          "family": "orange",
+          "hue": 46.4,
+          "chroma": 54.37,
+          "lab": [
+            50.739,
+            37.484,
+            39.377
+          ],
+          "srgb": [
+            192,
+            92,
+            55
+          ]
+        },
+        {
+          "role": "p15",
+          "pnumber": 21110,
+          "name": "cadmium orange no.2, vermilion",
+          "group": "Cadmium",
+          "family": "orange",
+          "hue": 25.0,
+          "chroma": 47.42,
+          "lab": [
+            39.469,
+            42.982,
+            20.035
+          ],
+          "srgb": [
+            161,
+            58,
+            63
+          ]
+        },
+        {
+          "role": "p16",
+          "pnumber": 56400,
+          "name": "fluorescent pigment magenta red",
+          "group": "",
+          "family": "red",
+          "hue": 358.6,
+          "chroma": 31.69,
+          "lab": [
+            38.159,
+            31.683,
+            -0.791
+          ],
+          "srgb": [
+            136,
+            68,
+            92
+          ]
+        }
+      ]
+    }
+  }
+}
