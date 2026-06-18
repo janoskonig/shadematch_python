@@ -115,6 +115,7 @@ function saveCompletedSet(set, palette) {
     try { localStorage.setItem(completedKey(palette), JSON.stringify(Array.from(set))); } catch (_) { /* ignore */ }
 }
 const SPECTRAL_PALETTE_KEY = 'spectral_palette_choice';
+const SPECTRAL_TARGETSET_KEY = 'spectral_targetset_choice';
 
 class SpectralMixer {
     constructor() {
@@ -148,6 +149,8 @@ class SpectralMixer {
         this.catalog = [];
         this.shadeIndex = 0;
         this.completed = new Set();
+        // This is a testing lab over real skin tones only — no random practice catalog.
+        this.targetSet = 'skin';
 
         this.shadeLabel = document.getElementById('shadeLabel');
         this.shadeName = document.getElementById('shadeName');
@@ -164,10 +167,15 @@ class SpectralMixer {
         this.bindStaticControls();     // one-time: reset / judge / skip / give-me-a-mix / modal
         this.setupKmPanelStatic();     // one-time: toggle + non-tinting sliders + reset
 
-        // Restore the last-used palette if it still exists, else the injected default.
-        let initial = 'classic';
-        try { initial = localStorage.getItem(SPECTRAL_PALETTE_KEY) || SPECTRAL_PALETTES.default || 'classic'; }
-        catch (_) { initial = SPECTRAL_PALETTES.default || 'classic'; }
+        // Default to the widest-gamut palette — this lab is about reaching real skin tones,
+        // so the classic five aren't the focus. Restore the last-used gamut palette if any;
+        // ignore a stored 'classic' (it's no longer offered). Classic remains only as a
+        // last-ditch fallback if the gamut data is missing.
+        const sizes = (SPECTRAL_PALETTES.sizes || []).map(Number).filter((n) => !Number.isNaN(n));
+        const widest = sizes.length ? String(Math.max(...sizes)) : 'classic';
+        let stored = null;
+        try { stored = localStorage.getItem(SPECTRAL_PALETTE_KEY); } catch (_) { stored = null; }
+        let initial = (stored && stored !== 'classic' && this.palettePigments(stored)) ? stored : widest;
         if (!this.palettePigments(initial)) initial = 'classic';
         this.applyPalette(initial);
     }
@@ -226,8 +234,8 @@ class SpectralMixer {
         this.initializeBasePlots();
         this.syncPaletteInfo();
 
-        // Reload progress for this palette and rebuild its target catalog.
-        this.completed = loadCompletedSet(this.activePalette);
+        // Reload progress for this palette + target set and rebuild its target catalog.
+        this.completed = loadCompletedSet(this.progressScope());
         this.loadCatalog();
     }
 
@@ -299,14 +307,59 @@ class SpectralMixer {
     setupPaletteSelector() {
         this.paletteSelect = document.getElementById('paletteSelect');
         if (!this.paletteSelect) return;
-        const opts = ['<option value="classic">Classic 5 (cad red/yellow + ultramarine)</option>'];
+        const opts = [];
         (SPECTRAL_PALETTES.sizes || []).forEach((s) => {
             const vol = SPECTRAL_PALETTES.volumes && SPECTRAL_PALETTES.volumes[String(s)];
             const tag = vol ? ` — gamut ${Math.round(vol).toLocaleString()}` : '';
-            opts.push(`<option value="${s}">${s} pigments (widest gamut${tag})</option>`);
+            opts.push(`<option value="${s}">${s} pigments${tag}</option>`);
         });
+        if (!opts.length) opts.push('<option value="classic">Classic 5</option>');  // gamut data missing
         this.paletteSelect.innerHTML = opts.join('');
         this.paletteSelect.addEventListener('change', () => this.applyPalette(this.paletteSelect.value));
+    }
+
+    // Progress (completed/resume) is namespaced per palette AND per target set, so skin-tone
+    // progress never mixes with the random practice catalog.
+    progressScope() {
+        return this.targetSet === 'skin' ? `${this.activePalette}::skin` : this.activePalette;
+    }
+
+    // Build the clickable skin-tone target grid (grouped by ethnicity × body site).
+    renderSkinPicker() {
+        const host = document.getElementById('skinTargetPicker');
+        if (!host) return;
+        const targets = window.SPECTRAL_SKIN_TARGETS || [];
+        if (!targets.length) { host.innerHTML = ''; return; }
+        const byEth = {};
+        targets.forEach((t) => { (byEth[t.ethnicity] = byEth[t.ethnicity] || []).push(t); });
+        host.innerHTML = Object.keys(byEth).map((eth) => {
+            const sws = byEth[eth].map((t) => {
+                const [r, g, b] = t.rgb;
+                const lab = t.lab ? ` — L* ${t.lab[0]}, a* ${t.lab[1]}, b* ${t.lab[2]}` : '';
+                return `<button type="button" class="skin-sw" data-id="${t.id}" title="${t.name}${lab}">
+                    <span class="chip" style="background:rgb(${r},${g},${b})"></span>
+                    <span class="site">${t.site}</span>
+                </button>`;
+            }).join('');
+            return `<div class="skin-eth-row"><span class="skin-eth-label">${eth}</span>
+                <div class="skin-swatches">${sws}</div></div>`;
+        }).join('');
+        host.querySelectorAll('.skin-sw').forEach((el) => {
+            el.addEventListener('click', () => {
+                const idx = this.catalog.findIndex((c) => c.id === el.dataset.id);
+                if (idx >= 0) this.loadShade(idx);
+            });
+        });
+        this.highlightPicker();
+    }
+
+    // Mark the currently-selected target swatch.
+    highlightPicker() {
+        const host = document.getElementById('skinTargetPicker');
+        if (!host || !this.target) return;
+        host.querySelectorAll('.skin-sw').forEach((el) => {
+            el.classList.toggle('is-selected', el.dataset.id === this.target.id);
+        });
     }
 
     // Paint the static dial parts: the 270° track and each ring's pigment colour.
@@ -527,8 +580,8 @@ class SpectralMixer {
                     const nice = { exact: 'spot on', close: 'very close', approximate: 'approximate',
                                    out_of_gamut: 'closest this palette can reach' }[verdict] || '';
                     this.status.textContent = Number.isFinite(de)
-                        ? `Solved — ΔE ${de.toFixed(1)}${nice ? ' · ' + nice : ''}. Tweak the dials or judge the match.`
-                        : 'Solved — tweak the dials or judge the match.';
+                        ? `Solved — ΔE ${de.toFixed(1)}${nice ? ' · ' + nice : ''}. Tweak the dials, or pick another target.`
+                        : 'Solved — tweak the dials, or pick another target.';
                 }
             })
             .catch(() => { if (this.status) this.status.textContent = 'Could not solve a mix — mix by hand or try again.'; })
@@ -730,10 +783,12 @@ class SpectralMixer {
         Array.from(this.completed).forEach((id) => {
             if (!ids.has(id)) { this.completed.delete(id); pruned = true; }
         });
-        if (pruned) saveCompletedSet(this.completed, this.activePalette);
+        if (pruned) saveCompletedSet(this.completed, this.progressScope());
+
+        this.renderSkinPicker();
 
         // Resume at the saved shade, else the first not-yet-completed one.
-        let idx = parseInt(localStorage.getItem(indexKey(this.activePalette)) || '', 10);
+        let idx = parseInt(localStorage.getItem(indexKey(this.progressScope())) || '', 10);
         if (!Number.isInteger(idx) || idx < 0 || idx >= this.catalog.length) {
             idx = this.catalog.findIndex((t) => !this.completed.has(t.id));
             if (idx < 0) idx = 0;
@@ -745,6 +800,15 @@ class SpectralMixer {
     // Each target is therefore reproducible with the same five pigments. Deterministic
     // (fixed seed) so ids and order are stable across reloads.
     generateCatalog() {
+        // Real human skin tones (Xiao 2017): a fixed list, palette-independent. Unlike the
+        // practice shades these aren't guaranteed reachable — that's the point (it shows
+        // whether the active palette can actually mix real skin), and completion stays the
+        // perceptual judge, not ΔE→0.
+        if (this.targetSet === 'skin') {
+            return (window.SPECTRAL_SKIN_TARGETS || []).map((t) => ({
+                id: t.id, rgb: t.rgb.slice(0, 3), name: t.name,
+            }));
+        }
         const keys = PALETTE_ORDER.filter((k) => this.bases[k]);
         if (keys.length < 2) return [];
         const rng = mulberry32(SPECTRAL_SEED);
@@ -760,7 +824,7 @@ class SpectralMixer {
     loadShade(index) {
         if (!this.catalog.length) return;
         this.shadeIndex = Math.max(0, Math.min(this.catalog.length - 1, index));
-        try { localStorage.setItem(indexKey(this.activePalette), String(this.shadeIndex)); } catch (_) { /* ignore */ }
+        try { localStorage.setItem(indexKey(this.progressScope()), String(this.shadeIndex)); } catch (_) { /* ignore */ }
         const t = this.catalog[this.shadeIndex];
         this.target = { id: t.id, rgb: t.rgb.slice(0, 3), name: t.name || ('Shade ' + (this.shadeIndex + 1)) };
         this.bestDeltaE = null;
@@ -775,12 +839,10 @@ class SpectralMixer {
         if (this.matchBar.container) this.matchBar.container.style.display = 'none';
         if (this.status) {
             this.status.classList.remove('is-win');
-            this.status.textContent = this.completed.has(t.id)
-                ? 'Already matched — mix again or skip ahead.'
-                : 'Mix to match, then tap “Judge match”.';
+            this.status.textContent = `Target: ${this.target.name}. Mix to test — ΔE updates live, or “Give me a mix”.`;
         }
         this.resetMix();
-        this.updateProgressUI();
+        this.highlightPicker();
     }
 
     nextShade() {
@@ -836,7 +898,7 @@ class SpectralMixer {
         if (!this.target) return;
         if (perception === 'identical' || perception === 'acceptable') {
             this.completed.add(this.target.id);
-            saveCompletedSet(this.completed, this.activePalette);
+            saveCompletedSet(this.completed, this.progressScope());
             if (this.status) {
                 this.status.textContent = perception === 'identical'
                     ? '✓ No perceptible difference — shade complete!'

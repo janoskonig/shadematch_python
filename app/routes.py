@@ -612,7 +612,8 @@ def build_spectral_palettes():
 def spectral():
     return render_template('spectral_mixer.html',
                            spectrum_plots=build_spectrum_plots(),
-                           spectral_palettes=build_spectral_palettes())
+                           spectral_palettes=build_spectral_palettes(),
+                           skin_targets=gamut_lab.skin_targets())
 
 
 @main.route('/spectral/solve', methods=['POST'])
@@ -665,7 +666,8 @@ def gamut_catalog():
     """Full pigment catalog + shipped baseline for the picker."""
     try:
         return jsonify({'pigments': gamut_lab.catalog(),
-                        'baseline': gamut_lab.shipped_baseline()})
+                        'baseline': gamut_lab.shipped_baseline(),
+                        'skin_gamut': gamut_lab.skin_gamut()})
     except Exception:
         current_app.logger.exception('gamut_catalog failed')
         return jsonify({'pigments': [], 'baseline': {'volume': 0, 'pnumbers': []}}), 500

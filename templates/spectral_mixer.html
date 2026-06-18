@@ -132,24 +132,20 @@
 }
 .mixed-spectrum-card .plot { width: 100%; height: 300px; }
 
-/* Leveling progress header */
-.spectral-progress { margin: 0 0 14px; }
-.spectral-progress-row {
-  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
-  font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 6px;
+/* Skin-tone target picker */
+.skin-picker { margin: 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
+.skin-eth-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.skin-eth-label { width: 84px; flex: 0 0 84px; font-size: 0.78rem; font-weight: 800; color: var(--text-secondary); text-align: right; }
+.skin-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.skin-sw {
+  width: 58px; cursor: pointer; border: 2px solid transparent; border-radius: 9px;
+  padding: 0; background: none; text-align: center; transition: transform .08s ease;
 }
-.spectral-progress-row .shade-label { font-weight: 800; color: var(--text-primary); }
-.spectral-progress-row .shade-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.spectral-progress-row .level-label {
-  margin-left: auto; font-weight: 800; color: var(--accent-primary, #4caf50);
-}
-.spectral-progress-track {
-  height: 8px; border-radius: 999px; background: var(--border); overflow: hidden;
-}
-.spectral-progress-fill {
-  height: 100%; width: 0; background: var(--accent-primary, #4caf50);
-  transition: width 0.3s ease;
-}
+.skin-sw:hover { transform: translateY(-1px); }
+.skin-sw .chip { display: block; width: 100%; height: 34px; border-radius: 7px; border: 1px solid rgba(0,0,0,.18); }
+.skin-sw .site { display: block; font-size: 0.62rem; color: var(--text-secondary); margin-top: 3px; line-height: 1.1; }
+.skin-sw.is-selected { border-color: var(--accent-primary, #4caf50); }
+.skin-sw.is-selected .site { color: var(--text-primary); font-weight: 800; }
 
 /* Perceptual-judgment modal */
 .spectral-modal {
@@ -223,22 +219,16 @@ input.drop-badge:focus {
   </header>
 
   <p class="spectral-hint">
-    Reproduce each target shade with the measured pigments (Kubelka–Munk mixing). Tap a pigment
-    for a whole drop, or drag its dial for a continuous amount (0–100). Exact RGB isn't always
-    reachable spectrally — get as close as you can, then judge the match to advance.
-    <br><strong>Keyboard:</strong> ←/→ to move between colours; ↑/↓ to change the amount
-    (Shift+↑/↓ = 0.1); or type a value.
+    Testing lab: pick a real human skin tone below (measured means per ethnicity × body site,
+    Xiao et al. 2017), then reproduce it with the active palette (Kubelka–Munk mixing) and read
+    the ΔE. Tap a pigment for a whole drop, or drag its dial for a continuous amount (0–100); or
+    hit <strong>Give me a mix</strong> to auto-solve. Exact colour isn't always reachable — that's
+    the point of the test.
+    <br><strong>Keyboard:</strong> ↑/↓ to change the focused amount (Shift+↑/↓ = 0.1), or type a value.
   </p>
 
-  <!-- Leveling progress -->
-  <div class="spectral-progress">
-    <div class="spectral-progress-row">
-      <span class="shade-label" id="shadeLabel">Shade —</span>
-      <span class="shade-name" id="shadeName"></span>
-      <span class="level-label" id="levelLabel">Level 1</span>
-    </div>
-    <div class="spectral-progress-track"><div class="spectral-progress-fill" id="spectralProgressFill"></div></div>
-  </div>
+  <!-- Skin-tone target picker: choose which measured skin colour to reproduce. -->
+  <div class="skin-picker" id="skinTargetPicker" aria-label="Choose a skin-tone target"></div>
 
   <!-- Target | current mix: seamless borderless split, like the main app -->
   <div class="spectral-pair-labels" aria-hidden="true"><span>Match this</span><span>Your mix</span></div>
@@ -288,9 +278,7 @@ input.drop-badge:focus {
 
   <div class="controls-bar" style="margin-top:12px;flex-wrap:wrap;justify-content:center;gap:10px;">
     <button type="button" id="spectralResetBtn" class="btn btn-secondary btn-lg">Reset mix</button>
-    <button type="button" id="spectralSolveBtn" class="btn btn-secondary btn-lg" title="Auto-solve a recipe for this shade with the current palette">Give me a mix</button>
-    <button type="button" id="spectralSkipBtn" class="btn btn-secondary btn-lg">Skip shade</button>
-    <button type="button" id="spectralJudgeBtn" class="btn btn-primary btn-lg">Judge match</button>
+    <button type="button" id="spectralSolveBtn" class="btn btn-primary btn-lg" title="Auto-solve a recipe for this target with the active palette">Give me a mix</button>
     <button type="button" id="kmToggle" class="btn btn-secondary btn-lg" aria-expanded="false"
             aria-controls="kmPanel">KM parameters</button>
   </div>
@@ -372,7 +360,10 @@ input.drop-badge:focus {
   // Selectable gamut-sized palettes (classic + widest-gamut 5/8/10/… sets from the
   // Hyperspectral Pigments dataset, chosen by scripts/gamut/optimize.py).
   window.SPECTRAL_PALETTES = JSON.parse('{{ spectral_palettes|tojson|safe }}');
+  // Real human skin-colour targets: mean CIELAB per ethnicity × body site from
+  // Xiao et al. 2017 (Skin Res. Technol. 23:21–29), converted to sRGB server-side.
+  window.SPECTRAL_SKIN_TARGETS = JSON.parse('{{ skin_targets|tojson|safe }}');
 </script>
 <script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
-<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260618-givemix"></script>
+<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260618-skinlab2"></script>
 {% endblock %}

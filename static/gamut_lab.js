@@ -16,6 +16,7 @@
     catalog: [],
     byPn: new Map(),
     baseline: { volume: 0, ab_hull: [] },
+    skin: null,            // { polygon, label, cite } — human skin-colour gamut overlay
     locked: [],            // ordered pnumbers
     poolMode: 'all',       // 'all' | 'groups' | 'picks'
     selectedGroups: new Set(),
@@ -131,7 +132,42 @@
     } else {
       $('resSeq').innerHTML = '<p class="muted">No palette returned.</p>';
     }
+    renderCoverage(res.coverage, (res.baseline && res.baseline.coverage) || state.baseline.coverage);
     drawPlot(res);
+  }
+
+  // ── Coverage error (ΔE2000 reachability of the catalog) ─────────────────────
+  function renderCoverage(cov, baseCov) {
+    const box = $('coverageBox');
+    if (!cov || cov.mean_delta_e == null) { box.hidden = true; return; }
+    box.hidden = false;
+    const de = (v) => (v == null ? '—' : `ΔE ${v.toFixed(2)}`);
+    $('covMeanDe').textContent = de(cov.mean_delta_e);
+    $('covMaxDe').textContent = de(cov.max_delta_e);
+    $('covWithin6').textContent = `${cov.within['6.0']}%`;
+    // Volume coverage can exceed 100% (extent), so flag that distinctly from containment.
+    const vc = cov.volume_coverage_pct;
+    $('covVol').innerHTML = vc > 100
+      ? `${vc}% <span class="muted" style="font-size:.62rem;font-weight:600;">(extent &gt; catalog)</span>`
+      : `${vc}%`;
+
+    // Stacked bar: reachable within ΔE1 / ΔE3 / ΔE6 / beyond (cumulative → disjoint slices).
+    const w1 = cov.within['1.0'], w3 = cov.within['3.0'], w6 = cov.within['6.0'];
+    const seg = [
+      { w: w1, c: '#2e9e5b', label: '≤1' },
+      { w: w3 - w1, c: '#7cc36a', label: '≤3' },
+      { w: w6 - w3, c: '#e7b84b', label: '≤6' },
+      { w: 100 - w6, c: 'rgba(0,0,0,0.12)', label: '>6' },
+    ];
+    $('covSeg').innerHTML = seg.filter((s) => s.w > 0.5).map((s) =>
+      `<span style="width:${s.w}%;background:${s.c}" title="${s.label} ΔE: ${s.w.toFixed(1)}%">${s.w >= 8 ? s.label : ''}</span>`).join('');
+
+    const parts = [`<strong>${cov.containment_pct}%</strong> of the ${cov.targets} catalog colours fall inside this gamut`];
+    if (baseCov && baseCov.mean_delta_e != null) {
+      const d = +(baseCov.mean_delta_e - cov.mean_delta_e).toFixed(2);
+      if (Math.abs(d) >= 0.01) parts.push(`coverage error ${d > 0 ? 'down' : 'up'} ${Math.abs(d).toFixed(2)} ΔE vs the shipped 5 (${baseCov.mean_delta_e.toFixed(2)})`);
+    }
+    $('covNote').innerHTML = parts.join(' · ') + '.';
   }
 
   function drawPlot(res) {
@@ -144,8 +180,32 @@
       return { x: xs, y: ys, mode: 'lines', name, fill: fill ? 'toself' : 'none',
         fillcolor: fill, line: { color: line, width: 2, dash: dash || 'solid' }, hoverinfo: 'skip' };
     };
-    const baseRing = ring(state.baseline.ab_hull, 'shipped 5', null, 'rgba(120,120,120,0.9)', 'dash');
-    if (baseRing) traces.push(baseRing);
+    // Dashed reference = the human skin-colour gamut, so you can see if this palette
+    // covers real skin tones. The measured mean chromaticities (per ethnicity × body
+    // site) and their hull are from Xiao et al. 2017 — see state.skin.cite.
+    const skin = state.skin;
+    if (skin && skin.hull && skin.hull.length >= 3) {
+      traces.push(ring(skin.hull, skin.label || 'human skin', 'rgba(208,138,108,0.12)', 'rgba(190,104,74,0.95)', 'dash'));
+    }
+    if (skin && skin.points && skin.points.length) {
+      const ethColor = { Caucasian: '#e6a57e', Chinese: '#cf9b46', Kurdish: '#8c5e3c', Thai: '#a64d79' };
+      // One trace per ethnicity for a legible legend; facial sites = filled diamond, body = open circle.
+      Object.keys(ethColor).forEach((eth) => {
+        const pp = skin.points.filter((p) => p.ethnicity === eth);
+        if (!pp.length) return;
+        traces.push({
+          x: pp.map((p) => p.a), y: pp.map((p) => p.b), mode: 'markers', name: eth,
+          legendgroup: 'skin',
+          text: pp.map((p) => `${p.ethnicity} · ${p.site}<br>L* ${p.L}, a* ${p.a}, b* ${p.b}`),
+          hovertemplate: '%{text}<extra></extra>',
+          marker: {
+            size: 9, color: ethColor[eth],
+            symbol: pp.map((p) => (p.facial ? 'diamond' : 'circle-open')),
+            line: { color: 'rgba(0,0,0,0.4)', width: 1 },
+          },
+        });
+      });
+    }
     const mainRing = ring(res.ab_hull, 'this set', 'rgba(59,110,245,0.13)', 'rgba(59,110,245,0.95)');
     if (mainRing) traces.push(mainRing);
     const pts = res.pigment_points || [];
@@ -157,8 +217,8 @@
       });
     }
     Plotly.react('gamutPlot', traces, {
-      margin: { t: 10, r: 10, b: 40, l: 44 }, showlegend: true,
-      legend: { orientation: 'h', y: -0.18 },
+      margin: { t: 10, r: 10, b: 76, l: 44 }, showlegend: true,
+      legend: { orientation: 'h', y: -0.30, font: { size: 10 } },
       xaxis: { title: 'a* (green ← → red)', zeroline: true, zerolinecolor: '#ccc', range: [-70, 80] },
       yaxis: { title: 'b* (blue ← → yellow)', zeroline: true, zerolinecolor: '#ccc', range: [-80, 90], scaleanchor: 'x' },
       paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
@@ -210,6 +270,8 @@
       const data = await (await fetch('/gamut/catalog')).json();
       state.catalog = data.pigments || [];
       state.baseline = data.baseline || { volume: 0, ab_hull: [] };
+      state.skin = data.skin_gamut || null;
+      if (state.skin && state.skin.cite) { const el = $('skinCite'); if (el) el.textContent = state.skin.cite; }
       state.byPn = new Map(state.catalog.map((p) => [String(p.pnumber), p]));
       const groups = Array.from(new Set(state.catalog.map((p) => p.group))).sort();
       $('catGroup').innerHTML = '<option value="">All groups</option>' + groups.map((g) => `<option value="${g}">${g}</option>`).join('');
