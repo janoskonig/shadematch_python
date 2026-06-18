@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ShadeMatch — Spectral pigment matching (pitch deck)</title>
+<style>
+  :root{
+    --stage:#11131a; --slide:#ffffff; --ink:#1a1d24; --muted:#5c6470; --hint:#8b929c;
+    --line:#e6e8ec; --soft:#f4f5f7;
+    --now:#0f6e56; --now-bg:#e1f5ee; --now-line:#1d9e75;
+    --ask:#854f0b; --ask-bg:#faeeda; --ask-line:#ba7517;
+    --info:#0c447c; --info-bg:#e6f1fb;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+    --serif:Georgia,"Times New Roman",serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --slide:#1b1e26; --ink:#eef0f3; --muted:#a7afba; --hint:#7d858f; --line:#2b2f39; --soft:#23272f;
+           --now-bg:#0f3329; --ask-bg:#3a2a0c; --info-bg:#0e2c4d; }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--stage);font-family:var(--sans);color:var(--ink);
+       display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;padding:14px;gap:12px}
+  .progress{position:fixed;top:0;left:0;height:3px;background:var(--now-line);width:0;transition:width .25s ease;z-index:5}
+  .depthbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;color:#cfd4db;font-size:13px}
+  .depthbar .lbl{color:#9aa1ab}
+  .depthbar button{background:#1b1e26;color:#cfd4db;border:1px solid #313641;border-radius:8px;padding:6px 12px;font-size:13px;cursor:pointer}
+  .depthbar button.on{background:var(--now-line);color:#06241b;border-color:var(--now-line);font-weight:500}
+  .stagewrap{width:min(96vw,1120px);aspect-ratio:16/9;position:relative}
+  .slide{position:absolute;inset:0;background:var(--slide);border-radius:16px;
+         padding:clamp(20px,3.2vw,42px);display:none;flex-direction:column;justify-content:center;gap:clamp(9px,1.3vw,16px);
+         box-shadow:0 18px 50px rgba(0,0,0,.35);overflow:auto}
+  .slide.on{display:flex}
+  @media (max-aspect-ratio:1/1){
+    .stagewrap{aspect-ratio:auto;width:min(94vw,620px);height:min(82vh,860px)}
+    .slide{justify-content:flex-start;gap:13px}
+    h1{font-size:clamp(25px,7vw,40px)} h2{font-size:clamp(19px,5.2vw,30px)}
+    .sub{font-size:clamp(15px,4vw,20px)} .explain{font-size:clamp(15px,4vw,19px)}
+    .fx{font-size:clamp(11px,3.1vw,15px)} .note,.src{font-size:clamp(12px,3.2vw,15px)}
+    li{font-size:clamp(15px,4vw,19px)} .quote{font-size:clamp(20px,5.5vw,30px)}
+    .slide .film{flex-direction:column} .slide .twoup,.slide .split{grid-template-columns:1fr}
+  }
+  .kick{font-size:clamp(11px,1.25vw,14px);letter-spacing:.08em;text-transform:uppercase;color:var(--hint);font-weight:600}
+  h1{font-size:clamp(25px,4.4vw,50px);line-height:1.08;margin:0;font-weight:650}
+  h2{font-size:clamp(19px,3vw,34px);line-height:1.16;margin:0;font-weight:600}
+  .sub{font-size:clamp(14px,1.9vw,22px);color:var(--muted);line-height:1.5}
+  .explain{font-size:clamp(14px,1.85vw,21px);line-height:1.5;background:var(--soft);border-left:4px solid var(--now-line);
+        border-radius:0 12px 12px 0;padding:clamp(12px,1.5vw,18px) clamp(14px,1.7vw,20px);color:var(--ink)}
+  .explain b{color:var(--now)}
+  .explain.ask{border-left-color:var(--ask-line)} .explain.ask b{color:var(--ask)}
+  .fx{font-family:var(--mono);font-size:clamp(11px,1.4vw,16px);line-height:1.8;background:#0e1116;color:#e9edf2;
+      border-radius:12px;padding:clamp(11px,1.5vw,18px);overflow-x:auto;white-space:pre;tab-size:2}
+  @media (prefers-color-scheme: dark){ .fx{background:#0a0c10} }
+  .note{font-size:clamp(12px,1.5vw,16px);color:var(--muted);line-height:1.45}
+  .src{font-size:clamp(11px,1.35vw,14px);color:var(--hint);line-height:1.4;border-top:1px solid var(--line);padding-top:8px;margin-top:2px}
+  .src b{color:var(--muted);font-weight:500}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:clamp(10px,1.4vw,16px)}
+  .card{border:1px solid var(--line);border-radius:14px;padding:clamp(13px,1.6vw,20px);background:var(--soft)}
+  .card.ask{border:2px solid var(--ask-line)}
+  .card h3{margin:0 0 6px;font-size:clamp(15px,1.9vw,21px);font-weight:600}
+  .card p{margin:0;font-size:clamp(12.5px,1.5vw,17px);color:var(--muted);line-height:1.45}
+  .quote{font-family:var(--serif);font-size:clamp(19px,3vw,38px);line-height:1.32}
+  .tags{display:flex;flex-wrap:wrap;gap:10px}
+  .tag{font-size:clamp(11px,1.3vw,15px);padding:5px 13px;border-radius:9px;font-weight:600}
+  .tag.now{background:var(--now-bg);color:var(--now)} .tag.ask{background:var(--ask-bg);color:var(--ask)}
+  .tag.info{background:var(--info-bg);color:var(--info)}
+  .pal{display:flex;flex-wrap:wrap;gap:clamp(10px,1.6vw,20px)}
+  .pig{display:flex;align-items:center;gap:9px;font-size:clamp(12px,1.6vw,18px);color:var(--muted)}
+  .sw{width:clamp(20px,2.4vw,30px);height:clamp(20px,2.4vw,30px);border-radius:7px;border:1px solid rgba(0,0,0,.18)}
+  ul{margin:2px 0 0;padding-left:1.3em}
+  li{font-size:clamp(13px,1.8vw,20px);line-height:1.55;margin:3px 0}
+  .mono{font-family:var(--mono);font-size:.92em}
+  .film{display:flex;gap:clamp(8px,1.4vw,16px);align-items:stretch}
+  .film figure{margin:0;flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+  .frame{border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--soft);aspect-ratio:16/10}
+  .frame img{width:100%;height:100%;object-fit:cover;object-position:top;display:block}
+  .cap{font-size:clamp(11px,1.35vw,15px);color:var(--muted);line-height:1.35}
+  .cap b{color:var(--ink);font-weight:500}
+  .twoup{display:grid;grid-template-columns:1fr 1fr;gap:clamp(10px,1.8vw,22px);align-items:stretch}
+  .twoup .frame{aspect-ratio:16/11}
+  .split{display:grid;grid-template-columns:1.05fr .95fr;gap:clamp(12px,1.8vw,22px);align-items:center}
+  .split .frame{aspect-ratio:3/4}
+  .srcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:10px 22px}
+  .srcs .s{font-size:clamp(11.5px,1.4vw,15px);line-height:1.4}
+  .srcs .s b{font-weight:500}
+  .srcs .s span{color:var(--muted)}
+  .srcs a{color:var(--info)}
+  .controls{display:flex;align-items:center;gap:14px;color:#cfd4db}
+  .controls button{background:#1b1e26;color:#e9edf2;border:1px solid #313641;border-radius:10px;
+        width:40px;height:40px;font-size:17px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+  .controls button:hover{background:#262b35}
+  .counter{font-size:14px;min-width:60px;text-align:center}
+  .hintbar{font-size:12px;color:#79808b;text-align:center}
+  .star{color:var(--ask);font-weight:700}
+</style>
+</head>
+<body>
+<div class="progress" id="progress"></div>
+
+<div class="depthbar">
+  <span class="lbl">Explain like I'm a:</span>
+  <button data-level="eli5">5-year-old</button>
+  <button data-level="hs">high-schooler</button>
+  <button data-level="expert">color scientist</button>
+</div>
+
+<div class="stagewrap">
+
+  <section class="slide on">
+    <div class="kick">Spectral lab · live demo</div>
+    <h1>ShadeMatch — matching color the way real paint does</h1>
+    <div class="sub">327-pigment spectral catalog · Kubelka–Munk mixing · gamut analysis · real measured skin targets</div>
+    <div class="tags">
+      <span class="tag now">327 measured pigments</span>
+      <span class="tag now">gamut lab</span>
+      <span class="tag ask">already aimed at human skin</span>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">Where this came from</div>
+    <h2>From a prototype to a spectral instrument</h2>
+    <div class="film">
+      <figure><div class="frame"><img src="evolution/then-prototype-home.png" alt="2025 first prototype"></div><div class="cap"><b>2025 · first prototype</b><br>The original main screen — two boxes, raw swatches.</div></figure>
+      <figure><div class="frame"><img src="evolution/now-home.png" alt="current main screen"></div><div class="cap"><b>Now · main screen</b><br>Full-bleed canvas, floating dock, Mixbox mixing.</div></figure>
+      <figure><div class="frame"><img src="evolution/now-spectral.png" alt="current spectral mixer"></div><div class="cap"><b>Now · spectral mixer</b><br>Measured pigments, Kubelka–Munk, real skin targets.</div></figure>
+    </div>
+    <div class="note">168 commits · 15 months. The goal sharpened from “match a colour” to “match real human skin.”</div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">The big idea</div>
+    <h2>Screens add light. Paint subtracts it.</h2>
+    <div class="explain" data-key="bigidea"></div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">What a “color” actually is here</div>
+    <h2>Each color is a light-fingerprint, not just “reddish”</h2>
+    <div class="explain" data-key="fingerprint"></div>
+    <div class="pal">
+      <span class="pig"><span class="sw" style="background:#ebf1f3"></span>titanium white <span style="color:var(--hint)">· white</span></span>
+      <span class="pig"><span class="sw" style="background:#393639"></span>cassel brown <span style="color:var(--hint)">· black</span></span>
+      <span class="pig"><span class="sw" style="background:#ba4c3c"></span>cadmium orange no.1 <span style="color:var(--hint)">· red</span></span>
+      <span class="pig"><span class="sw" style="background:#afb442"></span>bismuth-vanadate yellow <span style="color:var(--hint)">· yellow</span></span>
+      <span class="pig"><span class="sw" style="background:#1959a1"></span>cobalt blue dark <span style="color:var(--hint)">· blue</span></span>
+    </div>
+    <div class="note">These five — one pigment per painter primary — are the <b>widest-gamut</b> set the optimizer found across the 327-pigment catalog. Palettes scale 5 / 8 / 10 / 12 / 16.</div>
+    <div class="src"><b>Data:</b> H. Deborah, “Hyperspectral Pigment Dataset,” WHISPERS 2022 (IEEE) · Zenodo 5592485 — 327 Kremer pigments. <b>Palette:</b> data/GAMUT_REPORT.md.</div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">The mixing math — what you show live</div>
+    <h2>Color → light-thirst → blend → back to color</h2>
+    <div class="explain" data-key="mixing"></div>
+    <div class="fx">K/S = (1 − R)² / (2R)              color → light-thirst
+R   = 1 + K/S − √((K/S)² + 2·K/S)  light-thirst → color
+mix:  (K/S)blend = Σ cᵢ·(K/S)ᵢ / Σ cᵢ      cᵢ = amountᵢ²·strengthᵢ²·brightnessᵢ</div>
+    <div class="src"><b>Model:</b> van Wijnen, Spectral.js (MIT); <span>Kubelka &amp; Munk 1931.</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">Glare — the Saunderson correction</div>
+    <h2>Glare bounces off before light reaches the paint</h2>
+    <div class="explain" data-key="saunderson"></div>
+    <div class="fx">measured → true:  R  = (Rm − k1) / [(1−k1)(1−k2) + k2·(Rm − k1)]
+true → measured:  Rm = k1 + (1−k1)(1−k2)·R / (1 − k2·R)</div>
+    <div class="src"><b>Source:</b> J. L. Saunderson, <span>J. Opt. Soc. Am. 1942.</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">From fingerprint to a color you see</div>
+    <h2>Run the light-fingerprint through a model of the human eye</h2>
+    <div class="explain" data-key="cie"></div>
+    <div class="fx">X,Y,Z = k·Σλ R(λ)·[x̄,ȳ,z̄](λ)·S(λ)    S = D65,  x̄ȳz̄ = CIE 1931 2°
+ΔE = how different two colors look   (CIEDE2000; 0 = identical)</div>
+    <div class="src"><b>Source:</b> CIE 1931 / D65 · ΔE2000 via colormath · <span>Wyszecki &amp; Stiles 2000.</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">The classic mode’s engine — Mixbox 2.0</div>
+    <h2>A genius cheat-sheet: paint physics solved once, then looked up</h2>
+    <div class="explain" data-key="mixbox"></div>
+    <div class="fx">z = mixbox.rgbToLatent(rgb)     color → [c0,c1,c2,c3, εr,εg,εb]  (4 amounts + leftover)
+zMix = Σ wᵢ·zᵢ                  blend in latent space
+rgb  = mixbox.latentToRgb(zMix) cubic polynomial + leftover → color</div>
+    <div class="src"><b>Source:</b> Sochorová &amp; Jamriška, SIGGRAPH Asia 2021 · <span>CC BY-NC 4.0.</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">Two engines, one difference that matters</div>
+    <div class="grid">
+      <div class="card"><h3>Mixbox — classic game</h3><p>Learned lookup + polynomial. Spectra hidden, frozen. No new pigments. Non-commercial.</p></div>
+      <div class="card ask"><h3>Spectral lab — <span class="mono">/spectral</span></h3><p>Explicit Kubelka–Munk on real curves. Every parameter live. Open to <b>your</b> pigments + skin.</p></div>
+    </div>
+    <div class="note">Same instant feel. Closed box vs glass box — pour real measurements in.</div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">The inverse solver — <span class="mono">/reverse_engineer</span></div>
+    <div class="split">
+      <div>
+        <div class="explain" data-key="solver"></div>
+        <div class="src" style="margin-top:12px"><b>Strategy:</b> yargo13/color-formulation · <span>SciPy optimize · palette-aware · dual-illuminant fitness (D65 + A/F11).</span></div>
+      </div>
+      <div class="frame"><img src="evolution/now-reverse.png" alt="reverse-engineer solver output"></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">The Gamut Lab — <span class="mono">/gamut</span></div>
+    <div class="split">
+      <div>
+        <div class="explain" data-key="gamut"></div>
+        <div class="src" style="margin-top:12px"><b>Skin gamut:</b> Xiao et al. 2017, <span>Skin Res. Technol. 23(1) — 4 ethnicities × 4 body sites (n=960).</span></div>
+      </div>
+      <div class="frame"><img src="evolution/now-gamut.png" alt="gamut lab: reachable gamut vs human-skin hull"></div>
+    </div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">Honesty beat — say it before they catch it</div>
+    <h2>On the playground, the target curve is a guess, not a measurement</h2>
+    <div class="explain" data-key="honesty"></div>
+  </section>
+
+  <section class="slide">
+    <div class="kick"><span class="star">★</span> The core ask — getting K and S separately</div>
+    <h2>White card + black card = the trick that unlocks real pigment data</h2>
+    <div class="explain ask" data-key="ask"></div>
+    <div class="fx">thin film over a card of reflectance Rg:
+  R = [1 − Rg·(a − b·coth(bSX))] / [a − Rg + b·coth(bSX)]     a = 1 + K/S,  b = √(a²−1)
+black (Rg≈0) + white (Rg≈1) → solve K(λ), S(λ)  ⇒  two-constant mix: Kmix=ΣcK, Smix=ΣcS</div>
+    <div class="src"><b>Source:</b> Kubelka 1948 · Saunderson 1942 (deferred two-constant spike, per SOURCES.md).</div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">What I’m asking you for</div>
+    <div class="grid">
+      <div class="card ask"><h3>Pigment data</h3><p>Full strength + a few dilutions. Ideally over black AND white backings. 380–730 nm @ 10 nm · 0–1.</p></div>
+      <div class="card ask"><h3>Skin spectra</h3><p>Today it uses Xiao 2017 literature <b>means</b>. Real measured skin <b>spectra</b> become true targets.</p></div>
+    </div>
+    <div class="tags"><span class="tag info">Drops straight in today: CSV · <span class="mono">Wavelength,Reflectance</span> · values 0–1</span></div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">Standing on real work — see SOURCES.md</div>
+    <h2>Sources &amp; citations</h2>
+    <div class="srcs">
+      <div class="s"><b>Pigment data (327)</b><br><span>H. Deborah, “Hyperspectral Pigment Dataset,” WHISPERS 2022, IEEE. doi:10.1109/WHISPERS56178.2022.9955067 · Zenodo 5592485 — Kremer charts.</span></div>
+      <div class="s"><b>Human-skin gamut</b><br><span>Xiao et al., Skin Res. Technol. 23(1):21–29, 2017 (n=960) — 4 ethnicities × 4 body sites.</span></div>
+      <div class="s"><b>Kubelka–Munk model</b><br><span>Kubelka &amp; Munk 1931; Kubelka 1948; Spectral.js — R. van Wijnen (MIT); Saunderson 1942.</span></div>
+      <div class="s"><b>Inverse solver</b><br><span>yargo13/color-formulation (subset + Pareto + dual-illuminant); SciPy <span class="mono">optimize</span>.</span></div>
+      <div class="s"><b>Color science</b><br><span>Wyszecki &amp; Stiles 2000; Hunt 2011; Fairchild 2013; CIE 1931 / D65,A,F11; CIEDE2000; colormath.</span></div>
+      <div class="s"><b>Mixbox (classic mode)</b><br><span>Sochorová &amp; Jamriška, SIGGRAPH Asia 2021. doi:10.1145/3478513.3480549 · CC BY-NC 4.0.</span></div>
+    </div>
+    <div class="src"><b>Full, linked list:</b> <a href="../SOURCES.md">SOURCES.md</a> in the repo (last updated 2026-06-17).</div>
+  </section>
+
+  <section class="slide">
+    <div class="kick">Why it matters · the close</div>
+    <ul>
+      <li>Color by physics, not faked screen pixels.</li>
+      <li>327 measured pigments; a gamut lab that scores skin coverage.</li>
+      <li>An honest solver: it tells you when a color is out of gamut, not a fake match.</li>
+      <li>Already aimed at <b>human skin</b>: foundation, cosmetics, prosthetics. That’s the paper.</li>
+    </ul>
+    <div class="quote">“The physics is already built. I just need your measurements to point it at something real.”</div>
+  </section>
+
+</div>
+
+<div class="controls">
+  <button id="prev" aria-label="Previous slide">‹</button>
+  <span class="counter" id="counter"></span>
+  <button id="next" aria-label="Next slide">›</button>
+  <button id="full" aria-label="Toggle fullscreen">⛶</button>
+</div>
+<div class="hintbar">← / → navigate · F fullscreen · Home/End jump · top buttons switch explanation depth</div>
+
+<script>
+(function(){
+  var LEVELS = {
+    bigidea: {
+      eli5: "Screens make color by <b>adding light</b>. Paint makes color by <b>soaking light up</b>. They’re opposites — so paint needs different math.",
+      hs: "Displays are <b>additive</b> (red + green + blue light → white). Pigments are <b>subtractive</b> (each absorbs part of the spectrum). Averaging RGB models the wrong process.",
+      expert: "Additive (tristimulus) vs. subtractive (spectral) color formation. Pigment mixing is governed by wavelength-dependent absorption + scattering — modeled in the reflectance domain (Kubelka–Munk), not linear RGB interpolation."
+    },
+    fingerprint: {
+      eli5: "A color here isn’t just “red” — it’s a <b>curve</b> of how much light bounces back at each color of the rainbow. A fingerprint.",
+      hs: "Each pigment is a <b>reflectance spectrum</b>: reflectance across 38 wavelength bands (380–750 nm). Far more information than an RGB triple.",
+      expert: "Pigments are stored as spectral reflectance R(λ) on a 38-band grid. Operating in the spectral domain preserves metameric distinctions that collapse under tristimulus encoding."
+    },
+    mixing: {
+      eli5: "Turn each color into one number — how <b>thirsty</b> it is for light. Blend the thirst, then turn it back into a color.",
+      hs: "Convert reflectance to <b>K/S</b> (absorption ÷ scattering), blend the K/S values weighted by amount, then invert back to reflectance. Single-constant Kubelka–Munk.",
+      expert: "Single-constant KM: per-band K/S = (1−R)²/2R, concentration-weighted additivity in K/S space, inverse R = 1+K/S−√((K/S)²+2K/S). Tinting strengths from the measured dilution ladder, not fitted."
+    },
+    saunderson: {
+      eli5: "Some light <b>glares</b> off the shiny top before it reaches the paint. We subtract it.",
+      hs: "The <b>Saunderson correction</b> removes surface and internal boundary reflections, mapping measured reflectance to the internal value the KM model needs.",
+      expert: "Saunderson k1 (external/specular) + k2 (internal) terms relate measured ↔ internal reflectance; identity at k1=k2=0, exposed as live parameters for substrate-aware matching."
+    },
+    cie: {
+      eli5: "To get the color you actually <b>see</b>, run the curve through a model of the human eye in daylight.",
+      hs: "Multiply reflectance by the <b>CIE 1931</b> color-matching functions under D65 daylight → XYZ → Lab. <b>ΔE</b> = perceived difference (0 = identical).",
+      expert: "R(λ)→XYZ via CIE 1931 2° observer under D65 → CIELAB with no sRGB round-trip (out-of-gamut targets stay unclipped for scoring); perceptual objective = CIEDE2000."
+    },
+    mixbox: {
+      eli5: "The classic game uses a giant <b>pre-made cheat-sheet</b>: look up the color, blend, look up the answer. Fast — but you can’t change the paints.",
+      hs: "Mixbox encodes RGB as <b>7 latent numbers</b> (4 pigment amounts + a residual), blends them linearly, decodes with a fixed cubic polynomial. The KM physics is baked in offline.",
+      expert: "RGB→7-D latent via a trained 64³ LUT (4 primary concentrations + RGB residual) → linear blend → cubic-polynomial decode. KM solved offline; runtime is closed and non-tweakable. CC BY-NC 4.0."
+    },
+    solver: {
+      eli5: "Give it a <b>real measured color</b>, pick a palette, and it finds the recipe — and honestly says whether that palette can even make it.",
+      hs: "For your chosen palette it tries every pigment combination, returns a few recipes trading <b>simplicity vs accuracy</b> (a Pareto front), scores them under several lights to dodge <b>metamerism</b>, and gives a <b>reachability</b> verdict — “a wider palette can” when it can’t.",
+      expert: "Palette-aware exhaustive subset solve (multi-start L-BFGS-B) → effective-set collapse → Pareto front over (pigment-count, cost). Objective = multi-illuminant ΔE2000 (D65 headline + A/F11 stressors) to penalize metamerism; outputs continuous + integer-drop recipes and a gamut-reachability band."
+    },
+    gamut: {
+      eli5: "Pick a handful of paints and it draws the <b>range of colors</b> they can mix — then overlays <b>real human skin tones</b>. If your shape covers the skins, you can mix them.",
+      hs: "For any pigment set it measures the <b>reachable CIELAB gamut</b> (volume + how much of the 327-pigment catalog it covers), and overlays the <b>human-skin gamut</b>. A greedy search builds the widest-gamut palette — the best 5 roughly <b>double</b> the shipped five.",
+      expert: "Convex-hull volume in CIELAB of all KM mixtures (pure + pairwise) for a chosen set; ΔE2000 + volume coverage of the catalog masstones; greedy gamut-maximizing palette construction; a*–b* overlay of the Xiao 2017 skin-mean hull for containment checks."
+    },
+    honesty: {
+      eli5: "The skin targets are <b>average</b> colors from a study, and their curve is rebuilt from that color — not a real measurement. We draw it <b>dashed</b> so nobody’s fooled.",
+      hs: "The skin targets are Xiao 2017 <b>mean</b> chromaticities; their displayed spectrum is a <b>metameric reconstruction</b> from the mean color (dashed), not a measured curve.",
+      expert: "Skin targets are literature <b>mean</b> CIELAB per ethnicity × site; the overlaid curve is one of infinitely many metameric spectra mapping to that mean (dashed). Real per-subject measured spectra would replace both the means and the reconstruction."
+    },
+    ask: {
+      eli5: "To really know a paint we need <b>two</b> numbers: how much light it eats and how much it scatters. Paint it over a <b>black card</b> and a <b>white card</b> to get both.",
+      hs: "Measuring a film over black and white backings lets you solve absorption <b>K</b> and scattering <b>S</b> separately — the jump from single- to <b>two-constant</b> Kubelka–Munk.",
+      expert: "Over-black/over-white reflectance at known film thickness inverts the KM hyperbolic layer equations for K(λ), S(λ) independently → two-constant mixing (Kmix=ΣcK, Smix=ΣcS), and physical opacity + tinting strength."
+    }
+  };
+
+  var level = 'hs';
+  function applyLevel(lv){
+    level = lv;
+    document.querySelectorAll('.depthbar button').forEach(function(b){ b.classList.toggle('on', b.dataset.level === lv); });
+    document.querySelectorAll('.explain[data-key]').forEach(function(el){
+      var m = LEVELS[el.dataset.key]; if (m && m[lv]) el.innerHTML = m[lv];
+    });
+  }
+  document.querySelectorAll('.depthbar button').forEach(function(b){
+    b.addEventListener('click', function(){ applyLevel(b.dataset.level); });
+  });
+
+  var slides=[].slice.call(document.querySelectorAll('.slide'));
+  var i=0,n=slides.length;
+  var counter=document.getElementById('counter'),progress=document.getElementById('progress');
+  function render(){
+    slides.forEach(function(s,k){s.classList.toggle('on',k===i)});
+    counter.textContent=(i+1)+' / '+n;
+    progress.style.width=((i)/(n-1)*100)+'%';
+  }
+  function go(k){i=Math.max(0,Math.min(n-1,k));render()}
+  document.getElementById('prev').onclick=function(){go(i-1)};
+  document.getElementById('next').onclick=function(){go(i+1)};
+  document.getElementById('full').onclick=function(){
+    if(!document.fullscreenElement){document.documentElement.requestFullscreen&&document.documentElement.requestFullscreen()}
+    else{document.exitFullscreen&&document.exitFullscreen()}
+  };
+  document.addEventListener('keydown',function(e){
+    if(e.key==='ArrowRight'||e.key==='PageDown'||e.key===' '){e.preventDefault();go(i+1)}
+    else if(e.key==='ArrowLeft'||e.key==='PageUp'){go(i-1)}
+    else if(e.key==='Home'){go(0)} else if(e.key==='End'){go(n-1)}
+    else if(e.key==='1'){applyLevel('eli5')} else if(e.key==='2'){applyLevel('hs')} else if(e.key==='3'){applyLevel('expert')}
+    else if(e.key==='f'||e.key==='F'){document.getElementById('full').click()}
+  });
+  window.__deck={go:go,count:function(){return n},index:function(){return i},setLevel:applyLevel};
+  applyLevel(level);
+  render();
+})();
+</script>
+</body>
+</html>
