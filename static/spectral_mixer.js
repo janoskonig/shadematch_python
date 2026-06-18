@@ -30,18 +30,28 @@ if (!window.spectral || !window.spectral.Color || !window.spectral.mix) {
 // Defined once and reused for resampling, new spectral.Color(R38), and plotting.
 const WAVELENGTHS = Array.from({ length: 38 }, (_, i) => 380 + i * 10);
 
-const PALETTE_ORDER = ['white', 'black', 'red', 'yellow', 'blue'];
-const PALETTE_LABEL = { white: 'White', black: 'Black', red: 'Red', yellow: 'Yellow', blue: 'Blue' };
-
-// Relative tinting strength per base pigment, derived from the Kremer shade ladder
-// (static/pigments/*.csv) by scripts/compute_tinting_strength.py: the single-constant K/S
-// a pigment still shows at maximum dilution (sh-4) ranks its colouring power, geo-mean
-// normalised across the five bases. Stored as √strength because the engine weights by
-// tintingStrength², so strength enters the concentration weight LINEARLY. Verified to give
-// sensible tints (e.g. black:white 1:9 → dark grey, blue:white 1:9 → light blue).
-// Rounded to the panel's 0.1 slider grid so the engine and panel-default paths agree exactly.
-const SPECTRAL_TINTING = { white: 0.1, black: 2.7, red: 2.1, yellow: 1.0, blue: 1.7 };
+// ── Active palette (mutable; chosen via the size selector) ──────────────────
+// The palette is no longer a fixed five. /spectral injects window.SPECTRAL_PALETTES
+// (built by app/routes.build_spectral_palettes from the gamut optimiser): a 'classic'
+// five plus widest-gamut sets of 5/8/10/… pigments from the Hyperspectral Pigments
+// dataset. Each pigment carries its reflectance R on the 38-bin engine grid, a display
+// label, a hue family, and a tinting strength. These let-bindings hold the ACTIVE set
+// and are repopulated by SpectralMixer.applyPalette().
+//
+// Tinting strength = relative pigment power from the Kremer shade ladder (K/S retained at
+// max dilution); the engine weights concentration by tintingStrength², so it enters the
+// weight linearly. It only affects how far a dial turns, not the reachable gamut.
+let PALETTE_ORDER = ['white', 'black', 'red', 'yellow', 'blue'];
+let PALETTE_LABEL = { white: 'White', black: 'Black', red: 'Red', yellow: 'Yellow', blue: 'Blue' };
+let SPECTRAL_TINTING = { white: 0.1, black: 2.7, red: 2.1, yellow: 1.0, blue: 1.7 };
+let PALETTE_META = {};   // key → { name, family, srgb }
 const tintingFor = (key) => (SPECTRAL_TINTING[key] != null ? SPECTRAL_TINTING[key] : 1);
+
+// The injected catalog of selectable palettes (classic + gamut sets). Safe fallback so
+// the lab still runs (classic only) if the backend served nothing.
+const SPECTRAL_PALETTES = (window.SPECTRAL_PALETTES && window.SPECTRAL_PALETTES.palettes)
+    ? window.SPECTRAL_PALETTES
+    : { default: 'classic', sizes: [], volumes: {}, palettes: {} };
 
 // Same strict win threshold as the main game. Targets are generated from a pigment
 // recipe mixed by the same engine, and the engine's mix is ratio-invariant, so an
@@ -86,47 +96,47 @@ function mulberry32(seed) {
     };
 }
 
-function loadCompletedSet() {
+// Progress (completed shades + resume index) is namespaced per palette: each palette
+// generates a different target catalog, so its completed-ids must not bleed across
+// palettes. 'classic' keeps the original un-suffixed keys for backward compatibility.
+function completedKey(palette) {
+    return palette && palette !== 'classic' ? `${SPECTRAL_COMPLETED_KEY}::${palette}` : SPECTRAL_COMPLETED_KEY;
+}
+function indexKey(palette) {
+    return palette && palette !== 'classic' ? `${SPECTRAL_INDEX_KEY}::${palette}` : SPECTRAL_INDEX_KEY;
+}
+function loadCompletedSet(palette) {
     try {
-        const a = JSON.parse(localStorage.getItem(SPECTRAL_COMPLETED_KEY) || '[]');
+        const a = JSON.parse(localStorage.getItem(completedKey(palette)) || '[]');
         return new Set(Array.isArray(a) ? a : []);
     } catch (_) { return new Set(); }
 }
-function saveCompletedSet(set) {
-    try { localStorage.setItem(SPECTRAL_COMPLETED_KEY, JSON.stringify(Array.from(set))); } catch (_) { /* ignore */ }
+function saveCompletedSet(set, palette) {
+    try { localStorage.setItem(completedKey(palette), JSON.stringify(Array.from(set))); } catch (_) { /* ignore */ }
 }
+const SPECTRAL_PALETTE_KEY = 'spectral_palette_choice';
 
 class SpectralMixer {
     constructor() {
         // bases[color] = { name, swatch, raw:{wavelengths,reflectances}, R38, color }
         this.bases = {};
         this.relativeAmounts = {};
+        this.activePalette = 'classic';
 
-        PALETTE_ORDER.forEach((key) => {
-            const data = spectrum_plots[key];
-            if (!data) { console.error(`No measured spectrum for base "${key}"`); return; }
-            const R38 = resampleToGrid(data.wavelengths, data.reflectances);
-            const color = new spectral.Color(R38);
-            color.tintingStrength = tintingFor(key);   // measured relative strength (vs the engine's flat 1)
-            this.bases[key] = {
-                name: data.name || key,
-                swatch: color.sRGB,
-                raw: { wavelengths: data.wavelengths, reflectances: data.reflectances },
-                R38: R38,
-                color: color,
-            };
-            this.relativeAmounts[key] = 0;
-        });
-
+        // Static DOM refs (these elements never get re-rendered).
         this.currentMix = document.getElementById('currentMix');
         this.targetSwatch = document.getElementById('targetColor');
         this.colorCodesLine = document.getElementById('colorCodesLine');
         this.palette = document.getElementById('spectralPalette');
+        this.recipeStrip = document.getElementById('recipeStrip');
+        this.spectrumGrid = document.getElementById('spectrumGrid');
         this.status = document.getElementById('spectralStatus');
         this.matchBar = {
             container: document.getElementById('matchBarContainer'),
             fill: document.getElementById('matchBarFill'),
             label: document.getElementById('matchBarLabel'),
+            value: document.getElementById('deltaEValue'),
+            best: document.getElementById('deltaEBest'),
         };
 
         this.currentRgb = [255, 255, 255];
@@ -135,10 +145,9 @@ class SpectralMixer {
         this.scoreTimer = null;      // debounce handle for /calculate during drags
         this.bestDeltaE = null;      // closest ΔE reached on the current shade
 
-        // Leveling over the ported catalog (Mixbox) targets.
         this.catalog = [];
         this.shadeIndex = 0;
-        this.completed = loadCompletedSet();
+        this.completed = new Set();
 
         this.shadeLabel = document.getElementById('shadeLabel');
         this.shadeName = document.getElementById('shadeName');
@@ -146,20 +155,158 @@ class SpectralMixer {
         this.progressFill = document.getElementById('spectralProgressFill');
         this.perceptionModal = document.getElementById('perceptionModal');
 
-        // Adjustable Kubelka–Munk parameters (debug panel). These defaults reproduce the
-        // stock spectral.js mix exactly: concentration = amount² · tinting² · luminance¹,
-        // no Saunderson surface correction. Only used while the panel is open.
-        this.km = {
-            tinting: Object.fromEntries(PALETTE_ORDER.map((k) => [k, tintingFor(k)])),
-            concExp: 2, tsExp: 2, lumExp: 1, k1: 0, k2: 0,
-        };
+        // Adjustable Kubelka–Munk parameters (debug panel). Defaults reproduce the stock
+        // spectral.js mix exactly. `tinting` is repopulated per palette in applyPalette().
+        this.km = { tinting: {}, concExp: 2, tsExp: 2, lumExp: 1, k1: 0, k2: 0 };
         this.kmPanelActive = false;
 
+        this.setupPaletteSelector();   // one-time: the size <select>
+        this.bindStaticControls();     // one-time: reset / judge / skip / give-me-a-mix / modal
+        this.setupKmPanelStatic();     // one-time: toggle + non-tinting sliders + reset
+
+        // Restore the last-used palette if it still exists, else the injected default.
+        let initial = 'classic';
+        try { initial = localStorage.getItem(SPECTRAL_PALETTE_KEY) || SPECTRAL_PALETTES.default || 'classic'; }
+        catch (_) { initial = SPECTRAL_PALETTES.default || 'classic'; }
+        if (!this.palettePigments(initial)) initial = 'classic';
+        this.applyPalette(initial);
+    }
+
+    // The pigment list for a palette name (from the injected catalog, classic fallback).
+    palettePigments(name) {
+        const p = SPECTRAL_PALETTES.palettes && SPECTRAL_PALETTES.palettes[name];
+        return (p && p.length) ? p : null;
+    }
+
+    // Switch the whole lab to a palette: rebuild engine bases, regenerate the dial UI,
+    // base-spectrum plots, recipe strip and tinting sliders, then reload the (palette-
+    // specific) target catalog. Safe to call repeatedly.
+    applyPalette(name) {
+        const pigs = this.palettePigments(name) || this.palettePigments('classic');
+        if (!pigs) { if (this.status) this.status.textContent = 'No pigment data available.'; return; }
+        this.activePalette = name;
+        try { localStorage.setItem(SPECTRAL_PALETTE_KEY, name); } catch (_) { /* ignore */ }
+
+        // Repopulate the active-palette globals from the pigment records.
+        PALETTE_ORDER = pigs.map((p) => p.key);
+        PALETTE_LABEL = {}; SPECTRAL_TINTING = {}; PALETTE_META = {};
+        pigs.forEach((p) => {
+            PALETTE_LABEL[p.key] = p.label || p.key;
+            SPECTRAL_TINTING[p.key] = (p.tinting != null ? p.tinting : 1);
+            PALETTE_META[p.key] = { name: p.name || p.label || p.key, family: p.family || p.key, srgb: p.srgb };
+        });
+
+        // Build engine bases. Each pigment already carries R on the 38-bin grid; classic
+        // also carries a measured full-resolution curve via spectrum_plots for the plot.
+        this.bases = {};
+        this.relativeAmounts = {};
+        pigs.forEach((p) => {
+            const R38 = (p.R && p.R.length === WAVELENGTHS.length)
+                ? p.R.map((v) => Math.max(1e-4, Math.min(1, v)))
+                : resampleToGrid(p.R_wavelengths || WAVELENGTHS, p.R || []);
+            const color = new spectral.Color(R38);
+            color.tintingStrength = tintingFor(p.key);
+            const raw = (typeof spectrum_plots !== 'undefined' && spectrum_plots[p.key])
+                ? { wavelengths: spectrum_plots[p.key].wavelengths, reflectances: spectrum_plots[p.key].reflectances }
+                : { wavelengths: WAVELENGTHS, reflectances: R38 };
+            this.bases[p.key] = { name: p.name || p.label || p.key, swatch: color.sRGB, raw, R38, color };
+            this.relativeAmounts[p.key] = 0;
+        });
+
+        this.km.tinting = Object.fromEntries(PALETTE_ORDER.map((k) => [k, tintingFor(k)]));
+
+        // (Re)build all palette-dependent DOM, then (re)bind its listeners.
+        this.renderPaletteDials();
+        this.renderRecipeStrip();
+        this.renderBasePlotSlots();
+        this.renderTintingSliders();
         this.setupDials();
         this.initializeControls();
-        this.setupKmPanel();
+        this.bindTintingSliders();
         this.initializeBasePlots();
+        this.syncPaletteInfo();
+
+        // Reload progress for this palette and rebuild its target catalog.
+        this.completed = loadCompletedSet(this.activePalette);
         this.loadCatalog();
+    }
+
+    // Build the dial markup for the active palette (replaces the old static HTML).
+    renderPaletteDials() {
+        if (!this.palette) return;
+        this.palette.innerHTML = PALETTE_ORDER.map((key) => {
+            const label = PALETTE_LABEL[key] || key;
+            const swatch = (PALETTE_META[key] && PALETTE_META[key].srgb) || [180, 180, 180];
+            const bg = `rgb(${swatch[0]}, ${swatch[1]}, ${swatch[2]})`;
+            const full = (PALETTE_META[key] && PALETTE_META[key].name) || label;
+            return `
+      <div class="color-control">
+        <input class="drop-badge" data-badge-for="${key}" type="text" inputmode="decimal" value="0" aria-label="${label} amount" />
+        <div class="dial" data-color="${key}" role="slider" aria-label="${label} amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
+          <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="${key}" cx="50" cy="50" r="44"></circle></svg>
+          <button class="color-circle" data-color="${key}" style="background:${bg};" type="button" aria-label="Add ${label}">0</button>
+        </div>
+        <button class="minus-button" data-color="${key}" type="button" aria-label="Remove ${label}">−</button>
+        <span class="color-name" title="${full}">${label}</span>
+      </div>`;
+        }).join('');
+    }
+
+    // Recipe strip segments, one per active pigment.
+    renderRecipeStrip() {
+        if (!this.recipeStrip) return;
+        this.recipeStrip.innerHTML = PALETTE_ORDER.map((key) => {
+            const s = (PALETTE_META[key] && PALETTE_META[key].srgb) || [180, 180, 180];
+            return `<div class="recipe-seg" data-color="${key}" style="flex-grow:0;background:rgb(${s[0]},${s[1]},${s[2]});"></div>`;
+        }).join('');
+    }
+
+    // One spectrum-plot slot per active pigment.
+    renderBasePlotSlots() {
+        if (!this.spectrumGrid) return;
+        this.spectrumGrid.innerHTML = PALETTE_ORDER.map((key) =>
+            `<div class="spectrum-card"><div id="spectrumPlot-${key}" class="plot"></div></div>`).join('');
+    }
+
+    // Per-pigment tinting-strength sliders in the KM panel (rebuilt per palette).
+    renderTintingSliders() {
+        const group = document.getElementById('kmTintingGroup');
+        if (!group) return;
+        const rows = PALETTE_ORDER.map((key) => {
+            const label = PALETTE_LABEL[key] || key;
+            return `<div class="km-row"><label for="km-ts-${key}">${label}</label>
+        <input id="km-ts-${key}" type="range" data-km="ts:${key}" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:${key}"></span></div>`;
+        }).join('');
+        group.innerHTML = `<div class="km-group-title">Tinting strength (relative pigment power)</div>${rows}`;
+    }
+
+    // Reflect the current palette choice + gamut volume in the selector + info line.
+    syncPaletteInfo() {
+        if (this.paletteSelect && this.paletteSelect.value !== this.activePalette) {
+            this.paletteSelect.value = this.activePalette;
+        }
+        const info = document.getElementById('paletteInfo');
+        if (info) {
+            const n = PALETTE_ORDER.length;
+            const vol = SPECTRAL_PALETTES.volumes && SPECTRAL_PALETTES.volumes[String(n)];
+            info.textContent = this.activePalette === 'classic'
+                ? `${n} pigments · classic primaries`
+                : `${n} pigments · gamut ${vol ? Math.round(vol).toLocaleString() : '—'}`;
+        }
+    }
+
+    // Wire the palette-size <select> once. Options come from the injected catalog.
+    setupPaletteSelector() {
+        this.paletteSelect = document.getElementById('paletteSelect');
+        if (!this.paletteSelect) return;
+        const opts = ['<option value="classic">Classic 5 (cad red/yellow + ultramarine)</option>'];
+        (SPECTRAL_PALETTES.sizes || []).forEach((s) => {
+            const vol = SPECTRAL_PALETTES.volumes && SPECTRAL_PALETTES.volumes[String(s)];
+            const tag = vol ? ` — gamut ${Math.round(vol).toLocaleString()}` : '';
+            opts.push(`<option value="${s}">${s} pigments (widest gamut${tag})</option>`);
+        });
+        this.paletteSelect.innerHTML = opts.join('');
+        this.paletteSelect.addEventListener('change', () => this.applyPalette(this.paletteSelect.value));
     }
 
     // Paint the static dial parts: the 270° track and each ring's pigment colour.
@@ -311,7 +458,12 @@ class SpectralMixer {
         // − button is reachable but skipped by Tab (type 0 or ↓ on the field instead).
         this.palette.querySelectorAll('.dial').forEach((d) => { d.removeAttribute('tabindex'); d.removeAttribute('role'); });
         this.palette.querySelectorAll('.minus-button, .color-circle').forEach((b) => { b.tabIndex = -1; });
+    }
 
+    // One-time listeners for the static controls (these elements are NOT re-rendered per
+    // palette, so they must be bound once — binding them in initializeControls, which runs
+    // on every palette switch, would stack duplicate handlers).
+    bindStaticControls() {
         const reset = document.getElementById('spectralResetBtn');
         if (reset) reset.addEventListener('click', () => this.resetMix());
 
@@ -320,6 +472,9 @@ class SpectralMixer {
 
         const skip = document.getElementById('spectralSkipBtn');
         if (skip) skip.addEventListener('click', () => this.nextShade());
+
+        const solve = document.getElementById('spectralSolveBtn');
+        if (solve) solve.addEventListener('click', () => this.solveMix());
 
         if (this.perceptionModal) {
             this.perceptionModal.querySelectorAll('[data-perc]').forEach((btn) => {
@@ -331,6 +486,53 @@ class SpectralMixer {
                 if (e.target === this.perceptionModal) this.closePerception();
             });
         }
+    }
+
+    // "Give me a mix": ask the server to solve the current target with the active palette
+    // (reverse-engineer-style), then drop the returned recipe onto the dials. The mix is
+    // scale-invariant in the amounts, so we rescale the normalised recipe to a readable
+    // dial range (peak ≈ 60) without changing the resulting colour.
+    solveMix() {
+        if (!this.target || !window.spectral) return;
+        const btn = document.getElementById('spectralSolveBtn');
+        if (this._solving) return;
+        this._solving = true;
+        if (btn) { btn.disabled = true; btn.classList.add('is-solving'); }
+        if (this.status) { this.status.classList.remove('is-win'); this.status.textContent = 'Solving a mix…'; }
+
+        let targetR;
+        try { targetR = new spectral.Color(this.target.rgb).R; }
+        catch (_) { targetR = null; }
+        const done = () => { this._solving = false; if (btn) { btn.disabled = false; btn.classList.remove('is-solving'); } };
+
+        fetch('/spectral/solve', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ palette: this.activePalette, target_R: targetR }),
+        })
+            .then((r) => r.json())
+            .then((data) => {
+                if (data.error) throw new Error(data.error);
+                const amounts = data.amounts || {};
+                const peak = Math.max(0, ...Object.values(amounts));
+                const scale = peak > 0 ? 60 / peak : 0;
+                PALETTE_ORDER.forEach((key) => {
+                    this.relativeAmounts[key] = roundStep((amounts[key] || 0) * scale);
+                    this.syncControl(key);
+                });
+                this.updateMixedColor();
+                if (this.status) {
+                    const de = Number(data.delta_e);
+                    const verdict = (data.reachability && data.reachability.status) || '';
+                    const nice = { exact: 'spot on', close: 'very close', approximate: 'approximate',
+                                   out_of_gamut: 'closest this palette can reach' }[verdict] || '';
+                    this.status.textContent = Number.isFinite(de)
+                        ? `Solved — ΔE ${de.toFixed(1)}${nice ? ' · ' + nice : ''}. Tweak the dials or judge the match.`
+                        : 'Solved — tweak the dials or judge the match.';
+                }
+            })
+            .catch(() => { if (this.status) this.status.textContent = 'Could not solve a mix — mix by hand or try again.'; })
+            .finally(done);
     }
 
     resetMix() {
@@ -450,7 +652,23 @@ class SpectralMixer {
         return new spectral.Color(R);
     }
 
-    setupKmPanel() {
+    // Wire one input[data-km] slider: keep its readout, apply the param, redraw if live.
+    wireKmSlider(sl) {
+        const panel = document.getElementById('kmPanel');
+        const out = panel && panel.querySelector(`[data-km-val="${sl.dataset.km}"]`);
+        const apply = () => {
+            this.applyKmParam(sl.dataset.km, parseFloat(sl.value));
+            if (out) out.textContent = sl.value;
+            if (this.kmPanelActive) this.updateMixedColor();
+        };
+        sl.addEventListener('input', apply);
+        sl.value = String(this.kmDefault(sl.dataset.km));   // seed from measured defaults
+        apply();   // initialise the readout (no redraw — panel starts closed)
+    }
+
+    // One-time: the panel toggle, the non-tinting sliders (exponents, Saunderson) and the
+    // reset button. The per-pigment tinting sliders are (re)bound per palette below.
+    setupKmPanelStatic() {
         const panel = document.getElementById('kmPanel');
         const toggle = document.getElementById('kmToggle');
         if (!panel || !toggle) return;
@@ -463,27 +681,23 @@ class SpectralMixer {
             this.updateMixedColor();   // switch between engine and parameterized math
         });
 
-        const sliders = panel.querySelectorAll('input[type="range"][data-km]');
-        sliders.forEach((sl) => {
-            const out = panel.querySelector(`[data-km-val="${sl.dataset.km}"]`);
-            const apply = () => {
-                const v = parseFloat(sl.value);
-                this.applyKmParam(sl.dataset.km, v);
-                if (out) out.textContent = sl.value;
-                if (this.kmPanelActive) this.updateMixedColor();
-            };
-            sl.addEventListener('input', apply);
-            sl.value = String(this.kmDefault(sl.dataset.km));   // seed from measured defaults, not HTML
-            apply();   // initialise the value readout (no redraw — panel starts closed)
-        });
+        panel.querySelectorAll('input[type="range"][data-km]:not([data-km^="ts:"])')
+            .forEach((sl) => this.wireKmSlider(sl));
 
         const reset = document.getElementById('kmReset');
         if (reset) reset.addEventListener('click', () => {
-            sliders.forEach((sl) => {
+            panel.querySelectorAll('input[type="range"][data-km]').forEach((sl) => {
                 sl.value = String(this.kmDefault(sl.dataset.km));
                 sl.dispatchEvent(new Event('input'));
             });
         });
+    }
+
+    // Per-palette: bind the freshly-rendered tinting-strength sliders.
+    bindTintingSliders() {
+        const panel = document.getElementById('kmPanel');
+        if (!panel) return;
+        panel.querySelectorAll('input[type="range"][data-km^="ts:"]').forEach((sl) => this.wireKmSlider(sl));
     }
 
     // Default value for a panel parameter. Tinting strengths come from the measured ladder
@@ -516,10 +730,10 @@ class SpectralMixer {
         Array.from(this.completed).forEach((id) => {
             if (!ids.has(id)) { this.completed.delete(id); pruned = true; }
         });
-        if (pruned) saveCompletedSet(this.completed);
+        if (pruned) saveCompletedSet(this.completed, this.activePalette);
 
         // Resume at the saved shade, else the first not-yet-completed one.
-        let idx = parseInt(localStorage.getItem(SPECTRAL_INDEX_KEY) || '', 10);
+        let idx = parseInt(localStorage.getItem(indexKey(this.activePalette)) || '', 10);
         if (!Number.isInteger(idx) || idx < 0 || idx >= this.catalog.length) {
             idx = this.catalog.findIndex((t) => !this.completed.has(t.id));
             if (idx < 0) idx = 0;
@@ -546,7 +760,7 @@ class SpectralMixer {
     loadShade(index) {
         if (!this.catalog.length) return;
         this.shadeIndex = Math.max(0, Math.min(this.catalog.length - 1, index));
-        try { localStorage.setItem(SPECTRAL_INDEX_KEY, String(this.shadeIndex)); } catch (_) { /* ignore */ }
+        try { localStorage.setItem(indexKey(this.activePalette), String(this.shadeIndex)); } catch (_) { /* ignore */ }
         const t = this.catalog[this.shadeIndex];
         this.target = { id: t.id, rgb: t.rgb.slice(0, 3), name: t.name || ('Shade ' + (this.shadeIndex + 1)) };
         this.bestDeltaE = null;
@@ -622,7 +836,7 @@ class SpectralMixer {
         if (!this.target) return;
         if (perception === 'identical' || perception === 'acceptable') {
             this.completed.add(this.target.id);
-            saveCompletedSet(this.completed);
+            saveCompletedSet(this.completed, this.activePalette);
             if (this.status) {
                 this.status.textContent = perception === 'identical'
                     ? '✓ No perceptible difference — shade complete!'
@@ -675,9 +889,18 @@ class SpectralMixer {
 
     // Closeness feedback only (exponential decay, K=3). Completion is the perceptual judgment.
     updateMatchBar(deltaE) {
-        const { container, fill, label } = this.matchBar;
+        const { container, fill, label, value, best } = this.matchBar;
         if (!container || !fill || !label) return;
         container.style.display = '';
+
+        // Feature the measured ΔE₀₀ as a number, alongside the closeness bar.
+        if (value) {
+            value.textContent = isPerfectMatch(deltaE) ? '0.0' : deltaE.toFixed(1);
+            value.classList.toggle('is-exact', isPerfectMatch(deltaE));
+        }
+        if (best) {
+            best.textContent = (this.bestDeltaE != null) ? `best ${this.bestDeltaE.toFixed(1)}` : '';
+        }
 
         if (isPerfectMatch(deltaE)) {
             fill.style.width = '100%';
@@ -767,7 +990,9 @@ function randomRecipe(rng, keys) {
         return o.slice(0, n);
     };
     const has = (k) => keys.includes(k);
-    const chromatic = ['red', 'yellow', 'blue'].filter(has);
+    // Any slot that isn't the white tint or black shade is a chromatic hue driver. This
+    // generalises beyond the classic R/Y/B to the gamut palettes' extra pigments (p6, p7…).
+    const chromatic = keys.filter((k) => k !== 'white' && k !== 'black');
     const recipe = [];
     if (chromatic.length) {
         const nc = Math.min(chromatic.length, 1 + Math.floor(rng() * 2));   // 1 or 2 hues

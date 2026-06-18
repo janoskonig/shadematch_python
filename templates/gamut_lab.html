@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Gamut lab — ShadeMatch{% endblock %}
+
+{% block extra_head %}
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
+<style>
+.gamut-wrap { max-width: 1180px; margin: 0 auto; padding: 16px 16px 64px; }
+.gamut-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; flex-wrap: wrap; }
+.gamut-header h1 { font-size: 1.25rem; margin: 0; font-weight: 800; }
+.gamut-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.gamut-hint { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 16px; line-height: 1.45; }
+
+.gamut-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
+@media (min-width: 900px) { .gamut-grid { grid-template-columns: 1.05fr 0.95fr; align-items: start; } }
+
+.panel { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--surface, #fff); }
+.panel h2 { font-size: 1rem; margin: 0 0 10px; font-weight: 800; }
+
+/* Controls */
+.ctl-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.ctl-row label { font-weight: 700; font-size: 0.9rem; }
+.seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 6px 10px; cursor: pointer; font-size: 0.85rem; }
+.seg button.is-on { background: var(--accent, #3b6ef5); color: #fff; }
+#sizeVal { font-weight: 800; min-width: 1.6em; display: inline-block; text-align: center; }
+
+/* Picks / chips */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 3px 6px 3px 4px; font-size: 0.8rem; background: var(--surface,#fff); }
+.chip .sw { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); flex: 0 0 auto; }
+.chip button { border: 0; background: transparent; cursor: pointer; font-size: 0.95rem; line-height: 1; color: var(--text-secondary); padding: 0 2px; }
+.chips-empty { color: var(--text-secondary); font-size: 0.82rem; }
+
+/* Catalog */
+.cat-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.cat-tools input[type="search"], .cat-tools select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; }
+.cat-tools input[type="search"] { flex: 1 1 160px; }
+.cat-list { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+.cat-item { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.cat-item:last-child { border-bottom: 0; }
+.cat-item:hover { background: rgba(0,0,0,0.035); }
+.cat-item.is-picked { background: rgba(59,110,245,0.10); }
+.cat-sw { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.18); }
+.cat-name { font-size: 0.85rem; font-weight: 600; line-height: 1.15; }
+.cat-meta { font-size: 0.72rem; color: var(--text-secondary); }
+.cat-add { font-size: 0.78rem; color: var(--accent,#3b6ef5); font-weight: 700; white-space: nowrap; }
+.cat-count { font-size: 0.78rem; color: var(--text-secondary); margin-left: auto; }
+
+/* Results */
+.summary { display: flex; gap: 18px; flex-wrap: wrap; align-items: baseline; margin-bottom: 12px; }
+.summary .big { font-size: 1.6rem; font-weight: 800; }
+.summary .delta-pos { color: var(--accent-success, #2e9e5b); font-weight: 800; }
+.seq-item { display: grid; grid-template-columns: 22px 26px 1fr 96px; gap: 9px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+.seq-idx { font-size: 0.78rem; color: var(--text-secondary); text-align: right; }
+.seq-sw { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.18); }
+.seq-name { font-size: 0.85rem; font-weight: 600; }
+.seq-sub { font-size: 0.72rem; color: var(--text-secondary); }
+.seq-bar-wrap { font-size: 0.72rem; text-align: right; }
+.seq-bar { height: 7px; border-radius: 4px; background: var(--accent,#3b6ef5); }
+.seq-bar-track { height: 7px; border-radius: 4px; background: rgba(0,0,0,0.08); margin-top: 2px; }
+.tag-lock { font-size: 0.66rem; background: rgba(59,110,245,0.15); color: var(--accent,#3b6ef5); border-radius: 4px; padding: 1px 4px; margin-left: 5px; }
+#gamutPlot { width: 100%; height: 340px; }
+.muted { color: var(--text-secondary); font-size: 0.82rem; }
+.spinner { display: none; }
+.is-busy .spinner { display: inline; }
+.is-busy .run-label { opacity: 0.5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="gamut-wrap">
+  <header class="gamut-header">
+    <h1>Gamut lab</h1>
+    <div class="gamut-nav">
+      <a href="/spectral" class="btn btn-secondary">← Spectral mixer</a>
+      <a href="/" class="btn btn-secondary">Main app</a>
+    </div>
+  </header>
+
+  <p class="gamut-hint">
+    Pick pigments from the 327-pigment Kremer catalog (Hyperspectral Pigments, Zenodo 5592485) and
+    find the combination with the <strong>widest reachable colour gamut</strong>. Gamut = CIELAB
+    convex-hull volume of every Kubelka–Munk mixture, scored with the same engine the spectral mixer
+    uses. <strong>Lock</strong> pigments you want to keep, choose a target size, then
+    <strong>Find widest gamut</strong> — the search greedily adds the pigment that most enlarges the
+    gamut at each step. Or just <strong>Score my picks</strong> to measure an exact set.
+  </p>
+
+  <div class="gamut-grid">
+    <!-- LEFT: controls + catalog -->
+    <div>
+      <div class="panel" style="margin-bottom:18px;">
+        <h2>Search settings</h2>
+
+        <div class="ctl-row">
+          <label for="sizeRange">Target palette size</label>
+          <input type="range" id="sizeRange" min="2" max="20" step="1" value="8">
+          <span id="sizeVal">8</span>
+        </div>
+
+        <div class="ctl-row">
+          <label>Choose from</label>
+          <div class="seg" id="poolSeg" role="group" aria-label="Candidate pool">
+            <button type="button" data-pool="all" class="is-on">Whole catalog</button>
+            <button type="button" data-pool="groups">Selected groups</button>
+            <button type="button" data-pool="picks">My picks only</button>
+          </div>
+        </div>
+
+        <div class="ctl-row" style="align-items:flex-start;">
+          <label style="padding-top:4px;">Locked pigments</label>
+          <div id="lockedChips" class="chips" style="flex:1;"><span class="chips-empty">none — the search is unconstrained</span></div>
+        </div>
+
+        <div class="ctl-row">
+          <button type="button" id="runBtn" class="btn btn-primary"><span class="run-label">Find widest gamut</span><span class="spinner"> …working</span></button>
+          <button type="button" id="scoreBtn" class="btn btn-secondary"><span class="run-label">Score my picks</span><span class="spinner"> …</span></button>
+          <button type="button" id="clearBtn" class="btn btn-tertiary">Clear locks</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Pigment catalog</h2>
+        <div class="cat-tools">
+          <input type="search" id="catSearch" placeholder="Search name / Kremer no.…" aria-label="Search pigments">
+          <select id="catGroup" aria-label="Filter by group"><option value="">All groups</option></select>
+          <select id="catSort" aria-label="Sort">
+            <option value="chroma">Sort: chroma ↓</option>
+            <option value="hue">Sort: hue</option>
+            <option value="light">Sort: lightness ↓</option>
+            <option value="name">Sort: name</option>
+          </select>
+          <span class="cat-count" id="catCount"></span>
+        </div>
+        <div class="cat-list" id="catList"></div>
+      </div>
+    </div>
+
+    <!-- RIGHT: results -->
+    <div>
+      <div class="panel" style="margin-bottom:18px;">
+        <h2>Result</h2>
+        <div class="summary">
+          <div><div class="muted">Gamut volume</div><div class="big" id="resVol">—</div></div>
+          <div><div class="muted">vs shipped 5</div><div class="big" id="resDelta">—</div></div>
+          <div><div class="muted">Pigments</div><div class="big" id="resN">—</div></div>
+        </div>
+        <div id="resSeq"><p class="muted">Run a search or score your picks to see the palette here.</p></div>
+      </div>
+
+      <div class="panel">
+        <h2>Gamut in CIELAB (a*–b*)</h2>
+        <p class="muted" style="margin-top:0;">Filled area = colours reachable by mixing this set. Dashed outline = the shipped 5-pigment baseline. Dots = the pure pigments.</p>
+        <div id="gamutPlot"></div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='gamut_lab.js') }}?v=20260618"></script>
+{% endblock %}

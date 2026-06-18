@@ -213,6 +213,21 @@
             text-align: center;
         }
 
+        .palette-row {
+            display: flex; align-items: center; justify-content: center;
+            gap: 10px; flex-wrap: wrap; margin: 18px 0 4px;
+        }
+        .palette-row label { font-weight: 600; color: #444; }
+        .palette-row select {
+            padding: 8px 12px; border-radius: 8px; border: 2px solid #ddd;
+            font-size: 0.95em; background: #fff; color: #333; max-width: 340px;
+        }
+        .palette-note { font-size: 0.85em; color: #888; width: 100%; text-align: center; }
+        .pigment-swatch {
+            display: inline-block; width: 14px; height: 14px; border-radius: 4px;
+            border: 1px solid rgba(0,0,0,0.2); margin-right: 7px; vertical-align: -2px;
+        }
+
         .reachability {
             border-radius: 8px;
             padding: 15px 20px;
@@ -436,7 +451,13 @@
                     <div class="upload-hint">CSV format with Wavelength and Reflectance columns</div>
                     <input type="file" id="spectrumFile" accept=".csv" onchange="handleFileSelect(event)">
                 </div>
-                
+
+                <div class="palette-row">
+                    <label for="paletteSelect">Solve with palette</label>
+                    <select id="paletteSelect"></select>
+                    <span class="palette-note" id="paletteNote"></span>
+                </div>
+
                 <button class="btn" id="analyzeBtn" onclick="analyzeSpectrum()" disabled>
                     Analyze Spectrum
                 </button>
@@ -460,7 +481,32 @@
 
     <script>
         let selectedFile = null;
-        
+        const SPECTRAL_PALETTES = {{ spectral_palettes|tojson|safe }};
+        // pigment meta from the latest solve: key → {name, srgb}
+        let pigmentMeta = {};
+
+        // Populate the palette selector from the injected gamut palettes.
+        (function initPaletteSelect() {
+            const sel = document.getElementById('paletteSelect');
+            if (!sel) return;
+            const opts = ['<option value="classic">Classic 5 (cad red/yellow + ultramarine)</option>'];
+            (SPECTRAL_PALETTES.sizes || []).forEach(s => {
+                const vol = SPECTRAL_PALETTES.volumes && SPECTRAL_PALETTES.volumes[String(s)];
+                const tag = vol ? ` — gamut ${Math.round(vol).toLocaleString()}` : '';
+                opts.push(`<option value="${s}">${s} pigments (widest gamut${tag})</option>`);
+            });
+            sel.innerHTML = opts.join('');
+            const note = document.getElementById('paletteNote');
+            const sync = () => {
+                if (!note) return;
+                note.textContent = sel.value === 'classic'
+                    ? 'The original five primaries — a small gamut, so many colours are unreachable.'
+                    : `Wider gamut: ${sel.value} pigments from the Kremer catalog reach far more colours.`;
+            };
+            sel.addEventListener('change', sync);
+            sync();
+        })();
+
         function handleFileSelect(event) {
             const file = event.target.files[0];
             if (file) {
@@ -475,7 +521,8 @@
             
             const formData = new FormData();
             formData.append('spectrum_file', selectedFile);
-            
+            formData.append('palette', document.getElementById('paletteSelect').value);
+
             // Show loading
             document.getElementById('loading').style.display = 'block';
             document.getElementById('results').style.display = 'none';
@@ -510,6 +557,16 @@
             yellow: 'Cadmium Yellow', blue: 'Ultramarine Blue'
         };
 
+        // Display name for a pigment key: prefer the solved palette's real Kremer name,
+        // fall back to the classic labels, then the raw key.
+        function pigmentName(key) {
+            return (pigmentMeta[key] && pigmentMeta[key].name) || PIGMENT_LABELS[key] || key;
+        }
+        function pigmentSwatch(key) {
+            const s = pigmentMeta[key] && pigmentMeta[key].srgb;
+            return s ? `<span class="pigment-swatch" style="background:rgb(${s[0]},${s[1]},${s[2]})"></span>` : '';
+        }
+
         const ILLUMINANT_LABELS = {
             D65: 'Daylight (D65)', A: 'Incandescent (A)', F11: 'Fluorescent (F11)'
         };
@@ -542,7 +599,7 @@
                     item.className = 'pigment-item';
                     const share = pct[pigment] != null ? ` · ${pct[pigment].toFixed(0)}%` : '';
                     item.innerHTML = `
-                        <div class="pigment-name">${PIGMENT_LABELS[pigment] || pigment}</div>
+                        <div class="pigment-name">${pigmentSwatch(pigment)}${pigmentName(pigment)}</div>
                         <div class="pigment-drops">${drops} drop${drops === 1 ? '' : 's'}${share}</div>`;
                     list.appendChild(item);
                 });
@@ -612,6 +669,7 @@
             const container = document.getElementById('optionsContainer');
             const targetCss = rgbCss(data.target_rgb);
 
+            pigmentMeta = data.pigments || {};
             container.innerHTML = '';
             const options = data.options || [];
             if (!options.length) {
@@ -622,6 +680,13 @@
             if (banner) container.appendChild(banner);
             options.forEach((opt, i) => container.appendChild(optionCard(i, opt, targetCss)));
 
+            const note = document.getElementById('recipeNote');
+            if (note) {
+                const n = Object.keys(pigmentMeta).length;
+                note.textContent = `Each option trades simplicity for accuracy: the first is the closest `
+                    + `match, the rest use fewer pigments. ΔE is the best this ${n}-pigment palette can `
+                    + `reach — switch palettes above for a wider gamut.`;
+            }
             resultsDiv.style.display = 'block';
         }
         

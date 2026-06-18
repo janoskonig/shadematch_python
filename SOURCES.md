@@ -29,6 +29,37 @@ The dataset comprises hyperspectral images of 195 pigment patches and spectral l
 from 327 unique pigments, 186 bands at ~3.26 nm spacing over 405.37–995.83 nm. **The
 pigment patches were measured from Kremer Pigmente colour charts.**
 
+#### Expanded palette (the full 327-pigment spectral library)
+
+The original five bases above are a hand-picked subset. The **selectable gamut palettes**
+on `/spectral` (5 / 8 / 10 / 12 / 16 pigments) are built from the dataset's *averages*
+spectral library — `__speclib_averages.sli` + `.hdr`, the small (~1.2 MB) ENVI files that
+hold all 327 pigments' average reflectance, so there is no need for the 39 GB of
+hyperspectral images. Pipeline:
+
+- `scripts/gamut/envi_speclib.py` — parses the ENVI `.hdr`/`.sli`.
+- `scripts/gamut/build_pigments.py` — takes each pigment's masstone (sh-1), resamples to
+  the 38-bin engine grid, derives a tinting strength from the most-dilute tint (sh-4), and
+  writes `data/pigments_library.json` (mirrored to `app/data/`). The dataset contains **no
+  white pigment**, so Titanium White is kept from `static/pigments/titanium white.txt`.
+- `scripts/gamut/optimize.py` — measures each candidate set's **CIELAB convex-hull gamut
+  volume** under the exact `/spectral` Kubelka–Munk model (pure + pairwise mixtures), finds
+  the gamut-optimal white/black/red/yellow/blue, then **greedily** adds the pigment that
+  most enlarges the gamut. Writes `data/palette_recommendations.json` + `data/GAMUT_REPORT.md`.
+  The widest-gamut W/K/R/Y/B roughly **doubles** the shipped five's gamut. (In the
+  single-constant KM model the reachable gamut depends only on the reflectance curves, not
+  tinting strength.)
+
+Raw downloads are cached under `data/zenodo_5592485/` (re-fetch via the Zenodo API URLs
+above). `app/routes.build_spectral_palettes()` serves these sets to the `/spectral`
+palette-size selector.
+
+The **Gamut Lab** (`/gamut`) runs the same algorithm interactively: `app/gamut_lab.py`
+computes the CIELAB convex-hull gamut of any chosen pigment set at request time and
+greedily grows a palette from user-locked pigments within a chosen candidate pool. Routes:
+`GET /gamut/catalog`, `POST /gamut/optimize`, `POST /gamut/score`; UI in
+`templates/gamut_lab.html` + `static/gamut_lab.js`.
+
 ### Kremer Pigmente
 
 The physical pigments behind the dataset above, identified throughout the code by Kremer
@@ -71,6 +102,15 @@ The recipe solver in [`app/spectral_km.py`](app/spectral_km.py) adapts its **str
 (pigment-subset selection + Pareto-style recipe options trading simplicity vs. accuracy)
 and its **dual-illuminant fitness** (D65 + A, to resist metamerism) from this project. It
 is also the reference for the deferred two-constant K(λ)/S(λ) spike noted in the module.
+
+The same solver powers two entry points, both palette-aware: `/reverse_engineer` (upload a
+measured curve and pick a palette → `solve_recipe`) and the **"Give me a mix"** button on
+`/spectral` (`solve_mix` via `POST /spectral/solve` → one fast continuous multi-illuminant
+solve over the active palette). `solve_recipe` solves the five (and any set ≤ 7 pigments)
+exhaustively over every subset for a true Pareto front; the wider gamut palettes
+(8/10/12/16) use a forward-greedy subset search so the solve stays sub-second instead of
+2ⁿ-exploding. Choosing a wider palette in `/reverse_engineer` therefore reaches target
+colours the classic five cannot (e.g. a saturated cyan drops from ΔE ≈ 22 to ≈ 12).
 
 - Repo: <https://github.com/yargo13/color-formulation>
 - Two-constant Kubelka–Munk paint-formulation engine (Java) solving with a genetic

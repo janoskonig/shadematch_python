@@ -50,6 +50,30 @@
   white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
 }
 
+/* ΔE₀₀ readout: feature the measured colour difference, not just the bar. */
+#matchBarContainer.match-bar-wrap {
+  flex-direction: column; align-items: stretch; gap: 10px;
+}
+.delta-e-readout {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 10px 14px; border-radius: var(--radius-md, 10px);
+  background: var(--surface); border: 1px solid var(--border);
+}
+.delta-e-glyph {
+  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+  font-size: 0.8rem; font-weight: 700; color: var(--text-secondary);
+}
+.delta-e-glyph sub { font-size: 0.62em; }
+.delta-e-value {
+  font-variant-numeric: tabular-nums; font-weight: 800;
+  font-size: 1.9rem; line-height: 1; color: var(--text-primary);
+  transition: color 0.2s;
+}
+.delta-e-value.is-exact { color: var(--accent-success); }
+.delta-e-best { margin-left: auto; font-size: 0.78rem; color: var(--text-secondary); }
+.match-bar-track { display: flex; align-items: center; gap: var(--space-md); }
+.match-bar-track .match-bar { flex: 1; }
+
 /* One horizontal palette row, mirroring the lab layout of the main palette. */
 #spectralPalette.palette {
   display: flex; flex-wrap: nowrap; justify-content: center; align-items: flex-end;
@@ -191,6 +215,7 @@ input.drop-badge:focus {
   <header class="spectral-header">
     <h1>Spectral mixer</h1>
     <div class="spectral-nav">
+      <a href="/gamut" class="btn btn-secondary">Gamut lab</a>
       <a href="/color_inspector" class="btn btn-secondary">Color inspector</a>
       <a href="/reverse_engineer" class="btn btn-secondary">Reverse engineering</a>
       <a href="/" class="btn btn-secondary">← Main app</a>
@@ -228,10 +253,17 @@ input.drop-badge:focus {
     </div>
   </div>
 
-  <!-- Match bar (same behavior as the main game) -->
+  <!-- ΔE readout + match bar -->
   <div class="match-bar-wrap" id="matchBarContainer" style="display:none;">
-    <div class="match-bar"><div class="match-bar-fill" id="matchBarFill"></div></div>
-    <span class="match-bar-label" id="matchBarLabel"></span>
+    <div class="delta-e-readout" aria-live="polite">
+      <span class="delta-e-glyph">ΔE<sub>00</sub></span>
+      <span class="delta-e-value" id="deltaEValue">—</span>
+      <span class="delta-e-best" id="deltaEBest"></span>
+    </div>
+    <div class="match-bar-track">
+      <div class="match-bar"><div class="match-bar-fill" id="matchBarFill"></div></div>
+      <span class="match-bar-label" id="matchBarLabel"></span>
+    </div>
   </div>
 
   <div class="spectral-rgb-panel" aria-live="polite">
@@ -240,71 +272,23 @@ input.drop-badge:focus {
 
   <p class="spectral-status" id="spectralStatus" role="status">Match the target by mixing pigments.</p>
 
-  <!-- Live recipe proportion strip (mirrors the main app) -->
-  <div class="recipe-strip" id="recipeStrip" aria-hidden="true">
-    <div class="recipe-seg" data-color="white"  style="flex-grow:0;"></div>
-    <div class="recipe-seg" data-color="black"  style="flex-grow:0;"></div>
-    <div class="recipe-seg" data-color="red"    style="flex-grow:0;"></div>
-    <div class="recipe-seg" data-color="yellow" style="flex-grow:0;"></div>
-    <div class="recipe-seg" data-color="blue"   style="flex-grow:0;"></div>
+  <!-- Palette size / gamut selector. Options are injected from the gamut optimiser
+       (scripts/gamut/optimize.py via app/routes.build_spectral_palettes). -->
+  <div class="palette-picker" style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin:6px 0 10px;">
+    <label for="paletteSelect" style="font-weight:700;">Palette</label>
+    <select id="paletteSelect" class="form-select" style="max-width:320px;"></select>
+    <span id="paletteInfo" class="palette-info" style="opacity:.7;font-size:.9rem;"></span>
   </div>
 
-  <!-- Palette: main-app markup; each disc wrapped in a draggable dial (spectral only) -->
-  <div id="spectralPalette" class="palette">
-    <div class="color-control">
-      <input class="drop-badge" data-badge-for="white" type="text" inputmode="decimal" value="0" aria-label="White amount" />
+  <!-- Live recipe proportion strip (filled per palette by spectral_mixer.js) -->
+  <div class="recipe-strip" id="recipeStrip" aria-hidden="true"></div>
 
-      <div class="dial" data-color="white" role="slider" aria-label="White amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-        <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="white" cx="50" cy="50" r="44"></circle></svg>
-        <button class="color-circle" data-color="white" style="background:white;" type="button" aria-label="Add white drop">0</button>
-      </div>
-      <button class="minus-button" data-color="white" type="button" aria-label="Remove white drop">−</button>
-      <span class="color-name">White</span>
-    </div>
-    <div class="color-control">
-      <input class="drop-badge" data-badge-for="black" type="text" inputmode="decimal" value="0" aria-label="Black amount" />
-
-      <div class="dial" data-color="black" role="slider" aria-label="Black amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-        <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="black" cx="50" cy="50" r="44"></circle></svg>
-        <button class="color-circle" data-color="black" style="background:black;color:#fff;" type="button" aria-label="Add black drop">0</button>
-      </div>
-      <button class="minus-button" data-color="black" type="button" aria-label="Remove black drop">−</button>
-      <span class="color-name">Black</span>
-    </div>
-    <div class="color-control">
-      <input class="drop-badge" data-badge-for="red" type="text" inputmode="decimal" value="0" aria-label="Red amount" />
-
-      <div class="dial" data-color="red" role="slider" aria-label="Red amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-        <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="red" cx="50" cy="50" r="44"></circle></svg>
-        <button class="color-circle" data-color="red" style="background:red;" type="button" aria-label="Add red drop">0</button>
-      </div>
-      <button class="minus-button" data-color="red" type="button" aria-label="Remove red drop">−</button>
-      <span class="color-name">Red</span>
-    </div>
-    <div class="color-control">
-      <input class="drop-badge" data-badge-for="yellow" type="text" inputmode="decimal" value="0" aria-label="Yellow amount" />
-
-      <div class="dial" data-color="yellow" role="slider" aria-label="Yellow amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-        <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="yellow" cx="50" cy="50" r="44"></circle></svg>
-        <button class="color-circle" data-color="yellow" style="background:yellow;" type="button" aria-label="Add yellow drop">0</button>
-      </div>
-      <button class="minus-button" data-color="yellow" type="button" aria-label="Remove yellow drop">−</button>
-      <span class="color-name">Yellow</span>
-    </div>
-    <div class="color-control">
-      <input class="drop-badge" data-badge-for="blue" type="text" inputmode="decimal" value="0" aria-label="Blue amount" />
-
-      <div class="dial" data-color="blue" role="slider" aria-label="Blue amount" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
-        <svg class="dial-ring" viewBox="0 0 100 100"><circle class="dial-track" cx="50" cy="50" r="44"></circle><circle class="dial-fill" data-fill-for="blue" cx="50" cy="50" r="44"></circle></svg>
-        <button class="color-circle" data-color="blue" style="background:blue;" type="button" aria-label="Add blue drop">0</button>
-      </div>
-      <button class="minus-button" data-color="blue" type="button" aria-label="Remove blue drop">−</button>
-      <span class="color-name">Blue</span>
-    </div>
-  </div>
+  <!-- Palette dials: built per palette by spectral_mixer.js (renderPaletteDials) -->
+  <div id="spectralPalette" class="palette"></div>
 
   <div class="controls-bar" style="margin-top:12px;flex-wrap:wrap;justify-content:center;gap:10px;">
     <button type="button" id="spectralResetBtn" class="btn btn-secondary btn-lg">Reset mix</button>
+    <button type="button" id="spectralSolveBtn" class="btn btn-secondary btn-lg" title="Auto-solve a recipe for this shade with the current palette">Give me a mix</button>
     <button type="button" id="spectralSkipBtn" class="btn btn-secondary btn-lg">Skip shade</button>
     <button type="button" id="spectralJudgeBtn" class="btn btn-primary btn-lg">Judge match</button>
     <button type="button" id="kmToggle" class="btn btn-secondary btn-lg" aria-expanded="false"
@@ -322,19 +306,8 @@ input.drop-badge:focus {
       shade unreachable — that’s expected while exploring.
     </p>
 
-    <div class="km-group">
-      <div class="km-group-title">Tinting strength (relative pigment power)</div>
-      <div class="km-row"><label for="km-ts-white">White</label>
-        <input id="km-ts-white" type="range" data-km="ts:white" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:white"></span></div>
-      <div class="km-row"><label for="km-ts-black">Black</label>
-        <input id="km-ts-black" type="range" data-km="ts:black" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:black"></span></div>
-      <div class="km-row"><label for="km-ts-red">Red</label>
-        <input id="km-ts-red" type="range" data-km="ts:red" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:red"></span></div>
-      <div class="km-row"><label for="km-ts-yellow">Yellow</label>
-        <input id="km-ts-yellow" type="range" data-km="ts:yellow" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:yellow"></span></div>
-      <div class="km-row"><label for="km-ts-blue">Blue</label>
-        <input id="km-ts-blue" type="range" data-km="ts:blue" min="0.1" max="10" step="0.1" value="1"><span class="km-val" data-km-val="ts:blue"></span></div>
-    </div>
+    <!-- Tinting-strength sliders are rebuilt per palette by spectral_mixer.js -->
+    <div class="km-group" id="kmTintingGroup"></div>
 
     <div class="km-group">
       <div class="km-group-title">Concentration weight: amount<sup>a</sup> · strength<sup>b</sup> · luminance<sup>c</sup></div>
@@ -385,22 +358,21 @@ input.drop-badge:focus {
     </div>
 
     <h2 style="margin-top:20px;">Base pigment spectra</h2>
-    <div class="spectrum-grid">
-      <div class="spectrum-card"><div id="spectrumPlot-white"  class="plot"></div></div>
-      <div class="spectrum-card"><div id="spectrumPlot-black"  class="plot"></div></div>
-      <div class="spectrum-card"><div id="spectrumPlot-red"    class="plot"></div></div>
-      <div class="spectrum-card"><div id="spectrumPlot-yellow" class="plot"></div></div>
-      <div class="spectrum-card"><div id="spectrumPlot-blue"   class="plot"></div></div>
-    </div>
+    <!-- One plot per active pigment, built per palette by spectral_mixer.js -->
+    <div class="spectrum-grid" id="spectrumGrid"></div>
   </section>
 </div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-  // Measured base reflectance spectra (keyed white/black/red/yellow/blue), injected by /spectral.
+  // Measured base reflectance spectra for the classic five (full-resolution curves used
+  // for the base-spectrum plots), injected by /spectral.
   const spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
+  // Selectable gamut-sized palettes (classic + widest-gamut 5/8/10/… sets from the
+  // Hyperspectral Pigments dataset, chosen by scripts/gamut/optimize.py).
+  window.SPECTRAL_PALETTES = JSON.parse('{{ spectral_palettes|tojson|safe }}');
 </script>
 <script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
-<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260610b-masstone"></script>
+<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260618-givemix"></script>
 {% endblock %}

@@ -337,14 +337,19 @@ def _recipe_result(bases, keys, amounts, target):
     }
 
 
-def _best_for_subset(target, bases, keys, rng):
+def _best_for_subset(target, bases, keys, rng, light=False):
     """Best continuous mix of exactly `keys` (a pigment subset), as normalised fractions.
 
     Low-dimensional and fairly smooth once the forward model and objective are correct, so a
     multi-start L-BFGS-B (each base alone, the centroid, plus a few seeded random starts)
     finds the subset optimum reliably without a full global search per subset. Minimises the
     metameric cost (D65 match + test-light penalty). Returns (fractions array aligned to
-    `keys`, metameric cost)."""
+    `keys`, metameric cost).
+
+    `light=True` drops the per-pigment-alone starts (centroid + a few random only). Used by
+    solve_mix for the wide first pass over a big palette, where n single-pigment L-BFGS-B
+    runs would dominate the cost; the subsequent re-solve on the reduced subset uses the
+    full start set."""
     n = len(keys)
 
     def objective(x):
@@ -355,8 +360,9 @@ def _best_for_subset(target, bases, keys, rng):
         return _metameric_cost(delta_e_by_illuminant(target, mix_amounts(bases, amounts).R))
 
     starts = [np.full(n, 1.0 / n)]                 # centroid
-    starts += [np.eye(n)[i] for i in range(n)]     # each pigment alone
-    starts += [rng.random(n) for _ in range(3)]    # seeded random
+    if not light:
+        starts += [np.eye(n)[i] for i in range(n)]  # each pigment alone
+    starts += [rng.random(n) for _ in range(4 if light else 3)]    # seeded random
 
     bounds = [(0.0, 1.0)] * n
     best_x, best_f = None, np.inf
@@ -375,8 +381,8 @@ def _best_for_subset(target, bases, keys, rng):
 REACHABILITY_BANDS = [
     (1.0, 'exact', 'Reachable — the match is essentially perfect (ΔE < 1, imperceptible).'),
     (3.0, 'close', 'Reachable — a very good match (ΔE < 3, only a trained eye sees a difference).'),
-    (6.0, 'approximate', 'Approximate — a noticeable difference remains (ΔE 3–6); this is near the edge of what these five pigments can mix.'),
-    (float('inf'), 'out_of_gamut', 'Out of gamut — this colour is outside what these five pigments can mix (ΔE > 6); the recipe below is only the closest reachable approximation.'),
+    (6.0, 'approximate', 'Approximate — a noticeable difference remains (ΔE 3–6); this is near the edge of what this palette can mix.'),
+    (float('inf'), 'out_of_gamut', 'Out of gamut — this colour is outside what this palette can mix (ΔE > 6); the recipe below is only the closest reachable approximation.'),
 ]
 
 
@@ -388,6 +394,56 @@ def _reachability(best_delta_e):
     # unreachable fall-through (REACHABILITY_BANDS ends with inf, so this is defensive)
     last = REACHABILITY_BANDS[-1]
     return {'status': last[1], 'closest_delta_e': float(best_delta_e), 'message': last[2]}
+
+
+# Palettes with at most this many pigments are solved by exhaustive subset enumeration
+# (2ⁿ); wider ones use forward-greedy selection so a solve stays sub-second.
+EXHAUSTIVE_MAX = 7
+
+
+def _effsets_exhaustive(target_labs, bases, keys_all, rng, significance):
+    """Solve every non-empty pigment subset; collapse to one entry per *effective* set
+    (pigments left after dropping near-zero ones), keeping the lowest-cost solve for each."""
+    by_effset = {}
+    for k in range(1, len(keys_all) + 1):
+        for subset in combinations(keys_all, k):
+            fracs, cost = _best_for_subset(target_labs, bases, list(subset), rng)
+            eff = [(subset[i], fracs[i]) for i in range(len(subset)) if fracs[i] >= significance]
+            if not eff:
+                continue
+            effset = frozenset(p for p, _ in eff)
+            if effset not in by_effset or cost < by_effset[effset][1]:
+                by_effset[effset] = (eff, cost)
+    return by_effset
+
+
+def _effsets_greedy(target_labs, bases, keys_all, rng, significance, max_pigments=8):
+    """Forward-greedy subset search for wide palettes: start empty, repeatedly add the
+    pigment that most lowers the metameric cost, recording the effective recipe at each
+    step. Yields a simplicity/accuracy ladder (one entry per effective pigment count)
+    without the 2ⁿ blow-up. Stops once extra pigments stop helping or the cap is hit."""
+    by_effset = {}
+    chosen, last_cost = [], np.inf
+    cap = min(max_pigments, len(keys_all))
+    while len(chosen) < cap:
+        remaining = [k for k in keys_all if k not in chosen]
+        best = None
+        for c in remaining:
+            trial = chosen + [c]
+            fracs, cost = _best_for_subset(target_labs, bases, trial, rng, light=len(trial) > 6)
+            if best is None or cost < best[1]:
+                best = (trial, cost, fracs)
+        trial, cost, fracs = best
+        chosen = trial
+        eff = [(chosen[i], fracs[i]) for i in range(len(chosen)) if fracs[i] >= significance]
+        if eff:
+            effset = frozenset(p for p, _ in eff)
+            if effset not in by_effset or cost < by_effset[effset][1]:
+                by_effset[effset] = (eff, cost)
+        if cost > last_cost - 1e-3:    # adding another pigment no longer meaningfully helps
+            break
+        last_cost = cost
+    return by_effset
 
 
 def solve_recipe(target_color, bases, seed=0, max_options=3, significance=0.02):
@@ -407,25 +463,22 @@ def solve_recipe(target_color, bases, seed=0, max_options=3, significance=0.02):
 
     Returns {'options': [opt, …], 'reachability': {…}} ordered best-match first (so options[0]
     is the headline recipe). Each opt = {pigments, num_pigments, continuous:{…}, rounded:{…}}.
+
+    Works for any palette: the original five (and any set ≤ EXHAUSTIVE_MAX pigments) are
+    solved exhaustively over every subset; wider palettes (the 8/10/12/16-pigment gamut sets)
+    use a forward-greedy subset search so the solve stays fast instead of 2ⁿ-exploding.
     """
-    keys_all = [k for k in ORDER if k in bases]
+    # All bases, painter-primaries first; an arbitrary palette may add p6, p7, ….
+    keys_all = [k for k in ORDER if k in bases] + [k for k in bases if k not in ORDER]
     # Target curve is fixed for the whole solve — pre-compute its per-illuminant Labs
     # once and reuse them across the thousands of objective evaluations below.
     target_labs = _labs_under_all(target_color.R)
     rng = np.random.default_rng(seed)
 
-    # Solve every subset, then collapse to one entry per *effective* pigment set (the
-    # pigments left after dropping near-zero ones), keeping the lowest-cost solve for each.
-    by_effset = {}
-    for k in range(1, len(keys_all) + 1):
-        for subset in combinations(keys_all, k):
-            fracs, cost = _best_for_subset(target_labs, bases, list(subset), rng)
-            eff = [(subset[i], fracs[i]) for i in range(len(subset)) if fracs[i] >= significance]
-            if not eff:
-                continue
-            effset = frozenset(p for p, _ in eff)
-            if effset not in by_effset or cost < by_effset[effset][1]:
-                by_effset[effset] = (eff, cost)
+    if len(keys_all) <= EXHAUSTIVE_MAX:
+        by_effset = _effsets_exhaustive(target_labs, bases, keys_all, rng, significance)
+    else:
+        by_effset = _effsets_greedy(target_labs, bases, keys_all, rng, significance)
 
     # Pareto front over (number of pigments, cost): keep a recipe only if no simpler-or-equal
     # recipe also matches better. This is the simplicity/accuracy trade-off ladder.
@@ -502,3 +555,40 @@ def _round_recipe(bases, keys, fractions, target, max_total=12):
 
     amounts = {keys[i]: int(best_vec[i]) for i in range(len(keys)) if best_vec[i] > 0}
     return _recipe_result(bases, list(amounts.keys()), amounts, target)
+
+
+def solve_mix(target_color, bases, seed=0, significance=0.03):
+    """A single best continuous recipe for `target_color` over ALL of `bases` — the fast,
+    palette-agnostic "give me a mix" solve.
+
+    Unlike solve_recipe (exhaustive 2ⁿ subset sweep + Pareto front, tuned for the fixed five),
+    this does one multi-start continuous solve over every pigment in the palette, drops the
+    insignificant ones, and re-solves on what's left for a clean recipe. That stays fast for
+    the larger gamut palettes (8–16 pigments) where the subset sweep would blow up. Same
+    multi-illuminant objective, so the recipe resists metamerism.
+
+    Returns a _recipe_result dict (amounts as normalised fractions summing to 1, achieved
+    sRGB, headline ΔE, per-illuminant breakdown, metamerism index) plus a 'reachability'
+    verdict — or None if there are no bases.
+    """
+    keys = list(bases.keys())
+    if not keys:
+        return None
+    target_labs = _labs_under_all(target_color.R)
+    rng = np.random.default_rng(seed)
+
+    fracs, _ = _best_for_subset(target_labs, bases, keys, rng, light=len(keys) > 6)
+    eff = [keys[i] for i in range(len(keys)) if fracs[i] >= significance]
+    if not eff:
+        eff = [keys[int(np.argmax(fracs))]]
+    if len(eff) < len(keys):                      # tighten on the pigments that matter
+        fracs2, _ = _best_for_subset(target_labs, bases, eff, rng)
+        amounts = {eff[i]: float(fracs2[i]) for i in range(len(eff)) if fracs2[i] > 1e-6}
+    else:
+        amounts = {keys[i]: float(fracs[i]) for i in range(len(keys)) if fracs[i] > 1e-6}
+
+    total = sum(amounts.values()) or 1.0
+    amounts = {k: v / total for k, v in amounts.items()}
+    result = _recipe_result(bases, list(amounts.keys()), amounts, target_labs)
+    result['reachability'] = _reachability(result['delta_e'])
+    return result

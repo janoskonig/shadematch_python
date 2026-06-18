@@ -535,9 +535,173 @@ def build_spectrum_plots():
         return {}
 
 
+_SPECTRAL_PALETTES_CACHE = None
+
+
+def _short_label(name):
+    """A compact dial caption from a full Kremer name (the plot shows the full name)."""
+    s = name.split(',')[0].strip()
+    return (s[:16] + '…') if len(s) > 17 else s
+
+
+def build_spectral_palettes():
+    """Selectable pigment palettes for /spectral, sized by gamut.
+
+    'classic' is the shipped five (white/black/red/yellow/blue) — the default, so the
+    existing experience is unchanged. The numbered palettes (5/8/10/… pigments) are the
+    widest-gamut sets chosen by scripts/gamut/optimize.py from the Hyperspectral Pigments
+    dataset (Zenodo 5592485): the gamut-optimal W/K/R/Y/B, then greedily grown.
+
+    Every pigment carries its reflectance R already on the 38-bin engine grid, so the JS
+    engine builds spectral.Color(R) directly. Falls back to {classic-only} if the data
+    files are missing, so a bad deploy degrades instead of 500ing.
+    """
+    global _SPECTRAL_PALETTES_CACHE
+    if _SPECTRAL_PALETTES_CACHE is not None:
+        return _SPECTRAL_PALETTES_CACHE
+
+    def classic_palette():
+        plots = build_spectrum_plots()
+        out = []
+        for key in spectral_km.ORDER:
+            data = plots.get(key)
+            if not data:
+                continue
+            R = spectral_km.resample_to_grid(data['wavelengths'], data['reflectances'])
+            col = spectral_km.SpectralColor(R)
+            out.append({
+                'key': key, 'role': key, 'label': key.title(), 'name': data.get('name', key),
+                'family': key, 'R': [round(float(x), 6) for x in R], 'srgb': col.sRGB,
+                'tinting': spectral_km.TINTING.get(key, 1.0),
+            })
+        return out
+
+    palettes = {'classic': classic_palette()}
+    sizes = []
+    try:
+        data_dir = os.path.join(os.path.dirname(__file__), 'data')
+        lib = json.load(open(os.path.join(data_dir, 'pigments_library.json')))
+        recs = json.load(open(os.path.join(data_dir, 'palette_recommendations.json')))
+        by_pn = {str(p['pnumber']): p for p in lib['pigments']}
+        sizes = recs['sizes']
+        for size in sizes:
+            pigs = []
+            for p in recs['palettes'][str(size)]['pigments']:
+                src = by_pn.get(str(p['pnumber']))
+                if not src:
+                    continue
+                pigs.append({
+                    'key': p['role'], 'role': p['role'], 'label': _short_label(p['name']),
+                    'name': p['name'], 'family': p.get('family', p['role']),
+                    'R': src['R'], 'srgb': p['srgb'], 'tinting': src.get('tinting', 1.0),
+                })
+            palettes[str(size)] = pigs
+    except Exception:
+        current_app.logger.exception('build_spectral_palettes: gamut sets unavailable; classic only')
+
+    _SPECTRAL_PALETTES_CACHE = {
+        'default': 'classic',
+        'sizes': sizes,
+        'palettes': palettes,
+        'volumes': {str(s): recs['palettes'][str(s)]['volume'] for s in sizes} if sizes else {},
+    }
+    return _SPECTRAL_PALETTES_CACHE
+
+
 @main.route('/spectral')
 def spectral():
-    return render_template('spectral_mixer.html', spectrum_plots=build_spectrum_plots())
+    return render_template('spectral_mixer.html',
+                           spectrum_plots=build_spectrum_plots(),
+                           spectral_palettes=build_spectral_palettes())
+
+
+@main.route('/spectral/solve', methods=['POST'])
+def spectral_solve():
+    """"Give me a mix": solve the current target with the ACTIVE palette and return a recipe.
+
+    Reverse-engineer-style (target → recipe), but palette-agnostic and fast (one continuous
+    multi-illuminant solve over the active pigments via spectral_km.solve_mix), so it works
+    for the gamut palettes too. The client sends the target reflectance it already
+    reconstructed (spectral.Color(rgb).R) so server and client agree on the target curve.
+    """
+    data = request.get_json(silent=True) or {}
+    palette = str(data.get('palette', 'classic'))
+    target_R = data.get('target_R')
+    if not target_R or len(target_R) != spectral_km.SIZE:
+        return jsonify({'error': f'target_R must be {spectral_km.SIZE} values'}), 400
+    try:
+        sp = build_spectral_palettes()
+        pigs = sp['palettes'].get(palette) or sp['palettes'].get('classic')
+        if not pigs:
+            return jsonify({'error': 'palette unavailable'}), 400
+        bases = {p['key']: spectral_km.SpectralColor(p['R'], tinting=p.get('tinting', 1.0))
+                 for p in pigs}
+        res = spectral_km.solve_mix(spectral_km.SpectralColor(target_R), bases)
+        if not res:
+            return jsonify({'error': 'no solution'}), 500
+        return jsonify({
+            'amounts': res['amounts'],
+            'percentages': res['percentages'],
+            'achieved_rgb': res['achieved_rgb'],
+            'delta_e': res['delta_e'],
+            'reachability': res['reachability'],
+        })
+    except Exception:
+        current_app.logger.exception('spectral_solve failed')
+        return jsonify({'error': 'solve failed'}), 500
+
+
+# ── Gamut Lab (/gamut): interactive widest-gamut search over the pigment catalog ──
+from . import gamut_lab  # noqa: E402  (kept local to this feature)
+
+
+@main.route('/gamut')
+def gamut_page():
+    return render_template('gamut_lab.html')
+
+
+@main.route('/gamut/catalog')
+def gamut_catalog():
+    """Full pigment catalog + shipped baseline for the picker."""
+    try:
+        return jsonify({'pigments': gamut_lab.catalog(),
+                        'baseline': gamut_lab.shipped_baseline()})
+    except Exception:
+        current_app.logger.exception('gamut_catalog failed')
+        return jsonify({'pigments': [], 'baseline': {'volume': 0, 'pnumbers': []}}), 500
+
+
+@main.route('/gamut/optimize', methods=['POST'])
+def gamut_optimize():
+    """Greedily grow a palette to the requested size, maximising CIELAB gamut volume."""
+    data = request.get_json(silent=True) or {}
+    try:
+        size = int(data.get('size', 8))
+    except (TypeError, ValueError):
+        size = 8
+    size = max(2, min(size, 24))   # keep a single request bounded
+    locked = [str(p) for p in (data.get('locked') or [])]
+    pool = data.get('pool')
+    pool = [str(p) for p in pool] if pool else None
+    try:
+        return jsonify(gamut_lab.greedy(locked=locked, size=size, pool=pool))
+    except Exception:
+        current_app.logger.exception('gamut_optimize failed')
+        return jsonify({'error': 'optimization failed'}), 500
+
+
+@main.route('/gamut/score', methods=['POST'])
+def gamut_score():
+    """Gamut volume + a*b* hull for an exact, user-chosen pigment set."""
+    data = request.get_json(silent=True) or {}
+    pnumbers = [str(p) for p in (data.get('pnumbers') or [])]
+    try:
+        detail = gamut_lab.gamut_detail(pnumbers)
+        detail['baseline'] = gamut_lab.shipped_baseline()
+        return jsonify(detail)
+    except Exception:
+        current_app.logger.exception('gamut_score failed')
+        return jsonify({'error': 'scoring failed'}), 500
 
 
 # ── Auth ───────────────────────────────────────────────────────────────────
@@ -3583,9 +3747,25 @@ def spectral_mixer():
     return render_template('spectral_mixer.html')
 
 
+def _reverse_engineer_bases(palette):
+    """Bases (key→SpectralColor) for a reverse-engineer solve against the chosen palette.
+
+    'classic' is the original five; the numbered palettes (5/8/10/12/16) are the wider
+    gamut sets, so an arbitrary target colour can be matched far more closely. Returns
+    (bases, pigment_meta) where pigment_meta maps key → {name, srgb} for nice labels.
+    """
+    sp = build_spectral_palettes()
+    pigs = sp['palettes'].get(str(palette)) or sp['palettes'].get('classic')
+    if not pigs:
+        return {}, {}
+    bases = {p['key']: spectral_km.SpectralColor(p['R'], tinting=p.get('tinting', 1.0)) for p in pigs}
+    meta = {p['key']: {'name': p.get('name') or p.get('label') or p['key'], 'srgb': p['srgb']} for p in pigs}
+    return bases, meta
+
+
 @main.route('/reverse_engineer')
 def reverse_engineer_page():
-    return render_template('reverse_engineer.html')
+    return render_template('reverse_engineer.html', spectral_palettes=build_spectral_palettes())
 
 
 @main.route('/reverse_engineer', methods=['POST'])
@@ -3600,10 +3780,11 @@ def reverse_engineer():
         if 'Wavelength' not in spectrum_data.columns or 'Reflectance' not in spectrum_data.columns:
             return jsonify({'error': 'File must have Wavelength and Reflectance columns'}), 400
 
-        # Solve against the same five measured bases the /spectral lab mixes with, using the
-        # same Kubelka–Munk engine (app.spectral_km) — so a returned recipe reproduces what
-        # /spectral would render, not the old linear-average model.
-        bases = spectral_km.bases_from_spectrum_plots(build_spectrum_plots())
+        # Solve against the chosen palette with the same Kubelka–Munk engine (app.spectral_km)
+        # the /spectral lab mixes with — so a returned recipe reproduces what /spectral would
+        # render. The wider gamut palettes reach colours the classic five cannot.
+        palette = request.form.get('palette', 'classic')
+        bases, pigment_meta = _reverse_engineer_bases(palette)
         if not bases:
             return jsonify({'error': 'Base pigment spectra unavailable'}), 500
 
@@ -3616,6 +3797,8 @@ def reverse_engineer():
 
         return jsonify({
             'target_rgb': target.sRGB,
+            'palette': str(palette),
+            'pigments': pigment_meta,
             'options': result['options'],
             'reachability': result['reachability'],
         })
