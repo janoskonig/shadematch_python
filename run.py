@@ -9,5 +9,7 @@ app = create_app()
 # Check if this script is being run directly (not imported as a module)
 if __name__ == '__main__':
     # Start the Flask development server with debug mode enabled.
-    # Honor the PORT env var (used by hosting platforms and tooling); default to 5001.
-    app.run(debug=True, port=int(os.environ.get('PORT', 5001)))
+    # Port is configurable via the PORT env var (default 5000); on macOS,
+    # port 5000 is often taken by AirPlay/ControlCenter, so set PORT to override.
+    port = int(os.environ.get('PORT', 5000))
+    app.run(debug=True, port=port)

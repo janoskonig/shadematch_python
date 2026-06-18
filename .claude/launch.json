@@ -5,8 +5,9 @@
       "name": "shadematch",
       "runtimeExecutable": "python",
       "runtimeArgs": ["run.py"],
-      "port": 5001,
-      "autoPort": true
+      "env": { "PORT": "5050" },
+      "port": 5050,
+      "autoPort": false
     }
   ]
 }
