@@ -1,369 +1,374 @@
 {% extends "base.html" %}
 
-{% block title %}Spectral mixer — ShadeMatch{% endblock %}
+{% block title %}Spectral Mixer{% endblock %}
 
 {% block extra_head %}
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
 <style>
-/* Spectral lab: reuse the main app palette/theme; add a swatch + reflectance plots. */
-.spectral-wrap { max-width: 1100px; margin: 0 auto; padding: 16px 16px 48px; }
-.spectral-header {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  margin-bottom: 12px; flex-wrap: wrap;
-}
-.spectral-header h1 { font-size: 1.25rem; margin: 0; font-weight: 800; }
-.spectral-nav { display: flex; gap: 8px; flex-wrap: wrap; }
-.spectral-hint { font-size: 0.82rem; color: var(--text-secondary); margin: 0 0 16px; }
+        :root {
+            --surface-color: white;
+            --background-color: rgb(46, 46, 46);
+            --text-color: #333;
+            --border-color: #ddd;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
 
-/* Target | current-mix: one seamless split canvas — the halves touch borderless,
-   just like the main app's target|mix pair. */
-.spectral-pair-labels { display: flex; gap: 0; margin-bottom: 6px; }
-.spectral-pair-labels span {
-  flex: 1; font-size: 0.78rem; color: var(--text-secondary);
-  text-transform: uppercase; letter-spacing: 0.03em;
-}
-.spectral-pair {
-  display: flex; width: 100%; aspect-ratio: 1.9; min-height: 200px; max-height: 420px;
-  border: 2px solid var(--border); border-radius: var(--radius-md, 10px);
-  box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.06));
-  overflow: hidden; margin-bottom: 10px;
-}
-.spectral-half { flex: 1; min-width: 0; position: relative; }   /* no inner border — the two touch */
-/* Reflectance-spectrum curve drawn on top of each colour window. */
-.spectral-overlay { position: absolute; inset: 0; pointer-events: none; }
-.spectral-overlay .js-plotly-plot,
-.spectral-overlay .plot-container,
-.spectral-overlay .svg-container { width: 100% !important; height: 100% !important; }
-.spectral-status {
-  margin: 10px 0 0; min-height: 1.4em; font-weight: 700; font-size: 0.95rem;
-  color: var(--text-secondary); text-align: center;
-}
-.spectral-status.is-win { color: var(--accent-success, #4caf50); }
-.spectral-rgb-panel {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-md, 10px); padding: 10px 14px; margin-bottom: 16px;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 0.88rem;
-  white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
-}
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
 
-/* ΔE₀₀ readout: feature the measured colour difference, not just the bar. */
-#matchBarContainer.match-bar-wrap {
-  flex-direction: column; align-items: stretch; gap: 10px;
-}
-.delta-e-readout {
-  display: flex; align-items: baseline; gap: 10px;
-  padding: 10px 14px; border-radius: var(--radius-md, 10px);
-  background: var(--surface); border: 1px solid var(--border);
-}
-.delta-e-glyph {
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace;
-  font-size: 0.8rem; font-weight: 700; color: var(--text-secondary);
-}
-.delta-e-glyph sub { font-size: 0.62em; }
-.delta-e-value {
-  font-variant-numeric: tabular-nums; font-weight: 800;
-  font-size: 1.9rem; line-height: 1; color: var(--text-primary);
-  transition: color 0.2s;
-}
-.delta-e-value.is-exact { color: var(--accent-success); }
-.delta-e-best { margin-left: auto; font-size: 0.78rem; color: var(--text-secondary); }
-.match-bar-track { display: flex; align-items: center; gap: var(--space-md); }
-.match-bar-track .match-bar { flex: 1; }
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
 
-/* One horizontal palette row, mirroring the lab layout of the main palette. */
-#spectralPalette.palette {
-  display: flex; flex-wrap: nowrap; justify-content: center; align-items: flex-end;
-  gap: 4px; overflow-x: auto; margin: var(--space-md) 0; padding: var(--space-sm) 4px var(--space-xs);
-}
-#spectralPalette .color-control { flex: 0 0 auto; align-items: center; }
-/* Fixed disc size so the dial ring geometry is stable across breakpoints.
-   Sized so all five dials fit across a phone without horizontal scrolling. */
-#spectralPalette .color-circle { width: 44px; height: 44px; }
-@media (min-width: 600px) {
-  #spectralPalette.palette { gap: 14px; }
-  #spectralPalette .color-circle { width: 58px; height: 58px; }
-  #spectralPalette .dial { width: 80px; height: 80px; }
-}
-@media (max-width: 360px) {
-  #spectralPalette .dial { width: 52px; height: 52px; }
-  #spectralPalette .color-circle { width: 38px; height: 38px; }
-}
+        .user-info {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+        }
 
-/* Dial per pigment: a progress ring around the colour disc. Tap the disc to add a
-   whole drop; drag up/down anywhere on the dial to set a continuous amount.
-   Mobile-friendly (big target, vertical drag) and shares one value with the ± buttons.
-   The dial box is larger than the disc and reserves the ring's space (no overflow into
-   the badge / minus button). */
-.dial {
-  position: relative;
-  width: 62px; height: 62px;
-  display: grid; place-items: center;
-  touch-action: none;            /* vertical drag adjusts, never scrolls */
-  cursor: ns-resize;
-}
-.dial-ring {
-  position: absolute; inset: 0;
-  transform: rotate(135deg);     /* 270° dial with the gap centred at the bottom */
-  pointer-events: none; overflow: visible;
-}
-.dial-track { fill: none; stroke: var(--border); stroke-width: 7; }
-.dial-fill  { fill: none; stroke-width: 7; stroke-linecap: round; }
-@media (prefers-reduced-motion: no-preference) {
-  .dial-fill { transition: stroke-dasharray 0.08s linear; }
-}
+        .user-id-display {
+            background: var(--surface-color);
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px var(--shadow-color);
+            display: inline-block;
+        }
 
-.spectral-plots { margin-top: 28px; }
-.spectral-plots h2 { font-size: 1rem; font-weight: 800; margin: 0 0 12px; }
-.spectrum-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;
-}
-.spectrum-card {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-md, 10px); padding: 8px;
-}
-.spectrum-card .plot { width: 100%; height: 150px; }
-.mixed-spectrum-card {
-  margin-top: 16px; background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-md, 10px); padding: 8px;
-}
-.mixed-spectrum-card .plot { width: 100%; height: 300px; }
+        .user-label {
+            color: var(--text-color);
+            font-weight: bold;
+            margin-right: 8px;
+        }
 
-/* Skin-tone target picker */
-.skin-picker { margin: 0 0 16px; display: flex; flex-direction: column; gap: 8px; }
-.skin-eth-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.skin-eth-label { width: 84px; flex: 0 0 84px; font-size: 0.78rem; font-weight: 800; color: var(--text-secondary); text-align: right; }
-.skin-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
-.skin-sw {
-  width: 58px; cursor: pointer; border: 2px solid transparent; border-radius: 9px;
-  padding: 0; background: none; text-align: center; transition: transform .08s ease;
-}
-.skin-sw:hover { transform: translateY(-1px); }
-.skin-sw .chip { display: block; width: 100%; height: 34px; border-radius: 7px; border: 1px solid rgba(0,0,0,.18); }
-.skin-sw .site { display: block; font-size: 0.62rem; color: var(--text-secondary); margin-top: 3px; line-height: 1.1; }
-.skin-sw.is-selected { border-color: var(--accent-primary, #4caf50); }
-.skin-sw.is-selected .site { color: var(--text-primary); font-weight: 800; }
+        .user-id {
+            color: #007bff;
+            font-weight: bold;
+            font-family: monospace;
+            font-size: 1.1em;
+        }
 
-/* Perceptual-judgment modal */
-.spectral-modal {
-  position: fixed; inset: 0; z-index: 11000;
-  display: flex; align-items: center; justify-content: center; padding: 20px;
-  background: rgba(15, 23, 42, 0.55);
-}
-.spectral-modal-card {
-  background: var(--surface, #fff); color: var(--text-primary, #111);
-  border-radius: 16px; padding: 20px; max-width: 420px; width: 100%;
-  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.4);
-}
-.spectral-modal-card h2 { margin: 0 0 4px; font-size: 1.1rem; font-weight: 800; }
-.spectral-modal-card .modal-meta { margin: 0 0 14px; font-size: 0.85rem; color: var(--text-secondary); }
-.perc-pair {
-  display: flex; height: 84px; border-radius: 10px; overflow: hidden;
-  border: 1px solid var(--border); margin-bottom: 16px;
-}
-.perc-pair > div { flex: 1; }
-.perc-btns { display: flex; flex-direction: column; gap: 8px; }
-.perc-btns .btn { width: 100%; }
-.perc-cancel { margin-top: 10px; width: 100%; }
+        .color-controls {
+            display: flex;
+            flex-direction: row;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 40px;
+            flex-wrap: nowrap;
+            overflow-x: auto;
+            padding: 10px;
+        }
 
-/* Editable value badge — type a precise 0–100 amount; ↑/↓ step, Shift+↑/↓ = 0.01. */
-input.drop-badge {
-  display: inline-block; width: 54px; text-align: center;
-  padding: 0 4px; cursor: text; -moz-appearance: textfield;
-}
-input.drop-badge::-webkit-outer-spin-button,
-input.drop-badge::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-input.drop-badge:focus {
-  outline: 2px solid var(--accent-primary, #4caf50); outline-offset: 1px;
-  background: var(--bg, #fff);
-}
+        .color-control {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background: var(--surface-color);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px var(--shadow-color);
+            min-width: 150px;
+            flex: 0 0 auto;
+        }
 
-/* Kubelka–Munk parameter lab (debug panel, /spectral only). Hidden until toggled. */
-#kmToggle.is-on { background: var(--accent-primary, #4caf50); color: #fff; }
-.km-panel {
-  margin: 12px 0 4px; padding: 14px 16px;
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius-md, 10px); box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.06));
-}
-.km-panel h3 { margin: 0 0 4px; font-size: 0.95rem; font-weight: 800; }
-.km-panel .km-note { margin: 0 0 12px; font-size: 0.78rem; color: var(--text-secondary); }
-.km-group { margin-bottom: 14px; }
-.km-group > .km-group-title {
-  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--text-secondary); font-weight: 700; margin-bottom: 6px;
-}
-.km-row { display: flex; align-items: center; gap: 10px; margin: 5px 0; }
-.km-row > label { flex: 0 0 92px; font-size: 0.82rem; }
-.km-row > input[type="range"] { flex: 1; min-width: 0; }
-.km-row > .km-val {
-  flex: 0 0 48px; text-align: right; font-size: 0.82rem;
-  font-family: ui-monospace, 'SF Mono', Menlo, monospace; color: var(--text-secondary);
-}
-.km-panel .km-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
-</style>
+        .color-control h2 {
+            margin: 0 0 10px 0;
+            font-size: 1.2em;
+            text-align: center;
+        }
+
+        .color-circle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 10px 0;
+            border: 2px solid var(--border-color);
+            background-color: #f0f0f0;
+        }
+
+        .drop-buttons {
+            display: flex;
+            gap: 10px;
+            margin: 10px 0;
+        }
+
+        .drop-button {
+            padding: 6px 12px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            background: var(--surface-color);
+            color: var(--text-color);
+            cursor: pointer;
+            border: 1px solid var(--border-color);
+            transition: all 0.2s;
+        }
+
+        .drop-button:hover {
+            background: #f0f0f0;
+            transform: translateY(-1px);
+        }
+
+        .mixed-color {
+            text-align: center;
+            margin-top: 40px;
+            background: var(--surface-color);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px var(--shadow-color);
+        }
+
+        .mixed-color .color-circle {
+            width: 150px;
+            height: 150px;
+            margin: 20px auto;
+        }
+
+        .spectrum-plot {
+            width: 100%;
+            height: 120px;
+            margin-top: 10px;
+            background: var(--surface-color);
+            border-radius: 10px;
+            box-shadow: 0 2px 4px var(--shadow-color);
+        }
+
+        .mixed-spectrum {
+            width: 100%;
+            height: 300px;
+            margin-top: 20px;
+            background: var(--surface-color);
+            border-radius: 10px;
+            box-shadow: 0 2px 4px var(--shadow-color);
+        }
+
+        .nav-links {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            margin: 0 10px;
+            padding: 5px 10px;
+            border-radius: 5px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .nav-links a:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* MacBook Pro 1728x1117 optimization */
+        @media (min-width: 1600px) and (max-width: 1800px) and (min-height: 1000px) and (max-height: 1200px) {
+            .container {
+                max-width: 1600px;
+                padding: 25px;
+            }
+
+            h1 {
+                font-size: 2.5em;
+                margin-bottom: 50px;
+            }
+
+            .color-controls {
+                gap: 20px;
+                margin-bottom: 50px;
+                padding: 15px;
+            }
+
+            .color-control {
+                min-width: 180px;
+                padding: 20px;
+            }
+
+            .color-control h2 {
+                font-size: 1.3em;
+                margin-bottom: 15px;
+            }
+
+            .color-circle {
+                width: 70px;
+                height: 70px;
+                font-size: 20px;
+                margin: 15px 0;
+            }
+
+            .drop-buttons {
+                gap: 12px;
+                margin: 15px 0;
+            }
+
+            .drop-button {
+                padding: 8px 16px;
+                font-size: 18px;
+            }
+
+            .spectrum-plot {
+                height: 140px;
+                margin-top: 15px;
+            }
+
+            .mixed-color {
+                margin-top: 50px;
+                padding: 30px;
+            }
+
+            .mixed-color .color-circle {
+                width: 180px;
+                height: 180px;
+                margin: 25px auto;
+            }
+
+            .mixed-spectrum {
+                height: 350px;
+                margin-top: 25px;
+            }
+
+            .nav-links {
+                margin-bottom: 25px;
+            }
+
+            .nav-links a {
+                padding: 8px 15px;
+                font-size: 1.1em;
+                margin: 0 12px;
+            }
+        }
+    </style>
 {% endblock %}
 
 {% block content %}
-<div class="spectral-wrap">
-  <header class="spectral-header">
-    <h1>Spectral mixer</h1>
-    <div class="spectral-nav">
-      <a href="/gamut" class="btn btn-secondary">Gamut lab</a>
-      <a href="/color_inspector" class="btn btn-secondary">Color inspector</a>
-      <a href="/reverse_engineer" class="btn btn-secondary">Reverse engineering</a>
-      <a href="/" class="btn btn-secondary">← Main app</a>
+    <div class="container">
+        <div class="nav-links">
+            <a href="/spectral">Spectral Mixer</a>
+            <a href="/color_inspector">Color Inspector</a>
+            <a href="/reverse_engineer">Reverse Engineering</a>
+        </div>
+        
+        <!-- User ID Display -->
+        <div class="user-info" id="userInfo" style="display: none;">
+            <div class="user-id-display">
+                <span class="user-label">User ID:</span>
+                <span class="user-id" id="userIdDisplay"></span>
+            </div>
+        </div>
+        
+        <h1>Spectral Mixer</h1>
+        
+        <div class="color-controls">
+            {% for color_key, pigment_data in spectrum_plots.items() %}
+            <div class="color-control" data-color="{{ color_key }}">
+                <h2>{{ pigment_data.name }}</h2>
+                <div class="color-circle" id="{{ color_key }}Circle">0</div>
+                <div class="drop-buttons">
+                    <button class="drop-button" id="{{ color_key }}Minus">-</button>
+                    <button class="drop-button" id="{{ color_key }}Plus">+</button>
+                </div>
+                <div class="spectrum-plot" id="{{ color_key }}Spectrum"></div>
+            </div>
+            {% endfor %}
+        </div>
+        
+        <div class="mixed-color">
+            <h2>Mixed Color</h2>
+            <div class="color-circle" id="mixedCircle"></div>
+            <div class="mixed-spectrum" id="mixedSpectrum"></div>
+        </div>
+        
+        <!-- Video Thumbnail at bottom -->
+        <div style="text-align: center; margin-top: 30px; padding: 20px;">
+            <div style="display: inline-block; cursor: pointer; transition: transform 0.2s;" id="videoThumbnail" onclick="showVideoModal()">
+                <div style="position: relative; width: 200px; height: 112px; background: #000; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.3);">
+                    <img src="https://img.youtube.com/vi/rGQ7LR3PPG0/maxresdefault.jpg" 
+                         style="width: 100%; height: 100%; object-fit: cover;" 
+                         alt="Instructional Video Thumbnail">
+                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                                width: 50px; height: 50px; background: rgba(255,255,255,0.9); 
+                                border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                                font-size: 20px; color: #000;">▶</div>
+                </div>
+                <p style="margin-top: 8px; color: white; font-size: 0.9em;">📹 Watch Instructional Video</p>
+            </div>
+        </div>
     </div>
-  </header>
-
-  <p class="spectral-hint">
-    Testing lab: pick a real human skin tone below (measured means per ethnicity × body site,
-    Xiao et al. 2017), then reproduce it with the active palette (Kubelka–Munk mixing) and read
-    the ΔE. Tap a pigment for a whole drop, or drag its dial for a continuous amount (0–100); or
-    hit <strong>Give me a mix</strong> to auto-solve. Exact colour isn't always reachable — that's
-    the point of the test.
-    <br><strong>Keyboard:</strong> ↑/↓ to change the focused amount (Shift+↑/↓ = 0.1), or type a value.
-  </p>
-
-  <!-- Skin-tone target picker: choose which measured skin colour to reproduce. -->
-  <div class="skin-picker" id="skinTargetPicker" aria-label="Choose a skin-tone target"></div>
-
-  <!-- Target | current mix: seamless borderless split, like the main app -->
-  <div class="spectral-pair-labels" aria-hidden="true"><span>Match this</span><span>Your mix</span></div>
-  <div class="spectral-pair" aria-live="polite">
-    <div id="targetColor" class="spectral-half" role="img" aria-label="Target color"
-         style="background-color:rgb(255,255,255);">
-      <div id="targetSpectrumOverlay" class="spectral-overlay" aria-hidden="true"></div>
+    
+    <!-- Video Modal -->
+    <div id="videoModal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.8); z-index: 2000; display: flex; align-items: center; justify-content: center;">
+        <div style="position: relative; width: 90%; max-width: 800px; background: var(--surface-color); border-radius: 10px; padding: 20px;">
+            <button id="closeVideoBtn" style="position: absolute; top: 10px; right: 15px; background: none; border: none; color: var(--text-color); font-size: 24px; cursor: pointer; z-index: 2001;">&times;</button>
+            <div style="position: relative; width: 100%; height: 0; padding-bottom: 56.25%;">
+                <iframe id="videoFrame" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border: none; border-radius: 8px;" 
+                        src="" 
+                        allow="autoplay; encrypted-media" allowfullscreen>
+                </iframe>
+            </div>
+        </div>
     </div>
-    <div id="currentMix" class="spectral-half" role="img" aria-label="Current mixed color"
-         style="background-color:rgb(255,255,255);">
-      <div id="mixSpectrumOverlay" class="spectral-overlay" aria-hidden="true"></div>
-    </div>
-  </div>
-
-  <!-- ΔE readout + match bar -->
-  <div class="match-bar-wrap" id="matchBarContainer" style="display:none;">
-    <div class="delta-e-readout" aria-live="polite">
-      <span class="delta-e-glyph">ΔE<sub>00</sub></span>
-      <span class="delta-e-value" id="deltaEValue">—</span>
-      <span class="delta-e-best" id="deltaEBest"></span>
-    </div>
-    <div class="match-bar-track">
-      <div class="match-bar"><div class="match-bar-fill" id="matchBarFill"></div></div>
-      <span class="match-bar-label" id="matchBarLabel"></span>
-    </div>
-  </div>
-
-  <div class="spectral-rgb-panel" aria-live="polite">
-    <span id="colorCodesLine">rgb(255, 255, 255) · R255 G255 B255 · #FFFFFF</span>
-  </div>
-
-  <p class="spectral-status" id="spectralStatus" role="status">Match the target by mixing pigments.</p>
-
-  <!-- Palette size / gamut selector. Options are injected from the gamut optimiser
-       (scripts/gamut/optimize.py via app/routes.build_spectral_palettes). -->
-  <div class="palette-picker" style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin:6px 0 10px;">
-    <label for="paletteSelect" style="font-weight:700;">Palette</label>
-    <select id="paletteSelect" class="form-select" style="max-width:320px;"></select>
-    <span id="paletteInfo" class="palette-info" style="opacity:.7;font-size:.9rem;"></span>
-  </div>
-
-  <!-- Live recipe proportion strip (filled per palette by spectral_mixer.js) -->
-  <div class="recipe-strip" id="recipeStrip" aria-hidden="true"></div>
-
-  <!-- Palette dials: built per palette by spectral_mixer.js (renderPaletteDials) -->
-  <div id="spectralPalette" class="palette"></div>
-
-  <div class="controls-bar" style="margin-top:12px;flex-wrap:wrap;justify-content:center;gap:10px;">
-    <button type="button" id="spectralResetBtn" class="btn btn-secondary btn-lg">Reset mix</button>
-    <button type="button" id="spectralSolveBtn" class="btn btn-primary btn-lg" title="Auto-solve a recipe for this target with the active palette">Give me a mix</button>
-    <button type="button" id="kmToggle" class="btn btn-secondary btn-lg" aria-expanded="false"
-            aria-controls="kmPanel">KM parameters</button>
-  </div>
-
-  <!-- Kubelka–Munk parameter lab. When open, the live mix is recomputed with these
-       parameters instead of the engine defaults; targets stay as generated. -->
-  <div id="kmPanel" class="km-panel" style="display:none;">
-    <h3>Kubelka–Munk parameters</h3>
-    <p class="km-note">
-      Tweak the mixing model and watch <em>your mix</em> (right swatch) update live. Tinting
-      strengths default to values measured from the Kremer shade ladder; the other knobs
-      default to the stock engine. Targets aren’t regenerated, so changing these can make a
-      shade unreachable — that’s expected while exploring.
-    </p>
-
-    <!-- Tinting-strength sliders are rebuilt per palette by spectral_mixer.js -->
-    <div class="km-group" id="kmTintingGroup"></div>
-
-    <div class="km-group">
-      <div class="km-group-title">Concentration weight: amount<sup>a</sup> · strength<sup>b</sup> · luminance<sup>c</sup></div>
-      <div class="km-row"><label for="km-concExp">a (amount)</label>
-        <input id="km-concExp" type="range" data-km="concExp" min="0.5" max="4" step="0.1" value="2"><span class="km-val" data-km-val="concExp"></span></div>
-      <div class="km-row"><label for="km-tsExp">b (strength)</label>
-        <input id="km-tsExp" type="range" data-km="tsExp" min="0" max="4" step="0.1" value="2"><span class="km-val" data-km-val="tsExp"></span></div>
-      <div class="km-row"><label for="km-lumExp">c (luminance)</label>
-        <input id="km-lumExp" type="range" data-km="lumExp" min="0" max="3" step="0.1" value="1"><span class="km-val" data-km-val="lumExp"></span></div>
-    </div>
-
-    <div class="km-group">
-      <div class="km-group-title">Saunderson surface-reflection correction</div>
-      <div class="km-row"><label for="km-k1">k₁ (surface)</label>
-        <input id="km-k1" type="range" data-km="k1" min="0" max="0.1" step="0.005" value="0"><span class="km-val" data-km-val="k1"></span></div>
-      <div class="km-row"><label for="km-k2">k₂ (internal)</label>
-        <input id="km-k2" type="range" data-km="k2" min="0" max="0.8" step="0.02" value="0"><span class="km-val" data-km-val="k2"></span></div>
-    </div>
-
-    <div class="km-actions">
-      <button type="button" id="kmReset" class="btn btn-tertiary">Reset to defaults</button>
-    </div>
-  </div>
-
-  <!-- Perceptual-judgment modal (completion path; ΔE≈0 isn't reachable spectrally) -->
-  <div id="perceptionModal" class="spectral-modal" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="perceptionTitle">
-    <div class="spectral-modal-card">
-      <h2 id="perceptionTitle">Can you see a difference?</h2>
-      <p class="modal-meta" id="perceptionMeta">Compare your mix (right) to the target (left).</p>
-      <div class="perc-pair" aria-hidden="true">
-        <div id="percTarget"></div>
-        <div id="percMix"></div>
-      </div>
-      <div class="perc-btns">
-        <button type="button" class="btn btn-primary btn-lg" data-perc="identical">No difference</button>
-        <button type="button" class="btn btn-secondary btn-lg" data-perc="acceptable">Acceptable difference</button>
-        <button type="button" class="btn btn-secondary btn-lg" data-perc="unacceptable">Too different</button>
-      </div>
-      <button type="button" class="btn btn-tertiary perc-cancel" id="perceptionCancel">Keep mixing</button>
-    </div>
-  </div>
-
-  <!-- Reflectance spectra (the realistic part the main app doesn't show) -->
-  <section class="spectral-plots">
-    <h2>Mixed reflectance spectrum</h2>
-    <div class="mixed-spectrum-card">
-      <div id="mixedSpectrum" class="plot"></div>
-    </div>
-
-    <h2 style="margin-top:20px;">Base pigment spectra</h2>
-    <!-- One plot per active pigment, built per palette by spectral_mixer.js -->
-    <div class="spectrum-grid" id="spectrumGrid"></div>
-  </section>
-</div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-  // Measured base reflectance spectra for the classic five (full-resolution curves used
-  // for the base-spectrum plots), injected by /spectral.
-  const spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
-  // Selectable gamut-sized palettes (classic + widest-gamut 5/8/10/… sets from the
-  // Hyperspectral Pigments dataset, chosen by scripts/gamut/optimize.py).
-  window.SPECTRAL_PALETTES = JSON.parse('{{ spectral_palettes|tojson|safe }}');
-  // Real human skin-colour targets: mean CIELAB per ethnicity × body site from
-  // Xiao et al. 2017 (Skin Res. Technol. 23:21–29), converted to sRGB server-side.
-  window.SPECTRAL_SKIN_TARGETS = JSON.parse('{{ skin_targets|tojson|safe }}');
-</script>
-<script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
-<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260618-skinlab2"></script>
-{% endblock %}
+    
+    <script>
+        // Make spectrum_plots available to JavaScript
+        const spectrum_plots = JSON.parse('{{ spectrum_plots|tojson|safe }}');
+        
+        // Video modal functionality
+        function showVideoModal() {
+            document.getElementById('videoModal').style.display = 'flex';
+            // Reload the video when opening the modal
+            const iframe = document.getElementById('videoFrame');
+            iframe.src = 'https://www.youtube.com/embed/rGQ7LR3PPG0?autoplay=1&rel=0';
+        }
+        
+        function closeVideoModal() {
+            document.getElementById('videoModal').style.display = 'none';
+            // Stop the video when closing by removing the src
+            const iframe = document.getElementById('videoFrame');
+            iframe.src = ''; // This stops the video completely
+        }
+        
+        // Add event listeners when DOM is loaded
+        document.addEventListener('DOMContentLoaded', function() {
+            const videoModal = document.getElementById('videoModal');
+            const closeBtn = document.getElementById('closeVideoBtn');
+            
+            closeBtn.onclick = closeVideoModal;
+            
+            // Close video modal when clicking outside
+            videoModal.addEventListener('click', function(e) {
+                if (e.target === videoModal) {
+                    closeVideoModal();
+                }
+            });
+            
+            // Add hover effect to thumbnail
+            const thumbnail = document.getElementById('videoThumbnail');
+            thumbnail.addEventListener('mouseenter', function() {
+                this.style.transform = 'scale(1.05)';
+            });
+            thumbnail.addEventListener('mouseleave', function() {
+                this.style.transform = 'scale(1)';
+            });
+        });
+    </script>
+    <script src="{{ url_for('static', filename='spectral_mixer.js') }}">    </script>
+{% endblock %} 

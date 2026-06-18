@@ -1,136 +1,47 @@
-var CACHE_NAME = 'shadematch-static-v6';
-
+var CACHE_NAME = 'shadematch-static-v1';
 var PRECACHE_URLS = [
-  '/static/mixbox.js',
-  '/static/spectral.js',
   '/static/main.js',
   '/static/timer.js',
-  '/static/cookie-consent.js',
-  '/static/cookie-consent.css',
+  '/static/mixbox.js',
   '/static/manifest.webmanifest',
   '/static/icons/icon-192.png',
-  '/static/icons/icon-512.png',
-  '/static/icons/icon-512-maskable.png',
+  '/static/icons/icon-512.png'
 ];
 
-self.addEventListener('install', function (event) {
+self.addEventListener('install', function(event) {
   event.waitUntil(
-    caches.open(CACHE_NAME).then(function (cache) {
-      return cache.addAll(PRECACHE_URLS);
-    })
+    caches.open(CACHE_NAME)
+      .then(function(cache) { return cache.addAll(PRECACHE_URLS); })
+      .then(function() { return self.skipWaiting(); })
   );
-  self.skipWaiting();
 });
 
-self.addEventListener('activate', function (event) {
+self.addEventListener('activate', function(event) {
   event.waitUntil(
-    caches.keys().then(function (names) {
+    caches.keys().then(function(keys) {
       return Promise.all(
-        names
-          .filter(function (name) { return name !== CACHE_NAME; })
-          .map(function (name) { return caches.delete(name); })
+        keys.filter(function(k) { return k !== CACHE_NAME; })
+            .map(function(k) { return caches.delete(k); })
       );
-    })
+    }).then(function() { return self.clients.claim(); })
   );
-  self.clients.claim();
 });
 
-self.addEventListener('fetch', function (event) {
-  var url = new URL(event.request.url);
+self.addEventListener('fetch', function(event) {
+  var request = event.request;
 
-  // Network-first for navigation and API/session endpoints
-  if (
-    event.request.mode === 'navigate' ||
-    url.pathname.startsWith('/save_session') ||
-    url.pathname.startsWith('/save_skip') ||
-    url.pathname.startsWith('/api/') ||
-    url.pathname.startsWith('/push/') ||
-    url.pathname.startsWith('/register') ||
-    url.pathname.startsWith('/calculate') ||
-    url.pathname.startsWith('/login')
-  ) {
+  if (request.method !== 'GET') return;
+
+  if (request.mode === 'navigate' || request.url.indexOf('/calculate') !== -1) {
     event.respondWith(
-      fetch(event.request).catch(function () {
-        return caches.match(event.request);
-      })
+      fetch(request).catch(function() { return caches.match(request); })
     );
     return;
   }
 
-  // Network-first for the app logic bundle to avoid stale telemetry clients.
-  if (url.pathname === '/static/main.js') {
-    event.respondWith(
-      fetch(event.request).then(function (response) {
-        var clone = response.clone();
-        caches.open(CACHE_NAME).then(function (cache) {
-          cache.put(event.request, clone);
-        });
-        return response;
-      }).catch(function () {
-        return caches.match(event.request);
-      })
-    );
-    return;
-  }
-
-  // Cache-first for other precached static assets
-  if (url.pathname.startsWith('/static/')) {
-    event.respondWith(
-      caches.match(event.request).then(function (cached) {
-        return cached || fetch(event.request).then(function (response) {
-          var clone = response.clone();
-          caches.open(CACHE_NAME).then(function (cache) {
-            cache.put(event.request, clone);
-          });
-          return response;
-        });
-      })
-    );
-    return;
-  }
-
-  event.respondWith(fetch(event.request));
-});
-
-// ── Web Push ──────────────────────────────────────────────────────────────
-
-self.addEventListener('push', function (event) {
-  var data = {};
-  try {
-    data = event.data ? event.data.json() : {};
-  } catch (e) {
-    data = { title: 'ShadeMatch', body: event.data ? event.data.text() : '' };
-  }
-
-  var title = data.title || 'ShadeMatch';
-  var options = {
-    body: data.body || "Today's daily challenge is live!",
-    icon: data.icon || '/static/icons/icon-192.png',
-    badge: '/static/icons/icon-192.png',
-    data: { url: data.url || '/' },
-    vibrate: [200, 100, 200],
-    requireInteraction: false,
-  };
-
-  event.waitUntil(self.registration.showNotification(title, options));
-});
-
-self.addEventListener('notificationclick', function (event) {
-  event.notification.close();
-  var targetUrl = (event.notification.data && event.notification.data.url) || '/';
-
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
-      for (var i = 0; i < clientList.length; i++) {
-        var client = clientList[i];
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          client.navigate(targetUrl);
-          return client.focus();
-        }
-      }
-      if (clients.openWindow) {
-        return clients.openWindow(targetUrl);
-      }
+  event.respondWith(
+    caches.match(request).then(function(cached) {
+      return cached || fetch(request);
     })
   );
 });
