@@ -17,6 +17,7 @@ from .models import (
 )
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb, reverse_engineer_recipe
+from . import spectral_km
 from . import email_utils
 import pandas as pd
 import os
@@ -430,52 +431,280 @@ def stat_attempt_timeline_data():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+SPECTRAL_BASE_PIGMENTS = [
+    ('white', 'titanium white.txt'),
+    ('black', 'aniline_black.csv'),
+    ('red', 'cadmium_red.csv'),
+    ('yellow', 'cadmium_yellow.csv'),
+    ('blue', 'ultramarine_blue.csv'),
+]
+
+
+def _load_pigment_spectrum(file_path):
+    """Load a single measured pigment reflectance curve as (wavelengths, reflectances).
+
+    Handles both formats found in static/pigments/:
+      - .csv : 'Wavelength' column + one column per Kremer shade (sh-1..sh-4, 0-1).
+               We take shade-1 (masstone / full strength) as the base spectrum — see below.
+      - .txt : space-delimited 2-column 'wavelength reflectance' with reflectance
+               in 0-100, divided by 100 here.
+
+    Reflectances are validated to lie in [0, 1]; anything outside raises loudly
+    rather than being silently rescaled, because a quiet scaling bug here yields
+    plausible-but-wrong colors — the worst failure mode for a research tool.
+    """
+    if file_path.endswith('.csv'):
+        df = pd.read_csv(file_path)
+        wavelengths = df['Wavelength'].tolist()
+        # The four columns (sh-1..sh-4) are the same pigment at four dilution levels on the
+        # printed Kremer card, NOT repeat measurements. Averaging them blends four different
+        # tints into a physically meaningless curve (and silently weakens the pigment). Take
+        # shade-1 — the masstone / full-strength tint (lowest reflectance) — as the base.
+        reflectances = df.iloc[:, 1].tolist()
+    else:
+        data = []
+        with open(file_path, 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) == 2:
+                    try:
+                        data.append([float(parts[0]), float(parts[1]) / 100.0])
+                    except ValueError:
+                        continue
+        data = sorted(data, key=lambda x: x[0])
+        wavelengths = [r[0] for r in data]
+        reflectances = [r[1] for r in data]
+
+    if not reflectances:
+        raise ValueError(f"No reflectance samples parsed from {file_path}")
+
+    lo, hi = min(reflectances), max(reflectances)
+    # Tiny float overshoot tolerance only; real out-of-range data must fail.
+    if lo < -1e-6 or hi > 1.0 + 1e-6:
+        raise ValueError(
+            f"Reflectance out of [0,1] range in {os.path.basename(file_path)}: "
+            f"min={lo:.4f}, max={hi:.4f}. Refusing to silently normalize — "
+            f"fix the source units/parsing instead."
+        )
+    return wavelengths, reflectances
+
+
+_SPECTRUM_PLOTS_CACHE = None
+
+
+def build_spectrum_plots():
+    """Measured base-pigment reflectance spectra keyed by palette colour.
+
+    Shared by /spectral, /lab and the main game so any page can run the spectral
+    (Kubelka–Munk) mixing engine on the same base spectra.
+
+    The result is cached after the first successful build (the underlying files are
+    static), and a load failure returns {} (logged) rather than raising — so a missing
+    or malformed pigment file degrades to Mixbox-only instead of 500ing the home page.
+    """
+    global _SPECTRUM_PLOTS_CACHE
+    if _SPECTRUM_PLOTS_CACHE is not None:
+        return _SPECTRUM_PLOTS_CACHE
+
+    try:
+        wavelengths, x_bar, y_bar, z_bar = load_cie_data()
+        pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
+        spectrum_plots = {}
+
+        for color_key, filename in SPECTRAL_BASE_PIGMENTS:
+            file_path = os.path.join(pigments_dir, filename)
+            pigment_wavelengths, reflectances = _load_pigment_spectrum(file_path)
+
+            # Server-side measured swatch color (used only for the base circle/plot line).
+            X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
+            rgb = xyz_to_rgb(X, Y, Z)
+            spectrum_plots[color_key] = {
+                'wavelengths': pigment_wavelengths,
+                'reflectances': reflectances,
+                'rgb': rgb.tolist(),
+                'name': os.path.splitext(filename)[0].replace('_', ' ').title(),
+            }
+
+        _SPECTRUM_PLOTS_CACHE = spectrum_plots
+        return spectrum_plots
+    except Exception:
+        current_app.logger.exception('build_spectrum_plots failed; serving without spectral data')
+        return {}
+
+
+_SPECTRAL_PALETTES_CACHE = None
+
+
+def _short_label(name):
+    """A compact dial caption from a full Kremer name (the plot shows the full name)."""
+    s = name.split(',')[0].strip()
+    return (s[:16] + '…') if len(s) > 17 else s
+
+
+def build_spectral_palettes():
+    """Selectable pigment palettes for /spectral, sized by gamut.
+
+    'classic' is the shipped five (white/black/red/yellow/blue) — the default, so the
+    existing experience is unchanged. The numbered palettes (5/8/10/… pigments) are the
+    widest-gamut sets chosen by scripts/gamut/optimize.py from the Hyperspectral Pigments
+    dataset (Zenodo 5592485): the gamut-optimal W/K/R/Y/B, then greedily grown.
+
+    Every pigment carries its reflectance R already on the 38-bin engine grid, so the JS
+    engine builds spectral.Color(R) directly. Falls back to {classic-only} if the data
+    files are missing, so a bad deploy degrades instead of 500ing.
+    """
+    global _SPECTRAL_PALETTES_CACHE
+    if _SPECTRAL_PALETTES_CACHE is not None:
+        return _SPECTRAL_PALETTES_CACHE
+
+    def classic_palette():
+        plots = build_spectrum_plots()
+        out = []
+        for key in spectral_km.ORDER:
+            data = plots.get(key)
+            if not data:
+                continue
+            R = spectral_km.resample_to_grid(data['wavelengths'], data['reflectances'])
+            col = spectral_km.SpectralColor(R)
+            out.append({
+                'key': key, 'role': key, 'label': key.title(), 'name': data.get('name', key),
+                'family': key, 'R': [round(float(x), 6) for x in R], 'srgb': col.sRGB,
+                'tinting': spectral_km.TINTING.get(key, 1.0),
+            })
+        return out
+
+    palettes = {'classic': classic_palette()}
+    sizes = []
+    try:
+        data_dir = os.path.join(os.path.dirname(__file__), 'data')
+        lib = json.load(open(os.path.join(data_dir, 'pigments_library.json')))
+        recs = json.load(open(os.path.join(data_dir, 'palette_recommendations.json')))
+        by_pn = {str(p['pnumber']): p for p in lib['pigments']}
+        sizes = recs['sizes']
+        for size in sizes:
+            pigs = []
+            for p in recs['palettes'][str(size)]['pigments']:
+                src = by_pn.get(str(p['pnumber']))
+                if not src:
+                    continue
+                pigs.append({
+                    'key': p['role'], 'role': p['role'], 'label': _short_label(p['name']),
+                    'name': p['name'], 'family': p.get('family', p['role']),
+                    'R': src['R'], 'srgb': p['srgb'], 'tinting': src.get('tinting', 1.0),
+                })
+            palettes[str(size)] = pigs
+    except Exception:
+        current_app.logger.exception('build_spectral_palettes: gamut sets unavailable; classic only')
+
+    _SPECTRAL_PALETTES_CACHE = {
+        'default': 'classic',
+        'sizes': sizes,
+        'palettes': palettes,
+        'volumes': {str(s): recs['palettes'][str(s)]['volume'] for s in sizes} if sizes else {},
+    }
+    return _SPECTRAL_PALETTES_CACHE
+
+
 @main.route('/spectral')
 def spectral():
-    wavelengths, x_bar, y_bar, z_bar = load_cie_data()
-    pigments_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'pigments')
-    spectrum_plots = {}
+    return render_template('spectral_mixer.html',
+                           spectrum_plots=build_spectrum_plots(),
+                           spectral_palettes=build_spectral_palettes(),
+                           skin_targets=gamut_lab.skin_targets())
 
-    for filename in os.listdir(pigments_dir):
-        if filename.endswith(('.csv', '.txt')):
-            file_path = os.path.join(pigments_dir, filename)
-            try:
-                if filename.endswith('.csv'):
-                    df = pd.read_csv(file_path)
-                    pigment_wavelengths = df['Wavelength'].tolist()
-                    reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
-                else:
-                    data = []
-                    with open(file_path, 'r') as f:
-                        for line in f:
-                            parts = line.strip().split()
-                            if len(parts) == 2:
-                                try:
-                                    data.append([float(parts[0]), float(parts[1]) / 100.0])
-                                except ValueError:
-                                    continue
-                    if not data:
-                        continue
-                    data = sorted(data, key=lambda x: x[0])
-                    pigment_wavelengths = [r[0] for r in data]
-                    reflectances = [r[1] for r in data]
 
-                X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
-                rgb = xyz_to_rgb(X, Y, Z)
-                color_key = os.path.splitext(filename)[0].lower()
-                spectrum_plots[color_key] = {
-                    'wavelengths': pigment_wavelengths,
-                    'reflectances': reflectances,
-                    'rgb': rgb.tolist(),
-                    'name': os.path.splitext(filename)[0].replace('_', ' ').title(),
-                }
-            except Exception as e:
-                print(f"Error loading {filename}: {e}")
+@main.route('/spectral/solve', methods=['POST'])
+def spectral_solve():
+    """"Give me a mix": solve the current target with the ACTIVE palette and return a recipe.
 
-    return render_template('spectral_mixer.html', spectrum_plots=spectrum_plots)
+    Reverse-engineer-style (target → recipe), but palette-agnostic and fast (one continuous
+    multi-illuminant solve over the active pigments via spectral_km.solve_mix), so it works
+    for the gamut palettes too. The client sends the target reflectance it already
+    reconstructed (spectral.Color(rgb).R) so server and client agree on the target curve.
+    """
+    data = request.get_json(silent=True) or {}
+    palette = str(data.get('palette', 'classic'))
+    target_R = data.get('target_R')
+    if not target_R or len(target_R) != spectral_km.SIZE:
+        return jsonify({'error': f'target_R must be {spectral_km.SIZE} values'}), 400
+    try:
+        sp = build_spectral_palettes()
+        pigs = sp['palettes'].get(palette) or sp['palettes'].get('classic')
+        if not pigs:
+            return jsonify({'error': 'palette unavailable'}), 400
+        bases = {p['key']: spectral_km.SpectralColor(p['R'], tinting=p.get('tinting', 1.0))
+                 for p in pigs}
+        res = spectral_km.solve_mix(spectral_km.SpectralColor(target_R), bases)
+        if not res:
+            return jsonify({'error': 'no solution'}), 500
+        return jsonify({
+            'amounts': res['amounts'],
+            'percentages': res['percentages'],
+            'achieved_rgb': res['achieved_rgb'],
+            'delta_e': res['delta_e'],
+            'reachability': res['reachability'],
+        })
+    except Exception:
+        current_app.logger.exception('spectral_solve failed')
+        return jsonify({'error': 'solve failed'}), 500
+
+
+# ── Gamut Lab (/gamut): interactive widest-gamut search over the pigment catalog ──
+from . import gamut_lab  # noqa: E402  (kept local to this feature)
+
+
+@main.route('/gamut')
+def gamut_page():
+    return render_template('gamut_lab.html')
+
+
+@main.route('/gamut/catalog')
+def gamut_catalog():
+    """Full pigment catalog + shipped baseline for the picker."""
+    try:
+        return jsonify({'pigments': gamut_lab.catalog(),
+                        'baseline': gamut_lab.shipped_baseline(),
+                        'skin_gamut': gamut_lab.skin_gamut()})
+    except Exception:
+        current_app.logger.exception('gamut_catalog failed')
+        return jsonify({'pigments': [], 'baseline': {'volume': 0, 'pnumbers': []}}), 500
+
+
+@main.route('/gamut/optimize', methods=['POST'])
+def gamut_optimize():
+    """Greedily grow a palette to the requested size, maximising CIELAB gamut volume."""
+    data = request.get_json(silent=True) or {}
+    try:
+        size = int(data.get('size', 8))
+    except (TypeError, ValueError):
+        size = 8
+    size = max(2, min(size, 24))   # keep a single request bounded
+    locked = [str(p) for p in (data.get('locked') or [])]
+    pool = data.get('pool')
+    pool = [str(p) for p in pool] if pool else None
+    try:
+        return jsonify(gamut_lab.greedy(locked=locked, size=size, pool=pool))
+    except Exception:
+        current_app.logger.exception('gamut_optimize failed')
+        return jsonify({'error': 'optimization failed'}), 500
+
+
+@main.route('/gamut/score', methods=['POST'])
+def gamut_score():
+    """Gamut volume + a*b* hull for an exact, user-chosen pigment set."""
+    data = request.get_json(silent=True) or {}
+    pnumbers = [str(p) for p in (data.get('pnumbers') or [])]
+    try:
+        detail = gamut_lab.gamut_detail(pnumbers)
+        detail['baseline'] = gamut_lab.shipped_baseline()
+        return jsonify(detail)
+    except Exception:
+        current_app.logger.exception('gamut_score failed')
+        return jsonify({'error': 'scoring failed'}), 500
 
 
 # ── Auth ───────────────────────────────────────────────────────────────────
+
 
 @main.route('/register', methods=['POST'])
 def register():
@@ -3438,7 +3667,9 @@ def ishihara_test():
 
 @main.route('/spectral_mixer')
 def spectral_mixer():
-    return render_template('spectral_mixer.html')
+    # Legacy alias — the spectral mixer now lives at /spectral (gamut-enabled,
+    # needs spectrum_plots/skin_targets context), so send callers there.
+    return redirect(url_for('main.spectral'))
 
 
 @main.route('/reverse_engineer')
