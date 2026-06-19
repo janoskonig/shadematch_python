@@ -1,0 +1,83 @@
+{% extends 'emails/_base.html' %}
+
+{% block preheader %}{{ preheader|default(headline ~ " — open the daily challenge.") }}{% endblock %}
+{% block header_eyebrow %}Daily challenge{% endblock %}
+
+{% block body %}
+  <p style="margin:0 0 8px; font-size:12px; font-weight:800; letter-spacing:1.6px; color:#4A90D9; text-transform:uppercase;">
+    {{ eyebrow|default("Today's palette") }}
+  </p>
+  <h1 class="sm-h1" style="margin:0 0 12px; font-size:30px; line-height:1.18; font-weight:800; color:#2D2D2D;">
+    {{ headline }}
+  </h1>
+  {% if subhead %}
+    <p style="margin:0 0 22px; font-size:16px; line-height:1.6; color:#3A3A3A;">{{ subhead }}</p>
+  {% endif %}
+
+  {% if swatch_hex %}
+    {# Featured target color — uses bgcolor for Outlook + background-color
+       for everyone else. The contrast label uses a translucent overlay so it
+       reads on light or dark swatches. #}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 24px; border-radius:14px; overflow:hidden;">
+      <tr>
+        <td class="sm-swatch" align="center" valign="middle" bgcolor="{{ swatch_hex }}" height="170" style="background-color:{{ swatch_hex }}; height:170px; padding:24px; border-radius:14px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+            <tr>
+              <td align="center" style="background:rgba(255,255,255,0.86); border-radius:999px; padding:8px 18px; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-weight:800; font-size:15px; color:#2D2D2D;">
+                {{ swatch_label|default('Today') }}
+                {% if swatch_caption %}
+                  <span style="font-weight:600; color:#6B6B6B; padding-left:6px;">· {{ swatch_caption }}</span>
+                {% endif %}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  {% endif %}
+
+  {% if stats %}
+    {# Three-up stats row that stacks on mobile via .sm-stack. #}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 26px;">
+      <tr>
+        {% for stat in stats %}
+          <td class="sm-stack" align="center" valign="top" width="{{ (100 // (stats|length)) }}%" style="padding:0 6px;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="center" style="padding:14px 10px; background:#F4F1ED; border:1px solid #ECE7DE; border-radius:12px;">
+                  <div style="font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-size:22px; font-weight:800; color:#2D2D2D; line-height:1.1;">{{ stat.value }}</div>
+                  <div style="font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-size:11px; font-weight:700; letter-spacing:1.2px; text-transform:uppercase; color:#6B6B6B; margin-top:4px;">{{ stat.label }}</div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        {% endfor %}
+      </tr>
+    </table>
+  {% endif %}
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:6px 0 18px;">
+    <tr>
+      <td align="center" bgcolor="#4A90D9" style="background-color:#4A90D9; border-radius:12px;">
+        <a href="{{ cta_url }}" style="display:inline-block; padding:15px 30px; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-size:16px; font-weight:800; color:#FFFFFF; text-decoration:none; border-radius:12px;">
+          {{ cta_label|default('Open today\'s challenge →') }}
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  {% if tip %}
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 0;">
+      <tr>
+        <td style="padding:16px 18px; background:#F0F6FD; border:1px solid #DCE9F8; border-radius:12px; font-size:14px; line-height:1.55; color:#2D4F75;">
+          <strong style="color:#2D2D2D;">Tip:</strong> {{ tip }}
+        </td>
+      </tr>
+    </table>
+  {% endif %}
+
+  <hr style="border:none; border-top:1px solid #EFEAE2; margin:28px 0 18px;">
+  <p style="margin:0; font-size:13px; color:#6B6B6B;">
+    Streaks are kind: a single attempt counts. Even a quick 30-second mix keeps your run alive.
+  </p>
+{% endblock %}

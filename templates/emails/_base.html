@@ -1,0 +1,97 @@
+{# Shared HTML email layout. Inline-styled, table-based, mobile-responsive,
+   safe across Gmail / Outlook / Apple Mail / Yahoo. Child templates override
+   the `preheader`, `header_eyebrow`, and `body` blocks. #}<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>{{ subject|default(brand_name) }}</title>
+  <!--[if mso]>
+  <style type="text/css">
+    table, td, div, p, a { font-family: 'Segoe UI', Arial, sans-serif !important; }
+  </style>
+  <![endif]-->
+  <style>
+    a { color: #4A90D9; }
+    @media only screen and (max-width: 620px) {
+      .sm-container { width: 100% !important; }
+      .sm-px { padding-left: 22px !important; padding-right: 22px !important; }
+      .sm-py { padding-top: 28px !important; padding-bottom: 28px !important; }
+      .sm-h1 { font-size: 26px !important; line-height: 1.22 !important; }
+      .sm-stack { display: block !important; width: 100% !important; padding: 8px 0 !important; }
+      .sm-swatch { height: 140px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0; padding:0; background:#F8F6F3; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
+  {# Preheader: hidden text used by Gmail/Apple Mail as inbox preview. The
+     non-breaking spaces push real body content out of the preview. #}
+  <div style="display:none; max-height:0px; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#F8F6F3; opacity:0;">
+    {% block preheader %}{{ brand_name }} — color mixing made fun.{% endblock %}
+    &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F8F6F3;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" class="sm-container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:100%; background:#FFFFFF; border-radius:18px; overflow:hidden; border:1px solid #ECE7DE;">
+          {# ── Header banner ─────────────────────────────────────────── #}
+          <tr>
+            <td bgcolor="#4A90D9" style="background-color:#4A90D9; padding:26px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="left" style="font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-weight:800; font-size:22px; letter-spacing:0.4px; color:#FFFFFF;">
+                    <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#FFD166; margin-right:6px; vertical-align:middle;"></span><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#EF476F; margin-right:6px; vertical-align:middle;"></span><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#06D6A0; margin-right:10px; vertical-align:middle;"></span>{{ brand_name }}
+                  </td>
+                  <td align="right" style="font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-weight:700; font-size:11px; color:#E1ECFA; text-transform:uppercase; letter-spacing:1.4px;">
+                    {% block header_eyebrow %}Color Mixing Game{% endblock %}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          {# ── Body ──────────────────────────────────────────────────── #}
+          <tr>
+            <td class="sm-px sm-py" style="padding:40px 36px; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; color:#2D2D2D;">
+              {% block body %}{% endblock %}
+            </td>
+          </tr>
+
+          {# ── Footer ────────────────────────────────────────────────── #}
+          <tr>
+            <td style="padding:22px 36px 28px; background:#F4F1ED; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-size:12px; line-height:1.65; color:#6B6B6B; border-top:1px solid #E8E4DD;">
+              {% block footer_pre %}{% endblock %}
+              <p style="margin:0 0 6px;">
+                You received this from <strong style="color:#2D2D2D;">{{ brand_name }}</strong>{% if username %}, sent to player <strong>{{ username }}</strong>{% endif %}.
+              </p>
+              {% if list_unsubscribe_url %}
+                <p style="margin:0 0 6px;">
+                  Don't want these reminders?
+                  <a href="{{ list_unsubscribe_url }}" style="color:#4A90D9; text-decoration:underline;">Unsubscribe in one click</a>.
+                </p>
+              {% endif %}
+              {% if footer_address %}
+                <p style="margin:8px 0 0; color:#9A9A9A;">{{ footer_address }}</p>
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+
+        {# A subtle baseline beneath the card. #}
+        <table role="presentation" class="sm-container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:100%;">
+          <tr>
+            <td align="center" style="padding:14px 8px 0; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-size:11px; color:#9A9A9A;">
+              Mixing colors, drop by drop · Made with care for color enthusiasts.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

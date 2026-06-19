@@ -1,0 +1,8 @@
+{
+  "n_rows": 256,
+  "n_users": 3,
+  "n_targets": 29,
+  "max_attempt_no": 15,
+  "perfect_ratio_rate": 0.8359375,
+  "spec": "stable"
+}

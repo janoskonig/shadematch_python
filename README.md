@@ -33,6 +33,7 @@ FLASK_ENV=development
 1. Ensure your database is running and accessible
 2. **New environments:** Run the database initialization script: `python init_db.py` (drops and recreates all tables — use only on empty/dev DBs).
 3. **Existing PostgreSQL (e.g. production):** After pulling model changes, run `npm install` then `npm run db:migrate`. The script loads **`DATABASE_URL` from the repo-root `.env`** (same as Flask’s `load_dotenv`) or from your shell if already exported. It adds `skip_perception` and **`match_category`** when missing.
+4. **Gamification level recompute (Option C, 30-level mapping):** After deploying the tier-driven leveling rewrite, run `python scripts/recompute_levels.py` once to recompute every user’s `level` and `max_sum_drop_unlocked` under the new mapping. Use `--dry-run` first to inspect the planned changes. Idempotent and safe to re-run.
 
 ## Deployment on Render
 
