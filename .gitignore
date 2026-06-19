@@ -18,3 +18,4 @@ app/__pycache__/
 # Local analysis scratch files
 notes/
 factor2-pigmentek.csv
+data/
