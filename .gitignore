@@ -1,4 +1,7 @@
 .env
+*.env
+shadestudy.env
+local_verify.db
 node_modules/
 taf_dataapp_example.py
 spectraljs_package_readme.py

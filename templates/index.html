@@ -131,6 +131,43 @@
 .pwa-install-text span { color: var(--text-secondary); font-size: 0.75rem; }
 .pwa-ios-hint { font-size: 0.72rem !important; margin-top: 4px; }
 .pwa-install-actions { display: flex; gap: 6px; flex-shrink: 0; }
+
+/* ── SpotlightGuide (coach-mark walkthrough, replaces the intro video) ──────── */
+.sg-root { position: fixed; inset: 0; z-index: 11000; }   /* catches clicks → page inert during the tour */
+.sg-hole {
+  position: fixed; border-radius: 12px;
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.66);
+  outline: 2px solid rgba(255, 255, 255, 0.9);
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .sg-hole { transition: left 0.2s ease, top 0.2s ease, width 0.2s ease, height 0.2s ease; }
+}
+.sg-tip {
+  position: fixed; z-index: 11001;
+  background: var(--surface-color, #fff); color: var(--text-color, #111);
+  border-radius: 14px; padding: 16px 16px 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  width: max-content; max-width: min(320px, calc(100vw - 24px));
+}
+.sg-tip-title { margin: 0 0 6px; font-size: 1rem; font-weight: 800; }
+.sg-tip-body { margin: 0 0 12px; font-size: 0.9rem; line-height: 1.45; opacity: 0.85; }
+.sg-skip {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: 0; cursor: pointer;
+  color: inherit; opacity: 0.6; font-size: 0.78rem; font-weight: 700;
+}
+.sg-tip-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.sg-dots { display: flex; gap: 5px; }
+.sg-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--border-color, #ccc); }
+.sg-dot.is-active { background: var(--accent-color, #4caf50); }
+.sg-btn-row { display: flex; gap: 8px; }
+.sg-btn {
+  border-radius: 999px; border: 1px solid var(--border-color, #ccc);
+  background: var(--surface-color, #fff); color: var(--text-color, #111);
+  padding: 6px 14px; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+}
+.sg-next { background: var(--accent-color, #4caf50); color: #fff; border-color: transparent; }
 </style>
 {% endblock %}
 
@@ -320,6 +357,7 @@
         <a href="/results" class="btn-icon" aria-label="View results">&#128202; <span class="help-label">Results</span></a>
         <a href="/leaderboard" class="btn-icon" aria-label="View leaderboard">&#127942; <span class="help-label">Leaderboard</span></a>
         <button id="showVideoBtn" class="btn-icon" type="button" aria-label="Watch instructional video">&#9658; <span class="help-label">Help</span></button>
+        <button id="showGuideBtn" class="btn-icon" type="button" aria-label="Show the quick guide">&#128161; <span class="help-label">Guide</span></button>
       </div>
     </div>
   </header>
@@ -669,6 +707,53 @@
     }
     document.getElementById('closeVideoBtn').onclick = closeVideoAndProceed;
 
+    /* Spotlight guide (coach-mark walkthrough of the game board) */
+    var GAME_GUIDE_STEPS = [
+      { el: '#targetColor', title: 'Match this colour', body: 'The left panel is the target shade you need to reproduce.' },
+      { el: '#currentMix', title: 'Your mix', body: 'The right panel updates live as you add pigments — get it as close to the target as you can.' },
+      { el: '#palette', title: 'Add pigments', body: 'Tap a pigment to add a drop, and use the − button to remove one. The number on each shows your recipe.' },
+      { el: '#startBtn', title: 'Start when ready', body: 'Press Start to begin — the timer runs while you mix, and a close enough match completes the shade.' },
+      { el: '#showGuideBtn', title: 'Replay anytime', body: 'Tap Guide to see this walkthrough again whenever you like.' }
+    ];
+    function launchGuide(onDone) {
+      if (!window.SpotlightGuide) { if (onDone) onDone(); return; }
+      // The target / mix / palette can be hidden until the game starts. If the
+      // guide runs before that, reveal them just for the walkthrough so their
+      // steps can be highlighted, then restore the hidden state when it ends.
+      var board = ['targetColor', 'currentMix', 'palette']
+        .map(function(id) { return document.getElementById(id); })
+        .filter(Boolean);
+      var prevDisplay = board.map(function(el) { return el.style.display; });
+      var wasHidden = board.length && board.every(function(el) {
+        return getComputedStyle(el).display === 'none';
+      });
+      if (wasHidden) board.forEach(function(el) { el.style.display = ''; });
+      window.SpotlightGuide.start(GAME_GUIDE_STEPS, { onDone: function() {
+        if (wasHidden) board.forEach(function(el, i) { el.style.display = prevDisplay[i]; });
+        if (onDone) onDone();
+      }});
+    }
+    // Auto-run the guide only once nothing is covering the board (registration,
+    // consent, or video modal all closed).
+    function launchGuideWhenClear() {
+      var overlayIds = ['userModal', 'researchConsentModal', 'videoModal'];
+      var blocked = function() {
+        return overlayIds.some(function(id) {
+          var m = document.getElementById(id);
+          return m && getComputedStyle(m).display !== 'none';
+        });
+      };
+      var tries = 0;
+      (function attempt() {
+        if (!blocked()) { launchGuide(); return; }
+        if (tries++ > 40) return;   // give up after ~20s rather than nag forever
+        setTimeout(attempt, 500);
+      })();
+    }
+    // On-demand replay from the header button.
+    var guideBtn = document.getElementById('showGuideBtn');
+    if (guideBtn) guideBtn.onclick = function() { launchGuide(); };
+
     if (storedBirthdate && storedGender && !storedId) {
       localStorage.removeItem('userBirthdate');
       localStorage.removeItem('userGender');
@@ -676,16 +761,14 @@
 
     if (storedId) {
       // Logged-in returning user: no registration modal. First make sure consent
-      // is on record (back-fill for cached logins), then show the intro video
-      // once, shortly after.
+      // is on record (back-fill for cached logins), then run the spotlight
+      // walkthrough once (it replaces the auto-playing intro video; the video is
+      // still available on demand via the Help button).
       modal.style.display = 'none';
       ensureConsentForLoggedInUser(storedId, function() {
-        if (!localStorage.getItem('videoShown')) {
-          setTimeout(function() {
-            videoModal.style.display = 'flex';
-            document.getElementById('videoFrame').src = VIDEO_SRC;
-            localStorage.setItem('videoShown', 'true');
-          }, 1000);
+        if (!localStorage.getItem('guideShown')) {
+          localStorage.setItem('guideShown', 'true');
+          setTimeout(launchGuideWhenClear, 800);
         }
       });
     } else {
@@ -789,11 +872,18 @@
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (data.status === 'success') {
-          localStorage.setItem('pendingVerifyUserId', data.userId);
-          var idEl = document.getElementById('generatedId');
-          if (idEl) idEl.textContent = data.userId;
-          showSection('idDisplay');
-          alert('Registration successful. Please verify your email before logging in.');
+          // Log the new participant in immediately and send them straight into
+          // the colour-vision test — no email-verification gate up front. The
+          // verification email is still sent by /register (for reminders and ID
+          // recovery); the game shows a non-blocking "verify your email" nudge.
+          localStorage.removeItem('pendingVerifyUserId');
+          localStorage.setItem('userId', data.userId);
+          localStorage.setItem('userBirthdate', birthdate);
+          localStorage.setItem('userGender', gender);
+          if (email) localStorage.setItem('userEmail', email);
+          localStorage.setItem('userEmailVerified', '0');
+          localStorage.setItem('emailOptInReminders', emailOptIn ? '1' : '0');
+          window.location.href = '/ishihara-test';
         } else {
           var ed = document.getElementById('birthdateError');
           if (ed) { ed.textContent = data.message; ed.style.display = 'block'; }
@@ -979,6 +1069,7 @@
 {% endblock %}
 
 {% block extra_js %}
+  <script src="{{ url_for('static', filename='guide.js') }}?v=20260618"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
   <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260508-qc2"></script>
 

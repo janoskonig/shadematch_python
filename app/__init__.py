@@ -8,7 +8,15 @@ db = SQLAlchemy()
 
 def create_app():
     load_dotenv()
-    
+    # Full local config (SMTP, push keys, APP_BASE_URL, etc.) lives in
+    # shadestudy.env. Load it without overriding anything already set, so the
+    # real environment (e.g. Render) always wins and this is a no-op in prod
+    # where the file is absent.
+    load_dotenv(
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'shadestudy.env'),
+        override=False,
+    )
+
     base_dir = os.path.abspath(os.path.dirname(__file__))
     template_dir = os.path.join(base_dir, '..', 'templates')
     static_dir = os.path.join(base_dir, '..', 'static')
