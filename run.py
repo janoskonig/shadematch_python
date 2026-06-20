@@ -9,4 +9,4 @@ app = create_app()
 # Check if this script is being run directly (not imported as a module)
 if __name__ == '__main__':
     # Start the Flask development server with debug mode enabled
-    app.run(debug=True, port=5001)
+    app.run(debug=True, port=int(os.environ.get('PORT', 5001)))

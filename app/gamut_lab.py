@@ -14,10 +14,13 @@ handful of cheap matrix ops + a 3-D ConvexHull.
 
 Public API:
   catalog()                      -> [pigment dicts] for the picker
-  shipped_baseline()             -> {volume, pnumbers}
   gamut_volume(pnumbers)         -> float
   gamut_detail(pnumbers)         -> {volume, ab_hull, pigment_points, ...} for plotting
   greedy(locked, size, pool)     -> ordered [pigment + volume_after + delta]
+
+The lab compares two independently configured palettes against each other (A vs B), so
+there is no privileged baseline set — every palette is scored on its own and the client
+takes the A↔B difference.
 """
 import json
 import os
@@ -49,9 +52,7 @@ def _load():
     R = np.clip(np.array([p['R'] for p in P], dtype=float), 1e-4, 1.0)
     KS = E.ks(R)                                  # (n, 38)
     index = {str(p['pnumber']): i for i, p in enumerate(P)}
-    # Shipped five (for the baseline comparison line).
-    shipped_pn = [str(lib['shipped_bases'][k]) for k in ('white', 'black', 'red', 'yellow', 'blue')]
-    _STATE = {'lib': lib, 'P': P, 'KS': KS, 'index': index, 'shipped_pn': shipped_pn}
+    _STATE = {'lib': lib, 'P': P, 'KS': KS, 'index': index}
     return _STATE
 
 
@@ -273,13 +274,6 @@ def catalog():
     return [_rec(i) for i in range(len(P))]
 
 
-def shipped_baseline():
-    st = _load()
-    d = gamut_detail(st['shipped_pn'])
-    return {'volume': d['volume'], 'pnumbers': st['shipped_pn'],
-            'ab_hull': d['ab_hull'], 'coverage': d['coverage']}
-
-
 def gamut_detail(pnumbers):
     """Volume + a*b* hull polygon (+ pure-pigment points) for the chosen set, for plotting."""
     idx = _idx(pnumbers)
@@ -362,5 +356,5 @@ def greedy(locked=None, size=8, pool=None, max_pool=400):
 
     detail = gamut_detail([P[i]['pnumber'] for i in chosen])
     return {'sequence': seq, 'total_volume': round(prev_vol, 1),
-            'baseline': shipped_baseline(), 'coverage': detail['coverage'],
-            'ab_hull': detail['ab_hull'], 'pigment_points': detail['pigment_points']}
+            'coverage': detail['coverage'], 'ab_hull': detail['ab_hull'],
+            'pigment_points': detail['pigment_points']}
