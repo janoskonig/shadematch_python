@@ -660,14 +660,13 @@ def gamut_page():
 
 @main.route('/gamut/catalog')
 def gamut_catalog():
-    """Full pigment catalog + shipped baseline for the picker."""
+    """Full pigment catalog + the skin-gamut overlay for the picker."""
     try:
         return jsonify({'pigments': gamut_lab.catalog(),
-                        'baseline': gamut_lab.shipped_baseline(),
                         'skin_gamut': gamut_lab.skin_gamut()})
     except Exception:
         current_app.logger.exception('gamut_catalog failed')
-        return jsonify({'pigments': [], 'baseline': {'volume': 0, 'pnumbers': []}}), 500
+        return jsonify({'pigments': []}), 500
 
 
 @main.route('/gamut/optimize', methods=['POST'])
@@ -695,9 +694,7 @@ def gamut_score():
     data = request.get_json(silent=True) or {}
     pnumbers = [str(p) for p in (data.get('pnumbers') or [])]
     try:
-        detail = gamut_lab.gamut_detail(pnumbers)
-        detail['baseline'] = gamut_lab.shipped_baseline()
-        return jsonify(detail)
+        return jsonify(gamut_lab.gamut_detail(pnumbers))
     except Exception:
         current_app.logger.exception('gamut_score failed')
         return jsonify({'error': 'scoring failed'}), 500

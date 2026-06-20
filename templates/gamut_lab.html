@@ -15,67 +15,95 @@
 .gamut-nav { display: flex; gap: 8px; flex-wrap: wrap; }
 .gamut-hint { font-size: 0.85rem; color: var(--text-secondary); margin: 0 0 16px; line-height: 1.45; }
 
+/* Palette identity colours — A and B run consistently through chips, buttons and plot. */
+:root { --pal-a: #3b6ef5; --pal-b: #e1872b; }
+
 .gamut-grid { display: grid; grid-template-columns: 1fr; gap: 18px; }
-@media (min-width: 900px) { .gamut-grid { grid-template-columns: 1.05fr 0.95fr; align-items: start; } }
+@media (min-width: 900px) { .gamut-grid { grid-template-columns: 0.95fr 1.05fr; align-items: start; } }
 
 .panel { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--surface, #fff); }
 .panel h2 { font-size: 1rem; margin: 0 0 10px; font-weight: 800; }
 
+/* Palette config panels, tinted by identity */
+.pal-panel { border: 1px solid var(--border); border-radius: 12px; padding: 14px; background: var(--surface,#fff); margin-bottom: 18px; }
+.pal-panel.pal-a { border-top: 3px solid var(--pal-a); }
+.pal-panel.pal-b { border-top: 3px solid var(--pal-b); }
+.pal-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.pal-dot { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 auto; }
+.pal-a .pal-dot { background: var(--pal-a); }
+.pal-b .pal-dot { background: var(--pal-b); }
+.pal-head h2 { margin: 0; font-size: 1rem; font-weight: 800; }
+.pal-head .pal-vol { margin-left: auto; font-weight: 800; font-size: 1.05rem; }
+.pal-head .pal-vol .muted { font-weight: 600; font-size: 0.72rem; }
+
 /* Controls */
 .ctl-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-.ctl-row label { font-weight: 700; font-size: 0.9rem; }
+.ctl-row label { font-weight: 700; font-size: 0.85rem; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-.seg button { border: 0; background: transparent; padding: 6px 10px; cursor: pointer; font-size: 0.85rem; }
+.seg button { border: 0; background: transparent; padding: 5px 9px; cursor: pointer; font-size: 0.8rem; }
 .seg button.is-on { background: var(--accent, #3b6ef5); color: #fff; }
-#sizeVal { font-weight: 800; min-width: 1.6em; display: inline-block; text-align: center; }
+.pal-b .seg button.is-on { background: var(--pal-b); }
+.size-val { font-weight: 800; min-width: 1.6em; display: inline-block; text-align: center; }
 
 /* Picks / chips */
-.chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 30px; }
-.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 3px 6px 3px 4px; font-size: 0.8rem; background: var(--surface,#fff); }
-.chip .sw { width: 16px; height: 16px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); flex: 0 0 auto; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; min-height: 28px; margin-bottom: 10px; }
+.chip { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 999px; padding: 3px 6px 3px 4px; font-size: 0.78rem; background: var(--surface,#fff); }
+.chip .sw { width: 15px; height: 15px; border-radius: 50%; border: 1px solid rgba(0,0,0,.15); flex: 0 0 auto; }
 .chip button { border: 0; background: transparent; cursor: pointer; font-size: 0.95rem; line-height: 1; color: var(--text-secondary); padding: 0 2px; }
-.chips-empty { color: var(--text-secondary); font-size: 0.82rem; }
+.chips-empty { color: var(--text-secondary); font-size: 0.8rem; }
+
+.pal-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.pal-actions .btn { font-size: 0.82rem; }
+
+/* Per-palette result mini-summary */
+.pal-result { margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px; }
+.pal-result .muted { color: var(--text-secondary); font-size: 0.8rem; }
+.cov-line { font-size: 0.75rem; color: var(--text-secondary); margin: 6px 0 0; line-height: 1.4; }
+.seq-list { margin-top: 8px; max-height: 220px; overflow: auto; }
+.seq-item { display: grid; grid-template-columns: 20px 24px 1fr 78px; gap: 8px; align-items: center; padding: 5px 0; border-bottom: 1px dashed var(--border); }
+.seq-idx { font-size: 0.74rem; color: var(--text-secondary); text-align: right; }
+.seq-sw { width: 20px; height: 20px; border-radius: 5px; border: 1px solid rgba(0,0,0,.18); }
+.seq-name { font-size: 0.82rem; font-weight: 600; }
+.seq-sub { font-size: 0.7rem; color: var(--text-secondary); }
+.seq-bar-wrap { font-size: 0.7rem; text-align: right; }
+.seq-bar { height: 6px; border-radius: 4px; background: var(--accent,#3b6ef5); }
+.pal-b .seq-bar { background: var(--pal-b); }
+.seq-bar-track { height: 6px; border-radius: 4px; background: rgba(0,0,0,0.08); margin-top: 2px; }
+.tag-lock { font-size: 0.64rem; background: rgba(0,0,0,0.07); color: var(--text-secondary); border-radius: 4px; padding: 1px 4px; margin-left: 5px; }
 
 /* Catalog */
 .cat-tools { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .cat-tools input[type="search"], .cat-tools select { padding: 7px 9px; border: 1px solid var(--border); border-radius: 8px; font-size: 0.85rem; }
 .cat-tools input[type="search"] { flex: 1 1 160px; }
-.cat-list { max-height: 360px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
-.cat-item { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--border); cursor: pointer; }
+.cat-list { max-height: 520px; overflow: auto; border: 1px solid var(--border); border-radius: 10px; }
+.cat-item { display: grid; grid-template-columns: 26px 1fr auto; gap: 10px; align-items: center; padding: 7px 10px; border-bottom: 1px solid var(--border); }
 .cat-item:last-child { border-bottom: 0; }
 .cat-item:hover { background: rgba(0,0,0,0.035); }
-.cat-item.is-picked { background: rgba(59,110,245,0.10); }
 .cat-sw { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.18); }
 .cat-name { font-size: 0.85rem; font-weight: 600; line-height: 1.15; }
 .cat-meta { font-size: 0.72rem; color: var(--text-secondary); }
-.cat-add { font-size: 0.78rem; color: var(--accent,#3b6ef5); font-weight: 700; white-space: nowrap; }
+.cat-pills { display: inline-flex; gap: 5px; }
+.cat-pill { border: 1px solid var(--border); background: transparent; border-radius: 999px; width: 26px; height: 26px; cursor: pointer; font-weight: 800; font-size: 0.8rem; color: var(--text-secondary); }
+.cat-pill.is-on.a { background: var(--pal-a); border-color: var(--pal-a); color: #fff; }
+.cat-pill.is-on.b { background: var(--pal-b); border-color: var(--pal-b); color: #fff; }
 .cat-count { font-size: 0.78rem; color: var(--text-secondary); margin-left: auto; }
 
-/* Results */
-.summary { display: flex; gap: 18px; flex-wrap: wrap; align-items: baseline; margin-bottom: 12px; }
-.summary .big { font-size: 1.6rem; font-weight: 800; }
-.summary .delta-pos { color: var(--accent-success, #2e9e5b); font-weight: 800; }
-.coverage { border-top: 1px solid var(--border); padding-top: 12px; margin-bottom: 12px; }
-.cov-title { font-size: 0.82rem; font-weight: 800; margin-bottom: 9px; display: flex; align-items: center; gap: 6px; }
-.cov-info { display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%; background: rgba(0,0,0,0.07); color: var(--text-secondary); font-size: 0.62rem; cursor: help; font-weight: 700; }
-.cov-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px 16px; margin-bottom: 11px; }
-@media (min-width: 520px) { .cov-grid { grid-template-columns: repeat(4, 1fr); } }
-.cov-val { font-size: 1.15rem; font-weight: 800; }
-.cov-bar-row { display: flex; align-items: center; gap: 8px; }
-.cov-bar-label { font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; }
-.cov-seg { display: flex; flex: 1; height: 16px; border-radius: 5px; overflow: hidden; background: rgba(0,0,0,0.06); font-size: 0.6rem; }
-.cov-seg span { display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; min-width: 0; overflow: hidden; white-space: nowrap; }
-.cov-note { font-size: 0.72rem; color: var(--text-secondary); margin: 8px 0 0; line-height: 1.4; }
-.seq-item { display: grid; grid-template-columns: 22px 26px 1fr 96px; gap: 9px; align-items: center; padding: 6px 0; border-bottom: 1px dashed var(--border); }
-.seq-idx { font-size: 0.78rem; color: var(--text-secondary); text-align: right; }
-.seq-sw { width: 22px; height: 22px; border-radius: 6px; border: 1px solid rgba(0,0,0,.18); }
-.seq-name { font-size: 0.85rem; font-weight: 600; }
-.seq-sub { font-size: 0.72rem; color: var(--text-secondary); }
-.seq-bar-wrap { font-size: 0.72rem; text-align: right; }
-.seq-bar { height: 7px; border-radius: 4px; background: var(--accent,#3b6ef5); }
-.seq-bar-track { height: 7px; border-radius: 4px; background: rgba(0,0,0,0.08); margin-top: 2px; }
-.tag-lock { font-size: 0.66rem; background: rgba(59,110,245,0.15); color: var(--accent,#3b6ef5); border-radius: 4px; padding: 1px 4px; margin-left: 5px; }
-#gamutPlot { width: 100%; height: 340px; }
+/* Comparison */
+.cmp-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px; }
+.cmp-card { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+.cmp-card.pal-a { border-left: 3px solid var(--pal-a); }
+.cmp-card.pal-b { border-left: 3px solid var(--pal-b); }
+.cmp-card .muted { font-size: 0.74rem; color: var(--text-secondary); }
+.cmp-card .big { font-size: 1.5rem; font-weight: 800; }
+.delta-up { color: var(--pal-b); }
+.delta-down { color: var(--pal-a); }
+.cmp-table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-bottom: 14px; }
+.cmp-table th, .cmp-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--border); }
+.cmp-table th:first-child, .cmp-table td:first-child { text-align: left; color: var(--text-secondary); font-weight: 600; }
+.cmp-table thead th { font-size: 0.74rem; }
+.cmp-table .col-a { color: var(--pal-a); font-weight: 800; }
+.cmp-table .col-b { color: var(--pal-b); font-weight: 800; }
+#gamutPlot { width: 100%; max-width: 640px; margin: 0 auto; height: 440px; }
 .muted { color: var(--text-secondary); font-size: 0.82rem; }
 .spinner { display: none; }
 .is-busy .spinner { display: inline; }
@@ -94,49 +122,23 @@
   </header>
 
   <p class="gamut-hint">
-    Pick pigments from the 327-pigment Kremer catalog (Hyperspectral Pigments, Zenodo 5592485) and
-    find the combination with the <strong>widest reachable colour gamut</strong>. Gamut = CIELAB
-    convex-hull volume of every Kubelka–Munk mixture, scored with the same engine the spectral mixer
-    uses. <strong>Lock</strong> pigments you want to keep, choose a target size, then
-    <strong>Find widest gamut</strong> — the search greedily adds the pigment that most enlarges the
-    gamut at each step. Or just <strong>Score my picks</strong> to measure an exact set.
+    Build <strong>two palettes</strong> from the 327-pigment Kremer catalog (Hyperspectral
+    Pigments, Zenodo 5592485) and compare their reachable colour gamut head-to-head. Gamut =
+    CIELAB convex-hull volume of every Kubelka–Munk mixture, scored with the same engine the
+    spectral mixer uses. For each palette, <strong>lock</strong> pigments with its
+    <strong>A</strong>/<strong>B</strong> buttons in the catalog, then either
+    <strong>Find widest gamut</strong> (a greedy search that adds the pigment most enlarging the
+    gamut at each step) or <strong>Score picks</strong> to measure your exact set. The comparison
+    below pits palette&nbsp;A against palette&nbsp;B — no fixed baseline.
   </p>
 
   <div class="gamut-grid">
-    <!-- LEFT: controls + catalog -->
+    <!-- LEFT: shared catalog -->
     <div>
-      <div class="panel" style="margin-bottom:18px;">
-        <h2>Search settings</h2>
-
-        <div class="ctl-row">
-          <label for="sizeRange">Target palette size</label>
-          <input type="range" id="sizeRange" min="2" max="20" step="1" value="8">
-          <span id="sizeVal">8</span>
-        </div>
-
-        <div class="ctl-row">
-          <label>Choose from</label>
-          <div class="seg" id="poolSeg" role="group" aria-label="Candidate pool">
-            <button type="button" data-pool="all" class="is-on">Whole catalog</button>
-            <button type="button" data-pool="groups">Selected groups</button>
-            <button type="button" data-pool="picks">My picks only</button>
-          </div>
-        </div>
-
-        <div class="ctl-row" style="align-items:flex-start;">
-          <label style="padding-top:4px;">Locked pigments</label>
-          <div id="lockedChips" class="chips" style="flex:1;"><span class="chips-empty">none — the search is unconstrained</span></div>
-        </div>
-
-        <div class="ctl-row">
-          <button type="button" id="runBtn" class="btn btn-primary"><span class="run-label">Find widest gamut</span><span class="spinner"> …working</span></button>
-          <button type="button" id="scoreBtn" class="btn btn-secondary"><span class="run-label">Score my picks</span><span class="spinner"> …</span></button>
-          <button type="button" id="clearBtn" class="btn btn-tertiary">Clear locks</button>
-        </div>
-      </div>
-
       <div class="panel">
         <h2>Pigment catalog</h2>
+        <p class="muted" style="margin-top:0;">Tap <strong>A</strong> or <strong>B</strong> to lock a
+          pigment into that palette. A pigment can belong to both.</p>
         <div class="cat-tools">
           <input type="search" id="catSearch" placeholder="Search name / Kremer no.…" aria-label="Search pigments">
           <select id="catGroup" aria-label="Filter by group"><option value="">All groups</option></select>
@@ -152,45 +154,104 @@
       </div>
     </div>
 
-    <!-- RIGHT: results -->
+    <!-- RIGHT: two palette builders -->
     <div>
-      <div class="panel" style="margin-bottom:18px;">
-        <h2>Result</h2>
-        <div class="summary">
-          <div><div class="muted">Gamut volume</div><div class="big" id="resVol">—</div></div>
-          <div><div class="muted">vs shipped 5</div><div class="big" id="resDelta">—</div></div>
-          <div><div class="muted">Pigments</div><div class="big" id="resN">—</div></div>
+      <div class="pal-panel pal-a" data-pal="A">
+        <div class="pal-head">
+          <span class="pal-dot"></span>
+          <h2>Palette A</h2>
+          <span class="pal-vol"><span class="muted">gamut </span><span data-vol>—</span></span>
         </div>
-        <div class="coverage" id="coverageBox" hidden>
-          <div class="cov-title">Coverage of the 327-pigment catalog
-            <span class="cov-info" title="Targets = the masstone colour of every catalog pigment. A target is covered if it falls inside this palette's reachable CIELAB gamut (gamut-containment); for targets outside, the coverage error is the ΔE2000 to the nearest reachable mix. Volume coverage is this palette's 3-D gamut volume vs the whole catalog's — it can exceed 100% (extent) even when many target colours are still unreachable.">ⓘ</span>
-          </div>
-          <div class="cov-grid">
-            <div><div class="muted">Coverage error (mean ΔE)</div><div class="cov-val" id="covMeanDe">—</div></div>
-            <div><div class="muted">Worst miss (max ΔE)</div><div class="cov-val" id="covMaxDe">—</div></div>
-            <div><div class="muted">Catalog reached (≤ΔE 6)</div><div class="cov-val" id="covWithin6">—</div></div>
-            <div><div class="muted">Volume coverage</div><div class="cov-val" id="covVol">—</div></div>
-          </div>
-          <div class="cov-bar-row">
-            <span class="cov-bar-label">Reachable within</span>
-            <span class="cov-seg" id="covSeg"></span>
-          </div>
-          <p class="cov-note" id="covNote"></p>
+
+        <div class="ctl-row">
+          <label>Target size</label>
+          <input type="range" data-size min="2" max="20" step="1" value="8">
+          <span class="size-val" data-size-val>8</span>
         </div>
-        <div id="resSeq"><p class="muted">Run a search or score your picks to see the palette here.</p></div>
+        <div class="ctl-row">
+          <label>Choose from</label>
+          <div class="seg" data-pool role="group" aria-label="Candidate pool">
+            <button type="button" data-pool-mode="all" class="is-on">Whole catalog</button>
+            <button type="button" data-pool-mode="picks">My A picks only</button>
+          </div>
+        </div>
+
+        <div class="chips" data-chips><span class="chips-empty">no pigments locked into A yet</span></div>
+
+        <div class="pal-actions">
+          <button type="button" class="btn btn-primary" data-run><span class="run-label">Find widest gamut</span><span class="spinner"> …working</span></button>
+          <button type="button" class="btn btn-secondary" data-score><span class="run-label">Score picks</span><span class="spinner"> …</span></button>
+          <button type="button" class="btn btn-tertiary" data-clear>Clear A</button>
+        </div>
+
+        <div class="pal-result" data-result><p class="muted">Run a search or score your A picks.</p></div>
       </div>
 
-      <div class="panel">
-        <h2>Gamut in CIELAB (a*–b*)</h2>
-        <p class="muted" style="margin-top:0;">Filled blue = colours reachable by mixing this set. Dashed outline + small markers = the <strong>human skin-colour gamut</strong>: measured mean chromaticities per ethnicity (colour) × body site (♦ facial, ○ hand/arm). If your filled area covers the dashed hull, the palette can mix these skin tones. Big dots = the pure pigments.</p>
-        <div id="gamutPlot"></div>
-        <p class="muted" id="skinCite" style="font-size:0.68rem; margin:8px 0 0; line-height:1.4;"></p>
+      <div class="pal-panel pal-b" data-pal="B">
+        <div class="pal-head">
+          <span class="pal-dot"></span>
+          <h2>Palette B</h2>
+          <span class="pal-vol"><span class="muted">gamut </span><span data-vol>—</span></span>
+        </div>
+
+        <div class="ctl-row">
+          <label>Target size</label>
+          <input type="range" data-size min="2" max="20" step="1" value="8">
+          <span class="size-val" data-size-val>8</span>
+        </div>
+        <div class="ctl-row">
+          <label>Choose from</label>
+          <div class="seg" data-pool role="group" aria-label="Candidate pool">
+            <button type="button" data-pool-mode="all" class="is-on">Whole catalog</button>
+            <button type="button" data-pool-mode="picks">My B picks only</button>
+          </div>
+        </div>
+
+        <div class="chips" data-chips><span class="chips-empty">no pigments locked into B yet</span></div>
+
+        <div class="pal-actions">
+          <button type="button" class="btn btn-primary" data-run><span class="run-label">Find widest gamut</span><span class="spinner"> …working</span></button>
+          <button type="button" class="btn btn-secondary" data-score><span class="run-label">Score picks</span><span class="spinner"> …</span></button>
+          <button type="button" class="btn btn-tertiary" data-clear>Clear B</button>
+        </div>
+
+        <div class="pal-result" data-result><p class="muted">Run a search or score your B picks.</p></div>
       </div>
     </div>
+  </div>
+
+  <!-- COMPARISON -->
+  <div class="panel" style="margin-top:18px;">
+    <h2>A vs B</h2>
+    <div class="cmp-cards">
+      <div class="cmp-card pal-a"><div class="muted">Palette A gamut</div><div class="big" id="cmpVolA">—</div></div>
+      <div class="cmp-card pal-b"><div class="muted">Palette B gamut</div><div class="big" id="cmpVolB">—</div></div>
+      <div class="cmp-card"><div class="muted">Difference (B vs A)</div><div class="big" id="cmpDelta">—</div></div>
+    </div>
+
+    <table class="cmp-table" id="cmpTable" hidden>
+      <thead><tr><th>Catalog coverage</th><th class="col-a">A</th><th class="col-b">B</th></tr></thead>
+      <tbody>
+        <tr><td>Coverage error (mean ΔE)</td><td id="covMeanA">—</td><td id="covMeanB">—</td></tr>
+        <tr><td>Worst miss (max ΔE)</td><td id="covMaxA">—</td><td id="covMaxB">—</td></tr>
+        <tr><td>Catalog reached (≤ΔE 6)</td><td id="cov6A">—</td><td id="cov6B">—</td></tr>
+        <tr><td>Inside gamut (containment)</td><td id="covContA">—</td><td id="covContB">—</td></tr>
+        <tr><td>Volume coverage</td><td id="covVolA">—</td><td id="covVolB">—</td></tr>
+      </tbody>
+    </table>
+
+    <h2 style="font-size:0.95rem;">Gamut in CIELAB (a*–b*)</h2>
+    <p class="muted" style="margin-top:0;">Filled <span style="color:var(--pal-a);font-weight:700;">blue = A</span>,
+      <span style="color:var(--pal-b);font-weight:700;">orange = B</span> — colours each palette can mix.
+      Dashed outline + small markers = the <strong>human skin-colour gamut</strong>: measured mean
+      chromaticities per ethnicity (colour) × body site (♦ facial, ○ hand/arm). Big dots = the pure
+      pigments of each palette.</p>
+    <div id="gamutPlot"></div>
+    <p class="muted" id="skinCite" style="font-size:0.68rem; margin:8px 0 0; line-height:1.4;"></p>
   </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='gamut_lab.js') }}?v=20260618e"></script>
+<script src="{{ url_for('static', filename='gamut_lab.js') }}?v=20260620b"></script>
 {% endblock %}
