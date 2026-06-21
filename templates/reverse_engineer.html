@@ -175,7 +175,39 @@
             color: #666;
             margin-top: 5px;
         }
-        
+
+        .delta-e {
+            text-align: center;
+            font-size: 1.05em;
+            color: #333;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+
+        .reachability {
+            padding: 14px 18px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: center;
+            font-weight: 600;
+            background: #eef1ff;
+            color: #3b4bb8;
+            border: 1px solid #ccd3ff;
+        }
+        .reachability.exact { background: #e6f7ec; color: #1e7d46; border-color: #b6e6c6; }
+        .reachability.close { background: #eef7e6; color: #4a7d1e; border-color: #d2e6b6; }
+        .reachability.approximate { background: #fff6e6; color: #9a6b14; border-color: #f0dcb0; }
+        .reachability.out_of_gamut { background: #ffe6e6; color: #d63031; border-color: #f2bcbc; }
+
+        .recipe-card.alt {
+            background: #fafbff;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+        .recipe-card.alt .recipe-title {
+            font-size: 1.15em;
+            color: #555;
+        }
+
         .loading {
             display: none;
             text-align: center;
@@ -466,31 +498,79 @@
             });
         }
         
+        function titleize(key) {
+            return String(key).replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        }
+
+        function rgbCss(rgb) {
+            return `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
+        }
+
+        function pigmentListHtml(amounts) {
+            return Object.entries(amounts).map(([pigment, drops]) => `
+                <div class="pigment-item">
+                    <div class="pigment-name">${titleize(pigment)}</div>
+                    <div class="pigment-drops">${drops} drops</div>
+                </div>
+            `).join('');
+        }
+
         function displayResults(data) {
             const resultsDiv = document.getElementById('results');
-            const pigmentList = document.getElementById('pigmentList');
-            
-            // Clear previous results
-            pigmentList.innerHTML = '';
-            
-            // Display pigment recipe
-            Object.entries(data.recipe).forEach(([pigment, drops]) => {
-                const pigmentItem = document.createElement('div');
-                pigmentItem.className = 'pigment-item';
-                pigmentItem.innerHTML = `
-                    <div class="pigment-name">${pigment}</div>
-                    <div class="pigment-drops">${drops} drops</div>
+            const options = data.options || [];
+
+            if (options.length === 0) {
+                showError('No recipe could be found for this spectrum.');
+                return;
+            }
+
+            const reach = data.reachability || {};
+            const reachBanner = reach.message
+                ? `<div class="reachability ${reach.status || ''}">${reach.message}</div>`
+                : '';
+
+            // Headline (best-match) recipe.
+            const headline = options[0].rounded;
+            const headlineCard = `
+                <div class="recipe-card">
+                    <div class="recipe-title">Recommended Pigment Recipe</div>
+                    <div class="pigment-list">${pigmentListHtml(headline.amounts)}</div>
+                    <div class="color-preview">
+                        <div>
+                            <div class="color-box" style="background-color:${rgbCss(data.target_rgb)}"></div>
+                            <div class="color-label">Target Color</div>
+                        </div>
+                        <div>
+                            <div class="color-box" style="background-color:${rgbCss(headline.achieved_rgb)}"></div>
+                            <div class="color-label">Mixed Color</div>
+                        </div>
+                    </div>
+                    <div class="delta-e">Match quality: ΔE ${headline.delta_e.toFixed(2)}</div>
+                </div>
+            `;
+
+            // Alternative recipes from the Pareto ladder (simpler vs. more accurate).
+            const altCards = options.slice(1).map(opt => {
+                const r = opt.rounded;
+                return `
+                    <div class="recipe-card alt">
+                        <div class="recipe-title">Alternative — ${opt.num_pigments} pigment${opt.num_pigments === 1 ? '' : 's'}, ΔE ${r.delta_e.toFixed(2)}</div>
+                        <div class="pigment-list">${pigmentListHtml(r.amounts)}</div>
+                        <div class="color-preview">
+                            <div>
+                                <div class="color-box" style="background-color:${rgbCss(data.target_rgb)}"></div>
+                                <div class="color-label">Target Color</div>
+                            </div>
+                            <div>
+                                <div class="color-box" style="background-color:${rgbCss(r.achieved_rgb)}"></div>
+                                <div class="color-label">Mixed Color</div>
+                            </div>
+                        </div>
+                    </div>
                 `;
-                pigmentList.appendChild(pigmentItem);
-            });
-            
-            // Display colors
-            const targetColor = document.getElementById('targetColor');
-            const mixedColor = document.getElementById('mixedColor');
-            
-            targetColor.style.backgroundColor = `rgb(${data.target_rgb[0]}, ${data.target_rgb[1]}, ${data.target_rgb[2]})`;
-            mixedColor.style.backgroundColor = `rgb(${data.target_rgb[0]}, ${data.target_rgb[1]}, ${data.target_rgb[2]})`; // Using target for now
-            
+            }).join('');
+
+            resultsDiv.innerHTML = reachBanner + headlineCard + altCards;
             resultsDiv.style.display = 'block';
         }
         
