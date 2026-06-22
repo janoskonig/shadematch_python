@@ -298,3 +298,66 @@ class AnalyticsEvent(db.Model):
     ts = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     metadata_json = db.Column(db.JSON, nullable=True)
     received_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class CalibrationSession(db.Model):
+    """One run of the /calibration psychophysics game: a block of controlled-ΔE colour
+    pairs judged identical/acceptable/unacceptable. The standalone instrument for estimating
+    the 50:50 perceptibility/acceptability thresholds (see app/calibration.py)."""
+    __tablename__ = 'calibration_sessions'
+
+    session_uuid = db.Column(db.String(36), primary_key=True)
+    user_id = db.Column(db.String(6), db.ForeignKey('users.id'), nullable=True)
+    seed = db.Column(db.BigInteger, nullable=True)            # RNG seed → reproducible block
+    mode = db.Column(db.String(24), nullable=False, default='constant_stimuli')
+    illuminant = db.Column(db.String(8), nullable=False, default='D65')
+    n_trials = db.Column(db.Integer, nullable=True)
+    started_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    ended_at = db.Column(db.DateTime, nullable=True)
+    # Summary written at finish (app/calibration.summarize): thresholds + QC.
+    perceptibility_de = db.Column(db.Float, nullable=True)
+    acceptability_de = db.Column(db.Float, nullable=True)
+    catch_pass_rate = db.Column(db.Float, nullable=True)
+    low_quality = db.Column(db.Boolean, nullable=True)
+    summary_json = db.Column(db.JSON, nullable=True)
+    # Passive client environment snapshot (screen, viewport, color_gamut, ...).
+    client_env_json = db.Column(db.JSON, nullable=True)
+
+    __table_args__ = (
+        # Progress lookup: completed sessions for a user, oldest-first.
+        db.Index('idx_calibration_sessions_user_started', 'user_id', 'started_at'),
+    )
+
+
+class CalibrationTrial(db.Model):
+    """A single colour-pair trial in a CalibrationSession. The *true* ΔE and catch flag are
+    stored here at generation time and never sent to the client (the ΔE is hidden from the
+    player); the judgment + reaction time are written when the player responds."""
+    __tablename__ = 'calibration_trials'
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_uuid = db.Column(
+        db.String(36),
+        db.ForeignKey('calibration_sessions.session_uuid', ondelete='CASCADE'),
+        nullable=False,
+    )
+    seq = db.Column(db.Integer, nullable=False)              # presentation order (0-based)
+    center_name = db.Column(db.String(48), nullable=True)
+    center_lab_json = db.Column(db.JSON, nullable=True)      # [L, a, b] of colour 1
+    lab2_json = db.Column(db.JSON, nullable=True)            # [L, a, b] of colour 2
+    target_de = db.Column(db.Float, nullable=True)          # requested ΔE₀₀
+    actual_de = db.Column(db.Float, nullable=True)          # achieved ΔE₀₀ (used in the fit)
+    rgb1_json = db.Column(db.JSON, nullable=True)
+    rgb2_json = db.Column(db.JSON, nullable=True)
+    in_gamut = db.Column(db.Boolean, nullable=True)
+    is_catch = db.Column(db.Boolean, nullable=False, default=False)
+    catch_kind = db.Column(db.String(16), nullable=True)    # 'identical' | 'obvious'
+    # Response (null until judged):
+    judgment = db.Column(db.String(16), nullable=True)      # identical|acceptable|unacceptable
+    reaction_ms = db.Column(db.Integer, nullable=True)
+    responded_at = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('session_uuid', 'seq', name='uq_calibration_trial_seq'),
+        db.Index('idx_calibration_trials_session', 'session_uuid'),
+    )

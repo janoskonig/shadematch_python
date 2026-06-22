@@ -19,3 +19,6 @@ app/__pycache__/
 notes/
 factor2-pigmentek.csv
 /data/
+
+# Local editor / agent tooling (per-machine, not for the repo)
+.claude/

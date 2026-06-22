@@ -203,6 +203,14 @@ input.drop-badge:focus {
   font-family: ui-monospace, 'SF Mono', Menlo, monospace; color: var(--text-secondary);
 }
 .km-panel .km-actions { display: flex; justify-content: flex-end; margin-top: 4px; }
+/* "synthetic" badge — flags the two-flux group as a dummy (assumed S, not measured). */
+.km-synthetic-badge {
+  display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px;
+  font-size: 0.62rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+  color: #fff; background: var(--accent-warning, #e0911a); vertical-align: middle;
+}
+#kmTwoFluxGroup .km-row > select.form-select { flex: 1; min-width: 0; }
+#kmTwoFluxGroup .km-row > input[type="checkbox"] { width: 18px; height: 18px; }
 </style>
 {% endblock %}
 
@@ -229,6 +237,15 @@ input.drop-badge:focus {
 
   <!-- Skin-tone target picker: choose which measured skin colour to reproduce. -->
   <div class="skin-picker" id="skinTargetPicker" aria-label="Choose a skin-tone target"></div>
+
+  <!-- Viewing-light chooser: re-renders the swatches and re-scores the ΔE under the
+       selected CIE illuminant, so metameric drift (a D65 match that falls apart under
+       A/F11) becomes visible. Matrices + ΔE come from the KM engine (app/spectral_km). -->
+  <div class="illuminant-picker" style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;margin:6px 0 12px;">
+    <label for="illuminantSelect" style="font-weight:700;">Viewing light</label>
+    <select id="illuminantSelect" class="form-select" style="max-width:280px;"></select>
+    <span id="illuminantInfo" class="palette-info" style="opacity:.7;font-size:.9rem;"></span>
+  </div>
 
   <!-- Target | current mix: seamless borderless split, like the main app -->
   <div class="spectral-pair-labels" aria-hidden="true"><span>Match this</span><span>Your mix</span></div>
@@ -315,6 +332,41 @@ input.drop-badge:focus {
         <input id="km-k2" type="range" data-km="k2" min="0" max="0.8" step="0.02" value="0"><span class="km-val" data-km-val="k2"></span></div>
     </div>
 
+    <!-- Two-flux finite-layer rendering (synthetic). Re-casts the opaque masstone as a
+         finite paint film over a backing using the real KM two-flux solution, but the
+         scattering coefficient S is assumed flat (no over-black/over-white drawdowns yet),
+         so the "opacity" knob is a stand-in, not a measured thickness. Independent of the
+         sliders above; at full opacity it collapses back to the standard engine. -->
+    <div class="km-group" id="kmTwoFluxGroup">
+      <div class="km-group-title">Two-flux finite layer<span class="km-synthetic-badge">synthetic</span></div>
+      <p class="km-note" style="margin:0 0 10px;">
+        Renders <em>your mix</em> as a finite film over a backing instead of a fully opaque
+        masstone — so thin layers let the backing show through (hiding power). The math is the
+        real Kubelka–Munk two-flux solution driven by the <em>measured</em> K/S, but the
+        scattering coefficient <em>S</em> is <strong>assumed flat</strong> (we have no
+        black/white drawdown spectra yet), so “opacity” is a synthetic stand-in for film
+        thickness, not a measured value. Full opacity = the standard engine.
+      </p>
+      <div class="km-row">
+        <label for="km-twoflux-on">Enable</label>
+        <input id="km-twoflux-on" type="checkbox">
+        <span class="km-val"></span>
+      </div>
+      <div class="km-row">
+        <label for="km-twoflux-backing">Backing</label>
+        <select id="km-twoflux-backing" class="form-select">
+          <option value="white">White (R ≈ 0.85)</option>
+          <option value="black">Black (R ≈ 0.04)</option>
+          <option value="grey">Grey (R ≈ 0.50)</option>
+        </select>
+      </div>
+      <div class="km-row">
+        <label for="km-twoflux-tau">Opacity (S·X)</label>
+        <input id="km-twoflux-tau" type="range" min="0.05" max="6" step="0.05" value="1.5">
+        <span class="km-val" id="km-twoflux-tau-val">1.5</span>
+      </div>
+    </div>
+
     <div class="km-actions">
       <button type="button" id="kmReset" class="btn btn-tertiary">Reset to defaults</button>
     </div>
@@ -363,7 +415,12 @@ input.drop-badge:focus {
   // Real human skin-colour targets: mean CIELAB per ethnicity × body site from
   // Xiao et al. 2017 (Skin Res. Technol. 23:21–29), converted to sRGB server-side.
   window.SPECTRAL_SKIN_TARGETS = JSON.parse('{{ skin_targets|tojson|safe }}');
+  // Per-illuminant colour-matching functions (3×38) for rendering swatches under a
+  // chosen viewing light, von-Kries-adapted to the engine D65 white (so white stays
+  // white and only metameric drift shows). Keyed by illuminant; D65 is the engine CMF.
+  window.SPECTRAL_RENDER_CMF = JSON.parse('{{ render_cmfs|tojson|safe }}');
+  window.SPECTRAL_ILLUMINANTS = JSON.parse('{{ illuminants|tojson|safe }}');
 </script>
 <script src="{{ url_for('static', filename='spectral.js') }}?v=20260609"></script>
-<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260618-skinlab2"></script>
+<script src="{{ url_for('static', filename='spectral_mixer.js') }}?v=20260621-twoflux"></script>
 {% endblock %}
