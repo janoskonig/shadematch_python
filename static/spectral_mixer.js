@@ -74,6 +74,14 @@ const ILLUMINANT_LABEL = {
     F11: 'F11 — fluorescent (narrow-band)',
     D50: 'D50 — print daylight (≈5000 K)',
 };
+// Short code shown under each lamp button in the segmented viewing-light chooser.
+const ILLUMINANT_CODE = { D65: 'D65', A: 'A', F11: 'F11', D50: 'D50' };
+// Pictogram per light source (currentColor → inherits button state). D65 = sun (daylight),
+// A = incandescent bulb, F11 = fluorescent tube, D50 = sun (print daylight).
+const ICON_SUN = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.6M12 18.9v2.6M2.5 12h2.6M18.9 12h2.6M5.2 5.2l1.9 1.9M16.9 16.9l1.9 1.9M18.8 5.2l-1.9 1.9M7.1 16.9l-1.9 1.9"/></svg>';
+const ICON_BULB = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18h6M9.5 21h5M12 3a6 6 0 0 0-3.6 10.8c.5.4.9 1 1 1.7l.1.5h5l.1-.5c.1-.7.5-1.3 1-1.7A6 6 0 0 0 12 3Z"/></svg>';
+const ICON_TUBE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="9.5" width="17" height="5" rx="2.5"/><path d="M6.5 9.5v5M17.5 9.5v5"/></svg>';
+const ILLUMINANT_ICON = { D65: ICON_SUN, A: ICON_BULB, F11: ICON_TUBE, D50: ICON_SUN };
 // sRGB encode, mirroring spectral.js (GAMMA=2.4, XYZ→linear-sRGB). Negatives are clamped
 // to 0 only to avoid NaN from Math.pow on out-of-gamut adapted colours; in-gamut values
 // (all skin targets) are byte-identical to the engine under D65.
@@ -376,21 +384,42 @@ class SpectralMixer {
         this.paletteSelect.addEventListener('change', () => this.applyPalette(this.paletteSelect.value));
     }
 
-    // Wire the viewing-light <select> once. Options come from the injected illuminant list.
+    // Wire the viewing-light segmented control once. One lamp button per injected illuminant;
+    // tapping one selects it and deselects the rest (radiogroup). Options come from ILLUMINANTS.
     setupIlluminantSelector() {
-        this.illuminantSelect = document.getElementById('illuminantSelect');
-        if (!this.illuminantSelect) return;
+        this.illuminantGroup = document.getElementById('illuminantGroup');
+        if (!this.illuminantGroup) return;
         // No render matrices served (older backend) → hide the chooser; default D65 holds.
         if (!RENDER_CMF || ILLUMINANTS.length < 2) {
-            const wrap = this.illuminantSelect.closest('.illuminant-picker');
+            const wrap = this.illuminantGroup.closest('.illuminant-picker');
             if (wrap) wrap.style.display = 'none';
             return;
         }
-        this.illuminantSelect.innerHTML = ILLUMINANTS
-            .map((n) => `<option value="${n}">${ILLUMINANT_LABEL[n] || n}</option>`).join('');
-        this.illuminantSelect.value = this.illuminant;
-        this.illuminantSelect.addEventListener('change', () => this.setIlluminant(this.illuminantSelect.value));
+        this.illuminantButtons = ILLUMINANTS.map((n) => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'illuminant-btn';
+            btn.dataset.illuminant = n;
+            btn.setAttribute('role', 'radio');
+            btn.title = ILLUMINANT_LABEL[n] || n;
+            btn.setAttribute('aria-label', ILLUMINANT_LABEL[n] || n);
+            btn.innerHTML = `${ILLUMINANT_ICON[n] || ICON_SUN}<span class="illuminant-code">${ILLUMINANT_CODE[n] || n}</span>`;
+            btn.addEventListener('click', () => this.setIlluminant(n));
+            this.illuminantGroup.appendChild(btn);
+            return btn;
+        });
+        this.syncIlluminantButtons();
         this.syncIlluminantInfo();
+    }
+
+    // Reflect the active light in the segmented control (selected button + aria-checked).
+    syncIlluminantButtons() {
+        if (!this.illuminantButtons) return;
+        this.illuminantButtons.forEach((btn) => {
+            const on = btn.dataset.illuminant === this.illuminant;
+            btn.classList.toggle('is-selected', on);
+            btn.setAttribute('aria-checked', on ? 'true' : 'false');
+        });
     }
 
     // Switch the viewing light: re-render the swatches and re-score the ΔE under it.
@@ -399,7 +428,7 @@ class SpectralMixer {
         this.illuminant = name;
         this.illuminantCmf = RENDER_CMF[name];
         try { localStorage.setItem(SPECTRAL_ILLUMINANT_KEY, name); } catch (_) { /* ignore */ }
-        if (this.illuminantSelect && this.illuminantSelect.value !== name) this.illuminantSelect.value = name;
+        this.syncIlluminantButtons();
         this.syncIlluminantInfo();
         // ΔE "best so far" is per-light (a recipe close under D65 may be far under A/F11).
         this.bestDeltaE = null;
