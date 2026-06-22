@@ -22,3 +22,6 @@ factor2-pigmentek.csv
 
 # Local editor / agent tooling (per-machine, not for the repo)
 .claude/
+
+# Generated demo voiceover/video build artifacts
+demo/voiceover/
