@@ -59,6 +59,48 @@ const SPECTRAL_PALETTES = (window.SPECTRAL_PALETTES && window.SPECTRAL_PALETTES.
 const MATCH_PERFECT_DELTA_E = 0.01;
 const isPerfectMatch = (deltaE) => Number.isFinite(deltaE) && deltaE <= MATCH_PERFECT_DELTA_E;
 
+// ── Viewing-light rendering ─────────────────────────────────────────────────
+// /spectral injects one colour-matching matrix (3×38) per CIE illuminant. The 'D65'
+// entry is the engine CMF, so rendering a curve through it reproduces spectral.Color.sRGB
+// exactly; A / F11 are von-Kries-adapted to the engine D65 white, so a neutral still reads
+// neutral but a metameric pair drifts apart. Switching the light re-renders the target/mix
+// swatches and re-scores the ΔE under that light (server: /spectral/delta_e).
+const RENDER_CMF = window.SPECTRAL_RENDER_CMF || null;
+const ILLUMINANTS = (window.SPECTRAL_ILLUMINANTS && window.SPECTRAL_ILLUMINANTS.length)
+    ? window.SPECTRAL_ILLUMINANTS : ['D65'];
+const ILLUMINANT_LABEL = {
+    D65: 'D65 — daylight (≈6500 K)',
+    A: 'A — incandescent (≈2856 K)',
+    F11: 'F11 — fluorescent (narrow-band)',
+    D50: 'D50 — print daylight (≈5000 K)',
+};
+// sRGB encode, mirroring spectral.js (GAMMA=2.4, XYZ→linear-sRGB). Negatives are clamped
+// to 0 only to avoid NaN from Math.pow on out-of-gamut adapted colours; in-gamut values
+// (all skin targets) are byte-identical to the engine under D65.
+const SRGB_GAMMA = 2.4;
+const XYZ_RGB_M = [
+    [3.2409699419045226, -1.537383177570094, -0.4986107602930034],
+    [-0.9692436362808796, 1.8759675015077202, 0.04155505740717559],
+    [0.05563007969699366, -0.20397695888897652, 1.0569715142428786],
+];
+const srgbCompand = (x) => (x > 0.0031308 ? 1.055 * Math.pow(x, 1 / SRGB_GAMMA) - 0.055 : x * 12.92);
+
+// Flat backing reflectances for the synthetic two-flux demo (Rg, wavelength-independent).
+const TWOFLUX_BACKINGS = { white: 0.85, black: 0.04, grey: 0.5 };
+// 38-bin reflectance → display sRGB [r,g,b] under a given illuminant CMF (or null = no CMF).
+function renderRGBunder(R, cmf) {
+    if (!cmf || !R) return null;
+    const XYZ = cmf.map((row) => {
+        let s = 0;
+        for (let i = 0; i < row.length; i += 1) s += row[i] * R[i];
+        return s;
+    });
+    return XYZ_RGB_M.map((row) => {
+        const l = row[0] * XYZ[0] + row[1] * XYZ[1] + row[2] * XYZ[2];
+        return Math.round(srgbCompand(l < 0 ? 0 : l) * 255);
+    });
+}
+
 // Per-pigment "relative amount": a continuous 0–100 scale in fine 0.01 increments
 // (dial drag / keyboard); also nudged ±1 by tap / ± buttons.
 const AMOUNT_MAX = 100;
@@ -116,6 +158,7 @@ function saveCompletedSet(set, palette) {
 }
 const SPECTRAL_PALETTE_KEY = 'spectral_palette_choice';
 const SPECTRAL_TARGETSET_KEY = 'spectral_targetset_choice';
+const SPECTRAL_ILLUMINANT_KEY = 'spectral_illuminant_choice';
 
 class SpectralMixer {
     constructor() {
@@ -141,10 +184,19 @@ class SpectralMixer {
         };
 
         this.currentRgb = [255, 255, 255];
+        this.currentMixR = null;     // current mix reflectance (38-bin), for ΔE + re-render
+        this.targetR = null;         // target reflectance reconstructed from its sRGB
         this.target = null;          // { id, rgb, name }
         this.deltaReqId = 0;         // latest-wins guard for async ΔE responses
-        this.scoreTimer = null;      // debounce handle for /calculate during drags
-        this.bestDeltaE = null;      // closest ΔE reached on the current shade
+        this.scoreTimer = null;      // debounce handle for /spectral/delta_e during drags
+        this.bestDeltaE = null;      // closest ΔE reached on the current shade (this light)
+        this.deltaByIlluminant = null;  // latest {illuminant: ΔE} from the server
+
+        // Viewing light: which CIE illuminant the swatches render under / ΔE is scored by.
+        let storedIllum = null;
+        try { storedIllum = localStorage.getItem(SPECTRAL_ILLUMINANT_KEY); } catch (_) { storedIllum = null; }
+        this.illuminant = (storedIllum && ILLUMINANTS.includes(storedIllum)) ? storedIllum : 'D65';
+        this.illuminantCmf = RENDER_CMF ? RENDER_CMF[this.illuminant] : null;
 
         this.catalog = [];
         this.shadeIndex = 0;
@@ -163,9 +215,15 @@ class SpectralMixer {
         this.km = { tinting: {}, concExp: 2, tsExp: 2, lumExp: 1, k1: 0, k2: 0 };
         this.kmPanelActive = false;
 
+        // Synthetic two-flux finite-layer rendering (dummy: S assumed flat). Off by default;
+        // when on, the mix is re-cast as a film of optical depth `tau` (= S·X) over `backing`.
+        this.twoFlux = { active: false, tau: 1.5, backing: 'white' };
+
         this.setupPaletteSelector();   // one-time: the size <select>
+        this.setupIlluminantSelector(); // one-time: the viewing-light <select>
         this.bindStaticControls();     // one-time: reset / judge / skip / give-me-a-mix / modal
         this.setupKmPanelStatic();     // one-time: toggle + non-tinting sliders + reset
+        this.setupTwoFluxPanel();      // one-time: synthetic two-flux controls
 
         // Default to the widest-gamut palette — this lab is about reaching real skin tones,
         // so the classic five aren't the focus. Restore the last-used gamut palette if any;
@@ -316,6 +374,71 @@ class SpectralMixer {
         if (!opts.length) opts.push('<option value="classic">Classic 5</option>');  // gamut data missing
         this.paletteSelect.innerHTML = opts.join('');
         this.paletteSelect.addEventListener('change', () => this.applyPalette(this.paletteSelect.value));
+    }
+
+    // Wire the viewing-light <select> once. Options come from the injected illuminant list.
+    setupIlluminantSelector() {
+        this.illuminantSelect = document.getElementById('illuminantSelect');
+        if (!this.illuminantSelect) return;
+        // No render matrices served (older backend) → hide the chooser; default D65 holds.
+        if (!RENDER_CMF || ILLUMINANTS.length < 2) {
+            const wrap = this.illuminantSelect.closest('.illuminant-picker');
+            if (wrap) wrap.style.display = 'none';
+            return;
+        }
+        this.illuminantSelect.innerHTML = ILLUMINANTS
+            .map((n) => `<option value="${n}">${ILLUMINANT_LABEL[n] || n}</option>`).join('');
+        this.illuminantSelect.value = this.illuminant;
+        this.illuminantSelect.addEventListener('change', () => this.setIlluminant(this.illuminantSelect.value));
+        this.syncIlluminantInfo();
+    }
+
+    // Switch the viewing light: re-render the swatches and re-score the ΔE under it.
+    setIlluminant(name) {
+        if (!RENDER_CMF || !RENDER_CMF[name]) return;
+        this.illuminant = name;
+        this.illuminantCmf = RENDER_CMF[name];
+        try { localStorage.setItem(SPECTRAL_ILLUMINANT_KEY, name); } catch (_) { /* ignore */ }
+        if (this.illuminantSelect && this.illuminantSelect.value !== name) this.illuminantSelect.value = name;
+        this.syncIlluminantInfo();
+        // ΔE "best so far" is per-light (a recipe close under D65 may be far under A/F11).
+        this.bestDeltaE = null;
+        // If we already have all-illuminant ΔE for the current mix, switch the headline
+        // instantly; otherwise a fresh score is kicked off below.
+        if (this.deltaByIlluminant && Number.isFinite(Number(this.deltaByIlluminant[name]))) {
+            const de = Number(this.deltaByIlluminant[name]);
+            this.bestDeltaE = de;
+            this.updateMatchBar(de);
+        }
+        this.reRenderSwatches();
+    }
+
+    // Reflect the active light in the info line beside the chooser.
+    syncIlluminantInfo() {
+        const info = document.getElementById('illuminantInfo');
+        if (!info) return;
+        info.textContent = this.illuminant === 'D65'
+            ? 'reference light — the match this lab is built around'
+            : 'metameric drift vs. D65 — swatches + ΔE shift';
+    }
+
+    // Render a 38-bin reflectance to display sRGB under the active light. Falls back to the
+    // engine's own D65 sRGB if no matrices were served.
+    renderRGB(R) {
+        const rgb = renderRGBunder(R, this.illuminantCmf);
+        if (rgb) return rgb;
+        try { return new spectral.Color(R).sRGB.slice(0, 3); } catch (_) { return [255, 255, 255]; }
+    }
+
+    // Repaint target + mix swatches (and the RGB readout) under the current light without
+    // recomputing the mix. Used after a viewing-light change.
+    reRenderSwatches() {
+        if (this.targetR && this.targetSwatch) {
+            const [r, g, b] = this.renderRGB(this.targetR);
+            this.targetSwatch.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+        }
+        // Re-render the mix from its stored reflectance (or recompute from amounts).
+        this.updateMixedColor();
     }
 
     // Progress (completed/resume) is namespaced per palette AND per target set, so skin-tone
@@ -639,20 +762,29 @@ class SpectralMixer {
         const entries = Object.entries(this.relativeAmounts).filter(([, n]) => n > 0);
         const total = entries.reduce((acc, [, n]) => acc + n, 0);
 
-        let rgb;
         let reflectances;
         if (total === 0) {
-            rgb = [255, 255, 255];
             reflectances = WAVELENGTHS.map(() => 1);
         } else {
             // Kubelka–Munk subtractive mixing. factor = relative digital pigment amount
             // (not a real drop). Routes through the engine by default, or through the
-            // parameterized reimplementation when the KM debug panel is open.
+            // parameterized reimplementation when the KM debug panel is open. The mix
+            // reflectance is light-independent; only how we render it below depends on the
+            // chosen viewing light.
             const mixed = this.mixWith(entries);
-            rgb = mixed.sRGB;
             reflectances = mixed.R;
         }
 
+        // Synthetic two-flux finite layer: re-cast the opaque masstone as a finite film over
+        // a backing (real KM two-flux math off the measured K/S; S assumed flat). Only with
+        // paint actually down — an empty "mix" is forced white, not a real film.
+        if (this.twoFlux.active && total > 0) {
+            reflectances = this.applyTwoFlux(reflectances);
+        }
+        this.currentMixR = reflectances;
+
+        // Display colour under the active viewing light (D65 reproduces the engine sRGB).
+        const rgb = this.renderRGB(reflectances);
         const [r, g, b] = rgb;
         this.currentRgb = rgb;
         if (this.currentMix) this.currentMix.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
@@ -746,6 +878,59 @@ class SpectralMixer {
         });
     }
 
+    // One-time: the synthetic two-flux controls (enable / backing / opacity).
+    setupTwoFluxPanel() {
+        const onEl = document.getElementById('km-twoflux-on');
+        const backEl = document.getElementById('km-twoflux-backing');
+        const tauEl = document.getElementById('km-twoflux-tau');
+        const tauVal = document.getElementById('km-twoflux-tau-val');
+        if (!onEl || !backEl || !tauEl) return;
+        onEl.checked = this.twoFlux.active;
+        backEl.value = this.twoFlux.backing;
+        tauEl.value = String(this.twoFlux.tau);
+        if (tauVal) tauVal.textContent = Number(this.twoFlux.tau).toFixed(2);
+        // Any change re-renders the mix; ΔE "best" resets since the displayed film changes.
+        const changed = () => { this.bestDeltaE = null; this.updateMixedColor(); };
+        onEl.addEventListener('change', () => { this.twoFlux.active = onEl.checked; changed(); });
+        backEl.addEventListener('change', () => {
+            this.twoFlux.backing = backEl.value;
+            if (this.twoFlux.active) changed();
+        });
+        tauEl.addEventListener('input', () => {
+            this.twoFlux.tau = parseFloat(tauEl.value);
+            if (tauVal) tauVal.textContent = Number(this.twoFlux.tau).toFixed(2);
+            if (this.twoFlux.active) changed();
+        });
+    }
+
+    // Kubelka–Munk two-flux finite-layer reflectance for a masstone curve R (= R∞).
+    //   a = 1 + K/S = (R + 1/R)/2,   b = √(a²−1) = (1/R − R)/2     [both from the measured K/S]
+    //   R_layer = [1 − Rg(a − b·coth(bSX))] / [a + b·coth(bSX) − Rg]
+    // SYNTHETIC: S is assumed flat, so the optical depth SX is the single "opacity" knob; a
+    // real model needs over-black/over-white drawdowns to recover S(λ) per pigment. Reduces
+    // to R∞ as SX→∞ (full hiding) and to the backing Rg as SX→0 (bare substrate).
+    applyTwoFlux(R) {
+        const Rg = TWOFLUX_BACKINGS[this.twoFlux.backing] != null ? TWOFLUX_BACKINGS[this.twoFlux.backing] : 0.85;
+        const tau = Math.max(1e-3, this.twoFlux.tau);
+        const coth = (x) => {
+            if (x > 20) return 1;          // saturated → fully opaque
+            if (x < 1e-6) return 1 / x;    // thin-film limit
+            const e2 = Math.exp(2 * x);
+            return (e2 + 1) / (e2 - 1);
+        };
+        return R.map((r) => {
+            const Rinf = Math.min(0.999999, Math.max(1e-4, r));
+            const a = (Rinf + 1 / Rinf) / 2;          // = 1 + K/S
+            const b = (1 / Rinf - Rinf) / 2;          // = √(a²−1) ≥ 0
+            const bt = b * tau;
+            // b·coth(bτ) → 1/τ as b→0 (non-absorbing white), guarding the 0·∞ form.
+            const bcoth = bt < 1e-6 ? 1 / tau : b * coth(bt);
+            const den = a + bcoth - Rg;
+            const Rf = den !== 0 ? (1 - Rg * (a - bcoth)) / den : Rinf;
+            return Math.min(1, Math.max(1e-4, Rf));
+        });
+    }
+
     // Per-palette: bind the freshly-rendered tinting-strength sliders.
     bindTintingSliders() {
         const panel = document.getElementById('kmPanel');
@@ -829,8 +1014,15 @@ class SpectralMixer {
         this.target = { id: t.id, rgb: t.rgb.slice(0, 3), name: t.name || ('Shade ' + (this.shadeIndex + 1)) };
         this.bestDeltaE = null;
 
-        const [r, g, b] = this.target.rgb;
-        if (this.targetSwatch) this.targetSwatch.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+        // Reconstruct the target's reflectance from its sRGB once (the catalog has no
+        // measured spectrum), then render it under the active light. Reused for the ΔE
+        // score and for re-rendering when the viewing light changes.
+        try { this.targetR = new spectral.Color(this.target.rgb).R; }
+        catch (_) { this.targetR = null; }
+        if (this.targetSwatch) {
+            const [r, g, b] = this.targetR ? this.renderRGB(this.targetR) : this.target.rgb;
+            this.targetSwatch.style.backgroundColor = `rgb(${r}, ${g}, ${b})`;
+        }
         // Overlay the target's reflectance on its window. This is a metameric reconstruction
         // from the target's sRGB (the catalog has no measured spectrum), so it's drawn dashed
         // to distinguish it from the solid, true mix curve it sits beside.
@@ -873,7 +1065,8 @@ class SpectralMixer {
 
     openPerception() {
         if (!this.target || !this.perceptionModal) return;
-        const [tr, tg, tb] = this.target.rgb;
+        // Compare target vs. mix as seen under the active viewing light.
+        const [tr, tg, tb] = this.targetR ? this.renderRGB(this.targetR) : this.target.rgb;
         const [mr, mg, mb] = this.currentRgb;
         const pt = document.getElementById('percTarget');
         const pm = document.getElementById('percMix');
@@ -930,18 +1123,22 @@ class SpectralMixer {
     }
 
     requestDeltaE() {
-        if (!this.target) return;
-        const mixed = this.currentRgb;
+        if (!this.target || !this.targetR || !this.currentMixR) return;
         const id = (this.deltaReqId += 1);
-        fetch('/calculate', {
+        // Score under every illuminant at once (cheap, server-side) so switching lights is
+        // instant; the headline shows the active light's ΔE. D65 equals the engine headline.
+        fetch('/spectral/delta_e', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ target: this.target.rgb, mixed }),
+            body: JSON.stringify({ target_R: this.targetR, mixed_R: this.currentMixR }),
         })
             .then((res) => res.json())
             .then((data) => {
                 if (id !== this.deltaReqId) return; // a newer action superseded this one
-                const de = Number(data && data.delta_e);
+                const by = data && data.by_illuminant;
+                if (!by) return;
+                this.deltaByIlluminant = by;
+                const de = Number(by[this.illuminant]);
                 if (!Number.isFinite(de)) return;
                 if (this.bestDeltaE == null || de < this.bestDeltaE) this.bestDeltaE = de;
                 this.updateMatchBar(de);

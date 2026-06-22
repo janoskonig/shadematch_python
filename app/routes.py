@@ -13,7 +13,7 @@ from .models import (
     UserProgress, UserTargetColorStats, UserAward,
     DailyChallengeRun, DailyChallengeWinner, PushSubscription,
     AnalyticsEvent, MixingAttempt, MixingAttemptEvent, EmailVerificationToken,
-    ConsentRecord,
+    ConsentRecord, CalibrationSession, CalibrationTrial,
 )
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb
@@ -610,7 +610,9 @@ def spectral():
     return render_template('spectral_mixer.html',
                            spectrum_plots=build_spectrum_plots(),
                            spectral_palettes=build_spectral_palettes(),
-                           skin_targets=gamut_lab.skin_targets())
+                           skin_targets=gamut_lab.skin_targets(),
+                           render_cmfs=spectral_km.render_cmfs(),
+                           illuminants=spectral_km.ILLUMINANTS)
 
 
 @main.route('/spectral/solve', methods=['POST'])
@@ -647,6 +649,185 @@ def spectral_solve():
     except Exception:
         current_app.logger.exception('spectral_solve failed')
         return jsonify({'error': 'solve failed'}), 500
+
+
+@main.route('/spectral/delta_e', methods=['POST'])
+def spectral_delta_e():
+    """Headline match between a target and a mix, scored under each illuminant.
+
+    The illuminant chooser on /spectral recomputes the live ΔE under the selected
+    light: a recipe that nails the target under D65 can drift under A/F11 (metamerism).
+    Both curves come from the client (target_R reconstructed from its sRGB, mixed_R the
+    true mix reflectance), so server and client agree on the colours being compared.
+    Returns ΔE2000 per illuminant; the client picks the active one for the headline.
+    """
+    data = request.get_json(silent=True) or {}
+    target_R = data.get('target_R')
+    mixed_R = data.get('mixed_R')
+    if (not target_R or not mixed_R
+            or len(target_R) != spectral_km.SIZE or len(mixed_R) != spectral_km.SIZE):
+        return jsonify({'error': f'target_R and mixed_R must each be {spectral_km.SIZE} values'}), 400
+    try:
+        # Pass reflectance curves as lists, not ndarrays: delta_e_by_illuminant treats any
+        # ndarray as a pre-computed Lab stack (the solver's fast path), so an ndarray here
+        # would be mis-read as Lab instead of reflectance.
+        des = spectral_km.delta_e_by_illuminant(
+            [float(v) for v in target_R], [float(v) for v in mixed_R])
+        return jsonify({'by_illuminant': des, 'illuminants': spectral_km.ILLUMINANTS})
+    except Exception:
+        current_app.logger.exception('spectral_delta_e failed')
+        return jsonify({'error': 'delta_e failed'}), 500
+
+
+# ── Calibration game (/calibration): perceptibility/acceptability threshold probe ──
+# Standalone psychophysics instrument — a separate page from the main game so it can be
+# piloted on power users without touching the main loop. Presents colour pairs at controlled
+# ΔE₀₀ (hidden from the player) and records identical/acceptable/unacceptable judgments.
+import uuid as _uuid  # noqa: E402
+from . import calibration  # noqa: E402
+
+
+@main.route('/calibration')
+def calibration_page():
+    return render_template('calibration.html')
+
+
+def _calibration_progress(user_id):
+    """A user's calibration standing: completed-session count toward the target, per-session
+    history (the learning curve), and a pooled threshold over all their completed sessions."""
+    sessions = (CalibrationSession.query
+                .filter(CalibrationSession.user_id == user_id,
+                        CalibrationSession.ended_at.isnot(None))
+                .order_by(CalibrationSession.started_at.asc())
+                .all())
+    history = [{
+        'date': s.started_at.isoformat() if s.started_at else None,
+        'pt': s.perceptibility_de, 'at': s.acceptability_de,
+        'catch_pass_rate': s.catch_pass_rate, 'low_quality': bool(s.low_quality),
+    } for s in sessions]
+    pooled = {'perceptibility_de': None, 'acceptability_de': None, 'n_real': 0}
+    if sessions:
+        uuids = [s.session_uuid for s in sessions]
+        rows = (CalibrationTrial.query
+                .filter(CalibrationTrial.session_uuid.in_(uuids),
+                        CalibrationTrial.judgment.isnot(None))
+                .all())
+        pooled = calibration.summarize([{
+            'actual_de': r.actual_de, 'is_catch': r.is_catch,
+            'catch_kind': r.catch_kind, 'judgment': r.judgment,
+        } for r in rows])
+    return {'target': calibration.TARGET_SESSIONS, 'completed': len(sessions),
+            'history': history, 'pooled': pooled}
+
+
+@main.route('/calibration/progress')
+def calibration_progress():
+    """Progress for the intro screen. Registered users only (the calibration game is gated)."""
+    user_id = _normalize_user_id_value(request.args.get('user_id'))
+    if not user_id or not User.query.get(user_id):
+        return jsonify({'error': 'registration_required'}), 403
+    return jsonify(_calibration_progress(user_id))
+
+
+@main.route('/calibration/start', methods=['POST'])
+def calibration_start():
+    """Open a session, generate the controlled-ΔE block, persist the trials (with their true
+    ΔE), and return only what the client may see: the two RGBs per trial, in order.
+
+    Registered users only: the calibration data is tied to a consented participant (and pooled
+    per user across sessions), so anonymous play is rejected."""
+    data = request.get_json(silent=True) or {}
+    user_id = _normalize_user_id_value(data.get('user_id') or data.get('userId'))
+    if not user_id or not User.query.get(user_id):
+        return jsonify({'error': 'registration_required'}), 403
+    try:
+        seed = int(_uuid.uuid4().int % (2 ** 63))
+        block = calibration.build_block(seed)
+        session_uuid = str(_uuid.uuid4())
+        sess = CalibrationSession(
+            session_uuid=session_uuid, user_id=user_id, seed=seed,
+            mode='constant_stimuli', illuminant='D65', n_trials=len(block),
+            client_env_json=data.get('env') if isinstance(data.get('env'), dict) else None,
+        )
+        db.session.add(sess)
+        for i, t in enumerate(block):
+            db.session.add(CalibrationTrial(
+                session_uuid=session_uuid, seq=i,
+                center_name=t['center_name'], center_lab_json=t['center_lab'],
+                lab2_json=t['lab2'], target_de=t['target_de'], actual_de=t['actual_de'],
+                rgb1_json=t['rgb1'], rgb2_json=t['rgb2'], in_gamut=t['in_gamut'],
+                is_catch=t['is_catch'], catch_kind=t['catch_kind'],
+            ))
+        db.session.commit()
+        # Hide ΔE + catch flag — only colours and order go to the client.
+        trials = [{'trial_id': i, 'seq': i, 'a': block[i]['rgb1'], 'b': block[i]['rgb2']}
+                  for i in range(len(block))]
+        return jsonify({'session_id': session_uuid, 'n_trials': len(block), 'trials': trials})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('calibration_start failed')
+        return jsonify({'error': 'start failed'}), 500
+
+
+@main.route('/calibration/respond', methods=['POST'])
+def calibration_respond():
+    """Record one judgment. Idempotent per (session, trial): last write wins."""
+    data = request.get_json(silent=True) or {}
+    session_uuid = str(data.get('session_id') or '')
+    seq = data.get('trial_id')
+    judgment = data.get('judgment')
+    if judgment not in ('identical', 'acceptable', 'unacceptable'):
+        return jsonify({'error': 'invalid judgment'}), 400
+    try:
+        seq = int(seq)
+    except (TypeError, ValueError):
+        return jsonify({'error': 'invalid trial_id'}), 400
+    try:
+        row = CalibrationTrial.query.filter_by(session_uuid=session_uuid, seq=seq).first()
+        if not row:
+            return jsonify({'error': 'unknown trial'}), 404
+        row.judgment = judgment
+        rt = data.get('reaction_ms')
+        row.reaction_ms = int(rt) if isinstance(rt, (int, float)) and rt >= 0 else None
+        row.responded_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({'status': 'ok'})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('calibration_respond failed')
+        return jsonify({'error': 'respond failed'}), 500
+
+
+@main.route('/calibration/finish', methods=['POST'])
+def calibration_finish():
+    """Close the session and compute the per-session summary (thresholds + catch QC)."""
+    data = request.get_json(silent=True) or {}
+    session_uuid = str(data.get('session_id') or '')
+    try:
+        sess = CalibrationSession.query.get(session_uuid)
+        if not sess:
+            return jsonify({'error': 'unknown session'}), 404
+        rows = CalibrationTrial.query.filter_by(session_uuid=session_uuid).all()
+        responded = [{
+            'actual_de': r.actual_de, 'is_catch': r.is_catch,
+            'catch_kind': r.catch_kind, 'judgment': r.judgment,
+        } for r in rows]
+        summary = calibration.summarize(responded)
+        sess.ended_at = datetime.utcnow()
+        sess.perceptibility_de = summary.get('perceptibility_de')
+        sess.acceptability_de = summary.get('acceptability_de')
+        sess.catch_pass_rate = summary.get('catch_pass_rate')
+        sess.low_quality = summary.get('low_quality')
+        sess.summary_json = summary
+        if isinstance(data.get('env'), dict) and not sess.client_env_json:
+            sess.client_env_json = data.get('env')
+        db.session.commit()
+        progress = _calibration_progress(sess.user_id) if sess.user_id else None
+        return jsonify({'status': 'ok', 'summary': summary, 'progress': progress})
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('calibration_finish failed')
+        return jsonify({'error': 'finish failed'}), 500
 
 
 # ── Gamut Lab (/gamut): interactive widest-gamut search over the pigment catalog ──

@@ -125,6 +125,33 @@ for _name in ILLUMINANTS:
 # White points stacked in ILLUMINANTS order, shape (n_illum, 3), for the batched Lab transform.
 _ILLUM_WHITE = np.stack([_ILLUM[n][1] for n in ILLUMINANTS])
 
+
+def render_cmfs():
+    """Per-illuminant CMF (3×38) for *displaying* a reflectance curve under each light.
+
+    A swatch is drawn by R → XYZ → sRGB. Under a non-D65 light the colour a viewer
+    actually perceives is the chromatically-adapted one: a neutral still reads neutral
+    (the eye adapts to the light), but a metameric pair drifts apart. We bake that
+    von-Kries adaptation into the matrix so the client just swaps which 3×38 it
+    convolves R against:
+
+        XYZ = diag(WHITE_XYZ / white_illum) · (OBS · SPD_illum) · R
+
+    This maps the perfect diffuser (R≡1) to the engine D65 white under *every* light,
+    so white stays white and only genuine spectral mismatch shows. The 'D65' entry is
+    the engine CMF unchanged, so existing swatches render byte-for-byte identically.
+    Returns {illuminant: 3×38 list}, keys in ILLUMINANTS order.
+    """
+    out = {'D65': CMF.tolist()}
+    for name in ILLUMINANTS:
+        if name == 'D65':
+            continue
+        W, white = _ILLUM[name]
+        adapt = (WHITE_XYZ / white)[:, None]   # (3,1) von-Kries diagonal in XYZ
+        out[name] = (adapt * W).tolist()
+    return out
+
+
 # How hard the solver leans on the test lights relative to the D65 headline. D65
 # stays dominant (weight 1), so the headline match is preserved; this only steers
 # otherwise-comparable recipes toward ones that also hold up under A/F11.

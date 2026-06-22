@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}Eye calibration — ShadeMatch{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
+<style>
+/* Calibration game: a controlled-ΔE perceptibility/acceptability probe. Deliberately spare
+   — a neutral grey stage standardises the surround so judgments aren't swayed by chrome. */
+.cal-wrap { max-width: 720px; margin: 0 auto; padding: 16px 16px 48px; }
+.cal-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.cal-header h1 { font-size: 1.25rem; margin: 0; font-weight: 800; }
+
+.cal-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md, 12px); padding: 20px; box-shadow: var(--shadow-sm, 0 2px 8px rgba(0,0,0,0.06)); }
+.cal-card h2 { margin: 0 0 8px; font-size: 1.1rem; font-weight: 800; }
+.cal-card p { margin: 0 0 12px; font-size: 0.92rem; color: var(--text-secondary); line-height: 1.5; }
+.cal-card .btn-lg { width: 100%; }
+
+/* Neutral mid-grey stage (≈ L*50) — a controlled adapting surround for the pair. */
+.cal-stage {
+  background: #777777; border-radius: var(--radius-md, 12px);
+  padding: 7% 6%; display: flex; align-items: center; justify-content: center;
+  gap: 4%; min-height: 260px; margin-bottom: 16px;
+}
+.cal-patch { flex: 0 0 42%; aspect-ratio: 1 / 1; border-radius: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.25); }
+
+.cal-progress { height: 6px; background: var(--border); border-radius: 999px; overflow: hidden; margin-bottom: 14px; }
+.cal-progress > div { height: 100%; width: 0; background: var(--accent-primary, #4caf50); transition: width 0.2s; }
+.cal-count { text-align: center; font-size: 0.82rem; color: var(--text-secondary); margin-bottom: 14px; font-variant-numeric: tabular-nums; }
+
+.cal-prompt { text-align: center; font-weight: 800; font-size: 1.05rem; margin: 0 0 12px; }
+.cal-btns { display: grid; gap: 10px; }
+.cal-btns .btn { width: 100%; justify-content: center; }
+.cal-kbd { display: inline-block; min-width: 1.4em; padding: 0 5px; margin-right: 8px; border: 1px solid var(--border); border-radius: 5px; font-size: 0.72rem; font-family: ui-monospace, Menlo, monospace; color: var(--text-secondary); }
+
+.cal-hidden { display: none !important; }
+
+/* Results */
+.cal-result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 14px 0 4px; }
+.cal-metric { background: var(--bg, #fff); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; text-align: center; }
+.cal-metric .v { font-size: 1.7rem; font-weight: 800; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.cal-metric .k { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); margin-top: 4px; }
+.cal-quality { margin-top: 12px; font-size: 0.85rem; }
+.cal-quality.warn { color: var(--accent-warning, #e0911a); font-weight: 700; }
+.cal-note { font-size: 0.78rem; color: var(--text-secondary); margin-top: 12px; line-height: 1.5; }
+.cal-subh { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); font-weight: 800; margin: 18px 0 6px; }
+
+/* Session-progress dots (N of 5) */
+.cal-sessprog { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; flex-wrap: wrap; }
+.cal-dots { display: inline-flex; gap: 6px; }
+.cal-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--border); }
+.cal-dot.done { background: var(--accent-primary, #4caf50); }
+.cal-sessprog .lbl { font-size: 0.85rem; color: var(--text-secondary); font-weight: 700; }
+
+/* Per-session history (the learning curve as a compact row of bars) */
+.cal-history { display: flex; align-items: flex-end; gap: 6px; height: 56px; margin: 6px 0 2px; }
+.cal-history .hbar { flex: 1; min-width: 8px; background: var(--accent-primary, #4caf50); border-radius: 3px 3px 0 0; opacity: 0.85; position: relative; }
+.cal-history .hbar.lowq { background: var(--accent-warning, #e0911a); }
+.cal-history-empty { font-size: 0.82rem; color: var(--text-secondary); }
+.cal-history-cap { font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cal-wrap">
+  <header class="cal-header">
+    <h1>Eye calibration</h1>
+    <a href="/" class="btn btn-secondary">← Main app</a>
+  </header>
+
+  <!-- Registration gate: the calibration game is for registered players only (data is tied
+       to a consented participant and pooled per user across sessions). -->
+  <section class="cal-card cal-hidden" id="calGate">
+    <h2>Registered players only</h2>
+    <p>
+      Eye calibration is part of the research study, so it's tied to your player ID. Open the
+      main app to create an ID (or sign in), then come back here — your progress will be saved
+      to that ID across sessions.
+    </p>
+    <a href="/" class="btn btn-primary btn-lg">Go to the main app</a>
+  </section>
+
+  <!-- Intro -->
+  <section class="cal-card cal-hidden" id="calIntro">
+    <h2>How sharp are your eyes today?</h2>
+    <p>
+      You'll see <strong>pairs of skin colours</strong>, one after another. For each pair you
+      answer up to two quick questions: first <strong>“Are they identical?”</strong> — and if
+      not, <strong>“Would that difference be acceptable on your face?”</strong> Some pairs are
+      identical, some are obvious; most are subtle. There are no right answers and no
+      feedback — just judge what you see.
+    </p>
+    <p>
+      It takes under <strong>2 minutes</strong>. Best on a non-dimmed screen in even lighting.
+      Do it across a few short sessions on different days — that's by design, and the picture
+      of your eyes gets sharper each time. <span id="calUserLine" style="opacity:.7;"></span>
+    </p>
+    <div class="cal-sessprog" id="calIntroProgress" style="margin-bottom:14px;"></div>
+    <button type="button" id="calStartBtn" class="btn btn-primary btn-lg">Start</button>
+    <p class="cal-note" style="margin-top:12px;">
+      Tip: you can also press <span class="cal-kbd">1</span> for yes, <span class="cal-kbd">2</span> for no.
+    </p>
+  </section>
+
+  <!-- Trial runner -->
+  <section id="calRunner" class="cal-hidden">
+    <div class="cal-progress"><div id="calProgressFill"></div></div>
+    <div class="cal-count" id="calCount">—</div>
+    <div class="cal-stage" aria-label="Colour pair to compare">
+      <div class="cal-patch" id="calPatchA"></div>
+      <div class="cal-patch" id="calPatchB"></div>
+    </div>
+    <p class="cal-prompt" id="calPrompt">Are they identical?</p>
+    <div class="cal-btns">
+      <button type="button" class="btn btn-primary" data-ans="yes" id="calBtnYes"><span class="cal-kbd">1</span>Yes</button>
+      <button type="button" class="btn btn-secondary" data-ans="no" id="calBtnNo"><span class="cal-kbd">2</span>No</button>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <section class="cal-card cal-hidden" id="calResult">
+    <h2 id="calResultTitle">Session complete</h2>
+    <div class="cal-sessprog" id="calResultProgress"></div>
+    <div class="cal-quality" id="calQuality"></div>
+
+    <!-- Interim (sessions 1…N-1): progress only. Thresholds are deliberately withheld until
+         the protocol is finished — seeing your result mid-study could bias the sessions left. -->
+    <div id="calInterim">
+      <p class="cal-note" id="calInterimMsg"></p>
+    </div>
+
+    <!-- Final: revealed once all sessions are done. -->
+    <div id="calFinal" class="cal-hidden">
+      <div class="cal-subh">Your results</div>
+      <div class="cal-result-grid">
+        <div class="cal-metric"><div class="v" id="calPoolPt">—</div><div class="k">Perceptibility ΔE₀₀</div></div>
+        <div class="cal-metric"><div class="v" id="calPoolAt">—</div><div class="k">Acceptability ΔE₀₀</div></div>
+      </div>
+      <div class="cal-history" id="calHistory"></div>
+      <div class="cal-history-cap" id="calHistoryCap"></div>
+      <p class="cal-note" id="calResultNote">
+        Pooled across all your sessions. The smaller the perceptibility figure, the finer the
+        colour differences you can tell apart; acceptability is how far a match can drift before
+        you'd call it too different on a face.
+      </p>
+    </div>
+
+    <button type="button" id="calAgainBtn" class="btn btn-primary btn-lg" style="margin-top:8px;">Next session</button>
+    <a href="/" class="btn btn-tertiary btn-lg" style="margin-top:8px;display:block;text-align:center;">Back to the game</a>
+  </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='calibration.js') }}?v=20260622d"></script>
+{% endblock %}
