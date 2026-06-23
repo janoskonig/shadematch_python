@@ -21,7 +21,7 @@ from . import db
 
 MATCH_PERFECT_DELTA_E = 0.01
 CACHE_TTL_SEC = int(os.environ.get('STAT_EDA_CACHE_SECONDS', '120'))
-EVENTS_ROW_CAP = int(os.environ.get('STAT_EDA_EVENTS_MAX_ROWS', '250000'))
+EVENTS_ROW_CAP = int(os.environ.get('STAT_EDA_EVENTS_MAX_ROWS', '50000'))
 
 _bundle_ts: float = 0.0
 _bundle: Optional[Tuple[pd.DataFrame, pd.DataFrame]] = None

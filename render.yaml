@@ -6,7 +6,7 @@ services:
     buildCommand: |
       pip install --upgrade pip setuptools wheel
       pip install --only-binary=all --prefer-binary -r requirements.txt
-    startCommand: gunicorn run:app
+    startCommand: gunicorn -c gunicorn.conf.py run:app
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.7

@@ -44,14 +44,10 @@ from .gamification import (
     _effective_sum_cap,
 )
 from .next_action import build_next_action
-from .stat_eda import (
-    ALLOWED_PLOT_IDS,
-    build_attempt_archetypes,
-    build_recipe_similarity_summary,
-    get_attempt_deltae_timeline_data,
-    get_plot_png,
-)
-from .mixed_models_stat import get_mixed_models_summary
+# NOTE: `stat_eda` and `mixed_models_stat` pull in matplotlib + statsmodels (+ scipy),
+# which add hundreds of MB of RSS at import time. They are only needed by the rarely
+# used /stat admin dashboard, so we import them lazily inside the handlers below to
+# keep the base worker's memory footprint small (Render free tier = 512 MB).
 
 main = Blueprint('main', __name__)
 
@@ -175,6 +171,12 @@ def _rate_limit_allow(key, max_hits=5, window_sec=600):
     if len(bucket) >= max_hits:
         return False
     bucket.append(now)
+    # Opportunistically evict stale buckets so this dict can't grow without bound
+    # across many distinct IP/email/user keys over the worker's lifetime.
+    if len(_RATE_LIMIT_BUCKETS) > 512:
+        for k in [k for k, v in list(_RATE_LIMIT_BUCKETS.items())
+                  if not v or (now - v[-1]) >= window_sec]:
+            _RATE_LIMIT_BUCKETS.pop(k, None)
     return True
 
 
@@ -301,6 +303,7 @@ def stat_page():
 @main.route('/api/stat/plot/<string:plot_id>', methods=['GET'])
 def stat_plot(plot_id: str):
     """PNG figures from pandas/matplotlib (server-side EDA)."""
+    from .stat_eda import ALLOWED_PLOT_IDS, get_plot_png  # lazy: heavy matplotlib import
     pid = plot_id[:-4] if plot_id.lower().endswith('.png') else plot_id
     if pid not in ALLOWED_PLOT_IDS:
         return jsonify({'status': 'error', 'message': 'unknown plot id'}), 404
@@ -370,11 +373,19 @@ def stat_plot(plot_id: str):
         if not refresh_db_connection():
             pass
         return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        # Release any matplotlib figures that leaked (e.g. an error before
+        # _fig_to_png ran) so RSS returns toward baseline after each render.
+        import gc
+        import matplotlib.pyplot as plt
+        plt.close('all')
+        gc.collect()
     return Response(png, mimetype='image/png')
 
 
 @main.route('/api/stat/attempt-timeline-data', methods=['GET'])
 def stat_attempt_timeline_data():
+    from .stat_eda import get_attempt_deltae_timeline_data  # lazy: heavy pandas/matplotlib import
     opts = {}
     au = request.args.get('attempt_uuid')
     if au and str(au).strip():
@@ -3126,6 +3137,10 @@ def stat_summary():
             _set_cached_stat_summary_payload(payload, scope)
             return jsonify(payload)
 
+        # lazy: these pull in matplotlib + statsmodels (hundreds of MB) and are
+        # only reached for the full-scope /stat dashboard.
+        from .stat_eda import build_attempt_archetypes, build_recipe_similarity_summary
+        from .mixed_models_stat import get_mixed_models_summary
         archetypes = build_attempt_archetypes()
         recipe_similarity = build_recipe_similarity_summary()
         try:
@@ -3312,6 +3327,14 @@ def stat_summary():
         return jsonify(payload)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+    finally:
+        # Drop any leaked matplotlib figures and reclaim the large transient
+        # DataFrames/payloads built for the full-scope dashboard.
+        import gc
+        import sys
+        if 'matplotlib.pyplot' in sys.modules:
+            sys.modules['matplotlib.pyplot'].close('all')
+        gc.collect()
 
 
 @main.route('/api/stat/quality-summary', methods=['GET'])
