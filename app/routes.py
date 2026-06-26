@@ -17,6 +17,7 @@ from .models import (
 )
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb
+from .color_drops import PAINT_CHANNELS
 from . import spectral_km
 from . import email_utils
 import pandas as pd
@@ -1496,7 +1497,9 @@ MIXING_END_REASONS = frozenset({
     'abandoned',
 })
 
-PALETTE_COLORS = ('white', 'black', 'red', 'yellow', 'blue')
+# Canonical channel ordering lives in app/color_drops.py; aliased here for the
+# existing call sites that reference PALETTE_COLORS.
+PALETTE_COLORS = PAINT_CHANNELS
 
 
 def _normalize_user_id_value(value):

@@ -19,6 +19,7 @@ XP and streaks remain as secondary reinforcement and never drive the level.
 """
 from datetime import date, datetime, timedelta, time
 from .models import UserProgress, UserAward, UserTargetColorStats, TargetColor, MixingSession, MixingAttempt
+from .color_drops import sum_drops, sum_drops_strict
 from . import db
 
 COVERAGE_QUOTA = 10
@@ -291,13 +292,7 @@ def _effective_steps_for_session(session, step_map):
     if tracked_steps is not None and tracked_steps >= 0:
         return tracked_steps
     # Fallback for older rows lacking telemetry step count.
-    return (
-        (session.drop_white or 0)
-        + (session.drop_black or 0)
-        + (session.drop_red or 0)
-        + (session.drop_yellow or 0)
-        + (session.drop_blue or 0)
-    )
+    return sum_drops(session)
 
 
 def build_daily_missions(user_id: str, day: date = None):
@@ -451,10 +446,7 @@ def grant_daily_performance_awards(day: date):
 
 def target_color_sum_drop(tc) -> int | None:
     """Total recipe drops, or None if any channel is unset (incomplete recipe)."""
-    vals = [tc.drop_white, tc.drop_black, tc.drop_red, tc.drop_yellow, tc.drop_blue]
-    if any(v is None for v in vals):
-        return None
-    return int(sum(int(v or 0) for v in vals))
+    return sum_drops_strict(tc)
 
 
 def _catalog_sum_drops_sorted(target_colors_iter=None) -> list:
