@@ -14,6 +14,15 @@ spectral_by_wijnen.js
 # Python caches
 __pycache__/
 app/__pycache__/
+tests/__pycache__/
+.pytest_cache/
+
+# Virtualenvs (local test/dev only)
+.venv/
+venv/
+
+# Throwaway SQLite test databases
+*.sqlite
 
 # Local analysis scratch files
 notes/

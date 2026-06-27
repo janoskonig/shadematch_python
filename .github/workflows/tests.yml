@@ -1,0 +1,29 @@
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11.7"
+
+      # Phase-0 characterization tests cover domain logic (colour science,
+      # gamification, drops) and need only the light subset of deps — not the
+      # dashboard stack (pandas/statsmodels/matplotlib). Keeps CI fast.
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install \
+            Flask==2.1.2 Werkzeug==2.1.2 Flask-SQLAlchemy==2.5.1 "SQLAlchemy>=1.4.41,<1.5" \
+            numpy==1.24.3 scipy==1.10.1 colormath==3.0.0 python-dotenv==1.0.0 pytest==7.4.3
+
+      - name: Run tests
+        run: python -m pytest
