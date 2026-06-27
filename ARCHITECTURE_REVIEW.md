@@ -130,13 +130,22 @@ email, and build push payloads inline. Examples:
 
 **Impact:** unreviewable diffs, merge conflicts, untestable units.
 
-### 🔴 C2 — Duplicated colour science across four modules
-`utils.py`, `spectral_km.py`, `calibration.py`, and the orphan top-level
-`spectral_mixer.py` each carry their own CIE colour-matching functions,
-XYZ→sRGB matrix, Lab transforms, and ΔE. CIEDE2000 exists **twice** (a colormath
-wrapper in `utils.py` and a hand-vectorised version in `spectral_km.py`), and the
-CMF grids even disagree on resolution (31 bins @10 nm in `utils.py`, 38 bins in
-`spectral_km.py`). A fix or correction to one will silently not reach the others.
+### 🔴 C2 — Duplicated colour science across modules ✅ *addressed in this PR*
+`utils.py`, `spectral_km.py`, `calibration.py`, `routes.py`, and the orphan
+top-level `spectral_mixer.py` each carried their own CIE colour-matching
+functions, XYZ→sRGB matrix, Lab transforms, and ΔE. CIEDE2000 existed **twice**
+(a colormath wrapper in `utils.py` and a hand-vectorised version in
+`spectral_km.py`), and the **CIE 1931 data was copy-pasted three times** (utils,
+routes, spectral_mixer). A correction to one would silently not reach the others.
+
+**Resolution (see §6):** introduced the `app/color/` leaf package as the single
+home for the CIE data, the sRGB conversion stack, and the vectorised CIEDE2000.
+`utils`/`spectral_km`/`routes` now delegate to it. The two CIEDE2000
+*representations* are kept on purpose — colormath-exact for authoritative RGB
+scoring, fast vectorised for the solver — but a test now pins their agreement
+(~1e-4) so they cannot drift apart. The 38-bin Kubelka–Munk engine grid and its
+engine-white `xyz_to_lab` stay in `spectral_km` (tuned to the spectral pipeline;
+merging would change output).
 
 ### 🔴 C3 — Synchronous email & web-push in the request path
 `email_utils.send_email()` opens a blocking SMTP connection (15 s timeout) inside
@@ -186,6 +195,16 @@ Schema changes are ad-hoc scripts: `init_db.py` does a destructive
 `scripts/migrate_to_shadematch_v2.py` is a 500-line bespoke copier. No Alembic,
 no version table, no rollback, no enforced ordering, and no auto-migrate on
 deploy → high risk of model/DB drift.
+
+### 🟠 C9b — Name shadowing of the colour helpers in `routes.py`
+`routes.py` imported `spectrum_to_xyz`/`xyz_to_rgb` from `utils` (line ~19) and
+then **redefined functions of the same name** at the bottom of the file
+(~line 3953) — so the imports were dead and the demo endpoints
+(`/color_inspector`, `/mix_colors`) silently used a *different* legacy pipeline
+(chromaticity-normalised XYZ, 0–255 int RGB) than the rest of the app. Plus a
+third byte-identical copy of the CIE data. *Partially addressed:* the duplicate
+`load_cie_data` and the dead import are removed; the genuinely-divergent legacy
+`spectrum_to_xyz`/`xyz_to_rgb` are kept (now clearly labelled) pending goldens.
 
 ### 🟡 C10 — Security & correctness papercuts
 - `SECRET_KEY` silently defaults to `'dev'` (`config.py:33`) — insecure sessions
@@ -338,20 +357,52 @@ Equivalence was verified directly: lenient sum with a `None` channel = 12, stric
 sum with a `None` channel = `None`, strict full recipe = 15, `initial_drop_`
 prefix works, and all touched files byte-compile.
 
-> Everything in §5 beyond Phase 1 step 3 is intentionally **not** applied here —
-> those changes alter structure broadly and must ride on the Phase-0 test net
-> first. This document is the roadmap for that work.
+### 6.1 Phase-0 safety net (delivered)
+A pytest characterization suite (`tests/`) pins current behaviour before deeper
+change: colour-science goldens (`utils`, `spectral_km`), the drops module, and a
+gamification scenario (`process_progression`/`compute_quota_progress`). Runs in
+~1s against throwaway SQLite via a minimal ORM-only app (no pandas/Postgres/SMTP)
+plus a light-deps CI workflow. **30 tests passing.**
+
+### 6.2 Phase-1 colour-science consolidation (delivered)
+New leaf package **`app/color/`** — Flask/DB-free, the single source of truth:
+- `constants.py` — the CIE 1931 2° data (one copy; was three, verified
+  byte-equal) + sRGB matrix/gamma constants.
+- `convert.py` — `load_cie_data`, `spectrum_to_xyz`, `xyz_to_rgb`, `srgb_compand`
+  (moved verbatim from `utils`).
+- `distance.py` — the single vectorised `ciede2000` (moved from `spectral_km`,
+  with optional kL/kC/kH).
+
+Wiring (all behaviour-preserving, verified by goldens + identity tests):
+- `utils.py` re-exports the conversion stack from `app/color`; its authoritative
+  `delta_e_cie2000` stays on colormath so stored ΔE values are byte-for-byte
+  unchanged.
+- `spectral_km.ciede2000` is now the shared function (same object) — so
+  `calibration` and `gamut_lab`, which call `spectral_km.ciede2000`, are
+  unaffected.
+- `routes.py` drops its 3rd CIE-data copy and the dead shadowed import; its
+  divergent legacy `spectrum_to_xyz`/`xyz_to_rgb` are kept and labelled.
+
+A randomized test now asserts the two CIEDE2000 representations agree to <2e-4,
+so the duplication that C2 warned about can no longer silently reappear.
+
+> Everything in §5 beyond Phase 1 is intentionally **not** applied here — those
+> changes alter structure broadly and must ride further on the test net. This
+> document is the roadmap for that work.
 
 ---
 
 ## 7. Quick-win checklist (safe, isolated)
 
 - [x] Centralise paint-channel logic (`color_drops.py`).
+- [x] Add `pytest` characterization tests + CI before deeper refactors.
+- [x] Consolidate colour science into the `app/color/` library (C2).
+- [ ] Add goldens for the legacy `routes.py` colour pipeline, then fold it in (C9b).
 - [ ] Add indexes: `TargetColor.catalog_order`, `MixingSession(user_id,timestamp)`.
 - [ ] Fail fast if `SECRET_KEY` is unset in production.
 - [ ] Replace `print()` with `current_app.logger`.
 - [ ] Extract `finalize_attempt()` shared by save_session/save_skip.
 - [ ] Batch the per-level award-existence check into one query.
-- [ ] Add `pytest` characterization tests + CI before deeper refactors.
+- [ ] Delete the orphan top-level `spectral_mixer.py` (4th colour-science copy).
 - [ ] Drop the unused `Session` model and `mysql-connector-python` dep.
 ```

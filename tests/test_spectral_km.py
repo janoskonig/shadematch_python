@@ -24,16 +24,34 @@ def test_ciede2000_symmetric():
     assert float(s.ciede2000(a, b)) == float(s.ciede2000(b, a))
 
 
-def test_ciede2000_agrees_with_colormath_path():
-    # spectral_km's hand-vectorised CIEDE2000 must match the colormath-backed
-    # implementation in utils to high precision (the duplication this documents).
+def test_ciede2000_agrees_with_colormath_path_sample():
+    # On typical pairs the vectorised ΔE matches the colormath-backed path tightly.
     pairs = [((50, 2, -3), (52, 1, -1)),
              ((80, -10, 20), (75, -5, 18)),
              ((30, 40, -50), (31, 38, -48))]
     for a, b in pairs:
         mine = float(s.ciede2000(a, b))
         ref = float(utils_delta_e(LabColor(*a), LabColor(*b)))
-        assert mine == ref or abs(mine - ref) < 1e-9
+        assert abs(mine - ref) < 1e-9
+
+
+def test_ciede2000_agrees_with_colormath_path_randomized():
+    # Guard against silent divergence between the two CIEDE2000 representations:
+    # the fast vectorised one (solver hot path) and the authoritative
+    # colormath-backed one (RGB scoring). They agree to ~1e-4 across the Lab
+    # gamut — small edge-case differences in the hue-average branch, well below
+    # any perceptual or threshold significance.
+    import numpy as np
+
+    rng = np.random.default_rng(12345)
+    max_diff = 0.0
+    for _ in range(1000):
+        a = (rng.uniform(0, 100), rng.uniform(-90, 90), rng.uniform(-90, 90))
+        b = (rng.uniform(0, 100), rng.uniform(-90, 90), rng.uniform(-90, 90))
+        mine = float(s.ciede2000(a, b))
+        ref = float(utils_delta_e(LabColor(*a), LabColor(*b)))
+        max_diff = max(max_diff, abs(mine - ref))
+    assert max_diff < 2e-4, f"CIEDE2000 implementations diverged: {max_diff}"
 
 
 def test_km_ks_are_inverses():
