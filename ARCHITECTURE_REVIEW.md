@@ -196,15 +196,21 @@ Schema changes are ad-hoc scripts: `init_db.py` does a destructive
 no version table, no rollback, no enforced ordering, and no auto-migrate on
 deploy → high risk of model/DB drift.
 
-### 🟠 C9b — Name shadowing of the colour helpers in `routes.py`
-`routes.py` imported `spectrum_to_xyz`/`xyz_to_rgb` from `utils` (line ~19) and
-then **redefined functions of the same name** at the bottom of the file
-(~line 3953) — so the imports were dead and the demo endpoints
-(`/color_inspector`, `/mix_colors`) silently used a *different* legacy pipeline
-(chromaticity-normalised XYZ, 0–255 int RGB) than the rest of the app. Plus a
-third byte-identical copy of the CIE data. *Partially addressed:* the duplicate
-`load_cie_data` and the dead import are removed; the genuinely-divergent legacy
-`spectrum_to_xyz`/`xyz_to_rgb` are kept (now clearly labelled) pending goldens.
+### 🟠 C9b — Name shadowing of the colour helpers in `routes.py` ✅ *resolved*
+`routes.py` imported `spectrum_to_xyz`/`xyz_to_rgb` from `utils` and then
+**redefined functions of the same name** at the bottom of the file — so the
+imports were dead and several routes (`build_spectrum_plots`, which feeds the
+base swatches on `/spectral` + `/lab` + the game, plus the `/color_inspector`
+and `/mix_colors` demos) silently used a *different* legacy pipeline
+(chromaticity-normalised XYZ, 0–255 int RGB) than the rest of the app — on top of
+a third byte-identical copy of the CIE data.
+
+**Resolution:** the legacy pipeline moved to `app/color/legacy.py` under honest
+names (`spectrum_to_chromaticity_xyz`, `xyz_to_srgb8`); the duplicate
+`load_cie_data` and the dead shadowing import are gone, and `routes.py` now
+defines no colour maths inline. Pinned by goldens in `tests/test_color_legacy.py`
+and verified end-to-end: the five base-swatch RGBs are byte-identical to the old
+inline math over the real pigment files (0 mismatches).
 
 ### 🟡 C10 — Security & correctness papercuts
 - `SECRET_KEY` silently defaults to `'dev'` (`config.py:33`) — insecure sessions
@@ -381,7 +387,9 @@ Wiring (all behaviour-preserving, verified by goldens + identity tests):
   `calibration` and `gamut_lab`, which call `spectral_km.ciede2000`, are
   unaffected.
 - `routes.py` drops its 3rd CIE-data copy and the dead shadowed import; its
-  divergent legacy `spectrum_to_xyz`/`xyz_to_rgb` are kept and labelled.
+  divergent legacy `spectrum_to_xyz`/`xyz_to_rgb` are extracted to
+  `app/color/legacy.py` (honest names), so the module defines no colour maths
+  inline (see C9b).
 
 A randomized test now asserts the two CIEDE2000 representations agree to <2e-4,
 so the duplication that C2 warned about can no longer silently reappear.
@@ -397,7 +405,7 @@ so the duplication that C2 warned about can no longer silently reappear.
 - [x] Centralise paint-channel logic (`color_drops.py`).
 - [x] Add `pytest` characterization tests + CI before deeper refactors.
 - [x] Consolidate colour science into the `app/color/` library (C2).
-- [ ] Add goldens for the legacy `routes.py` colour pipeline, then fold it in (C9b).
+- [x] Extract the legacy `routes.py` colour pipeline to `app/color/legacy.py` (C9b).
 - [ ] Add indexes: `TargetColor.catalog_order`, `MixingSession(user_id,timestamp)`.
 - [ ] Fail fast if `SECRET_KEY` is unset in production.
 - [ ] Replace `print()` with `current_app.logger`.

@@ -17,9 +17,11 @@ from .models import (
 )
 import string
 from .utils import calculate_delta_e
-# load_cie_data comes from the shared colour package. spectrum_to_xyz / xyz_to_rgb
-# are defined locally at the bottom of this module (legacy demo-endpoint variants).
 from .color import load_cie_data
+# The base-swatch / demo endpoints use a legacy spectrum→sRGB pipeline that
+# differs from the canonical one (chromaticity-normalised XYZ, 0–255 int RGB);
+# it lives in app/color/legacy.py so it no longer shadows utils' names here.
+from .color.legacy import spectrum_to_chromaticity_xyz, xyz_to_srgb8
 from .color_drops import PAINT_CHANNELS
 from . import spectral_km
 from . import email_utils
@@ -531,8 +533,8 @@ def build_spectrum_plots():
             pigment_wavelengths, reflectances = _load_pigment_spectrum(file_path)
 
             # Server-side measured swatch color (used only for the base circle/plot line).
-            X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
-            rgb = xyz_to_rgb(X, Y, Z)
+            X, Y, Z = spectrum_to_chromaticity_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
+            rgb = xyz_to_srgb8(X, Y, Z)
             spectrum_plots[color_key] = {
                 'wavelengths': pigment_wavelengths,
                 'reflectances': reflectances,
@@ -3822,8 +3824,8 @@ def color_inspector():
             df = pd.read_csv(os.path.join(pigments_dir, filename))
             pigment_wavelengths = df['Wavelength'].tolist()
             reflectances = df.iloc[:, 1:].mean(axis=1).tolist()
-            X, Y, Z = spectrum_to_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
-            rgb = xyz_to_rgb(X, Y, Z)
+            X, Y, Z = spectrum_to_chromaticity_xyz(reflectances, pigment_wavelengths, x_bar, y_bar, z_bar)
+            rgb = xyz_to_srgb8(X, Y, Z)
             samples.append({
                 'name': os.path.splitext(filename)[0].replace('_', ' ').title(),
                 'wavelengths': pigment_wavelengths,
@@ -3851,8 +3853,8 @@ def mix_colors():
                 n = count / (total_drops * 0.5)
                 mixed_spectrum *= np.array(pigments[color]['reflectances']) ** n
     mixed_spectrum = np.clip(mixed_spectrum, 0.01, 1.0)
-    X, Y, Z = spectrum_to_xyz(mixed_spectrum, wavelengths, x_bar, y_bar, z_bar)
-    r, g, b = xyz_to_rgb(X, Y, Z)
+    X, Y, Z = spectrum_to_chromaticity_xyz(mixed_spectrum, wavelengths, x_bar, y_bar, z_bar)
+    r, g, b = xyz_to_srgb8(X, Y, Z)
     return jsonify({'rgb': [int(r), int(g), int(b)],
                     'spectrum': {'wavelengths': wavelengths.tolist(), 'reflectances': mixed_spectrum.tolist()}})
 
@@ -3951,30 +3953,6 @@ def get_cookie_consent():
     })
 
 
-# ── Legacy CIE helpers for the colour-inspector / mix-colors demo endpoints ──
-# load_cie_data is imported from the shared app.color package (the data is
-# byte-identical to the old local copy). spectrum_to_xyz / xyz_to_rgb below are
-# the *legacy* variants used only by these demo routes: spectrum_to_xyz here
-# chromaticity-normalises X/Y/Z by their sum and xyz_to_rgb returns 0–255 ints —
-# both intentionally differ from app.color.convert, so they are kept local.
-
-def spectrum_to_xyz(spectrum, wavelengths, x_bar, y_bar, z_bar):
-    x_interp = np.interp(wavelengths, np.arange(400, 701, 10), x_bar)
-    y_interp = np.interp(wavelengths, np.arange(400, 701, 10), y_bar)
-    z_interp = np.interp(wavelengths, np.arange(400, 701, 10), z_bar)
-    X = np.sum(spectrum * x_interp)
-    Y = np.sum(spectrum * y_interp)
-    Z = np.sum(spectrum * z_interp)
-    s = X + Y + Z
-    if s > 0:
-        X, Y, Z = X / s, Y / s, Z / s
-    return X, Y, Z
-
-
-def xyz_to_rgb(X, Y, Z):
-    M = np.array([[3.2406, -1.5372, -0.4986],
-                  [-0.9689,  1.8758,  0.0415],
-                  [0.0557, -0.2040,  1.0570]])
-    rgb = np.dot(M, np.array([X, Y, Z]))
-    rgb = np.where(rgb > 0.0031308, 1.055 * np.power(np.clip(rgb, 0, None), 1 / 2.4) - 0.055, 12.92 * rgb)
-    return np.clip(rgb * 255, 0, 255).astype(int)
+# Colour-science helpers now live in app/color/ (canonical: app.color.convert;
+# legacy base-swatch/demo pipeline: app.color.legacy) — imported at the top of
+# this module. Nothing colour-related is defined inline here anymore.
