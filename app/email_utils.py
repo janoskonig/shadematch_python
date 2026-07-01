@@ -24,6 +24,7 @@ from __future__ import annotations
 import os
 import smtplib
 import uuid
+from html import escape as _html_escape
 from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid
 from typing import Mapping, Optional, Tuple
@@ -298,4 +299,45 @@ def send_daily_reminder_email(
         list_unsubscribe_url=unsubscribe_url,
         one_click_unsubscribe=True,
         transactional=False,
+    )
+
+
+def admin_notify_email() -> str:
+    """Destination for internal admin notifications (new-user alerts, etc.)."""
+    return (os.environ.get('ADMIN_NOTIFY_EMAIL') or '').strip() or 'jancheeta876@gmail.com'
+
+
+def send_new_user_admin_email(*, fields: Mapping[str, object]) -> None:
+    """Notify the admin that a new user just registered.
+
+    ``fields`` is a mapping of label -> value describing the signup (e.g.
+    User ID, Email, Gender, Age, Reminders, Registered at). Built inline rather
+    than from a Jinja template since it's an internal, plain-text-friendly note.
+    """
+    rows = list(fields.items())
+
+    text_lines = ['A new ShadeMatch user just registered.', '']
+    text_lines += [f'{label}: {value}' for label, value in rows]
+    text = '\n'.join(text_lines)
+
+    row_html = ''.join(
+        f'<tr>'
+        f'<td style="padding:4px 12px 4px 0;color:#555;white-space:nowrap;">{_html_escape(str(label))}</td>'
+        f'<td style="padding:4px 0;font-weight:600;">{_html_escape(str(value))}</td>'
+        f'</tr>'
+        for label, value in rows
+    )
+    html = (
+        '<div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:15px;color:#111;">'
+        '<p style="margin:0 0 12px;">A new <strong>ShadeMatch</strong> user just registered.</p>'
+        f'<table style="border-collapse:collapse;">{row_html}</table>'
+        '</div>'
+    )
+
+    send_email(
+        to_email=admin_notify_email(),
+        subject='New ShadeMatch signup',
+        html=html,
+        text=text,
+        transactional=True,
     )

@@ -952,6 +952,21 @@ def register():
         db.session.rollback()
         return jsonify({'status': 'error', 'message': 'Registration failed, please try again.'}), 409
 
+    # Notify the admin of the new signup. Never let a mail hiccup affect the
+    # registration response.
+    try:
+        email_utils.send_new_user_admin_email(fields={
+            'User ID': user.id,
+            'Email': email or '(none)',
+            'Gender': gender,
+            'Age': age,
+            'Reminders opt-in': 'yes' if email_opt_in_reminders else 'no',
+            'Registered at': (user.created_at.isoformat(sep=' ', timespec='seconds')
+                              if user.created_at else 'n/a') + ' UTC',
+        })
+    except Exception as exc:
+        print(f'admin new-user notify failed for user {user.id}: {exc}')
+
     if email:
         try:
             token_plain, _ = _issue_email_token(
@@ -3470,6 +3485,149 @@ def stat_quality_summary():
         }
         _set_cached_stat_quality_payload(payload)
         return jsonify(payload)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/stat/calibration-summary', methods=['GET'])
+def stat_calibration_summary():
+    """Aggregations over the /calibration psychophysics game (calibration_sessions /
+    calibration_trials). Powers the Calibration tab in /stat.
+
+    The /calibration page imposes ΔE₀₀ via method-of-constant-stimuli and records a
+    three-way judgment (identical / acceptable / unacceptable) per colour pair, so the
+    pooled data reproduce the 50:50 perceptibility (PT) and acceptability (AT) thresholds
+    that the main game's self-selected ΔE can't. This endpoint surfaces:
+      - overview tiles (completed sessions, distinct players, trials, low-quality runs)
+      - population pooled PT/AT over ALL completed sessions (calibration.summarize)
+      - the psychometric breakdown by ΔE level: P(saw a difference) and P(unacceptable)
+      - catch-trial QC pass rates (the data-quality gate)
+      - per-session results — the individual game runs ("in-game" calibrations)
+      - per-player pooled PT/AT (a player's own threshold across their sessions)
+    """
+    from collections import defaultdict
+    try:
+        sessions = (CalibrationSession.query
+                    .filter(CalibrationSession.ended_at.isnot(None))
+                    .order_by(CalibrationSession.started_at.asc())
+                    .all())
+        session_uuids = [s.session_uuid for s in sessions]
+        session_user = {s.session_uuid: s.user_id for s in sessions}
+
+        # All judged trials for completed sessions, pulled once and aggregated in Python
+        # (the threshold fit in calibration.summarize is a logistic IRLS, not SQL).
+        trials = []
+        if session_uuids:
+            trials = (CalibrationTrial.query
+                      .filter(CalibrationTrial.session_uuid.in_(session_uuids),
+                              CalibrationTrial.judgment.isnot(None))
+                      .all())
+
+        def _row(t):
+            return {'actual_de': t.actual_de, 'is_catch': t.is_catch,
+                    'catch_kind': t.catch_kind, 'judgment': t.judgment}
+
+        # Population pooled thresholds over every completed session.
+        pooled = calibration.summarize([_row(t) for t in trials])
+
+        # Psychometric curve: per requested ΔE level, the share who saw a difference
+        # (1 − P(identical)) and the share who judged it unacceptable. Real trials only.
+        level_counts = defaultdict(lambda: {'identical': 0, 'acceptable': 0, 'unacceptable': 0})
+        real_count_by_session = defaultdict(int)
+        catch_counts = defaultdict(lambda: {'passed': 0, 'total': 0})
+        for t in trials:
+            if t.is_catch:
+                kind = t.catch_kind or 'unknown'
+                catch_counts[kind]['total'] += 1
+                if ((kind == 'identical' and t.judgment == 'identical')
+                        or (kind == 'obvious' and t.judgment == 'unacceptable')):
+                    catch_counts[kind]['passed'] += 1
+                continue
+            real_count_by_session[t.session_uuid] += 1
+            if t.target_de is None or t.judgment not in ('identical', 'acceptable', 'unacceptable'):
+                continue
+            level_counts[round(float(t.target_de), 3)][t.judgment] += 1
+
+        by_level = []
+        for lvl in sorted(level_counts):
+            c = level_counts[lvl]
+            n = c['identical'] + c['acceptable'] + c['unacceptable']
+            by_level.append({
+                'target_de': lvl,
+                'n': n,
+                'n_identical': c['identical'],
+                'n_acceptable': c['acceptable'],
+                'n_unacceptable': c['unacceptable'],
+                'p_perceived_diff': ((n - c['identical']) / n) if n else None,
+                'p_unacceptable': (c['unacceptable'] / n) if n else None,
+            })
+
+        catch_qc = []
+        for kind in ('identical', 'obvious'):
+            v = catch_counts.get(kind)
+            if not v:
+                continue
+            catch_qc.append({
+                'catch_kind': kind,
+                'n': v['total'],
+                'pass_rate': (v['passed'] / v['total']) if v['total'] else None,
+            })
+
+        # Per-session results — the individual runs ("in-game" calibrations), newest first.
+        per_session = [{
+            'session_uuid': s.session_uuid,
+            'user_id': s.user_id,
+            'started_at': s.started_at.isoformat() if s.started_at else None,
+            'n_real': real_count_by_session.get(s.session_uuid, 0),
+            'perceptibility_de': s.perceptibility_de,
+            'acceptability_de': s.acceptability_de,
+            'catch_pass_rate': s.catch_pass_rate,
+            'low_quality': bool(s.low_quality),
+        } for s in reversed(sessions)][:500]
+
+        # Per-player pooled thresholds (a player's own PT/AT across all their sessions).
+        trials_by_user = defaultdict(list)
+        for t in trials:
+            trials_by_user[session_user.get(t.session_uuid)].append(t)
+        sessions_by_user = defaultdict(int)
+        distinct_users = set()
+        for s in sessions:
+            sessions_by_user[s.user_id] += 1
+            if s.user_id:
+                distinct_users.add(s.user_id)
+        per_user = []
+        for uid, ts in trials_by_user.items():
+            pooled_u = calibration.summarize([_row(t) for t in ts])
+            per_user.append({
+                'user_id': uid,
+                'n_sessions': sessions_by_user.get(uid, 0),
+                'n_real': pooled_u.get('n_real'),
+                'perceptibility_de': pooled_u.get('perceptibility_de'),
+                'acceptability_de': pooled_u.get('acceptability_de'),
+                'catch_pass_rate': pooled_u.get('catch_pass_rate'),
+            })
+        per_user.sort(key=lambda r: (-(r['n_sessions'] or 0), str(r['user_id'] or '')))
+
+        overview = {
+            'total_sessions': CalibrationSession.query.count(),
+            'completed_sessions': len(sessions),
+            'distinct_users': len(distinct_users),
+            'target_sessions': calibration.TARGET_SESSIONS,
+            'trials_judged': len(trials),
+            'real_trials_judged': sum(real_count_by_session.values()),
+            'low_quality_sessions': sum(1 for s in sessions if s.low_quality),
+        }
+
+        return jsonify({
+            'status': 'success',
+            'overview': overview,
+            'pooled': pooled,
+            'by_delta_level': by_level,
+            'catch_qc': catch_qc,
+            'per_session': per_session,
+            'per_user': per_user,
+            'delta_levels': list(calibration.DELTA_LEVELS),
+        })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
