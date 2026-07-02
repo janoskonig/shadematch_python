@@ -14,6 +14,13 @@ from .models import (
     DailyChallengeRun, DailyChallengeWinner, PushSubscription,
     AnalyticsEvent, MixingAttempt, MixingAttemptEvent, EmailVerificationToken,
     ConsentRecord, CalibrationSession, CalibrationTrial,
+    ProbeSlot, ProbeSchedule,
+)
+from .probe import (
+    maybe_assign_flow_probe,
+    bind_probe_attempt,
+    resolve_probe_for_attempt,
+    probe_payload,
 )
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb
@@ -2274,12 +2281,17 @@ def save_session():
         )
         db.session.add(session)
 
+        is_probe = resolve_probe_for_attempt(
+            attempt_uuid, user_id, data.get('target_color_id'), skipped=skipped,
+        )
+
         xp_earned, new_awards, streak_event, level_up = process_progression(
             user_id=user_id,
             match_category=mc,
             skipped=skipped,
             target_color_id=data.get('target_color_id'),
             delta_e=data.get('delta_e'),
+            is_probe=is_probe,
         )
         new_awards.extend(grant_daily_mission_awards(user_id))
 
@@ -2364,12 +2376,17 @@ def save_skip():
         )
         db.session.add(session)
 
+        is_probe = resolve_probe_for_attempt(
+            attempt_uuid, user_id, data.get('target_color_id'), skipped=True,
+        )
+
         xp_earned, new_awards, streak_event, level_up = process_progression(
             user_id=user_id,
             match_category=mc,
             skipped=True,
             target_color_id=data.get('target_color_id'),
             delta_e=delta_e,
+            is_probe=is_probe,
         )
         new_awards.extend(grant_daily_mission_awards(user_id))
 
@@ -2622,7 +2639,24 @@ def _daily_seed(d=None):
 
 
 def _daily_target_ids(d=None):
-    """Return a stable ordered list of target_color IDs for the day."""
+    """
+    Return a stable ordered list of target_color IDs for the day.
+
+    Probe rotation (learning-effect study): when probe_schedule has rows for
+    the date, the scheduled colours lead the list (in `position` order) and the
+    seeded filler completes it. Dates without schedule rows behave exactly as
+    before.
+    """
+    d = d or date.today()
+
+    scheduled = (
+        ProbeSchedule.query
+        .filter_by(challenge_date=d)
+        .order_by(ProbeSchedule.position.asc())
+        .all()
+    )
+    scheduled_ids = [row.target_color_id for row in scheduled]
+
     rows = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
     sorted_basic = [r for r in rows if r.color_type == 'basic']
     sorted_skin = [r for r in rows if r.color_type == 'skin']
@@ -2635,7 +2669,10 @@ def _daily_target_ids(d=None):
     selected_basic = rng.sample(remaining_basic, min(3, len(remaining_basic)))
     selected_skin = rng.sample(sorted_skin, min(5, len(sorted_skin)))
 
-    return [c.id for c in first_three + selected_basic + selected_skin]
+    seeded_ids = [c.id for c in first_three + selected_basic + selected_skin]
+    if not scheduled_ids:
+        return seeded_ids
+    return scheduled_ids + [cid for cid in seeded_ids if cid not in scheduled_ids]
 
 
 @main.route('/api/daily-challenge/today', methods=['GET'])
@@ -2770,6 +2807,50 @@ def daily_challenge_resolve():
             'daily_performance_awards': daily_perf_awards,
         })
 
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ── Probe slots (learning-effect study) ────────────────────────────────────
+
+@main.route('/api/probe/next', methods=['POST'])
+def probe_next():
+    """
+    Return the user's pending probe slot, assigning a new one when due.
+    The payload is deliberately arm-free: the client only sees a target colour,
+    so a probe round is indistinguishable from a normal round.
+    """
+    data = request.get_json() or {}
+    _, user_id, err = _resolve_authenticated_user(data)
+    if err:
+        return err
+    try:
+        slot = maybe_assign_flow_probe(user_id)
+        db.session.commit()
+        return jsonify({'status': 'success', **probe_payload(slot)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/probe/start', methods=['POST'])
+def probe_start():
+    """Bind the attempt that is about to be played to its probe slot."""
+    data = request.get_json() or {}
+    _, user_id, err = _resolve_authenticated_user(data)
+    if err:
+        return err
+    slot_id = data.get('slot_id')
+    attempt_uuid = data.get('attempt_uuid')
+    if not slot_id or not attempt_uuid:
+        return jsonify({'status': 'error', 'message': 'slot_id and attempt_uuid required'}), 400
+    try:
+        slot = bind_probe_attempt(int(slot_id), str(attempt_uuid), user_id)
+        if slot is None:
+            return jsonify({'status': 'error', 'message': 'slot not found or not bindable'}), 404
+        db.session.commit()
+        return jsonify({'status': 'success', 'slot_id': slot.id})
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500

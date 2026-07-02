@@ -983,30 +983,73 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  let currentProbeSlot = null;
+
+  async function fetchProbeSlot() {
+    // Learning-effect study: ask the server whether a probe round is due.
+    // Best-effort — any failure falls back to normal play.
+    const uid = getAuthenticatedUserId();
+    if (!uid) return null;
+    try {
+      const res = await fetch('/api/probe/next', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (d.status === 'success' && d.probe && d.probe.target_color
+          && Array.isArray(d.probe.target_color.rgb)) {
+        return d.probe;
+      }
+    } catch (e) { /* probes must never block gameplay */ }
+    return null;
+  }
+
+  async function bindProbeAttempt(slotId, attemptUuid) {
+    const uid = getAuthenticatedUserId();
+    if (!uid || !slotId || !attemptUuid) return;
+    try {
+      await fetch('/api/probe/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid, slot_id: slotId, attempt_uuid: attemptUuid }),
+      });
+    } catch (e) { /* server falls back to matching by target colour on save */ }
+  }
+
   async function goToNextShade() {
     sessionShadesCompleted += 1;
     let reshuffled = false;
-    let nextIndex = currentTargetIndex + 1;
-    if (nextIndex >= targetColors.length) {
-      await refreshCatalogFromServer();
-      const next = buildShuffledPlayQueue(fullCatalog);
-      if (!next.length) {
-        sessionShadesCompleted -= 1;
-        alert(
-          onlyBlockedByPracticeQuota(fullCatalog)
-            ? 'You have reached the practice attempt quota on every shade in your tier. Unlock higher sum-drop caps or add new shades to keep playing.'
-            : 'No target colors available. Check the catalog or your tier unlocks.',
-        );
-        return;
+
+    // A due probe replaces the queued colour for this round (the queue is not
+    // consumed); the round looks and plays exactly like a normal one.
+    currentProbeSlot = await fetchProbeSlot();
+
+    if (currentProbeSlot) {
+      currentTargetColor = currentProbeSlot.target_color;
+    } else {
+      let nextIndex = currentTargetIndex + 1;
+      if (nextIndex >= targetColors.length) {
+        await refreshCatalogFromServer();
+        const next = buildShuffledPlayQueue(fullCatalog);
+        if (!next.length) {
+          sessionShadesCompleted -= 1;
+          alert(
+            onlyBlockedByPracticeQuota(fullCatalog)
+              ? 'You have reached the practice attempt quota on every shade in your tier. Unlock higher sum-drop caps or add new shades to keep playing.'
+              : 'No target colors available. Check the catalog or your tier unlocks.',
+          );
+          return;
+        }
+        targetColors.length = 0;
+        targetColors.push(...next);
+        nextIndex = 0;
+        reshuffled = true;
+        showToast('New shuffle — fresh order, same practice.', 'info', 3200);
       }
-      targetColors.length = 0;
-      targetColors.push(...next);
-      nextIndex = 0;
-      reshuffled = true;
-      showToast('New shuffle — fresh order, same practice.', 'info', 3200);
+      currentTargetIndex = nextIndex;
+      currentTargetColor = targetColors[currentTargetIndex];
     }
-    currentTargetIndex = nextIndex;
-    currentTargetColor = targetColors[currentTargetIndex];
     setGameTarget(currentTargetColor);
     updateBox('targetColor', targetColor);
     resetMix();
@@ -1017,6 +1060,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     setControlState('mixing');
     updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
     beginAttemptForCurrentTarget();
+    if (currentProbeSlot && telemetryAttempt) {
+      bindProbeAttempt(currentProbeSlot.slot_id, telemetryAttempt.attempt_uuid);
+    }
 
     maybeRhythmFeedback(sessionShadesCompleted, reshuffled);
 

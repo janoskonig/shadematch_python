@@ -821,13 +821,20 @@ def build_progress_response(user_id: str, user_progress, _catalog_size_ignored=N
 # Core progression engine
 # ---------------------------------------------------------------------------
 
-def process_progression(user_id, match_category, skipped, target_color_id, delta_e, today=None):
+def process_progression(user_id, match_category, skipped, target_color_id, delta_e, today=None,
+                        is_probe=False):
     """
     Must be called inside an open db.session transaction.
     Returns (xp_earned, new_awards, streak_event, level_up_event).
 
     level_up_event is now quota-driven: fires when quota coverage crosses a
     level boundary. XP is still accumulated but never drives level or maxed state.
+
+    is_probe: experimental probe rounds (learning-effect study) are
+    quota-neutral — XP, streak and daily missions accrue normally, but the
+    round must not touch UserTargetColorStats nor advance quota/level;
+    otherwise the probe arms would push level pacing apart and probes on
+    locked-band colours would corrupt the deterministic level recompute.
 
     streak_event values:
         None | 'started' | 'same_day' | 'incremented' | 'freeze_consumed' | 'reset'
@@ -929,7 +936,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
     # 'stopped' rows are persisted for analytics but do NOT advance progression.
     counts_toward_quota = match_category in COMPLETED_MATCH_CATEGORIES
 
-    if target_color_id is not None:
+    if target_color_id is not None and not is_probe:
         stats = UserTargetColorStats.query.filter_by(
             user_id=user_id, target_color_id=target_color_id,
         ).first()
