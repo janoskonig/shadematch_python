@@ -355,6 +355,11 @@
   <div class="app-row">
     <div class="main-content" id="mainContent">
 
+      <!-- Next-action CTA (populated by renderNextAction after saves/progress
+           load). Above the game panel so the daily challenge is discoverable
+           without scrolling. -->
+      <div id="nextActionCta" class="next-action-cta" style="display:none;"></div>
+
       <div class="mixing-workspace">
         <div class="mixing-canvas-zone">
           <!-- Swatches (full-bleed canvas) -->
@@ -460,9 +465,6 @@
         <span class="na-reason">Please verify your email to receive reminder emails.</span>
         <button id="resendVerifyBtn" class="btn btn-secondary" type="button">Resend verification email</button>
       </div>
-
-      <!-- Next-action CTA (populated by renderNextAction after saves/progress load) -->
-      <div id="nextActionCta" class="next-action-cta" style="display:none;"></div>
 
       <!-- PWA install affordance -->
       <div id="pwaInstallCta" class="pwa-install-cta" style="display:none;">
