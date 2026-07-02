@@ -361,3 +361,78 @@ class CalibrationTrial(db.Model):
         db.UniqueConstraint('session_uuid', 'seq', name='uq_calibration_trial_seq'),
         db.Index('idx_calibration_trials_session', 'session_uuid'),
     )
+
+class ProbeSlot(db.Model):
+    """
+    Experimental probe-round ledger for the learning-effect study.
+
+    A probe slot is assigned server-side (seeded randomization) and later bound
+    to the mixing attempt that fulfils it. Probe rounds are quota-neutral: they
+    never touch UserTargetColorStats and are excluded from quota/level
+    computation (see gamification.process_progression(is_probe=True)).
+    Assignment-time snapshots are stored so the randomization stays auditable
+    even if the surrounding logic changes later.
+
+    arm: 'repeat'        — a colour the user has played before
+         'matched_new'   — an unplayed colour matched on difficulty, within the
+                           user's unlocked sum-drop band
+         'repeat_short' / 'repeat_long' — fallback contrast (recency of the
+                           repeated exposure) when the band has no unplayed colour
+    channel: 'flow' (in-game probe slot) | 'daily' (daily-challenge carrier)
+    """
+    __tablename__ = 'probe_slots'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(6), db.ForeignKey('users.id'), nullable=False)
+    assigned_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    channel = db.Column(db.String(8), nullable=False, default='flow')
+    slot_index = db.Column(db.Integer, nullable=False)
+    arm = db.Column(db.String(16), nullable=False)
+    target_color_id = db.Column(db.Integer, db.ForeignKey('target_colors.id'), nullable=False)
+    seed = db.Column(db.String(64), nullable=False)
+    policy_version = db.Column(db.String(16), nullable=False, default='probe-v1')
+
+    # Assignment-time snapshots (computed from mixing_sessions, NOT from
+    # user_target_color_stats — the latter excludes probe rounds by design,
+    # while exposure/memory dose must include them).
+    prior_exposure_count = db.Column(db.Integer, nullable=False, default=0)
+    last_exposure_at = db.Column(db.DateTime, nullable=True)
+    rounds_since_last_exposure = db.Column(db.Integer, nullable=True)
+    cumulative_prior_rounds = db.Column(db.Integer, nullable=False, default=0)
+    level_at_assignment = db.Column(db.Integer, nullable=True)
+    cap_at_assignment = db.Column(db.Integer, nullable=True)
+
+    attempt_uuid = db.Column(
+        db.String(36), db.ForeignKey('mixing_attempts.attempt_uuid'),
+        nullable=True, unique=True,
+    )
+    # assigned -> served (attempt bound) -> completed | skipped; 'expired' if
+    # superseded before being played.
+    status = db.Column(db.String(16), nullable=False, default='assigned')
+
+    __table_args__ = (
+        db.Index('idx_probe_slots_user_status', 'user_id', 'status'),
+    )
+
+
+class ProbeSchedule(db.Model):
+    """
+    Planned daily-challenge probe rotation: which probe colour appears on which
+    date (and the how-manyth return of that colour this is). Multiple rows per
+    date are allowed (position orders them); dates without rows fall back to
+    the regular seeded daily selection.
+    """
+    __tablename__ = 'probe_schedule'
+
+    id = db.Column(db.Integer, primary_key=True)
+    challenge_date = db.Column(db.Date, nullable=False)
+    target_color_id = db.Column(db.Integer, db.ForeignKey('target_colors.id'), nullable=False)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    rotation_cycle = db.Column(db.Integer, nullable=True)
+    notes = db.Column(db.String(255), nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('challenge_date', 'target_color_id',
+                            name='uq_probe_schedule_date_color'),
+        db.Index('idx_probe_schedule_date', 'challenge_date'),
+    )
