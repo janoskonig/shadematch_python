@@ -23,6 +23,7 @@ from app.models import (                            # noqa: E402
 )
 from app.probe import (                             # noqa: E402
     maybe_assign_flow_probe, resolve_probe_for_attempt, _rng_for,
+    assign_daily_probe, bind_probe_attempt,
     MIN_REPEAT_GAP_ROUNDS, MIN_ROUNDS_BEFORE_PROBES,
 )
 from app.gamification import (                      # noqa: E402
@@ -220,6 +221,31 @@ with app.app_context():
               slot_b.prior_exposure_count > 0
               and slot_b.rounds_since_last_exposure is not None,
               (slot_b.prior_exposure_count, slot_b.rounds_since_last_exposure))
+
+    # ── 7. Daily-channel probe slot (daily challenge carrier) ─────────────
+    d_slot = assign_daily_probe('TEST01', 5)
+    db.session.commit()
+    check('daily slot created', d_slot is not None
+          and d_slot.channel == 'daily' and d_slot.arm == 'daily',
+          (getattr(d_slot, 'channel', None), getattr(d_slot, 'arm', None)))
+    daily_id = d_slot.id
+
+    bind_probe_attempt(daily_id, 'uuid-daily-1', 'TEST01')
+    db.session.commit()
+    ok_daily = resolve_probe_for_attempt('uuid-daily-1', 'TEST01', 5, skipped=False)
+    db.session.commit()
+    check('daily slot binds and resolves',
+          ok_daily and ProbeSlot.query.get(daily_id).status == 'completed')
+
+    # A same-day retry reuses and rebinds the slot instead of duplicating it.
+    d_slot2 = assign_daily_probe('TEST01', 5)
+    db.session.commit()
+    check('same-day daily slot reused and rebindable',
+          d_slot2 is not None and d_slot2.id == daily_id
+          and d_slot2.status == 'assigned' and d_slot2.attempt_uuid is None,
+          (getattr(d_slot2, 'id', None), getattr(d_slot2, 'status', None)))
+    check('no duplicate daily slot rows',
+          ProbeSlot.query.filter_by(user_id='TEST01', channel='daily').count() == 1)
 
 failed = [c for c in CHECKS if not c[1]]
 print(f'\n{len(CHECKS) - len(failed)}/{len(CHECKS)} checks passed.')
