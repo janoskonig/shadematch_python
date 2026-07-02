@@ -21,6 +21,7 @@ from .probe import (
     bind_probe_attempt,
     resolve_probe_for_attempt,
     probe_payload,
+    assign_daily_probe,
 )
 import string
 from .utils import calculate_delta_e, spectrum_to_xyz, xyz_to_rgb
@@ -2711,6 +2712,54 @@ def daily_challenge_today():
         'already_submitted': already_submitted,
         **next_action_data,
     })
+
+
+@main.route('/api/daily-challenge/start', methods=['POST'])
+def daily_challenge_start():
+    """
+    Begin today's daily challenge round: returns the colour of the day (the
+    scheduled probe colour when probe_schedule has one) and creates/rebinds
+    the user's quota-neutral daily probe slot. The client binds the attempt
+    via /api/probe/start, exactly like a flow probe.
+    """
+    data = request.get_json() or {}
+    _, user_id, err = _resolve_authenticated_user(data)
+    if err:
+        return err
+
+    today = date.today()
+    final_run = (
+        DailyChallengeRun.query
+        .filter_by(user_id=user_id, challenge_date=today, is_final=True)
+        .first()
+    )
+    if final_run:
+        return jsonify({'status': 'success', 'already_submitted': True,
+                        'target_color': None})
+
+    target_ids = _daily_target_ids(today)
+    if not target_ids:
+        return jsonify({'status': 'error', 'message': 'No daily colour available'}), 404
+    tc = TargetColor.query.get(target_ids[0])
+    if tc is None:
+        return jsonify({'status': 'error', 'message': 'Daily colour not found'}), 404
+
+    try:
+        slot = assign_daily_probe(user_id, tc.id, today=today)
+        db.session.commit()
+        return jsonify({
+            'status': 'success',
+            'already_submitted': False,
+            'challenge_date': today.isoformat(),
+            'slot_id': slot.id if slot else None,
+            'target_color': {
+                'id': tc.id, 'name': tc.name, 'type': tc.color_type,
+                'rgb': [tc.r, tc.g, tc.b],
+            },
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @main.route('/api/daily-challenge/submit', methods=['POST'])

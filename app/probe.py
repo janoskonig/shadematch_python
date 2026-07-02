@@ -21,7 +21,7 @@ rounds), NOT from UserTargetColorStats (which excludes them by design).
 """
 import hashlib
 import random as _random
-from datetime import datetime
+from datetime import datetime, date, timedelta
 
 from . import db
 from .models import ProbeSlot, MixingSession, TargetColor, UserProgress
@@ -207,6 +207,61 @@ def maybe_assign_flow_probe(user_id: str):
         cumulative_prior_rounds=n,
         level_at_assignment=level,
         cap_at_assignment=cap,
+        status='assigned',
+    )
+    db.session.add(slot)
+    return slot
+
+
+def assign_daily_probe(user_id: str, target_color_id: int, today=None):
+    """
+    Create (or rebind) today's daily-channel probe slot for the user. The
+    daily challenge is the primary probe carrier: everyone plays the same
+    colour on the same day, and the round is quota-neutral like any probe.
+
+    One slot per user per day. A retry within the day reuses the slot: the
+    status is reset to 'assigned' and the attempt binding cleared, so the new
+    attempt can bind via /api/probe/start. Adds to the session, no commit.
+    """
+    if not user_id:
+        return None
+    today = today or date.today()
+    day_start = datetime(today.year, today.month, today.day)
+    day_end = day_start + timedelta(days=1)
+
+    slot = (
+        ProbeSlot.query
+        .filter_by(user_id=user_id, channel='daily')
+        .filter(ProbeSlot.assigned_at >= day_start, ProbeSlot.assigned_at < day_end)
+        .order_by(ProbeSlot.assigned_at.desc())
+        .first()
+    )
+    if slot:
+        slot.status = 'assigned'
+        slot.attempt_uuid = None
+        return slot
+
+    rounds = _user_rounds(user_id)
+    up = UserProgress.query.filter_by(user_id=user_id).first()
+    last = _last_slot(user_id)
+    slot_index = (last.slot_index + 1) if last else 1
+    _, seed = _rng_for(user_id, slot_index)
+    exp_count, exp_last_at, exp_since = _exposure_snapshot(rounds, target_color_id)
+
+    slot = ProbeSlot(
+        user_id=user_id,
+        channel='daily',
+        slot_index=slot_index,
+        arm='daily',
+        target_color_id=target_color_id,
+        seed=seed,
+        policy_version=POLICY_VERSION,
+        prior_exposure_count=exp_count,
+        last_exposure_at=exp_last_at,
+        rounds_since_last_exposure=exp_since,
+        cumulative_prior_rounds=len(rounds),
+        level_at_assignment=int(up.level) if up else 1,
+        cap_at_assignment=int(up.max_sum_drop_unlocked) if up else 4,
         status='assigned',
     )
     db.session.add(slot)

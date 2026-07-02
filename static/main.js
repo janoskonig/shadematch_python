@@ -627,6 +627,12 @@ function renderNextAction(na) {
   el.dataset.actionId = p.id;
   el.dataset.route = (p.payload && p.payload.route) || '';
   el.style.display = 'flex';
+
+  const isDaily = el.dataset.route === 'daily_challenge';
+  el.style.cursor = isDaily ? 'pointer' : '';
+  el.onclick = isDaily
+    ? () => { if (window.__startDailyChallenge) window.__startDailyChallenge(); }
+    : null;
 }
 
 function renderDailyMissions(dm) {
@@ -1017,9 +1023,83 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) { /* server falls back to matching by target colour on save */ }
   }
 
+  // ── Daily challenge mode (probe carrier) ────────────────────────────────
+  let dailyMode = null; // {slot_id} while today's challenge round is active
+
+  async function startDailyChallenge() {
+    if (!requireAuthenticatedUser()) return;
+    const uid = getAuthenticatedUserId();
+    try {
+      const res = await fetch('/api/daily-challenge/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (d.already_submitted) {
+        showToast("You've already completed today's challenge — come back tomorrow!", 'info', 3200);
+        return;
+      }
+      if (d.status !== 'success' || !d.target_color || !Array.isArray(d.target_color.rgb)) return;
+
+      // Leave the round in progress cleanly, then serve the daily colour in
+      // the normal game UI.
+      if (telemetryAttempt) {
+        await flushTelemetry({ finalize: true, endReason: 'abandoned' });
+      }
+      dailyMode = { slot_id: d.slot_id };
+      currentProbeSlot = null;
+      currentTargetColor = d.target_color;
+      setGameTarget(currentTargetColor);
+      updateBox('targetColor', targetColor);
+      resetMix();
+      stopTimer();
+      resetTimerDisplay();
+      startTimer();
+      enableColorMixing();
+      setControlState('mixing');
+      beginAttemptForCurrentTarget();
+      if (dailyMode.slot_id && telemetryAttempt) {
+        await bindProbeAttempt(dailyMode.slot_id, telemetryAttempt.attempt_uuid);
+      }
+      showToast("📅 Today's challenge — one run, make it count!", 'info', 3000);
+    } catch (e) {
+      console.error('Daily challenge start failed:', e);
+    }
+  }
+  window.__startDailyChallenge = startDailyChallenge;
+
+  async function maybeSubmitDailyRun(attemptUuid, deltaE, steps) {
+    if (!dailyMode) return;
+    const uid = getAuthenticatedUserId();
+    dailyMode = null;
+    if (!uid || !attemptUuid) return;
+    try {
+      const res = await fetch('/api/daily-challenge/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: uid,
+          attempt_uuid: attemptUuid,
+          score_primary: Number.isFinite(deltaE) ? deltaE : null,
+          score_secondary: Number.isFinite(steps) ? steps : null,
+          is_final: true,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (d.status === 'success') {
+        showToast('📅 Daily challenge submitted — see you tomorrow!', 'success', 3200);
+        loadAndRenderProgress().catch(() => {}); // refresh the CTA (daily done)
+      }
+    } catch (e) { /* run stays playable tomorrow; never block the game */ }
+  }
+
   async function goToNextShade() {
     sessionShadesCompleted += 1;
     let reshuffled = false;
+    // Any transition back to normal serving ends daily mode (a submitted run
+    // already cleared it; an unfinished one stays restartable via the CTA).
+    dailyMode = null;
 
     // A due probe replaces the queued colour for this round (the queue is not
     // consumed); the round looks and plays exactly like a normal one.
@@ -1206,12 +1286,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           currentSessionSaved = true;
           window.currentSessionSaved = true;
           sessionLogs.push(session);
+          const stepsForDaily = telemetryAttempt?.decisionStepIndex ?? null;
           await flushTelemetry({
             finalize: true,
             endReason: 'saved_match',
             terminalBoundaryType: 'boundary_save',
           });
           await saveSessionToServer(session);
+          await maybeSubmitDailyRun(session.attempt_uuid, data.delta_e, stepsForDaily);
           setControlState('completed');
         }
       });
@@ -1222,6 +1304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ── Button handlers ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', async () => {
     if (!requireAuthenticatedUser()) return;
+    dailyMode = null;
     if (telemetryAttempt) {
       await flushTelemetry({
         finalize: true,
@@ -1283,6 +1366,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         skip_perception: skipPerception,
         attempt_ended_client_ts_ms: nowClientTsMs(),
       };
+      const stepsForDaily = telemetryAttempt?.decisionStepIndex ?? null;
       await flushTelemetry({
         finalize: true,
         endReason: 'skipped',
@@ -1300,6 +1384,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
         handleProgressionResponse(data);
+        await maybeSubmitDailyRun(skipData.attempt_uuid, skipData.delta_e, stepsForDaily);
       } catch {
         alert('Error saving skip data. Please check your connection and try again.');
         return;
@@ -1311,6 +1396,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('restartBtn').addEventListener('click', async () => {
     if (!requireAuthenticatedUser()) return;
+    dailyMode = null;
     await flushTelemetry({
       finalize: true,
       endReason: 'restart',
@@ -1369,7 +1455,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         endReason: 'reset',
         terminalBoundaryType: 'boundary_reset',
       });
-      saveSessionToServer(session);
+      const savePromise = saveSessionToServer(session);
+      // In daily mode the save must land before the slot is rebound below,
+      // otherwise the reset-save could re-claim the freshly cleared slot.
+      if (dailyMode) await savePromise;
     }
     resetMix();
     resetTimerDisplay();
@@ -1378,6 +1467,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     enableColorMixing();
     setControlState('mixing');
     beginAttemptForCurrentTarget();
+    if (dailyMode) {
+      try {
+        const res = await fetch('/api/daily-challenge/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: getAuthenticatedUserId() }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (d.status === 'success' && d.slot_id && telemetryAttempt) {
+          dailyMode.slot_id = d.slot_id;
+          await bindProbeAttempt(d.slot_id, telemetryAttempt.attempt_uuid);
+        }
+      } catch (e) { /* the save-time colour fallback still applies */ }
+    }
   });
 
   // ── Palette interaction ────────────────────────────────────────────────
