@@ -248,5 +248,11 @@ def build_next_action(user_id: str, today: date = None, quota=None):
                 'remaining_attempts_total': quota['remaining_attempts_total'],
                 'is_maxed_out': is_maxed_out,
             },
-        }
+        },
+        # Compact state for the header badge: has today's challenge been
+        # submitted? (final_today was computed for the policy above.)
+        'daily_status': {
+            'challenge_date': policy_day,
+            'submitted': final_today is not None,
+        },
     }

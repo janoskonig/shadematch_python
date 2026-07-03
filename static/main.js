@@ -475,6 +475,7 @@ async function loadAndRenderProgress() {
     if (data.status === 'success') {
       renderProgressStrip(data.progress);
       if (data.next_action) renderNextAction(data.next_action);
+      if (data.daily_status) renderDailyStatusBadge(data.daily_status);
       if (data.daily_missions) renderDailyMissions(data.daily_missions);
     }
   } catch { /* silent */ }
@@ -588,6 +589,9 @@ async function handleProgressionResponse(data) {
   if (data.next_action) {
     renderNextAction(data.next_action);
   }
+  if (data.daily_status) {
+    renderDailyStatusBadge(data.daily_status);
+  }
   if (data.daily_missions) {
     renderDailyMissions(data.daily_missions);
   }
@@ -633,6 +637,44 @@ function renderNextAction(na) {
   el.onclick = isDaily
     ? () => { if (window.__startDailyChallenge) window.__startDailyChallenge(); }
     : null;
+}
+
+// ── Daily-challenge status badge (always-visible header indicator) ────────
+function renderDailyStatusBadge(status) {
+  if (status) window.__dailyStatus = status;
+  const st = window.__dailyStatus;
+  const host = document.querySelector('.header-right');
+  if (!host) return;
+  let el = document.getElementById('dailyStatusBadge');
+  if (!el) {
+    el = document.createElement('button');
+    el.id = 'dailyStatusBadge';
+    el.type = 'button';
+    el.className = 'daily-status-badge';
+    host.insertBefore(el, host.firstChild);
+  }
+  if (!st) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  el.classList.remove('daily-pending', 'daily-done', 'daily-playing');
+  if (window.__dailyPlaying) {
+    el.classList.add('daily-playing');
+    el.innerHTML = '📅<span class="daily-status-text">Daily…</span>';
+    el.title = 'Daily round in progress — save or skip to submit';
+    el.onclick = null;
+    el.style.cursor = 'default';
+  } else if (st.submitted) {
+    el.classList.add('daily-done');
+    el.innerHTML = '📅<span class="daily-status-text">Daily ✓</span>';
+    el.title = "Today's challenge completed — come back tomorrow!";
+    el.onclick = null;
+    el.style.cursor = 'default';
+  } else {
+    el.classList.add('daily-pending');
+    el.innerHTML = '📅<span class="daily-status-text">Daily</span><span class="daily-dot"></span>';
+    el.title = "Today's challenge is waiting — tap to play";
+    el.onclick = () => { if (window.__startDailyChallenge) window.__startDailyChallenge(); };
+    el.style.cursor = 'pointer';
+  }
 }
 
 function renderDailyMissions(dm) {
@@ -1062,6 +1104,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (dailyMode.slot_id && telemetryAttempt) {
         await bindProbeAttempt(dailyMode.slot_id, telemetryAttempt.attempt_uuid);
       }
+      window.__dailyPlaying = true;
+      renderDailyStatusBadge(null);
+      const cta = document.getElementById('nextActionCta');
+      if (cta) {
+        cta.innerHTML = '<span class="na-icon">📅</span>'
+          + '<span class="na-label">Daily round in progress</span>'
+          + '<span class="na-reason">Mix today&#39;s colour — save or skip to submit your run</span>';
+        cta.style.display = 'flex';
+        cta.style.cursor = 'default';
+        cta.onclick = null;
+      }
       showToast("📅 Today's challenge — one run, make it count!", 'info', 3000);
     } catch (e) {
       console.error('Daily challenge start failed:', e);
@@ -1073,6 +1126,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!dailyMode) return;
     const uid = getAuthenticatedUserId();
     dailyMode = null;
+    window.__dailyPlaying = false;
+    renderDailyStatusBadge(null);
     if (!uid || !attemptUuid) return;
     try {
       const res = await fetch('/api/daily-challenge/submit', {
@@ -1088,6 +1143,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
       const d = await res.json().catch(() => ({}));
       if (d.status === 'success') {
+        renderDailyStatusBadge({ submitted: true });
         showToast('📅 Daily challenge submitted — see you tomorrow!', 'success', 3200);
         loadAndRenderProgress().catch(() => {}); // refresh the CTA (daily done)
       }
@@ -1100,6 +1156,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Any transition back to normal serving ends daily mode (a submitted run
     // already cleared it; an unfinished one stays restartable via the CTA).
     dailyMode = null;
+    if (window.__dailyPlaying) {
+      window.__dailyPlaying = false;
+      renderDailyStatusBadge(null);
+    }
 
     // A due probe replaces the queued colour for this round (the queue is not
     // consumed); the round looks and plays exactly like a normal one.
@@ -1305,6 +1365,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('startBtn').addEventListener('click', async () => {
     if (!requireAuthenticatedUser()) return;
     dailyMode = null;
+    if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
     if (telemetryAttempt) {
       await flushTelemetry({
         finalize: true,
@@ -1397,6 +1458,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('restartBtn').addEventListener('click', async () => {
     if (!requireAuthenticatedUser()) return;
     dailyMode = null;
+    if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
     await flushTelemetry({
       finalize: true,
       endReason: 'restart',
