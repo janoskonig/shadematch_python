@@ -597,25 +597,27 @@ async function handleProgressionResponse(data) {
   }
 }
 
-// ── Next-action renderer ──────────────────────────────────────────────────
-function renderNextAction(na) {
-  if (!na || !na.primary) return;
-  const p = na.primary;
+// ── Daily round chip (target swatch overlay) ──────────────────────────────
+function setDailyChip(on) {
+  const chip = document.getElementById('dailyChip');
+  if (chip) chip.style.display = on ? '' : 'none';
+}
 
-  // Find or create the next-action slot inside the progress strip area
-  let el = document.getElementById('nextActionCta');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'nextActionCta';
-    el.className = 'next-action-cta';
-    // Insert after progressStrip if it exists, else append to body
-    const strip = document.getElementById('progressStrip');
-    if (strip && strip.parentNode) {
-      strip.parentNode.insertBefore(el, strip.nextSibling);
-    } else {
-      document.body.appendChild(el);
-    }
+// ── Next-action renderer ──────────────────────────────────────────────────
+// The banner is reserved for urgent, action-required states. The daily
+// challenge is auto-served as the first round of the day (with the target
+// swatch chip) and tracked by the header badge, so it no longer needs a
+// persistent banner; routine practice suggestions stay ambient.
+const BANNER_ACTION_IDS = new Set(['streak_at_risk']);
+
+function renderNextAction(na) {
+  const el = document.getElementById('nextActionCta');
+  const p = na && na.primary;
+  if (!p || !BANNER_ACTION_IDS.has(p.id)) {
+    if (el) el.style.display = 'none';
+    return;
   }
+  if (!el) return;
 
   const typeIcon = {
     daily_challenge: '📅',
@@ -631,17 +633,22 @@ function renderNextAction(na) {
   el.dataset.actionId = p.id;
   el.dataset.route = (p.payload && p.payload.route) || '';
   el.style.display = 'flex';
-
-  const isDaily = el.dataset.route === 'daily_challenge';
-  el.style.cursor = isDaily ? 'pointer' : '';
-  el.onclick = isDaily
-    ? () => { if (window.__startDailyChallenge) window.__startDailyChallenge(); }
-    : null;
+  el.style.cursor = '';
+  el.onclick = null;
 }
 
 // ── Daily-challenge status badge (always-visible header indicator) ────────
 function renderDailyStatusBadge(status) {
-  if (status) window.__dailyStatus = status;
+  if (status) {
+    const cur = window.__dailyStatus;
+    // Monotonic within a day: a submitted challenge never becomes
+    // unsubmitted. Guards against stale envelopes rendered late by the
+    // queued toast sequence overwriting the submit-time update.
+    const staleDowngrade = cur && cur.submitted && !status.submitted
+      && (!status.challenge_date || !cur.challenge_date
+          || status.challenge_date === cur.challenge_date);
+    if (!staleDowngrade) window.__dailyStatus = status;
+  }
   const st = window.__dailyStatus;
   const host = document.querySelector('.header-right');
   if (!host) return;
@@ -1067,6 +1074,37 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ── Daily challenge mode (probe carrier) ────────────────────────────────
   let dailyMode = null; // {slot_id} while today's challenge round is active
+  let dailyAutoAttempted = false; // auto-serve at most once per session
+
+  async function maybeServeDaily() {
+    // The colour of the day is served automatically as the player's next
+    // round, once per session, until today's run is submitted. The header
+    // badge remains a manual entry point after that.
+    const uid = getAuthenticatedUserId();
+    if (!uid) return null;
+    if (dailyAutoAttempted) return null;
+    if (window.__dailyStatus && window.__dailyStatus.submitted) return null;
+    dailyAutoAttempted = true;
+    try {
+      const res = await fetch('/api/daily-challenge/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (d.status === 'success' && !d.already_submitted && d.target_color
+          && Array.isArray(d.target_color.rgb)) {
+        return { slot_id: d.slot_id, target_color: d.target_color };
+      }
+      if (d.already_submitted) {
+        renderDailyStatusBadge({
+          challenge_date: (window.__dailyStatus || {}).challenge_date,
+          submitted: true,
+        });
+      }
+    } catch (e) { /* the daily must never block gameplay */ }
+    return null;
+  }
 
   async function startDailyChallenge() {
     if (!requireAuthenticatedUser()) return;
@@ -1104,17 +1142,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (dailyMode.slot_id && telemetryAttempt) {
         await bindProbeAttempt(dailyMode.slot_id, telemetryAttempt.attempt_uuid);
       }
+      dailyAutoAttempted = true;
       window.__dailyPlaying = true;
       renderDailyStatusBadge(null);
-      const cta = document.getElementById('nextActionCta');
-      if (cta) {
-        cta.innerHTML = '<span class="na-icon">📅</span>'
-          + '<span class="na-label">Daily round in progress</span>'
-          + '<span class="na-reason">Mix today&#39;s colour — save or skip to submit your run</span>';
-        cta.style.display = 'flex';
-        cta.style.cursor = 'default';
-        cta.onclick = null;
-      }
+      setDailyChip(true);
       showToast("📅 Today's challenge — one run, make it count!", 'info', 3000);
     } catch (e) {
       console.error('Daily challenge start failed:', e);
@@ -1128,6 +1159,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     dailyMode = null;
     window.__dailyPlaying = false;
     renderDailyStatusBadge(null);
+    setDailyChip(false);
     if (!uid || !attemptUuid) return;
     try {
       const res = await fetch('/api/daily-challenge/submit', {
@@ -1143,7 +1175,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
       const d = await res.json().catch(() => ({}));
       if (d.status === 'success') {
-        renderDailyStatusBadge({ submitted: true });
+        renderDailyStatusBadge({
+          challenge_date: (window.__dailyStatus || {}).challenge_date,
+          submitted: true,
+        });
         showToast('📅 Daily challenge submitted — see you tomorrow!', 'success', 3200);
         loadAndRenderProgress().catch(() => {}); // refresh the CTA (daily done)
       }
@@ -1153,19 +1188,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function goToNextShade() {
     sessionShadesCompleted += 1;
     let reshuffled = false;
-    // Any transition back to normal serving ends daily mode (a submitted run
-    // already cleared it; an unfinished one stays restartable via the CTA).
+    // Any transition ends the previous round's daily state (a submitted run
+    // already cleared it; an unfinished one stays reachable via the badge).
     dailyMode = null;
     if (window.__dailyPlaying) {
       window.__dailyPlaying = false;
       renderDailyStatusBadge(null);
     }
+    setDailyChip(false);
 
-    // A due probe replaces the queued colour for this round (the queue is not
-    // consumed); the round looks and plays exactly like a normal one.
-    currentProbeSlot = await fetchProbeSlot();
+    // Serving priority: colour of the day (once per session, until
+    // submitted) → due probe → shuffled queue. Probe and daily rounds do
+    // not consume the queue.
+    const daily = await maybeServeDaily();
+    if (daily) {
+      dailyMode = { slot_id: daily.slot_id };
+      currentProbeSlot = null;
+      currentTargetColor = daily.target_color;
+    } else {
+      currentProbeSlot = await fetchProbeSlot();
+    }
 
-    if (currentProbeSlot) {
+    if (dailyMode) {
+      // target already set above
+    } else if (currentProbeSlot) {
       currentTargetColor = currentProbeSlot.target_color;
     } else {
       let nextIndex = currentTargetIndex + 1;
@@ -1200,7 +1246,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     setControlState('mixing');
     updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
     beginAttemptForCurrentTarget();
-    if (currentProbeSlot && telemetryAttempt) {
+    if (dailyMode && dailyMode.slot_id && telemetryAttempt) {
+      await bindProbeAttempt(dailyMode.slot_id, telemetryAttempt.attempt_uuid);
+      window.__dailyPlaying = true;
+      renderDailyStatusBadge(null);
+      setDailyChip(true);
+      showToast("📅 Today's challenge — mix the colour of the day!", 'info', 2800);
+    } else if (currentProbeSlot && telemetryAttempt) {
       bindProbeAttempt(currentProbeSlot.slot_id, telemetryAttempt.attempt_uuid);
     }
 
@@ -1366,6 +1418,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!requireAuthenticatedUser()) return;
     dailyMode = null;
     if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
+    setDailyChip(false);
     if (telemetryAttempt) {
       await flushTelemetry({
         finalize: true,
@@ -1389,7 +1442,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     targetColors.push(...newQueue);
 
     currentTargetIndex = 0;
-    currentTargetColor = targetColors[currentTargetIndex];
+    // The first round of the session is the colour of the day (when today's
+    // run is still open); the queued colour stays next in line.
+    const dailyFirst = await maybeServeDaily();
+    if (dailyFirst) {
+      dailyMode = { slot_id: dailyFirst.slot_id };
+      currentTargetColor = dailyFirst.target_color;
+    } else {
+      currentTargetColor = targetColors[currentTargetIndex];
+    }
     setGameTarget(currentTargetColor);
     updateBox('targetColor', targetColor);
     resetMix();
@@ -1398,6 +1459,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     setControlState('mixing');
     updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
     beginAttemptForCurrentTarget();
+    if (dailyMode && dailyMode.slot_id && telemetryAttempt) {
+      await bindProbeAttempt(dailyMode.slot_id, telemetryAttempt.attempt_uuid);
+      window.__dailyPlaying = true;
+      renderDailyStatusBadge(null);
+      showToast("📅 Today's challenge — mix the colour of the day!", 'info', 2800);
+    }
+    setDailyChip(!!dailyMode);
   });
 
   document.getElementById('skipBtn').addEventListener('click', async () => {
@@ -1459,6 +1527,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!requireAuthenticatedUser()) return;
     dailyMode = null;
     if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
+    setDailyChip(false);
     await flushTelemetry({
       finalize: true,
       endReason: 'restart',
