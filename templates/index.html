@@ -351,6 +351,19 @@
     </div>
   </div>
 
+  <!-- ======== Push opt-in prompt (recurring: every visit until subscribed) ======== -->
+  <div id="pushNagModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div style="text-align:center;margin-bottom:var(--space-md);">
+        <div style="font-size:2.5rem;margin-bottom:12px;">🔔</div>
+        <h2 class="modal-title">Enable daily reminders?</h2>
+        <p class="modal-subtitle">Get notified when the daily challenge goes live — one tap, turn off any time.</p>
+      </div>
+      <button id="pushNagEnableBtn" class="btn btn-primary btn-full btn-lg">Enable reminders</button>
+      <button id="pushNagLaterBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">Not now</button>
+    </div>
+  </div>
+
   <!-- ======== Display-setup instructions modal (one-shot, post-login) ======== -->
   <div id="instructionsModal" class="modal-overlay" style="display:none;">
     <div class="modal-card">
@@ -904,7 +917,14 @@
           if (email) localStorage.setItem('userEmail', email);
           localStorage.setItem('userEmailVerified', '0');
           localStorage.setItem('emailOptInReminders', emailOptIn ? '1' : '0');
-          window.location.href = '/ishihara-test';
+          // Offer push reminders before moving on — only where web push can
+          // actually work (iOS Safari tabs lack the Notification API).
+          if ('Notification' in window && 'serviceWorker' in navigator &&
+              Notification.permission !== 'denied') {
+            showSection('postRegister');
+          } else {
+            window.location.href = '/ishihara-test';
+          }
         } else {
           var ed = document.getElementById('birthdateError');
           if (ed) { ed.textContent = data.message; ed.style.display = 'block'; }
@@ -983,13 +1003,66 @@
     if (!pushBtn || !('Notification' in window) || !('serviceWorker' in navigator)) return;
     var uid = localStorage.getItem('userId');
     if (!uid) return;
-    if (Notification.permission === 'granted' || localStorage.getItem('pushSubscribed')) return;
+    if (localStorage.getItem('pushSubscribed')) return;
+    if (Notification.permission === 'granted') {
+      // Permission was granted but this device never (successfully) subscribed
+      // — resubscribe silently; no prompt is shown when permission is granted.
+      navigator.serviceWorker.ready.then(function() {
+        window.requestPushPermission && window.requestPushPermission();
+      }).catch(function() {});
+      return;
+    }
     /* Only show once SW is confirmed registered */
     navigator.serviceWorker.ready.then(function() {
       if (Notification.permission !== 'denied') {
         pushBtn.style.display = 'flex';
       }
+      if (Notification.permission === 'default') {
+        schedulePushNag();
+      }
     }).catch(function() {});
+
+    /* Recurring opt-in prompt: shown on every visit until the user subscribes.
+       Waits until no other modal overlay is open so it never stacks on top of
+       consent, instructions, or the guide. */
+    function schedulePushNag() {
+      var nag = document.getElementById('pushNagModal');
+      var enableBtn = document.getElementById('pushNagEnableBtn');
+      var laterBtn = document.getElementById('pushNagLaterBtn');
+      if (!nag || !enableBtn || !laterBtn) return;
+
+      function otherOverlayOpen() {
+        var overlays = document.querySelectorAll('.modal-overlay');
+        for (var i = 0; i < overlays.length; i++) {
+          if (overlays[i].id !== 'pushNagModal' &&
+              getComputedStyle(overlays[i]).display !== 'none') return true;
+        }
+        return false;
+      }
+
+      var tries = 0;
+      var timer = setInterval(function() {
+        tries++;
+        if (localStorage.getItem('pushSubscribed') ||
+            Notification.permission !== 'default' || tries > 20) {
+          clearInterval(timer);
+          return;
+        }
+        if (otherOverlayOpen()) return; /* re-check on the next tick */
+        clearInterval(timer);
+        nag.style.display = 'flex';
+      }, 3000);
+
+      enableBtn.onclick = async function() {
+        enableBtn.disabled = true;
+        enableBtn.textContent = '⏳ Setting up…';
+        try { await window.requestPushPermission(); } catch (e) {}
+        enableBtn.disabled = false;
+        enableBtn.textContent = 'Enable reminders';
+        nag.style.display = 'none';
+      };
+      laterBtn.onclick = function() { nag.style.display = 'none'; };
+    }
 
     var emailVerifyNotice = document.getElementById('emailVerifyNotice');
     var uid = localStorage.getItem('userId');

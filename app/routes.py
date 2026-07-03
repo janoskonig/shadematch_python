@@ -3840,11 +3840,102 @@ def push_unsubscribe():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+# ── Daily reminder CTA copy ──────────────────────────────────────────────
+# Duolingo-style rotating messages. Each user gets one entry per day, chosen
+# deterministically from (day-of-year + user-id hash), so the copy changes
+# every day without repeating for weeks and no two neighbours necessarily see
+# the same line. Placeholders: {streak}, {color}, {rem}, {rem_word},
+# {completed}, {total}.
+
+CTA_PUSH_STREAK = [
+    {'title': '🔥 Day {streak}. Don\'t blow it.',
+     'body': 'One 60-second mix keeps your streak breathing. That\'s it. That\'s the ask.'},
+    {'title': 'Your {streak}-day streak is sweating',
+     'body': 'It survived this long. Don\'t let today be the day it didn\'t.'},
+    {'title': 'Streaks don\'t die. They\'re abandoned.',
+     'body': '{streak} days strong. Open the app, mix one color, stay legendary.'},
+    {'title': 'This is a hostage situation 🔥',
+     'body': 'Your {streak}-day streak stays safe — as long as one color gets mixed today.'},
+    {'title': 'Quick maths: {streak} > 0',
+     'body': 'Keep it that way. One mix today and the streak lives on.'},
+    {'title': '{streak} days of perfect attendance',
+     'body': 'Don\'t make your streak start over from 1. It hates starting over.'},
+]
+
+CTA_PUSH_COLOR = [
+    {'title': '{color} is judging you',
+     'body': 'Only {rem} {rem_word} left to master it. It\'s basically begging at this point.'},
+    {'title': 'You left {color} on read',
+     'body': 'It needs {rem} more {rem_word}. Reply with drops.'},
+    {'title': '{color} won\'t mix itself',
+     'body': 'Believe us, it\'s tried. {rem} {rem_word} to go — finish the job.'},
+    {'title': 'So close to mastering {color}',
+     'body': '{rem} {rem_word} left. Future you is already bragging about it.'},
+    {'title': 'A wild {color} appeared!',
+     'body': 'It\'s weak — {rem} {rem_word} from defeat. Choose your drops wisely.'},
+    {'title': 'Today\'s target: {color}',
+     'body': '{rem} {rem_word} between you and mastery. The pipette is right there.'},
+]
+
+CTA_PUSH_GENERIC = [
+    {'title': 'The pigments miss you 🎨',
+     'body': 'It\'s been a whole day. One mix and they\'ll stop sulking.'},
+    {'title': 'Doing science today?',
+     'body': 'Every mix you make is a real data point in a real study. Be the data.'},
+    {'title': '5 pigments. 1 target. 0 excuses.',
+     'body': 'Today\'s challenge is live. Show it who owns the pipette.'},
+    {'title': 'Your daily color fix is ready',
+     'body': '60 seconds of mixing beats 60 minutes of scrolling. Probably.'},
+    {'title': 'Beep beep. Palette delivery 🚚',
+     'body': 'A fresh daily challenge just dropped. Sign here with 5 drops.'},
+    {'title': 'Color theory won\'t learn itself',
+     'body': 'Today\'s challenge is live — go mix something beautiful.'},
+]
+
+CTA_PUSH_MAXED = [
+    {'title': 'Palette master. Streak guardian?',
+     'body': 'Every color is mastered — the only thing left to lose is your streak. Don\'t.'},
+    {'title': 'Nothing left to prove. Except today.',
+     'body': 'One quick mix keeps your run alive. Masters don\'t skip.'},
+    {'title': 'The catalog fears you',
+     'body': 'You\'ve mastered every shade. Defend your streak with one mix today.'},
+]
+
+CTA_EMAIL_SUBJECT_STREAK = [
+    '🔥 Your {streak}-day streak is on the line',
+    'Day {streak}: don\'t stop now',
+    'One mix keeps the streak alive',
+    'Your streak survived {streak} days. Then came today.',
+]
+
+CTA_EMAIL_SUBJECT_COLOR = [
+    '{color} is still waiting for you',
+    '{rem} {rem_word} from mastering {color}',
+    'You left {color} unfinished…',
+    'Today\'s mission: {color}',
+]
+
+CTA_EMAIL_SUBJECT_GENERIC = [
+    'The pigments miss you 🎨',
+    'Your daily challenge is getting cold',
+    '60 seconds. 5 drops. Go.',
+    'Science needs you (seriously)',
+]
+
+
+def _pick_daily_cta(pool, user_id):
+    """Deterministic daily rotation: same user + same day → same message."""
+    idx = (date.today().toordinal() + sum(ord(c) for c in str(user_id))) % len(pool)
+    return pool[idx]
+
+
 @main.route('/push/send-daily', methods=['POST'])
 def push_send_daily():
     """Cron-triggered endpoint to send daily challenge reminders."""
     secret = request.headers.get('X-Cron-Secret') or (request.get_json({}) or {}).get('secret')
-    if secret != os.environ.get('PUSH_CRON_SECRET', ''):
+    cron_secret = os.environ.get('PUSH_CRON_SECRET', '')
+    # An unset server secret must fail closed, never match an empty client value.
+    if not cron_secret or secret != cron_secret:
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
     webpush = None
@@ -3924,27 +4015,37 @@ def push_send_daily():
                 'current_streak': 0,
             }
 
+    def _cta_fields(ctx):
+        """Values available to CTA copy templates."""
+        return {
+            'streak': ctx['current_streak'],
+            'color': ctx['best_tc'].name if ctx['best_tc'] else '',
+            'rem': ctx['best_rem'] or 0,
+            'rem_word': 'attempt' if ctx['best_rem'] == 1 else 'attempts',
+            'completed': ctx['completed'],
+            'total': ctx['total'],
+        }
+
+    def _pick_cta_pool(ctx, streak_pool, color_pool, generic_pool, maxed_pool):
+        """Priority: maxed-out > streak in danger (>=3) > specific color > generic."""
+        if ctx['is_maxed_out']:
+            return maxed_pool
+        if ctx['current_streak'] >= 3:
+            return streak_pool
+        if ctx['best_tc']:
+            return color_pool
+        return generic_pool
+
     def _build_push_payload(user_id):
         """Return personalized push payload dict for this user."""
         ctx = _build_personalized_context(user_id)
-        if ctx['is_maxed_out']:
-            body = "All colors mastered — keep your streak alive with today's challenge!"
-        elif ctx['best_tc']:
-            body = (
-                f"Today's challenge is live — {ctx['best_tc'].name} needs "
-                f"{ctx['best_rem']} more attempt{'s' if ctx['best_rem'] != 1 else ''} "
-                f"({ctx['completed']}/{ctx['total']} colors done)"
-            )
-        elif ctx['total']:
-            body = (
-                f"Today's palette challenge is live — "
-                f"{ctx['completed']}/{ctx['total']} colors complete so far!"
-            )
-        else:
-            body = "Today's palette challenge is live — can you match every shade?"
+        pool = _pick_cta_pool(ctx, CTA_PUSH_STREAK, CTA_PUSH_COLOR,
+                              CTA_PUSH_GENERIC, CTA_PUSH_MAXED)
+        msg = _pick_daily_cta(pool, user_id)
+        fields = _cta_fields(ctx)
         return {
-            'title': 'ShadeMatch Daily Challenge',
-            'body': body,
+            'title': msg['title'].format(**fields),
+            'body': msg['body'].format(**fields),
             'url': '/',
             'icon': '/static/icons/icon-192.png',
         }
@@ -3953,6 +4054,13 @@ def push_send_daily():
         """Build the rich Jinja context consumed by the daily reminder email."""
         ctx = _build_personalized_context(user.id)
         cta_url = email_utils.base_url(request.url_root) + '/'
+        fields = _cta_fields(ctx)
+
+        def _subject(pool):
+            # Streak-danger copy wins whenever there is a streak worth guarding.
+            if ctx['current_streak'] >= 3:
+                pool = CTA_EMAIL_SUBJECT_STREAK
+            return _pick_daily_cta(pool, user.id).format(**fields)
 
         stats = []
         if ctx['current_streak']:
@@ -3965,7 +4073,7 @@ def push_send_daily():
 
         if ctx['is_maxed_out']:
             return {
-                'subject': "Streak day — keep your run alive",
+                'subject': _subject(CTA_EMAIL_SUBJECT_GENERIC),
                 'eyebrow': 'You mastered the palette',
                 'headline': "Keep your streak alive today",
                 'subhead': "Every color in the catalog is mastered. A single mix today keeps your run going — go for a personal best Delta-E?",
@@ -3981,7 +4089,7 @@ def push_send_daily():
             attempts_word = 'attempt' if ctx['best_rem'] == 1 else 'attempts'
             swatch_hex = f"#{best_tc.r:02X}{best_tc.g:02X}{best_tc.b:02X}"
             return {
-                'subject': f"Today's challenge: {best_tc.name}",
+                'subject': _subject(CTA_EMAIL_SUBJECT_COLOR),
                 'eyebrow': "Today's target color",
                 'headline': f"{best_tc.name} is calling, {user.id}",
                 'subhead': f"You're {ctx['best_rem']} {attempts_word} away from mastering this shade. Today is a great day to close it out.",
@@ -3996,7 +4104,7 @@ def push_send_daily():
             }
 
         return {
-            'subject': "Today's ShadeMatch challenge is live",
+            'subject': _subject(CTA_EMAIL_SUBJECT_GENERIC),
             'eyebrow': "Today's palette",
             'headline': "Your daily challenge is ready",
             'subhead': "Mix today's colors and watch your progress climb. Even one attempt keeps the streak alive.",
@@ -4057,6 +4165,8 @@ def push_send_daily():
 
     return jsonify({
         'status': 'success',
+        'push_ready': push_ready,
+        'subscriptions': len(subs),
         'sent': sent,
         'failed': failed,
         'cleaned': len(dead_endpoints),
