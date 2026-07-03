@@ -93,6 +93,24 @@
 }
 .push-optin-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
 
+/* ── Daily round chip (on the target swatch) ─────────────────── */
+.color-pair { position: relative; }
+.daily-chip {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 5;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.92);
+  border: 1px solid rgba(102,126,234,0.55);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #333;
+  pointer-events: none;
+}
+
 /* ── Daily status badge (header) ─────────────────────────────── */
 .daily-status-badge {
   display: inline-flex;
@@ -400,6 +418,7 @@
           <!-- Swatches (full-bleed canvas) -->
           <div class="swatches-container" id="swatchesContainer">
             <div class="color-pair">
+              <div id="dailyChip" class="daily-chip" style="display:none;">📅 Today's challenge</div>
               <div id="targetColor" class="color-half"></div>
               <div id="currentMix" class="color-half" style="background-color:rgb(255,255,255);"></div>
             </div>
@@ -1073,7 +1092,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260618"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260703-daily2"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260703-daily3"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>
