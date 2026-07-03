@@ -93,6 +93,41 @@
 }
 .push-optin-btn:hover { border-color: var(--accent-primary); color: var(--accent-primary); }
 
+/* ── Daily status badge (header) ─────────────────────────────── */
+.daily-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 40px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm, 8px);
+  border: 1px solid var(--border, #ddd);
+  background: var(--surface, #fff);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary, #222);
+}
+.daily-status-badge.daily-pending {
+  border-color: rgba(102,126,234,0.6);
+  background: linear-gradient(135deg, rgba(102,126,234,0.12), rgba(118,75,162,0.12));
+}
+.daily-status-badge.daily-done { opacity: 0.75; }
+.daily-status-badge.daily-playing { border-color: rgba(102,126,234,0.6); }
+.daily-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #e74c3c;
+  animation: dailyPulse 1.6s ease-in-out infinite;
+}
+@keyframes dailyPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
+@media (max-width: 480px) {
+  .daily-status-badge .daily-status-text { display: none; }
+  .daily-status-badge { padding: 6px 8px; }
+}
+
 /* ── Next-action CTA ─────────────────────────────────────────── */
 .next-action-cta {
   display: flex;
@@ -1038,7 +1073,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260618"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260702-probe1"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260703-daily2"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>
