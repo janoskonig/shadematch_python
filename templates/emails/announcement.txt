@@ -1,26 +1,28 @@
-A brand-new palette to climb
+New colours, a fairer game
 
-{{ brand_name }} now plays through a fresh, evenly spread set of colours — with extra
-detail around real skin tones. Every target is mixable to an exact match.
+{{ brand_name }} just switched to a brand-new set of target colours, spread evenly
+across the whole colour space - with extra detail around real skin tones. Every
+target is mixable to an exact match.
 
-You climb it one step at a time: start with the 2-drop colours, and each colour you
-nail unlocks the next step — 3 drops, then 4, and on up. Everyone starts fresh at
-step one, so today is a clean run.
+Because the colours now cover the space evenly and everyone climbs the same ladder
+from the same starting point, the competition is fairer - no more luck of the draw
+on which shades you got. Everyone starts fresh today.
 
 Play now: {{ cta_url }}
 
 ------------------------------------------------------------
 
-Új paletta, amit mászni lehet
+Új színek, igazságosabb verseny
 
-A {{ brand_name }} mostantól egy friss, egyenletesen elosztott színkészleten megy —
-több árnyalattal a valódi bőrtónusok körül. Minden cél pontosan kikeverhető.
+A {{ brand_name }} mostantól egy vadonatúj célszín-készleten megy, amely egyenletesen
+fedi le az egész színteret - több árnyalattal a valódi bőrtónusok körül. Minden cél
+pontosan kikeverhető.
 
-Lépésről lépésre haladsz: a 2 cseppes színekkel kezdesz, és minden eltalált szín
-megnyitja a következő lépcsőt — 3 csepp, majd 4, és így tovább. Mindenki az első
-lépcsőről indul, szóval a mai egy tiszta kezdés.
+Mivel a színek most egyenletesen fedik a teret, és mindenki ugyanarról a pontról,
+ugyanazon a létrán indul, a verseny igazságosabb - nincs többé szerencsefüggő, hogy
+épp mely árnyalatokat kaptad. Ma mindenki tiszta lappal kezd.
 
-Játssz most: {{ cta_url }}
+Play now: {{ cta_url }}
 
 —
 You received this from {{ brand_name }}{% if username %}, sent to player {{ username }}{% endif %}.
