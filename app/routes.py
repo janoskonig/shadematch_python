@@ -2492,6 +2492,110 @@ def get_user_results():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+# ── Personal accuracy / effort by hue sector ─────────────────────────────────
+
+HUE_SECTORS = 6                         # 60° sectors of the a*-b* plane
+HUE_MIN_ATTEMPTS = 3                    # below this a sector is shown faint (unreliable)
+
+
+def _srgb_to_lab_ab(rgb):
+    """(n,3) 8-bit sRGB → (a*, b*) CIELAB pair (D65, 2°), vectorised. Matches the
+    colormath sRGB→Lab used elsewhere; we only need a*/b* for the hue angle."""
+    c = np.asarray(rgb, dtype=float) / 255.0
+    lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+    M = np.array([[0.4124564, 0.3575761, 0.1804375],
+                  [0.2126729, 0.7151522, 0.0721750],
+                  [0.0193339, 0.1191920, 0.9503041]])
+    xyz = lin @ M.T
+    white = np.array([0.95047, 1.0, 1.08883])
+    r = xyz / white
+    f = np.where(r > 0.008856451679035631, np.cbrt(r),
+                 7.787037037037037 * r + 16.0 / 116.0)
+    a = 500.0 * (f[:, 0] - f[:, 1])
+    b = 200.0 * (f[:, 1] - f[:, 2])
+    return a, b
+
+
+def compute_user_hue_stats(user_id):
+    """Per hue-sector accuracy/effort for one user's mixing attempts.
+
+    Accuracy is the *completion rate* (share of attempts finished to a perfect
+    match rather than skipped): population-wide the final ΔE is ~0 for every
+    solved round, so completion rate — not best-ΔE — is what actually varies.
+    Effort is the median number of mixing steps taken in that hue. The give-up
+    ΔE of skipped rounds is surfaced as a secondary tooltip figure.
+    """
+    steps_sq = (db.session.query(
+                    MixingAttemptEvent.attempt_uuid.label('au'),
+                    func.count(MixingAttemptEvent.id).label('nsteps'))
+                .group_by(MixingAttemptEvent.attempt_uuid).subquery())
+    rows = (db.session.query(
+                MixingSession.target_r, MixingSession.target_g, MixingSession.target_b,
+                MixingSession.delta_e, MixingSession.skipped, steps_sq.c.nsteps)
+            .outerjoin(steps_sq, steps_sq.c.au == MixingSession.attempt_uuid)
+            .filter(MixingSession.user_id == user_id)
+            .filter(MixingSession.target_r.isnot(None))
+            .all())
+
+    width = 360.0 / HUE_SECTORS
+    out = []
+    if rows:
+        rgb = np.array([[r[0], r[1], r[2]] for r in rows], dtype=float)
+        a, b = _srgb_to_lab_ab(rgb)
+        hue = np.degrees(np.arctan2(b, a)) % 360.0
+        sec = np.floor(hue / width).astype(int)
+        dE = np.array([np.nan if r[3] is None else r[3] for r in rows], dtype=float)
+        skipped = np.array([bool(r[4]) for r in rows])
+        steps = np.array([np.nan if r[5] is None else r[5] for r in rows], dtype=float)
+    for k in range(HUE_SECTORS):
+        m = (sec == k) if rows else np.array([], dtype=bool)
+        n = int(m.sum()) if rows else 0
+        entry = {
+            'sector': k,
+            'hue_mid': (k + 0.5) * width,
+            'n': n,
+            'completion_rate': None,
+            'median_steps': None,
+            'median_giveup_delta_e': None,
+            'color': '#dddddd',
+        }
+        if n:
+            solved = ~skipped[m]
+            entry['completion_rate'] = round(float(solved.mean()), 3)
+            st = steps[m]
+            st = st[~np.isnan(st)]
+            if st.size:
+                entry['median_steps'] = round(float(np.median(st)), 1)
+            gu = dE[m][skipped[m]]
+            gu = gu[~np.isnan(gu)]
+            if gu.size:
+                entry['median_giveup_delta_e'] = round(float(np.median(gu)), 1)
+            mc = rgb[m].mean(axis=0).round().astype(int)
+            entry['color'] = '#%02x%02x%02x' % (int(mc[0]), int(mc[1]), int(mc[2]))
+        out.append(entry)
+    return out
+
+
+@main.route('/api/user/hue-accuracy', methods=['POST'])
+def user_hue_accuracy():
+    data = request.get_json(silent=True) or {}
+    user_id = (data.get('user_id') or '').strip()
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id required'}), 400
+    try:
+        sectors = compute_user_hue_stats(user_id)
+        total = sum(s['n'] for s in sectors)
+        return jsonify({
+            'status': 'success',
+            'sectors': sectors,
+            'total_attempts': total,
+            'min_attempts': HUE_MIN_ATTEMPTS,
+            'step_reference': 30,   # steps mapped to a full-length petal in the effort rose
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @main.route('/api/leaderboard', methods=['POST'])
 def get_leaderboard():
     data = request.get_json(silent=True) or {}
