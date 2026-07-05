@@ -4082,14 +4082,18 @@ def push_send_daily():
                     'best_rem': None,
                     'completed': quota['completed_colors'],
                     'total': quota['total_tracked_colors'],
+                    'bands_cleared': quota['bands_cleared'],
+                    'total_bands': quota['total_bands'],
                     'current_streak': current_streak,
                 }
 
             color_map = quota['color_quota_map']
-            cap = int(up.max_sum_drop_unlocked) if up else 4
+            cap = int(up.max_sum_drop_unlocked) if up else MIN_SUM_DROP_BAND
             eff = _effective_sum_cap(cap)
             tc_rows = [
-                tc for tc in TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
+                tc for tc in TargetColor.query
+                .filter_by(color_type='gamut')
+                .order_by(TargetColor.catalog_order.asc()).all()
                 if (s := target_color_sum_drop(tc)) is not None
                 and MIN_SUM_DROP_BAND <= s <= eff
             ]
@@ -4107,6 +4111,8 @@ def push_send_daily():
                 'best_rem': best_rem,
                 'completed': quota['completed_colors'],
                 'total': quota['total_tracked_colors'],
+                'bands_cleared': quota['bands_cleared'],
+                'total_bands': quota['total_bands'],
                 'current_streak': current_streak,
             }
         except Exception:
@@ -4116,6 +4122,8 @@ def push_send_daily():
                 'best_rem': None,
                 'completed': 0,
                 'total': 0,
+                'bands_cleared': 0,
+                'total_bands': 0,
                 'current_streak': 0,
             }
 
@@ -4172,8 +4180,8 @@ def push_send_daily():
                 'label': 'Day streak',
                 'value': f"{ctx['current_streak']}🔥" if ctx['current_streak'] >= 3 else str(ctx['current_streak']),
             })
-        if ctx['total']:
-            stats.append({'label': 'Colors mastered', 'value': f"{ctx['completed']}/{ctx['total']}"})
+        if ctx.get('total_bands'):
+            stats.append({'label': 'Bands unlocked', 'value': f"{ctx['bands_cleared']}/{ctx['total_bands']}"})
 
         if ctx['is_maxed_out']:
             return {

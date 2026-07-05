@@ -1,0 +1,48 @@
+{% extends "emails/_base.html" %}
+
+{% block preheader %}A fresh palette built around skin tones — climb it one step at a time. · Új, bőrtónusokra épülő paletta, lépésről lépésre.{% endblock %}
+{% block header_eyebrow %}What's new · Újdonság{% endblock %}
+
+{% block body %}
+<h1 class="sm-h1" style="margin:0 0 14px; font-size:30px; line-height:1.2; font-weight:800; color:#2D2D2D;">
+  A brand-new palette to climb 🎨
+</h1>
+<p style="margin:0 0 16px; font-size:16px; line-height:1.6;">
+  {{ brand_name }} now plays through a fresh, evenly spread set of colours — with <strong>extra
+  detail around real skin tones</strong>. Every target is mixable to an <strong>exact match</strong>.
+</p>
+<p style="margin:0 0 20px; font-size:16px; line-height:1.6;">
+  You climb it one step at a time: start with the <strong>2-drop</strong> colours, and each colour
+  you nail <strong>unlocks the next step</strong> — 3 drops, then 4, and on up. Everyone starts
+  fresh at step one, so today is a clean run.
+</p>
+
+<hr style="border:none; border-top:1px solid #ECE7DE; margin:24px 0;">
+
+<h2 style="margin:0 0 12px; font-size:22px; line-height:1.25; font-weight:800; color:#2D2D2D;">
+  Új paletta, amit mászni lehet 🎨
+</h2>
+<p style="margin:0 0 16px; font-size:16px; line-height:1.6;">
+  A {{ brand_name }} mostantól egy friss, egyenletesen elosztott színkészleten megy — <strong>több
+  árnyalattal a valódi bőrtónusok körül</strong>. Minden cél <strong>pontosan kikeverhető</strong>.
+</p>
+<p style="margin:0 0 24px; font-size:16px; line-height:1.6;">
+  Lépésről lépésre haladsz: a <strong>2 cseppes</strong> színekkel kezdesz, és minden eltalált szín
+  <strong>megnyitja a következő lépcsőt</strong> — 3 csepp, majd 4, és így tovább. Mindenki az első
+  lépcsőről indul, szóval a mai egy tiszta kezdés.
+</p>
+
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 4px;">
+  <tr>
+    <td align="center" bgcolor="#4A90D9" style="border-radius:10px;">
+      <a href="{{ cta_url }}" style="display:inline-block; padding:14px 28px; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-size:16px; font-weight:800; color:#FFFFFF; text-decoration:none; border-radius:10px;">
+        Mix a color · Keverj egy színt &rarr;
+      </a>
+    </td>
+  </tr>
+</table>
+{% endblock %}
+
+{% block footer_pre %}
+<p style="margin:0 0 10px;">Thanks for mixing with us. · Köszönjük, hogy velünk keversz.</p>
+{% endblock %}
