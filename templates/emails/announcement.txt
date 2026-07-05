@@ -1,0 +1,28 @@
+A brand-new palette to climb
+
+{{ brand_name }} now plays through a fresh, evenly spread set of colours — with extra
+detail around real skin tones. Every target is mixable to an exact match.
+
+You climb it one step at a time: start with the 2-drop colours, and each colour you
+nail unlocks the next step — 3 drops, then 4, and on up. Everyone starts fresh at
+step one, so today is a clean run.
+
+Play now: {{ cta_url }}
+
+------------------------------------------------------------
+
+Új paletta, amit mászni lehet
+
+A {{ brand_name }} mostantól egy friss, egyenletesen elosztott színkészleten megy —
+több árnyalattal a valódi bőrtónusok körül. Minden cél pontosan kikeverhető.
+
+Lépésről lépésre haladsz: a 2 cseppes színekkel kezdesz, és minden eltalált szín
+megnyitja a következő lépcsőt — 3 csepp, majd 4, és így tovább. Mindenki az első
+lépcsőről indul, szóval a mai egy tiszta kezdés.
+
+Játssz most: {{ cta_url }}
+
+—
+You received this from {{ brand_name }}{% if username %}, sent to player {{ username }}{% endif %}.
+{% if list_unsubscribe_url %}Unsubscribe in one click / Leiratkozás egy kattintással: {{ list_unsubscribe_url }}{% endif %}
+{% if footer_address %}{{ footer_address }}{% endif %}

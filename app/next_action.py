@@ -72,7 +72,9 @@ def _nearest_deficit_unlocked_target(user_id: str):
     cap = int(up.max_sum_drop_unlocked) if up else 4
     eff = _effective_sum_cap(cap)
     candidates = [
-        tc for tc in TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
+        tc for tc in TargetColor.query
+        .filter_by(color_type='gamut')
+        .order_by(TargetColor.catalog_order.asc()).all()
         if (s := target_color_sum_drop(tc)) is not None
         and MIN_SUM_DROP_BAND <= s <= eff
     ]
