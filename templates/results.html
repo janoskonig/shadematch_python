@@ -353,6 +353,18 @@
     .collapsible-body { padding: 0 var(--space-md) var(--space-sm); }
     .back-link { margin-bottom: var(--space-sm); }
   }
+
+  /* Hue accuracy / effort roses */
+  .hue-roses {
+    display: flex; flex-wrap: wrap; gap: var(--space-md);
+    justify-content: center; margin-top: var(--space-sm);
+  }
+  .hue-rose { flex: 1 1 240px; max-width: 320px; text-align: center; }
+  .hue-rose-title { font-size: 0.9rem; font-weight: 600; margin: 0 0 2px; }
+  .hue-rose-sub { font-size: 0.72rem; color: var(--muted, #888); margin: 0 0 4px; }
+  .hue-rose svg { width: 100%; height: auto; }
+  .hue-rose svg text { fill: var(--text, #333); }
+  .hue-note { font-size: 0.74rem; color: var(--muted, #888); margin-top: 8px; line-height: 1.4; }
 </style>
 {% endblock %}
 
@@ -429,6 +441,22 @@
           <div id="colorStatsList"></div>
         </div>
       </section>
+
+      <!-- Accuracy / effort by hue (two petal-roses) -->
+      <section class="collapsible-card" id="hueAccuracyCard" data-open="true" style="display:none;" aria-labelledby="hueHeading">
+        <button type="button" class="collapsible-toggle" aria-expanded="true" aria-controls="hueBody"
+                onclick="toggleCollapsible('hueAccuracyCard', this)">
+          <span class="collapsible-title" id="hueHeading">Your Palette by Hue</span>
+          <span class="collapsible-meta" id="hueMeta"></span>
+          <svg class="collapsible-chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="collapsible-body" id="hueBody">
+          <div class="hue-roses" id="hueRoses"></div>
+          <p class="hue-note" id="hueNote"></p>
+        </div>
+      </section>
     </div>
 
     <!-- Session history -->
@@ -471,9 +499,96 @@
         renderAwards(data.awards, cq);
         renderColorStats(data.color_stats, data.coverage_quota);
         document.getElementById('profileSection').style.display = '';
+        loadHueAccuracy(userId);
       } catch (e) {
         console.error('Profile load error:', e);
       }
+    }
+
+    // ── Accuracy / effort by hue ──────────────────────────────
+    const HUE_NAMES = { 30: 'Reds', 90: 'Yellows', 150: 'Greens',
+                        210: 'Cyans', 270: 'Blues', 330: 'Magentas' };
+
+    async function loadHueAccuracy(userId) {
+      try {
+        const res = await fetch('/api/user/hue-accuracy', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId }),
+        });
+        const data = await res.json();
+        if (data.status !== 'success') return;
+        renderHueRoses(data);
+      } catch (e) {
+        console.error('Hue accuracy load error:', e);
+      }
+    }
+
+    // Build one petal-rose SVG. `metric(s)` returns a number (or null); `norm`
+    // maps it to a 0..1 petal length. Sectors below minAttempts render faint.
+    function makeHueRose(sectors, metric, norm, fmt, minAttempts) {
+      const cx = 100, cy = 104, R = 76;
+      const P = (ang, r) => [cx + r * Math.cos(ang * Math.PI / 180),
+                             cy - r * Math.sin(ang * Math.PI / 180)];
+      let svg = `<svg viewBox="0 0 200 208" role="img">`;
+      svg += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#e5e5e5" stroke-width="1"/>`;
+      svg += `<circle cx="${cx}" cy="${cy}" r="${R / 2}" fill="none" stroke="#efefef" stroke-width="1"/>`;
+      sectors.forEach(s => {
+        const a0 = s.hue_mid - 30, a1 = s.hue_mid + 30;
+        const v = metric(s);
+        const name = HUE_NAMES[s.hue_mid] || (s.hue_mid + '°');
+        // wedge outline at full radius (light guide)
+        let guide = `M ${cx} ${cy} L ${P(a0, R).join(' ')} `;
+        for (let a = a0; a <= a1; a += 10) guide += `L ${P(a, R).join(' ')} `;
+        guide += 'Z';
+        svg += `<path d="${guide}" fill="none" stroke="#f0f0f0" stroke-width="1"/>`;
+        if (v == null || s.n === 0) return;
+        const faint = s.n < minAttempts;
+        const r = Math.max(3, R * Math.min(1, Math.max(0, norm(v))));
+        let d = `M ${cx} ${cy} L ${P(a0, r).join(' ')} `;
+        for (let a = a0; a <= a1; a += 10) d += `L ${P(a, r).join(' ')} `;
+        d += 'Z';
+        const tip = `${name} · ${s.n} play${s.n === 1 ? '' : 's'}` +
+          (faint ? ' (few plays)' : '') + ` · ${fmt(s)}`;
+        svg += `<path d="${d}" fill="${s.color}" fill-opacity="${faint ? 0.28 : 0.9}" ` +
+          `stroke="#555" stroke-width="0.6"${faint ? ' stroke-dasharray="2 2"' : ''}>` +
+          `<title>${tip}</title></path>`;
+        // value label at the petal tip
+        const [lx, ly] = P(s.hue_mid, R + 12);
+        svg += `<text x="${lx}" y="${ly}" font-size="8" text-anchor="middle" ` +
+          `dominant-baseline="middle" fill-opacity="${faint ? 0.5 : 1}">${fmt(s)}</text>`;
+      });
+      svg += `</svg>`;
+      return svg;
+    }
+
+    function renderHueRoses(data) {
+      const card = document.getElementById('hueAccuracyCard');
+      const host = document.getElementById('hueRoses');
+      if (!data.total_attempts) { card.style.display = 'none'; return; }
+      const minN = data.min_attempts || 3;
+      const stepRef = data.step_reference || 30;
+      const s = data.sectors;
+
+      const accSvg = makeHueRose(
+        s, x => x.completion_rate,
+        v => v, x => Math.round(x.completion_rate * 100) + '%', minN);
+      const effSvg = makeHueRose(
+        s, x => x.median_steps,
+        v => v / stepRef, x => x.median_steps + ' steps', minN);
+
+      host.innerHTML =
+        `<div class="hue-rose"><p class="hue-rose-title">Accuracy</p>` +
+        `<p class="hue-rose-sub">longer = you finish more matches</p>${accSvg}</div>` +
+        `<div class="hue-rose"><p class="hue-rose-title">Effort</p>` +
+        `<p class="hue-rose-sub">longer = more steps to finish</p>${effSvg}</div>`;
+
+      const covered = s.filter(x => x.n >= minN).length;
+      document.getElementById('hueMeta').textContent = `${covered}/6 hues`;
+      document.getElementById('hueNote').textContent =
+        'Each petal is a hue family, painted its own colour. Left: share of matches you ' +
+        'complete (vs. give up). Right: typical number of mixing steps. Faint dashed ' +
+        `petals have fewer than ${minN} plays, so treat them loosely.`;
+      card.style.display = '';
     }
 
     function renderProgressCard(p, quota) {
