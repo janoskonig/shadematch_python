@@ -21,14 +21,22 @@ from datetime import date, datetime, timedelta, time
 from .models import UserProgress, UserAward, UserTargetColorStats, TargetColor, MixingSession, MixingAttempt
 from . import db
 
-COVERAGE_QUOTA = 10
+# Attempts on a color before it counts as "completed" (advances the sum-drop cap
+# and is hidden from the picker). Lowered 10 -> 5 so bands unlock and colors
+# rotate out ~2x faster: the player meets more variety per session instead of
+# grinding the same handful of colors.
+COVERAGE_QUOTA = 5
 STREAK_FREEZE_CAP = 3
 
 # Sum-drop tier: quota and games only count colors with a full recipe and
 # MIN_SUM_DROP_BAND <= sum(drops) <= user's effective cap.
 MIN_SUM_DROP_BAND = 2
 MAX_SUM_DROP_CATALOG_CAP = 28
-DEFAULT_CAP = 4                  # Starting effective cap for new users
+# Starting effective sum-drop cap for new users. Raised 4 -> 8 so a fresh player
+# immediately sees ~23 colors (all bands 2..8) instead of the ~9-color band-<=4
+# path everyone used to stall on. Wider initial variety = more reasons to keep
+# playing. Dial down (e.g. 6 -> 17 colors) for a gentler on-ramp.
+DEFAULT_CAP = 8
 
 # Total leveling slots. 30 = (1 starting + up to 18 cap-advance levels) + endgame
 # stages + 1 mastery cap. The cap-phase length adapts to the live catalog so
@@ -65,11 +73,11 @@ RANK_TIERS = [
 STREAK_MILESTONES = [3, 7, 14, 30, 60, 100]
 
 # Per-color reinforcement milestones (must be < COVERAGE_QUOTA).
+# Rescaled for COVERAGE_QUOTA = 5.
 PER_COLOR_REINFORCEMENT_MILESTONES = [
     (2, 'Warm-Up'),
-    (4, 'Building'),
-    (6, 'Strong push'),
-    (8, 'Almost there'),
+    (3, 'Building'),
+    (4, 'Almost there'),
 ]
 
 # Global quota coverage % milestones (quota_major)
