@@ -21,11 +21,11 @@ from datetime import date, datetime, timedelta, time
 from .models import UserProgress, UserAward, UserTargetColorStats, TargetColor, MixingSession, MixingAttempt
 from . import db
 
-# Attempts on a color before it counts as "completed" (advances the sum-drop cap
-# and is hidden from the picker). Lowered 10 -> 5 so bands unlock and colors
-# rotate out ~2x faster: the player meets more variety per session instead of
-# grinding the same handful of colors.
-COVERAGE_QUOTA = 5
+# Attempts on a color before it counts as "completed" (and is hidden from the
+# picker). Lowered to 2: the gamut set has hundreds of colours evenly covering the
+# space, so repeating the same shade many times adds nothing — play it once or twice
+# and move on. (Band unlock is independent: one solved colour opens the next band.)
+COVERAGE_QUOTA = 2
 STREAK_FREEZE_CAP = 3
 
 # Sum-drop tier: quota and games only count colors with a full recipe and
@@ -76,13 +76,9 @@ RANK_TIERS = [
 
 STREAK_MILESTONES = [3, 7, 14, 30, 60, 100]
 
-# Per-color reinforcement milestones (must be < COVERAGE_QUOTA).
-# Rescaled for COVERAGE_QUOTA = 5.
-PER_COLOR_REINFORCEMENT_MILESTONES = [
-    (2, 'Warm-Up'),
-    (3, 'Building'),
-    (4, 'Almost there'),
-]
+# Per-color reinforcement milestones (must be < COVERAGE_QUOTA). With COVERAGE_QUOTA=2
+# there is no room for intermediate per-colour milestones, so none are awarded.
+PER_COLOR_REINFORCEMENT_MILESTONES = []
 
 # Global quota coverage % milestones (quota_major)
 QUOTA_GLOBAL_MILESTONE_PCTS = [25, 50, 75]
