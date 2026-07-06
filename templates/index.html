@@ -742,6 +742,27 @@
         .catch(finish);  // fail-open: never block play on a flaky network
     }
 
+    // First-visit sequencing: the cookie banner is the FIRST thing a visitor
+    // must settle. Everything else (research consent, registration, guide)
+    // waits for it, so overlays never stack.
+    function whenCookieConsentSettled(cb) {
+      var given = function() {
+        var cc = window.cookieConsent;
+        return !cc || (cc.consent && cc.consent.given);
+      };
+      if (given()) { cb(); return; }
+      var fired = false;
+      var fire = function() {
+        if (fired) return;
+        fired = true;
+        clearInterval(poll);
+        cb();
+      };
+      document.addEventListener('cookieConsentUpdated', fire, { once: true });
+      // Safety net in case the event was dispatched before we listened.
+      var poll = setInterval(function() { if (given()) fire(); }, 500);
+    }
+
     /* Spotlight guide (coach-mark walkthrough of the game board) */
     var GAME_GUIDE_STEPS = [
       { el: '#targetColor', title: 'Match this colour', body: 'The left panel is the target shade you need to reproduce.' },
@@ -751,6 +772,7 @@
       { el: '#showGuideBtn', title: 'Replay anytime', body: 'Tap Guide to see this walkthrough again whenever you like.' }
     ];
     function launchGuide(onDone) {
+      window.__guidePending = false;
       if (!window.SpotlightGuide) { if (onDone) onDone(); return; }
       // The target / mix / palette can be hidden until the game starts. If the
       // guide runs before that, reveal them just for the walkthrough so their
@@ -768,11 +790,14 @@
         if (onDone) onDone();
       }});
     }
-    // Auto-run the guide only once nothing is covering the board (registration
-    // and consent modals both closed).
+    // Auto-run the guide only once nothing is covering the board: registration
+    // and consent modals closed AND the cookie banner settled. The guide is the
+    // LAST step of the first-visit sequence (the PWA install card in main.js
+    // waits for it via window.__guidePending / SpotlightGuide.isActive()).
     function launchGuideWhenClear() {
       var overlayIds = ['userModal', 'researchConsentModal'];
       var blocked = function() {
+        if (document.querySelector('.cookie-consent-banner')) return true;
         return overlayIds.some(function(id) {
           var m = document.getElementById(id);
           return m && getComputedStyle(m).display !== 'none';
@@ -781,7 +806,7 @@
       var tries = 0;
       (function attempt() {
         if (!blocked()) { launchGuide(); return; }
-        if (tries++ > 40) return;   // give up after ~20s rather than nag forever
+        if (tries++ > 120) { window.__guidePending = false; return; }  // give up after ~60s rather than nag forever
         setTimeout(attempt, 500);
       })();
     }
@@ -795,22 +820,27 @@
     }
 
     if (storedId) {
-      // Logged-in returning user: no registration modal. First make sure consent
-      // is on record (back-fill for cached logins), then run the spotlight
-      // walkthrough once.
+      // Logged-in returning user: no registration modal. Cookie banner first,
+      // then make sure research consent is on record (back-fill for cached
+      // logins), then run the spotlight walkthrough once — last of the sequence.
       modal.style.display = 'none';
-      ensureConsentForLoggedInUser(storedId, function() {
-        if (!localStorage.getItem('guideShown')) {
-          localStorage.setItem('guideShown', 'true');
-          setTimeout(launchGuideWhenClear, 800);
-        }
+      whenCookieConsentSettled(function() {
+        ensureConsentForLoggedInUser(storedId, function() {
+          if (!localStorage.getItem('guideShown')) {
+            localStorage.setItem('guideShown', 'true');
+            window.__guidePending = true;
+            setTimeout(launchGuideWhenClear, 800);
+          }
+        });
       });
     } else {
-      // New / unregistered user: consent is the FIRST screen, shown immediately.
-      // It is a full-screen overlay (nothing is exposed behind it) and
+      // New / unregistered user: cookie banner first, then research consent
+      // (a full-screen overlay — nothing is exposed behind it), and
       // registration follows only after consent is given.
       modal.style.display = 'none';
-      window.showResearchConsentModal(proceedToRegistrationFlow);
+      whenCookieConsentSettled(function() {
+        window.showResearchConsentModal(proceedToRegistrationFlow);
+      });
     }
 
     document.getElementById('switchUserBtn').onclick = function() {
@@ -1163,9 +1193,9 @@
 {% endblock %}
 
 {% block extra_js %}
-  <script src="{{ url_for('static', filename='guide.js') }}?v=20260618"></script>
+  <script src="{{ url_for('static', filename='guide.js') }}?v=20260706-flow1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260703-daily3"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260706-flow1"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>

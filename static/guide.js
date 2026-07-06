@@ -168,5 +168,9 @@
     if (cb) { try { cb(); } catch (_) { /* swallow */ } }
   }
 
-  global.SpotlightGuide = { start: start, stop: finish };
+  global.SpotlightGuide = {
+    start: start,
+    stop: finish,
+    isActive: function () { return !!state; },
+  };
 })(window);

@@ -440,6 +440,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
 // ── Toast system ──────────────────────────────────────────────────────────
 function showToast(message, type = 'info', duration = 4000) {
+  // Don't talk over the spotlight walkthrough — hold toasts until it ends.
+  if (window.SpotlightGuide && SpotlightGuide.isActive && SpotlightGuide.isActive()) {
+    setTimeout(() => showToast(message, type, duration), 1500);
+    return;
+  }
   const container = document.getElementById('toastContainer') || createToastContainer();
   const toast = document.createElement('div');
   toast.className = `shade-toast shade-toast--${type}`;
@@ -451,6 +456,8 @@ function showToast(message, type = 'info', duration = 4000) {
     setTimeout(() => toast.remove(), 400);
   }, duration);
 }
+
+window.showToast = showToast;
 
 function createToastContainer() {
   const el = document.createElement('div');
@@ -1818,7 +1825,7 @@ window.addEventListener('beforeinstallprompt', (e) => {
   _deferredInstallPrompt = e;
   // Show install CTA if user hasn't dismissed it
   if (!localStorage.getItem('pwaDismissed')) {
-    _showPwaInstallCta();
+    _showPwaInstallCtaWhenClear();
   }
 });
 
@@ -1832,6 +1839,25 @@ function _showPwaInstallCta() {
   let el = document.getElementById('pwaInstallCta');
   if (!el) return;
   el.style.display = 'flex';
+}
+
+// The install card is the LAST voice in the first-visit sequence: it stays
+// away while the cookie banner, consent/registration modals, or the spotlight
+// walkthrough (running or scheduled — window.__guidePending) hold the screen.
+function _firstVisitOverlayActive() {
+  if (window.__guidePending) return true;
+  if (window.SpotlightGuide && SpotlightGuide.isActive && SpotlightGuide.isActive()) return true;
+  if (document.querySelector('.cookie-consent-banner')) return true;
+  return ['userModal', 'researchConsentModal'].some((id) => {
+    const m = document.getElementById(id);
+    return m && getComputedStyle(m).display !== 'none';
+  });
+}
+
+function _showPwaInstallCtaWhenClear() {
+  if (localStorage.getItem('pwaDismissed')) return;
+  if (!_firstVisitOverlayActive()) { _showPwaInstallCta(); return; }
+  setTimeout(_showPwaInstallCtaWhenClear, 1000);
 }
 
 function _hidePwaInstallCta() {
@@ -1875,7 +1901,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isInStandaloneMode = window.navigator.standalone === true;
   if (isIos && !isInStandaloneMode) {
-    _showPwaInstallCta();
+    _showPwaInstallCtaWhenClear();
     const hint = document.getElementById('pwaIosHint');
     if (hint) hint.style.display = '';
     const btn = document.getElementById('pwaInstallBtn');
