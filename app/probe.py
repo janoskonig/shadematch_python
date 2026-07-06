@@ -30,6 +30,7 @@ from .gamification import (
     target_color_sum_drop,
     _effective_sum_cap,
 )
+from .regions import region_of_target
 
 POLICY_VERSION = 'probe-v1'
 MIN_ROUNDS_BEFORE_PROBES = 5
@@ -74,10 +75,10 @@ def _exposure_snapshot(rounds, target_color_id):
 
 
 def _recipe_colors_in_band(cap: int):
-    """Colours with a full recipe inside [MIN_SUM_DROP_BAND, effective cap]."""
+    """Gamut colours with a full recipe inside [MIN_SUM_DROP_BAND, effective cap]."""
     eff = _effective_sum_cap(cap)
     out = []
-    for tc in TargetColor.query.all():
+    for tc in TargetColor.query.filter_by(color_type='gamut').all():
         s = target_color_sum_drop(tc)
         if s is not None and MIN_SUM_DROP_BAND <= s <= eff:
             out.append(tc)
@@ -137,59 +138,48 @@ def maybe_assign_flow_probe(user_id: str):
         return None
 
     up = UserProgress.query.filter_by(user_id=user_id).first()
-    cap = int(up.max_sum_drop_unlocked) if up else 4
+    cap = int(up.max_sum_drop_unlocked) if up else MIN_SUM_DROP_BAND
     level = int(up.level) if up else 1
 
     played_ids = {r.target_color_id for r in rounds if r.target_color_id is not None}
     band_colors = _recipe_colors_in_band(cap)
     band_ids = {tc.id for tc in band_colors}
+    reg_of = {tc.id: region_of_target(tc) for tc in band_colors}
 
-    # Repeat candidates: played, has recipe, last exposure far enough back.
-    repeat_candidates = []
-    for cid in sorted(played_ids):
-        _, _, since = _exposure_snapshot(rounds, cid)
-        if since is not None and since >= MIN_REPEAT_GAP_ROUNDS:
-            repeat_candidates.append((cid, since))
+    # Region exposure from the gamut play history (counts, not distinct).
+    region_exposure = {}
+    for r in rounds:
+        rid = reg_of.get(r.target_color_id)
+        if rid is not None:
+            region_exposure[rid] = region_exposure.get(rid, 0) + 1
 
+    # Both arms serve an UNPLAYED colour (never an exact repeat — that would confound
+    # learning with recipe recall); they differ only by whether the colour's region was
+    # already practised. 'region_transfer' probes generalisation within a practised
+    # region; 'region_new' is the fresh-region baseline.
     new_candidates = [tc for tc in band_colors if tc.id not in played_ids]
+    transfer = [tc for tc in new_candidates if region_exposure.get(reg_of[tc.id], 0) > 0]
+    new_region = [tc for tc in new_candidates if region_exposure.get(reg_of[tc.id], 0) == 0]
 
-    # Arm decision (1:1), with deterministic fallbacks.
-    arm = 'repeat' if rng.random() < 0.5 else 'matched_new'
-    target_id = None
-
-    if arm == 'matched_new' and not new_candidates:
-        arm = 'repeat'  # band exhausted → recency-contrast fallback below
-    if arm == 'repeat' and not repeat_candidates:
-        arm = 'matched_new' if new_candidates else None
+    arm = 'region_transfer' if rng.random() < 0.5 else 'region_new'
+    if arm == 'region_transfer' and not transfer:
+        arm = 'region_new' if new_region else None
+    elif arm == 'region_new' and not new_region:
+        arm = 'region_transfer' if transfer else None
     if arm is None:
         return None  # nothing eligible on either arm
 
-    if arm == 'matched_new':
-        # Difficulty reference: median sum-drop of the user's played in-band colours.
-        played_sums = sorted(
-            s for cid in played_ids if cid in band_ids
-            if (s := target_color_sum_drop(TargetColor.query.get(cid))) is not None
-        )
-        ref = played_sums[len(played_sums) // 2] if played_sums else MIN_SUM_DROP_BAND
-        best_gap = min(abs(target_color_sum_drop(tc) - ref) for tc in new_candidates)
-        closest = [tc for tc in new_candidates
-                   if abs(target_color_sum_drop(tc) - ref) == best_gap]
-        target_id = rng.choice(sorted(tc.id for tc in closest))
-    else:
-        if new_candidates:
-            # Regular repeat arm.
-            target_id = rng.choice(sorted(cid for cid, _ in repeat_candidates))
-        else:
-            # Fallback contrast: short vs long recency among repeat candidates.
-            by_recency = sorted(repeat_candidates, key=lambda t: t[1])
-            half = max(1, len(by_recency) // 2)
-            if rng.random() < 0.5:
-                arm = 'repeat_short'
-                pool = by_recency[:half]
-            else:
-                arm = 'repeat_long'
-                pool = by_recency[-half:]
-            target_id = rng.choice(sorted(cid for cid, _ in pool))
+    pool = transfer if arm == 'region_transfer' else new_region
+    # Difficulty-match the probe to the player's level: closest sum-drop band to the
+    # median of their played in-band colours (so arm ≠ difficulty).
+    played_sums = sorted(
+        s for cid in played_ids if cid in band_ids
+        if (s := target_color_sum_drop(TargetColor.query.get(cid))) is not None
+    )
+    ref = played_sums[len(played_sums) // 2] if played_sums else MIN_SUM_DROP_BAND
+    best_gap = min(abs(target_color_sum_drop(tc) - ref) for tc in pool)
+    closest = [tc for tc in pool if abs(target_color_sum_drop(tc) - ref) == best_gap]
+    target_id = rng.choice(sorted(tc.id for tc in closest))
 
     exp_count, exp_last_at, exp_since = _exposure_snapshot(rounds, target_id)
 
@@ -261,7 +251,7 @@ def assign_daily_probe(user_id: str, target_color_id: int, today=None):
         rounds_since_last_exposure=exp_since,
         cumulative_prior_rounds=len(rounds),
         level_at_assignment=int(up.level) if up else 1,
-        cap_at_assignment=int(up.max_sum_drop_unlocked) if up else 4,
+        cap_at_assignment=int(up.max_sum_drop_unlocked) if up else MIN_SUM_DROP_BAND,
         status='assigned',
     )
     db.session.add(slot)
