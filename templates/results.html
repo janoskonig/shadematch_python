@@ -365,6 +365,7 @@
   .hue-rose svg { width: 100%; height: auto; }
   .hue-rose svg text { fill: var(--text, #333); }
   .hue-note { font-size: 0.74rem; color: var(--muted, #888); margin-top: 8px; line-height: 1.4; }
+  .hue-interpret { font-size: 0.85rem; color: var(--text, #333); margin-top: 10px; line-height: 1.5; }
 </style>
 {% endblock %}
 
@@ -454,6 +455,7 @@
         </button>
         <div class="collapsible-body" id="hueBody">
           <div class="hue-roses" id="hueRoses"></div>
+          <p class="hue-interpret" id="hueInterpret"></p>
           <p class="hue-note" id="hueNote"></p>
         </div>
       </section>
@@ -561,6 +563,79 @@
       return svg;
     }
 
+    // Plain-language reading of the two roses. Every claim is gated on
+    // n >= minN so the text never asserts more than the petals show.
+    function buildHueInterpretation(sectors, minN) {
+      const fam = s => HUE_NAMES[s.hue_mid] || (s.hue_mid + '°');
+      const pct = s => Math.round(s.completion_rate * 100) + '%';
+      const eligible = sectors.filter(s => s.n >= minN && s.completion_rate != null);
+
+      if (eligible.length < 2) {
+        return 'Play a few more colours across the wheel and a personal reading will appear here.';
+      }
+
+      const byRate = eligible.slice().sort((a, b) => b.completion_rate - a.completion_rate);
+      const best = byRate[0], worst = byRate[byRate.length - 1];
+      const withSteps = eligible.filter(s => s.median_steps != null);
+      const bySteps = withSteps.slice().sort((a, b) => b.median_steps - a.median_steps);
+
+      const parts = [];
+      const totalN = eligible.reduce((t, s) => t + s.n, 0);
+      let coverage = `This reading is based on ${totalN} matches across ` +
+        `${eligible.length} of 6 hue families.`;
+      const thin = sectors.filter(s => s.n > 0 && s.n < minN).map(fam);
+      if (thin.length) {
+        coverage = coverage.replace(/\.$/,
+          ` — ${thin.join(' and ')} have too few plays to judge yet.`);
+      }
+      parts.push(coverage);
+
+      // Effort contrast, shared by both profiles (folded into the weakest
+      // sentence instead when the weakest family is also the slowest).
+      const effortContrast = () => {
+        if (bySteps.length < 2) return null;
+        const most = bySteps[0], least = bySteps[bySteps.length - 1];
+        if (most === least || most.median_steps === least.median_steps) return null;
+        return `${fam(most)} take you the most work (typically ${most.median_steps} steps), ` +
+          `while ${fam(least)} come quickest (${least.median_steps}).`;
+      };
+
+      if (best.completion_rate - worst.completion_rate < 0.15) {
+        parts.push(`Your accuracy is even across hues (${pct(worst)}–${pct(best)}) — ` +
+          'no weak spot stands out yet.');
+        const eff = effortContrast();
+        if (eff) parts.push(eff);
+        const leastPlayed = sectors.slice().sort((a, b) => a.n - b.n)[0];
+        parts.push(`To firm up the picture, try a few more ${fam(leastPlayed)} — ` +
+          'they have the fewest plays so far.');
+        return parts.join(' ');
+      }
+
+      parts.push(`Your strongest family is ${fam(best)}: you finish ${pct(best)} of them.`);
+      const worstSlowest = bySteps.length && bySteps[0] === worst;
+      if (worstSlowest) {
+        parts.push(`${fam(worst)} are your hardest — you finish ${pct(worst)}, ` +
+          `and they take your most steps (typically ${worst.median_steps}).`);
+      } else {
+        parts.push(`${fam(worst)} are your hardest — you finish ${pct(worst)}.`);
+        const eff = effortContrast();
+        if (eff) parts.push(eff);
+      }
+
+      const giveup = worst.median_giveup_delta_e;
+      if (giveup != null) {
+        const closeness = giveup <= 1 ? "you're usually a hair's breadth away"
+          : giveup <= 2 ? "you're usually very close"
+          : giveup <= 5 ? "you're still close"
+          : "you're often still visibly off, so there's real room to grow there";
+        parts.push(`When you do give up on ${fam(worst)}, ${closeness}.`);
+      }
+
+      parts.push(`Worth a few extra rounds on ${fam(worst)} — ` +
+        "that's where practice will show the fastest.");
+      return parts.join(' ');
+    }
+
     function renderHueRoses(data) {
       const card = document.getElementById('hueAccuracyCard');
       const host = document.getElementById('hueRoses');
@@ -584,6 +659,7 @@
 
       const covered = s.filter(x => x.n >= minN).length;
       document.getElementById('hueMeta').textContent = `${covered}/6 hues`;
+      document.getElementById('hueInterpret').textContent = buildHueInterpretation(s, minN);
       document.getElementById('hueNote').textContent =
         'Each petal is a hue family, painted its own colour. Left: share of matches you ' +
         'complete (vs. give up). Right: typical number of mixing steps. Faint dashed ' +
