@@ -35,12 +35,13 @@ MAX_SUM_DROP_CATALOG_CAP = 28
 
 # Main gameplay is the even-gamut / skin target set (color_type='gamut'); the older
 # basic/skin/lab catalog is retired from serving, coverage and levels. Progression is a
-# sum-drop BAND ladder: solving ≥1 gamut colour at band k unlocks band k+1 (start band 2).
+# sum-drop BAND ladder as a content gate: bands 2..STARTING_BAND are open from the start
+# (the low bands are sparse, so a low start = too few colours), and solving a colour at
+# band k >= STARTING_BAND unlocks band k+1.
 GAMUT_TYPE = 'gamut'
-# Starting sum-drop cap for new users. Under the band ladder a fresh player begins at
-# band 2 (only 2-drop colours) and unlocks one band at a time by solving a colour in the
-# current band, so the initial cap is MIN_SUM_DROP_BAND, not a wider window.
-DEFAULT_CAP = MIN_SUM_DROP_BAND
+STARTING_BAND = 12          # bands 2..12 open immediately (~30 gamut colours of variety)
+# Starting sum-drop cap for new users = the open band window.
+DEFAULT_CAP = STARTING_BAND
 
 # Total leveling slots. 30 = (1 starting + up to 18 cap-advance levels) + endgame
 # stages + 1 mastery cap. The cap-phase length adapts to the live catalog so
@@ -548,9 +549,10 @@ def _derived_max_sum_drop_unlocked(colors_at_quota_total: int, sum_drops_sorted)
 
 
 def _band_ladder_cap(solved_bands) -> int:
-    """Band-ladder cap: start at MIN_SUM_DROP_BAND and walk up while each successive
-    band has ≥1 solved colour. Solving one colour at band k opens band k+1."""
-    cap = MIN_SUM_DROP_BAND
+    """Band-ladder cap: bands 2..STARTING_BAND are open from the start; from there, walk up
+    while each successive band has ≥1 solved colour. Solving one colour at band k (>= the
+    starting band) opens band k+1."""
+    cap = STARTING_BAND
     while cap in solved_bands and cap < MAX_SUM_DROP_CATALOG_CAP:
         cap += 1
     return cap
