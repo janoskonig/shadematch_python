@@ -22,8 +22,11 @@ Streak-at-risk predicates (ALL must hold):
 
 Guest (no user_id): returns {'next_action': None}
 """
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
-from .models import UserProgress, UserTargetColorStats, DailyChallengeRun, TargetColor
+from .models import (
+    UserProgress, UserTargetColorStats, DailyChallengeRun, TargetColor, MixingSession,
+)
 from .gamification import (
     COVERAGE_QUOTA,
     compute_quota_progress,
@@ -31,6 +34,7 @@ from .gamification import (
     target_color_sum_drop,
     _effective_sum_cap,
 )
+from .regions import region_of_target, TARGET_EXPOSURES_PER_REGION
 
 POLICY_VERSION = 'v2'
 
@@ -57,19 +61,16 @@ def _streak_at_risk(up: UserProgress, today: date) -> bool:
 
 
 def _nearest_deficit_unlocked_target(user_id: str):
-    """
-    Return the TargetColor with the smallest positive remaining quota attempts
-    among colors with a full recipe and sum_drop in the user's current tier band.
-
-    Tie-break: lowest catalog_order (iterated first).
-    Returns None when all eligible colors are at or above quota.
-    """
+    """Pick the next target, steering toward the region-based learning design: revisit an
+    under-exposed multi-colour region the player has already entered — with a *new* colour,
+    spaced from the last rounds — before opening a fresh region. Falls back to the
+    smallest-remaining-quota colour. Returns (TargetColor, remaining) or (None, None)."""
     stats_map = {
-        s.target_color_id: s.attempt_count
+        s.target_color_id: int(s.attempt_count or 0)
         for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
     }
     up = UserProgress.query.filter_by(user_id=user_id).first()
-    cap = int(up.max_sum_drop_unlocked) if up else 4
+    cap = int(up.max_sum_drop_unlocked) if up else MIN_SUM_DROP_BAND
     eff = _effective_sum_cap(cap)
     candidates = [
         tc for tc in TargetColor.query
@@ -78,16 +79,60 @@ def _nearest_deficit_unlocked_target(user_id: str):
         if (s := target_color_sum_drop(tc)) is not None
         and MIN_SUM_DROP_BAND <= s <= eff
     ]
-    best = None
-    best_remaining = None
-    for tc in candidates:
-        remaining = max(0, COVERAGE_QUOTA - stats_map.get(tc.id, 0))
-        if remaining > 0:
-            # Smaller remaining wins; catalog_order tiebreak is already the natural iter order
-            if best is None or remaining < best_remaining:
-                best = tc
-                best_remaining = remaining
-    return best, best_remaining
+    if not candidates:
+        return None, None
+
+    reg_of = {tc.id: region_of_target(tc) for tc in candidates}
+    region_size = Counter(reg_of.values())                 # multi-colour = revisitable
+
+    # Per-region exposure + the last regions played (gamut history only), for spacing.
+    played = (MixingSession.query.filter_by(user_id=user_id)
+              .order_by(MixingSession.timestamp.asc())
+              .with_entities(MixingSession.target_color_id).all())
+    region_exposure = Counter()
+    region_seq = []
+    for (tid,) in played:
+        rid = reg_of.get(tid)
+        if rid is not None:
+            region_exposure[rid] += 1
+            region_seq.append(rid)
+    recent = set(region_seq[-2:])                          # avoid the last 2 regions
+
+    def remaining(tc):
+        return max(0, COVERAGE_QUOTA - stats_map.get(tc.id, 0))
+
+    avail = [tc for tc in candidates if remaining(tc) > 0]
+    if not avail:
+        return None, None
+
+    by_region = defaultdict(list)
+    for tc in avail:
+        by_region[reg_of[tc.id]].append(tc)
+
+    def pick_in_region(tcs):
+        # Prefer a not-yet-played colour in the region (avoid exact repeats).
+        pool = [tc for tc in tcs if stats_map.get(tc.id, 0) == 0] or tcs
+        return min(pool, key=lambda tc: (stats_map.get(tc.id, 0), tc.catalog_order))
+
+    # A) under-exposed, multi-colour, already-entered, spaced region → deepen its curve
+    a = [rid for rid in by_region
+         if 0 < region_exposure[rid] < TARGET_EXPOSURES_PER_REGION
+         and region_size[rid] >= 2 and rid not in recent]
+    if a:
+        rid = min(a, key=lambda r: region_exposure[r])
+        tc = pick_in_region(by_region[rid])
+        return tc, remaining(tc)
+
+    # B) fresh (unentered) region, spaced, lowest band first → breadth
+    b = [rid for rid in by_region if region_exposure[rid] == 0 and rid not in recent]
+    if b:
+        rid = min(b, key=lambda r: min(target_color_sum_drop(tc) for tc in by_region[r]))
+        tc = pick_in_region(by_region[rid])
+        return tc, remaining(tc)
+
+    # C) fallback — smallest remaining quota (spacing relaxed)
+    tc = min(avail, key=lambda tc: (remaining(tc), tc.catalog_order))
+    return tc, remaining(tc)
 
 
 # ---------------------------------------------------------------------------
