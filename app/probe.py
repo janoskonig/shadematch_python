@@ -74,10 +74,10 @@ def _exposure_snapshot(rounds, target_color_id):
 
 
 def _recipe_colors_in_band(cap: int):
-    """Colours with a full recipe inside [MIN_SUM_DROP_BAND, effective cap]."""
+    """Gamut colours with a full recipe inside [MIN_SUM_DROP_BAND, effective cap]."""
     eff = _effective_sum_cap(cap)
     out = []
-    for tc in TargetColor.query.all():
+    for tc in TargetColor.query.filter_by(color_type='gamut').all():
         s = target_color_sum_drop(tc)
         if s is not None and MIN_SUM_DROP_BAND <= s <= eff:
             out.append(tc)
@@ -137,16 +137,18 @@ def maybe_assign_flow_probe(user_id: str):
         return None
 
     up = UserProgress.query.filter_by(user_id=user_id).first()
-    cap = int(up.max_sum_drop_unlocked) if up else 4
+    cap = int(up.max_sum_drop_unlocked) if up else MIN_SUM_DROP_BAND
     level = int(up.level) if up else 1
 
     played_ids = {r.target_color_id for r in rounds if r.target_color_id is not None}
     band_colors = _recipe_colors_in_band(cap)
     band_ids = {tc.id for tc in band_colors}
 
-    # Repeat candidates: played, has recipe, last exposure far enough back.
+    # Repeat candidates: a gamut colour in the current band the user played long
+    # enough ago. Restricting to band_ids keeps repeats on the live (gamut) catalog
+    # — retired basic/skin colours in the play history are never re-served.
     repeat_candidates = []
-    for cid in sorted(played_ids):
+    for cid in sorted(played_ids & band_ids):
         _, _, since = _exposure_snapshot(rounds, cid)
         if since is not None and since >= MIN_REPEAT_GAP_ROUNDS:
             repeat_candidates.append((cid, since))
@@ -261,7 +263,7 @@ def assign_daily_probe(user_id: str, target_color_id: int, today=None):
         rounds_since_last_exposure=exp_since,
         cumulative_prior_rounds=len(rounds),
         level_at_assignment=int(up.level) if up else 1,
-        cap_at_assignment=int(up.max_sum_drop_unlocked) if up else 4,
+        cap_at_assignment=int(up.max_sum_drop_unlocked) if up else MIN_SUM_DROP_BAND,
         status='assigned',
     )
     db.session.add(slot)

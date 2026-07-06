@@ -2760,21 +2760,28 @@ def _daily_target_ids(d=None):
         .order_by(ProbeSchedule.position.asc())
         .all()
     )
-    scheduled_ids = [row.target_color_id for row in scheduled]
+    # Only honour scheduled probes that point at live (gamut) colours; the legacy
+    # schedule was built against the retired basic/skin catalog.
+    _gamut_ids = {r.id for r in TargetColor.query.filter_by(color_type='gamut')
+                  .with_entities(TargetColor.id).all()}
+    scheduled_ids = [row.target_color_id for row in scheduled
+                     if row.target_color_id in _gamut_ids]
 
-    rows = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
-    sorted_basic = [r for r in rows if r.color_type == 'basic']
-    sorted_skin = [r for r in rows if r.color_type == 'skin']
+    rows = (TargetColor.query
+            .filter_by(color_type='gamut')
+            .order_by(TargetColor.catalog_order.asc()).all())
+    sorted_skin = [r for r in rows if r.classification == 'even_gamut_v2_skin']
+    sorted_bg = [r for r in rows if r.classification != 'even_gamut_v2_skin']
 
     seed = _daily_seed(d)
     rng = _random.Random(seed)
 
-    first_three = sorted_basic[:3]
-    remaining_basic = sorted_basic[3:11]
-    selected_basic = rng.sample(remaining_basic, min(3, len(remaining_basic)))
+    first_three = sorted_bg[:3]                       # easy low-band anchors
+    remaining_bg = sorted_bg[3:11]
+    selected_bg = rng.sample(remaining_bg, min(3, len(remaining_bg)))
     selected_skin = rng.sample(sorted_skin, min(5, len(sorted_skin)))
 
-    seeded_ids = [c.id for c in first_three + selected_basic + selected_skin]
+    seeded_ids = [c.id for c in first_three + selected_bg + selected_skin]
     if not scheduled_ids:
         return seeded_ids
     return scheduled_ids + [cid for cid in seeded_ids if cid not in scheduled_ids]
