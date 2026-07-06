@@ -267,19 +267,10 @@
   .summary-number { font-size: 1.6em; font-weight: 900; color: var(--accent-primary); line-height: 1.1; overflow-wrap: anywhere; }
   .summary-label { font-size: 0.72rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 
-  /* Show-more toggle button (sessions, etc.) */
-  .show-more-btn {
-    display: block; margin: var(--space-md) auto 0;
-    padding: var(--space-xs) var(--space-lg);
-    background: var(--bg-primary); border: 1px solid var(--border);
-    border-radius: var(--radius-full); cursor: pointer;
-    font-family: inherit; font-weight: 700; font-size: 0.85rem;
-    color: var(--accent-primary);
-    min-height: var(--touch-min);
+  .sessions-truncated-note {
+    text-align: center; font-size: 0.78rem; color: var(--text-secondary);
+    margin-top: var(--space-sm);
   }
-  .show-more-btn:hover { background: var(--surface); }
-  .results-table-row.is-hidden,
-  .result-card.is-hidden { display: none; }
 
   .results-table {
     width: 100%; border-collapse: collapse; margin-top: var(--space-md);
@@ -790,6 +781,8 @@
       return key.replace(/_/g, ' ');
     }
 
+    var MAX_AWARDS_SHOWN = 5;
+
     function renderAwards(awards, coverageQuota) {
       const majorT = coverageQuota != null && coverageQuota > 0 ? coverageQuota : 10;
       const grid = document.getElementById('awardsGrid');
@@ -801,20 +794,19 @@
         if (meta) meta.textContent = '0';
         return;
       }
-      if (meta) meta.textContent = String(awards.length);
-      // Sort: quota-major first, then by unlocked_at desc
-      const sorted = [...awards].sort((a, b) => {
-        const aMajor = awardTypeClass(a.key, a.metadata, majorT) === 'award-badge--quota-major' ? 0 : 1;
-        const bMajor = awardTypeClass(b.key, b.metadata, majorT) === 'award-badge--quota-major' ? 0 : 1;
-        return aMajor - bMajor;
-      });
-      grid.innerHTML = sorted.map(a => {
+      // Server orders by unlocked_at desc; show only the most recent few.
+      const recent = awards.slice(0, MAX_AWARDS_SHOWN);
+      if (meta) meta.textContent = recent.length < awards.length
+        ? `latest ${recent.length} of ${awards.length}` : String(awards.length);
+      grid.innerHTML = recent.map(a => {
         const cls = awardTypeClass(a.key, a.metadata, majorT);
         const icon = awardIcon(a.key, a.metadata, majorT);
         const label = awardLabel(a.key, a.metadata, majorT);
         return `<div class="award-badge ${cls}">${icon} ${label}</div>`;
       }).join('');
     }
+
+    var MAX_QUOTA_COLORS_SHOWN = 5;
 
     function renderColorStats(colorStats, quota) {
       const list = document.getElementById('colorStatsList');
@@ -836,7 +828,8 @@
         return aRem - bRem;
       });
 
-      list.innerHTML = sorted.map(s => {
+      // Only the most promising few: nearest to quota first (at-quota sort last).
+      list.innerHTML = sorted.slice(0, MAX_QUOTA_COLORS_SHOWN).map(s => {
         const pct = Math.min(100, Math.round(s.attempt_count / q * 100));
         const remaining = Math.max(0, q - s.attempt_count);
         const atQuota = s.attempt_count >= q;
@@ -886,7 +879,7 @@
         .catch(() => showError('Failed to load results. Please try again.'));
     }
 
-    var INITIAL_SESSIONS_VISIBLE = 8;
+    var MAX_SESSIONS_SHOWN = 15;
     // Per-session cap (seconds) for aggregating elapsed time. Caps abandoned tabs
     // so totals/averages stay realistic. Mirrors the leaderboard cap on the server.
     var SESSION_TIME_CAP_SEC = 1800;
@@ -989,7 +982,8 @@
         '<th>Date</th><th>Target</th><th>Drops</th><th>Outcome</th><th>Time</th><th>Status</th></tr></thead><tbody>';
       let cardsHTML = '<div class="result-cards">';
 
-      results.forEach((r, idx) => {
+      // Server orders newest-first; keep the page short.
+      results.slice(0, MAX_SESSIONS_SHOWN).forEach((r, idx) => {
         const rgb = r.target_color.match(/\d+/g);
         const rgbStr = rgb ? rgb.join(',') : '128,128,128';
         const drops = [
@@ -1005,15 +999,14 @@
         const statusClass = isCompleted ? 'status-completed' : 'status-skipped';
         const statusText = isCompleted ? 'Completed' : 'Skipped';
         const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A';
-        const hiddenClass = idx >= INITIAL_SESSIONS_VISIBLE ? ' is-hidden' : '';
 
-        tableHTML += `<tr class="results-table-row${hiddenClass}"><td>${ts}</td>
+        tableHTML += `<tr class="results-table-row"><td>${ts}</td>
           <td><div class="color-preview" style="background-color:rgb(${rgbStr})"></div>${r.target_color}</td>
           <td>${drops}</td><td>${cat}</td>
           <td>${typeof r.time_sec === 'number' ? r.time_sec.toFixed(1) : r.time_sec}s</td>
           <td class="${statusClass}">${statusText}</td></tr>`;
 
-        cardsHTML += `<div class="result-card${hiddenClass}">
+        cardsHTML += `<div class="result-card">
           <div class="result-card-header">
             <div class="result-card-swatch" style="background-color:rgb(${rgbStr})"></div>
             <div>
@@ -1033,34 +1026,11 @@
       tableHTML += '</tbody></table>';
       cardsHTML += '</div>';
 
-      const hiddenCount = Math.max(0, results.length - INITIAL_SESSIONS_VISIBLE);
-      const showMoreHTML = hiddenCount > 0
-        ? `<button type="button" class="show-more-btn" id="showMoreSessionsBtn"
-                   onclick="toggleSessionRows()">Show all ${results.length} sessions</button>`
+      const truncatedNote = results.length > MAX_SESSIONS_SHOWN
+        ? `<p class="sessions-truncated-note">Showing your ${MAX_SESSIONS_SHOWN} most recent rounds (of ${totalSessions} total).</p>`
         : '';
 
-      document.getElementById('results-content').innerHTML = summaryHTML + tableHTML + cardsHTML + showMoreHTML;
-    }
-
-    function toggleSessionRows() {
-      const btn = document.getElementById('showMoreSessionsBtn');
-      const hiddenRows = document.querySelectorAll('.results-table-row.is-hidden, .result-card.is-hidden');
-      if (hiddenRows.length > 0) {
-        hiddenRows.forEach(el => el.classList.remove('is-hidden'));
-        if (btn) btn.textContent = 'Show fewer';
-        btn.dataset.expanded = 'true';
-      } else {
-        // Re-hide rows beyond the initial visible count
-        document.querySelectorAll('.results-table-row').forEach((el, i) => {
-          if (i >= INITIAL_SESSIONS_VISIBLE) el.classList.add('is-hidden');
-        });
-        document.querySelectorAll('.result-card').forEach((el, i) => {
-          if (i >= INITIAL_SESSIONS_VISIBLE) el.classList.add('is-hidden');
-        });
-        const total = document.querySelectorAll('.results-table-row').length;
-        if (btn) btn.textContent = 'Show all ' + total + ' sessions';
-        btn.dataset.expanded = 'false';
-      }
+      document.getElementById('results-content').innerHTML = summaryHTML + tableHTML + cardsHTML + truncatedNote;
     }
 
     function showError(message) {
