@@ -1341,7 +1341,10 @@ def _target_color_public_dict(tc):
 @main.route('/api/target-colors', methods=['GET'])
 def get_target_colors():
     user_id = request.args.get('user_id')
-    rows = TargetColor.query.order_by(TargetColor.catalog_order.asc()).all()
+    # Main gameplay is the gamut set; the retired basic/skin/lab catalog is not served.
+    rows = (TargetColor.query
+            .filter_by(color_type='gamut')
+            .order_by(TargetColor.catalog_order.asc()).all())
     colors = [_target_color_public_dict(tc) for tc in rows]
 
     next_action_data = {}
