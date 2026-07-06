@@ -50,6 +50,7 @@ from .gamification import (
     MIN_SUM_DROP_BAND,
     target_color_sum_drop,
     _effective_sum_cap,
+    _xp_level,
 )
 from .next_action import build_next_action
 # NOTE: `stat_eda` and `mixed_models_stat` pull in matplotlib + statsmodels (+ scipy),
@@ -2675,8 +2676,10 @@ def get_leaderboard():
         ]
 
         def sort_key(row):
+            # Rank on the XP-derived level, never the stored `level` column, so a stale
+            # cached value can never misrank a player (e.g. a veteran who hasn't replayed).
             return (
-                -int(row.level or 1),
+                -_xp_level(int(row.xp or 0)),
                 -int(row.xp or 0),
                 -int(row.completed_sessions or 0),
                 -int(row.perfect_count or 0),
@@ -2702,7 +2705,7 @@ def get_leaderboard():
                 'rank': rank,
                 'display_name': f'You ({row.user_id})' if is_current_user else f'Player #{rank}',
                 'is_current_user': is_current_user,
-                'level': int(row.level or 1),
+                'level': _xp_level(int(row.xp or 0)),
                 'xp': int(row.xp or 0),
                 'current_streak': int(row.current_streak or 0),
                 'total_sessions': int(row.total_sessions or 0),
