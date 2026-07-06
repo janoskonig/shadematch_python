@@ -223,12 +223,15 @@ DAILY_MISSIONS = [
 # XP-based helpers kept for backward-compat XP display (never drive level/completion)
 # ---------------------------------------------------------------------------
 
-# Kept only for XP secondary display; level is now quota-derived.
-# Doubling early on, then linear chunks of +40k for the 30-level XP bar.
+# XP thresholds to reach each level (index 0 = L1). Level/rank are XP-driven: every
+# mix earns quality-weighted XP (XP_TABLE), so leveling is continuous and a player's
+# standing reflects their whole history. Calibrated to the live XP range (~7..70k):
+# fast early levels (L2 ≈ 2 rounds), the median player around L6, p90 ≈ Gold, the most
+# dedicated ≈ Diamond, with Master (L26-30) left as aspirational headroom.
 LEVEL_THRESHOLDS = [
-    0,      200,    500,    1000,   2000,   4000,   8000,   16000,  32000,  64000,
-    96000,  128000, 160000, 200000, 240000, 280000, 320000, 360000, 400000, 440000,
-    480000, 520000, 560000, 600000, 640000, 680000, 720000, 760000, 800000, 840000,
+    0,      150,    400,    800,    1400,   2200,   3300,   4800,   6700,   9000,
+    11800,  15200,  19300,  24200,  30000,  36800,  44700,  53800,  64200,  76000,
+    89400,  104500, 121400, 140300, 161400, 184900, 211000, 240000, 272200, 308000,
 ]
 
 
@@ -808,24 +811,15 @@ def build_progress_response(user_id: str, user_progress, _catalog_size_ignored=N
     xp = up.xp if up else 0
 
     quota = compute_quota_progress(user_id)
-    computed_lv = compute_level_from_bands(
-        quota['bands_cleared'],
-        quota['total_bands'],
-        quota['is_maxed_out'],
-    )
-    # Floor the display level by the cached value (safety net for legacy rows
-    # that pre-date the migration or rare catalog reshapes).
+    # Level/rank are XP-driven (continuous, quality-weighted, history-preserving).
+    # XP only grows, so this is monotonic; floor by the cached level as a safety net.
+    computed_lv = _xp_level(xp)
     peak_lv = up.level if up else 1
     level = max(peak_lv, computed_lv)
-    # Progress toward the next band-unlock: how much of the current frontier band
-    # is done (a single solve there levels the player up).
-    if quota['is_maxed_out']:
-        level_progress_pct = 100.0
-    elif quota['tier_total_colors'] > 0:
-        level_progress_pct = round(
-            100.0 * quota['tier_completed_colors'] / quota['tier_total_colors'], 1)
-    else:
-        level_progress_pct = 0.0
+    # Progress toward the next level, measured in XP within the current level.
+    xp_in, xp_to = _xp_level_progress(xp)
+    span = xp_in + xp_to
+    level_progress_pct = 100.0 if xp_to <= 0 else round(100.0 * xp_in / span, 1)
     rank, rank_color = compute_rank(level)
 
     xp_in_level, xp_to_next = _xp_level_progress(xp)
@@ -894,15 +888,11 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
 
     # ── Snapshot old quota state before any writes ───────────────────────
     old_quota = compute_quota_progress(user_id)
-    old_level = compute_level_from_bands(
-        old_quota['bands_cleared'],
-        old_quota['total_bands'],
-        old_quota['is_maxed_out'],
-    )
     old_is_maxed = old_quota['is_maxed_out']
 
     # ── Get or create UserProgress ───────────────────────────────────────
     up = UserProgress.query.filter_by(user_id=user_id).first()
+    old_level = _xp_level(up.xp if up else 0)   # XP-driven level, pre-round
     if not up:
         up = UserProgress(
             user_id=user_id, xp=0, level=old_level,
@@ -1042,14 +1032,9 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
     new_ratio = new_quota['coverage_ratio']
     new_is_maxed = new_quota['is_maxed_out']
 
-    computed_new = compute_level_from_bands(
-        new_quota['bands_cleared'],
-        new_quota['total_bands'],
-        new_is_maxed,
-    )
-    # Clamp against the cached display level: the new mapping is monotonic in
-    # `colors_at_quota_total`, so the floor only matters as a safety net for
-    # legacy rows that pre-date the migration (or rare catalog reshapes).
+    # up.xp was already incremented above, so this is the post-round XP level.
+    computed_new = _xp_level(up.xp)
+    # XP only grows, so this is monotonic; floor by the cached level as a safety net.
     final_level = max(up.level, computed_new)
 
     # ── Global quota milestone awards (quota_major) ───────────────────────
