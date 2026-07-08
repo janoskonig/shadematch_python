@@ -86,7 +86,7 @@ MIN_PARTICIPANT_AGE = 18
 # The content is defined once as structured data (intro + labelled items) so the
 # UI can render it as a readable list, while RESEARCH_CONSENT_TEXT — the exact
 # string that is hashed into each audit record — is derived from that same data.
-RESEARCH_CONSENT_VERSION = '1.0'
+RESEARCH_CONSENT_VERSION = '1.1'  # 1.1: privacy policy expanded 2026-07-08 (telemetry, device info, push)
 RESEARCH_CONTACT_EMAIL = 'konig.janos@semmelweis.hu'
 RESEARCH_CONSENT_INTRO = (
     "You are about to take part in a scientific study of colour vision and "
