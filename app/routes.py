@@ -281,6 +281,9 @@ def index():
         research_consent_intro=RESEARCH_CONSENT_INTRO,
         research_consent_items=RESEARCH_CONSENT_ITEMS,
         research_consent_version=RESEARCH_CONSENT_VERSION,
+        has_semmelweis_logo=os.path.exists(
+            os.path.join(current_app.static_folder, 'img', 'semmelweis-logo.png')
+        ),
     )
 
 

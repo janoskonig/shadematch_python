@@ -229,10 +229,12 @@
   <!-- ======== Research informed-consent modal (blocking, pre-registration) ======== -->
   <div id="researchConsentModal" class="modal-overlay" style="display:none; z-index:10010;" data-consent-version="{{ research_consent_version }}">
     <div class="modal-card">
+      {% if has_semmelweis_logo %}
       <img src="{{ url_for('static', filename='img/semmelweis-logo.png') }}"
            alt="Semmelweis University"
            style="display:block; max-height:52px; width:auto; margin:0 auto var(--space-md);"
            onerror="this.style.display='none'">
+      {% endif %}
       <h2 class="modal-title">Before you take part</h2>
       <div id="researchConsentText" style="line-height: 1.55; color: var(--text-primary); max-height: 48vh; overflow-y: auto; margin-bottom: var(--space-md); text-align: left;">
         <p style="margin: 0 0 var(--space-md);">{{ research_consent_intro }}</p>
