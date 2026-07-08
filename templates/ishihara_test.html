@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Ishihara Color Vision Test{% endblock %}
+{% block title %}Color Vision Test{% endblock %}
 
 {% block extra_head %}
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -10,187 +10,218 @@
 
 {% block extra_css %}
 <style>
-    body { padding: var(--space-md); }
-
-    .test-container {
-      max-width: 800px; margin: 0 auto;
-      background: var(--surface);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-md);
-      overflow: hidden;
-    }
-    .ish-header {
-      background: linear-gradient(135deg, #3a5a8c 0%, #4a7ab5 100%);
-      color: var(--text-on-accent);
-      padding: var(--space-xl); text-align: center;
-    }
-    .ish-header h1 { font-size: var(--font-size-2xl); font-weight: 300; margin-bottom: var(--space-sm); }
-    .ish-header p { font-size: 1rem; opacity: 0.9; }
-    .ish-header .test-info { margin-top: var(--space-md); font-size: var(--font-size-sm); opacity: 0.8; }
-
-    .ish-warning {
-      background: #FFF8E1; border: 1px solid #FFE082;
-      border-radius: var(--radius-sm); padding: var(--space-md);
-      margin: var(--space-sm) 0; color: #6D4C00; font-size: var(--font-size-sm);
+    .ish-wrap {
+      max-width: 680px; margin: 0 auto;
+      padding: var(--space-xs) var(--space-md) var(--space-lg);
     }
 
-    .progress-bar {
-      background: var(--border); height: 6px; position: relative;
+    .topbar {
+      display: flex; align-items: center; gap: var(--space-xs);
+      padding: var(--space-xs) 0;
     }
-    .progress-fill {
-      background: linear-gradient(90deg, var(--accent-success), #8BC34A);
-      height: 100%; width: 0%; border-radius: 3px;
+    .back-btn {
+      width: 44px; height: 44px; margin-left: -12px;
+      border: none; background: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      color: var(--text-secondary); border-radius: var(--radius-full);
+      touch-action: manipulation;
     }
-    @media (prefers-reduced-motion: no-preference) {
-      .progress-fill { transition: width 0.3s ease; }
+    .back-btn:hover:not(:disabled) { background: var(--border); color: var(--text-primary); }
+    .back-btn:disabled { opacity: 0.25; cursor: default; }
+    .topbar-title { flex: 1; font-weight: 700; font-size: 0.95rem; color: var(--text-primary); }
+    .topbar-count { font-size: var(--font-size-sm); color: var(--text-secondary); }
+
+    .segments { display: flex; gap: 4px; }
+    .segment { flex: 1; height: 4px; border-radius: var(--radius-full); background: var(--border); }
+    .segment.filled { background: var(--accent-primary); }
+
+    .rule-note {
+      text-align: center; font-size: var(--font-size-sm);
+      color: var(--text-secondary); margin: var(--space-sm) 0 0;
     }
 
-    .plate-container { padding: var(--space-xl); text-align: center; }
+    .test-card { margin-top: var(--space-xs); }
     .plate {
-      width: 320px; height: 320px; margin: 0 auto var(--space-lg);
-      border-radius: 50%; background-size: contain;
-      background-position: center; background-repeat: no-repeat;
-      background-color: #f8f9fa; box-shadow: var(--shadow-lg);
-      border: 6px solid var(--border); position: relative;
+      width: min(78vw, 320px); aspect-ratio: 1 / 1;
+      margin: var(--space-md) auto; border-radius: 50%;
+      border: 1px solid var(--border); background: var(--surface);
+      overflow: hidden; flex-shrink: 0;
     }
-    .plate img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; }
+    .plate img { width: 100%; height: 100%; object-fit: contain; border-radius: 50%; display: block; }
 
     .question {
-      font-size: var(--font-size-lg); margin-bottom: var(--space-lg);
-      color: var(--text-primary); font-weight: 600;
+      text-align: center; font-size: var(--font-size-lg); font-weight: 700;
+      color: var(--text-primary); margin-bottom: var(--space-md);
     }
 
-    .options {
-      display: flex; flex-wrap: nowrap; gap: var(--space-sm);
-      max-width: 800px; margin: 0 auto; justify-content: center;
-    }
+    .options { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm); }
     .option {
-      background: var(--bg-primary); border: 2px solid var(--border);
-      border-radius: var(--radius-md);
-      padding: var(--space-md) var(--space-md);
-      cursor: pointer; font-size: 1rem; font-weight: 600;
-      flex: 1; min-width: 0; text-align: center;
-      color: var(--text-primary); min-height: 56px;
-      display: flex; align-items: center; justify-content: center;
-      touch-action: manipulation;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      .option { transition: all 0.15s ease; }
-    }
-    .option:hover { background: var(--surface); border-color: var(--accent-primary); }
-    .option.selected { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
-    .option.correct { background: var(--accent-success); color: var(--text-on-accent); border-color: var(--accent-success); }
-    .option.incorrect { background: var(--accent-danger); color: var(--text-on-accent); border-color: var(--accent-danger); }
-
-    .navigation {
-      display: flex; justify-content: space-between; align-items: center;
-      margin-top: var(--space-xl); padding: 0 var(--space-md);
-    }
-    .nav-btn {
-      min-height: var(--touch-min); padding: var(--space-sm) var(--space-lg);
-      border-radius: var(--radius-full); cursor: pointer; font-size: 1rem;
-      font-weight: 700; border: 2px solid var(--border-strong);
+      min-height: var(--touch-min);
+      border: 2px solid var(--border); border-radius: var(--radius-md);
       background: var(--surface); color: var(--text-primary);
+      font-family: inherit; font-size: 1.1rem; font-weight: 700;
+      cursor: pointer; touch-action: manipulation;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .option.full { grid-column: 1 / -1; font-size: 0.95rem; }
+    .option:hover { border-color: var(--accent-primary); }
+    .option.selected {
+      background: var(--accent-primary); border-color: var(--accent-primary);
+      color: var(--text-on-accent);
+    }
+
+    .hint {
+      text-align: center; font-size: var(--font-size-sm);
+      color: var(--text-secondary); margin-top: var(--space-md);
+    }
+
+    @media (min-width: 768px) {
+      .ish-wrap { padding-top: var(--space-lg); }
+      .test-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius-lg); padding: var(--space-xl);
+        display: flex; gap: var(--space-xl); align-items: center;
+        margin-top: var(--space-md);
+      }
+      .plate { width: 240px; margin: 0; }
+      .test-side { flex: 1; min-width: 0; }
+      .question { text-align: left; }
+      .options { grid-template-columns: 1fr; }
+      .option.full { grid-column: auto; }
+      .hint { text-align: left; }
+    }
+
+    .result-screen { max-width: 420px; margin: var(--space-2xl) auto 0; text-align: center; }
+    .result-icon {
+      width: 64px; height: 64px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto var(--space-md);
+    }
+    .result-icon.pass { background: #E8F5E9; color: var(--accent-success); }
+    .result-icon.fail { background: #FFF8E1; color: #6D4C00; }
+    .result-screen h2 { color: var(--text-primary); font-size: var(--font-size-xl); margin: 0 0 var(--space-sm); }
+    .result-screen p { color: var(--text-secondary); line-height: 1.55; margin: 0 0 var(--space-md); }
+
+    .id-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-md); padding: var(--space-md);
+      text-align: left; margin: var(--space-md) 0 var(--space-lg);
+    }
+    .id-label { font-size: var(--font-size-sm); color: var(--text-secondary); }
+    .id-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+    .id-value {
+      font-family: 'Courier New', monospace; font-size: 1.5rem; font-weight: 700;
+      letter-spacing: 3px; color: var(--text-primary);
+    }
+    .copy-btn {
+      border: none; background: none; color: var(--accent-primary);
+      font-family: inherit; font-size: var(--font-size-sm); font-weight: 700;
+      cursor: pointer; min-height: 44px; padding: 0 var(--space-sm);
       touch-action: manipulation;
     }
-    @media (prefers-reduced-motion: no-preference) {
-      .nav-btn { transition: all 0.15s ease; }
+    .id-hint { font-size: var(--font-size-sm); color: var(--text-secondary); margin-top: var(--space-xs); }
+
+    .why-details { margin-top: var(--space-md); text-align: left; }
+    .why-details summary {
+      color: var(--accent-primary); font-size: var(--font-size-sm); font-weight: 700;
+      cursor: pointer; text-align: center; list-style: none; padding: var(--space-sm);
     }
-    .nav-btn:hover:not(:disabled) { background: var(--bg-primary); }
-    .nav-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .nav-btn.primary { background: var(--accent-primary); color: var(--text-on-accent); border-color: var(--accent-primary); }
-    .nav-btn.primary:hover:not(:disabled) { background: #3a7bc8; }
+    .why-details summary::-webkit-details-marker { display: none; }
+    .why-details p { font-size: var(--font-size-sm); margin-top: var(--space-sm); }
 
-    .results { display: none; padding: var(--space-xl); text-align: center; }
-    .results h2 { color: var(--text-primary); margin-bottom: var(--space-md); font-size: var(--font-size-2xl); }
-    .score-display { font-size: 3em; font-weight: 900; color: var(--accent-primary); margin: var(--space-md) 0; }
-    .result-message { font-size: var(--font-size-lg); color: var(--text-secondary); margin-bottom: var(--space-lg); line-height: 1.6; }
+    .reg-message { color: var(--accent-danger); font-size: var(--font-size-sm); margin: var(--space-md) 0; }
+    .reg-message a { color: var(--accent-primary); }
 
-    .restart-btn, .home-btn {
-      min-height: var(--touch-min); padding: var(--space-md) var(--space-xl);
-      border-radius: var(--radius-full); cursor: pointer; font-size: 1rem;
-      font-weight: 700; border: none; touch-action: manipulation;
-    }
-    .restart-btn { background: var(--accent-success); color: var(--text-on-accent); }
-    .restart-btn:hover { background: #4ea84e; }
-    .home-btn { background: var(--surface); color: var(--text-primary); border: 2px solid var(--border-strong); margin-left: var(--space-md); }
-    .home-btn:hover { background: var(--bg-primary); }
-
-    .loading { text-align: center; padding: var(--space-xl); color: var(--text-secondary); }
+    .loading { text-align: center; padding: var(--space-2xl); color: var(--text-secondary); }
     .spinner {
       border: 4px solid var(--border); border-top: 4px solid var(--accent-primary);
       border-radius: 50%; width: 40px; height: 40px;
       animation: spin 1s linear infinite; margin: var(--space-md) auto;
     }
     @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-    @media (max-width: 768px) {
-      .plate { width: 260px; height: 260px; }
-      .options { flex-wrap: wrap; gap: var(--space-sm); }
-      .option { flex: 1; min-width: calc(50% - 4px); padding: var(--space-sm) var(--space-sm); }
-      .ish-header h1 { font-size: var(--font-size-xl); }
+    @media (prefers-reduced-motion: reduce) {
+      .spinner { animation: none; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-    <div class="test-container">
-        <div class="ish-header">
-            <h1>Ishihara Color Vision Test</h1>
-            <p>Identify the number or pattern you see in each circle</p>
-            <div class="ish-warning">
-                <strong>Note:</strong> This test is currently limited to 5 plates for testing purposes.
-            </div>
-            <div class="test-info">
-                <span id="timer">Time: 00:00</span> |
-                <span id="currentPlate">Loading...</span>
-            </div>
-        </div>
-
-        <div class="progress-bar">
-            <div class="progress-fill" id="progressFill"></div>
-        </div>
-
+    <div class="ish-wrap">
         <div class="loading" id="loading">
             <div class="spinner"></div>
             <p>Loading test data...</p>
         </div>
 
-        <div class="plate-container" id="plateContainer" style="display: none;">
-            <div class="plate" id="plate"></div>
-            <div class="question" id="question"></div>
-            <div class="options" id="options"></div>
+        <div id="plateContainer" hidden>
+            <div class="topbar">
+                <button class="back-btn" id="backBtn" type="button" aria-label="Previous plate" disabled>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
+                </button>
+                <span class="topbar-title">Color vision test</span>
+                <span class="topbar-count" id="plateCount" aria-live="polite"></span>
+            </div>
+            <div class="segments" id="segments" aria-hidden="true"></div>
+            <p class="rule-note" id="ruleNote">All 5 plates must be answered correctly to take part.</p>
 
-            <div class="navigation">
-                <button class="nav-btn" id="prevBtn" type="button" disabled>Previous</button>
-                <button class="nav-btn primary" id="nextBtn" type="button">Next</button>
+            <div class="test-card">
+                <div class="plate"><img id="plateImg" src="" alt=""></div>
+                <div class="test-side">
+                    <div class="question">Which number do you see?</div>
+                    <div class="options" id="options" role="group" aria-label="Answer options"></div>
+                    <div class="hint">Tap an answer to continue &middot; use &lsaquo; to go back</div>
+                </div>
             </div>
         </div>
 
-        <div class="results" id="results">
-            <h2>Test Complete!</h2>
-            <div class="score-display" id="scoreDisplay"></div>
-            <div class="result-message" id="resultMessage"></div>
-            <button class="restart-btn" id="restartBtn" type="button">Take Test Again</button>
-            <button class="home-btn" id="homeBtn" type="button">Go Home</button>
+        <div id="passScreen" class="result-screen" hidden>
+            <div class="result-icon pass">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <h2>Normal color vision</h2>
+            <p>You identified all 5 plates correctly.</p>
+            <div class="id-card" id="idCard" hidden>
+                <div class="id-label">Your participant ID</div>
+                <div class="id-row">
+                    <span class="id-value" id="userIdText"></span>
+                    <button class="copy-btn" id="copyIdBtn" type="button">Copy</button>
+                </div>
+                <div class="id-hint">Saved on this device &mdash; keep it to log in elsewhere.</div>
+            </div>
+            <div class="reg-message" id="regMessage" hidden></div>
+            <button class="btn btn-primary btn-lg btn-full" id="startBtn" type="button" hidden>Start color matching</button>
+        </div>
+
+        <div id="failScreen" class="result-screen" hidden>
+            <div class="result-icon fail">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/></svg>
+            </div>
+            <h2>We couldn't confirm typical color vision</h2>
+            <p id="failDetail"></p>
+            <p>Screen glare or night mode can affect the result &mdash; you're welcome to try once more in good light.</p>
+            <button class="btn btn-secondary btn-lg btn-full" id="retryBtn" type="button">Retake the test</button>
+            <details class="why-details">
+                <summary>Why does the study need this?</summary>
+                <p>ShadeStudy compares how people with typical color vision mix and match colors. Results from participants with reduced color discrimination would measure something different, so the color game needs a passing result on this screening test.</p>
+            </details>
         </div>
     </div>
 
     <script>
         let ishiharaPlates = [];
         let currentPlateIndex = 0;
-        let userAnswers = new Array(25).fill(null);
-        let testCompleted = false;
+        let userAnswers = [];
         let startTime = null;
-        let timerInterval = null;
+        let advancing = false;
+
+        const LINES_LABEL = 'I only see lines';
 
         async function loadTestData() {
             try {
                 const response = await fetch('/static/ishihara_test_data.csv?v=' + Date.now());
                 const csvText = await response.text();
                 ishiharaPlates = parseCSV(csvText);
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('plateContainer').style.display = 'block';
+                document.getElementById('loading').hidden = true;
+                document.getElementById('plateContainer').hidden = false;
                 initTest();
             } catch (error) {
                 console.error('Error loading test data:', error);
@@ -205,13 +236,12 @@
             const plates = [];
             const maxPlates = 5;
             for (let i = 1; i <= maxPlates && i < lines.length; i++) {
-                const values = lines[i].split(',');
+                const values = lines[i].split(',').map(v => v.trim());
                 plates.push({
                     id: parseInt(values[0]),
                     image_file: values[1],
                     correct_answer: values[7],
-                    options: [values[2], values[3], values[4], values[5], values[6]].filter(opt => opt && opt.trim() !== ''),
-                    question_text: 'What do you see in this plate?'
+                    options: [values[2], values[3], values[4], values[5], values[6]].filter(opt => opt && opt !== '')
                 });
             }
             return plates;
@@ -220,181 +250,155 @@
         function initTest() {
             currentPlateIndex = 0;
             userAnswers = new Array(ishiharaPlates.length).fill(null);
-            testCompleted = false;
             startTime = new Date();
-            startTimerFn();
+            advancing = false;
+            const segmentsEl = document.getElementById('segments');
+            segmentsEl.innerHTML = '';
+            ishiharaPlates.forEach(() => {
+                const seg = document.createElement('div');
+                seg.className = 'segment';
+                segmentsEl.appendChild(seg);
+            });
             showPlate(currentPlateIndex);
-            updateProgress();
         }
-
-        function startTimerFn() { if (timerInterval) clearInterval(timerInterval); timerInterval = setInterval(updateTimer, 1000); }
-        function updateTimer() {
-            if (!startTime) return;
-            const elapsed = Math.floor((new Date() - startTime) / 1000);
-            document.getElementById('timer').textContent = 'Time: ' + Math.floor(elapsed / 60).toString().padStart(2, '0') + ':' + (elapsed % 60).toString().padStart(2, '0');
-        }
-        function stopTimerFn() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
 
         function showPlate(index) {
             const plate = ishiharaPlates[index];
-            document.getElementById('plate').innerHTML = '<img src="/ishihara/' + plate.image_file + '" alt="Ishihara Plate ' + plate.id + '" onerror="this.style.display=\'none\'">';
-            document.getElementById('question').textContent = 'Plate ' + plate.id + ': ' + plate.question_text;
+            const img = document.getElementById('plateImg');
+            img.src = '/ishihara/' + plate.image_file;
+            img.alt = 'Ishihara plate ' + (index + 1) + ' of ' + ishiharaPlates.length;
+
             const optionsEl = document.getElementById('options');
             optionsEl.innerHTML = '';
-            plate.options.forEach(option => {
+            // Render the "lines" option last so the number options form a
+            // clean 2-column grid with the full-width lines row underneath.
+            const ordered = plate.options.filter(o => o !== 'lines')
+                .concat(plate.options.filter(o => o === 'lines'));
+            ordered.forEach(option => {
                 const btn = document.createElement('button');
-                btn.className = 'option';
+                btn.className = 'option' + (option === 'lines' ? ' full' : '');
                 btn.type = 'button';
-                btn.textContent = option;
-                btn.onclick = () => selectOption(option);
+                btn.textContent = option === 'lines' ? LINES_LABEL : option;
+                btn.dataset.value = option;
+                btn.onclick = () => selectOption(option, btn);
                 if (userAnswers[index] === option) btn.classList.add('selected');
                 optionsEl.appendChild(btn);
             });
-            updateNavigationButtons();
-            document.getElementById('currentPlate').textContent = 'Plate ' + plate.id + ' of ' + ishiharaPlates.length;
+
+            document.getElementById('plateCount').textContent = (index + 1) + ' of ' + ishiharaPlates.length;
+            document.getElementById('backBtn').disabled = index === 0;
+            document.getElementById('ruleNote').hidden = index !== 0;
+            updateProgress();
+            preloadNextPlate(index);
         }
 
-        function selectOption(selectedOption) {
-            userAnswers[currentPlateIndex] = selectedOption;
-            document.querySelectorAll('.option').forEach(opt => {
-                opt.classList.remove('selected', 'correct', 'incorrect');
-                if (opt.textContent == selectedOption) opt.classList.add('selected');
-            });
-            document.getElementById('nextBtn').disabled = false;
+        function preloadNextPlate(index) {
+            const next = ishiharaPlates[index + 1];
+            if (next) { const im = new Image(); im.src = '/ishihara/' + next.image_file; }
         }
 
-        function updateNavigationButtons() {
-            document.getElementById('prevBtn').disabled = currentPlateIndex === 0;
-            const nextBtn = document.getElementById('nextBtn');
-            nextBtn.textContent = currentPlateIndex === ishiharaPlates.length - 1 ? 'Finish Test' : 'Next';
-            nextBtn.disabled = userAnswers[currentPlateIndex] === null;
+        function selectOption(value, btn) {
+            if (advancing) return;
+            advancing = true;
+            userAnswers[currentPlateIndex] = value;
+            document.querySelectorAll('.option').forEach(opt => opt.classList.remove('selected'));
+            btn.classList.add('selected');
+            setTimeout(() => {
+                advancing = false;
+                if (currentPlateIndex < ishiharaPlates.length - 1) {
+                    currentPlateIndex++;
+                    showPlate(currentPlateIndex);
+                } else {
+                    finishTest();
+                }
+            }, 300);
+        }
+
+        function prevPlate() {
+            if (currentPlateIndex > 0 && !advancing) {
+                currentPlateIndex--;
+                showPlate(currentPlateIndex);
+            }
         }
 
         function updateProgress() {
-            document.getElementById('progressFill').style.width = ((currentPlateIndex + 1) / ishiharaPlates.length * 100) + '%';
+            document.querySelectorAll('.segment').forEach((seg, i) => {
+                seg.classList.toggle('filled', i <= currentPlateIndex);
+            });
         }
 
-        function nextPlate() {
-            if (currentPlateIndex < ishiharaPlates.length - 1) { currentPlateIndex++; showPlate(currentPlateIndex); updateProgress(); }
-            else finishTest();
-        }
-        function prevPlate() {
-            if (currentPlateIndex > 0) { currentPlateIndex--; showPlate(currentPlateIndex); updateProgress(); }
-        }
+        function hasPassedTest(score) { return score >= 90; }
 
         function finishTest() {
-            stopTimerFn();
             const correctAnswers = userAnswers.filter((a, i) => a === ishiharaPlates[i].correct_answer).length;
             const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
             const totalTime = startTime ? Math.floor((new Date() - startTime) / 1000) : 0;
-            document.getElementById('scoreDisplay').textContent = score + '%';
-            document.getElementById('resultMessage').innerHTML =
-                getResultMessage(score) + '<br><br><strong>Results:</strong><br>' +
-                '• Correct: ' + correctAnswers + '/' + ishiharaPlates.length + '<br>' +
-                '• Time: ' + Math.floor(totalTime / 60) + ':' + (totalTime % 60).toString().padStart(2, '0') + '<br>' +
-                '• Avg per plate: ' + Math.round(totalTime / ishiharaPlates.length) + 's';
-            document.getElementById('plateContainer').style.display = 'none';
-            document.getElementById('results').style.display = 'block';
-            testCompleted = true;
-            checkTestResults();
-        }
-
-        function getResultMessage(score) {
-            if (score >= 90) return "Excellent color vision! You have normal color perception.";
-            if (score >= 80) return "Good color vision with minor difficulties.";
-            if (score >= 70) return "Moderate color vision deficiency detected.";
-            if (score >= 60) return "Significant color vision deficiency detected.";
-            return "Severe color vision deficiency detected.";
-        }
-        function hasPassedTest(score) { return score >= 90; }
-
-        function checkTestResults() {
-            const correctAnswers = userAnswers.filter((a, i) => a === ishiharaPlates[i].correct_answer).length;
-            const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
-            if (hasPassedTest(score)) { displayTestSuccess(score); registerUserAfterTest(); }
-            else displayTestFailure(score);
-        }
-
-        function displayTestSuccess(score) {
-            const rm = document.getElementById('resultMessage');
-            rm.innerHTML += '<br><br><div style="background:#E8F5E9;border:2px solid var(--accent-success);border-radius:var(--radius-md);padding:var(--space-lg);margin:var(--space-md) 0;text-align:center;">' +
-                '<h3 style="color:var(--accent-success);margin:0 0 var(--space-sm) 0;">Test Passed!</h3>' +
-                '<p style="margin:var(--space-sm) 0;color:var(--text-primary);">Your score of <strong>' + score + '%</strong> meets the threshold. You can proceed.</p></div>';
-        }
-
-        function displayTestFailure(score) {
-            const rm = document.getElementById('resultMessage');
-            rm.innerHTML += '<br><br><div style="background:#FFEBEE;border:2px solid var(--accent-danger);border-radius:var(--radius-md);padding:var(--space-lg);margin:var(--space-md) 0;text-align:center;">' +
-                '<h3 style="color:var(--accent-danger);margin:0 0 var(--space-sm) 0;">Test Failed — Access Denied</h3>' +
-                '<p style="margin:var(--space-sm) 0;color:var(--text-primary);">Your score of <strong>' + score + '%</strong> is below the required 90%.</p>' +
-                '<p style="margin:var(--space-sm) 0;color:var(--text-secondary);">Only users with normal color vision can participate.</p></div>';
-        }
-
-        async function registerUserAfterTest() {
             try {
-                const birthdate = localStorage.getItem('userBirthdate');
-                const gender = localStorage.getItem('userGender');
-                const email = localStorage.getItem('userEmail');
-                const emailOptIn = localStorage.getItem('emailOptInReminders') === '1';
-                if (!birthdate || !gender) return;
-                const existingUserId = localStorage.getItem('userId');
-                if (existingUserId) { displayUserID(existingUserId); return; }
-                if (!email) {
-                    const rm = document.getElementById('resultMessage');
-                    rm.innerHTML += '<br><br><p style="color:var(--accent-danger);font-weight:700;">Please go back to the home page and complete registration with your email, then take this test again.</p>';
-                    return;
-                }
-                const response = await fetch('/register', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        birthdate,
-                        gender,
-                        email,
-                        email_opt_in_reminders: emailOptIn,
-                    }),
-                });
-                const data = await response.json();
-                if (data.status === 'success') {
-                    localStorage.setItem('userId', data.userId);
-                    displayUserID(data.userId);
-                } else if (data.message) {
-                    const rm = document.getElementById('resultMessage');
-                    rm.innerHTML += '<br><br><p style="color:var(--accent-danger);">' + data.message + '</p>';
-                }
-            } catch (error) { console.error('Error registering user:', error); }
+                localStorage.setItem('ishiharaResult', JSON.stringify({
+                    correct: correctAnswers,
+                    total: ishiharaPlates.length,
+                    timeSec: totalTime,
+                    finishedAt: new Date().toISOString()
+                }));
+            } catch (e) { /* storage blocked */ }
+
+            document.getElementById('plateContainer').hidden = true;
+            if (hasPassedTest(score)) {
+                document.getElementById('passScreen').hidden = false;
+                registerUserAfterTest();
+            } else {
+                document.getElementById('failDetail').textContent =
+                    'You matched ' + correctAnswers + ' of ' + ishiharaPlates.length + ' plates. The study compares how people with typical color vision mix colors, so the color game needs a passing result.';
+                document.getElementById('failScreen').hidden = false;
+            }
+        }
+
+        function showRegMessage(html) {
+            const el = document.getElementById('regMessage');
+            el.innerHTML = html;
+            el.hidden = false;
+        }
+
+        function registerUserAfterTest() {
+            // Registration (with research consent) happens on the home page
+            // before this test; by the time someone passes, their userId is
+            // already in localStorage. Consent is session-only on the home
+            // page, so this page cannot register on its own.
+            const existingUserId = localStorage.getItem('userId');
+            if (existingUserId) { displayUserID(existingUserId); return; }
+            showRegMessage('Complete registration on the <a href="/">home page</a> first, then take this test again.');
         }
 
         function displayUserID(userId) {
-            const rm = document.getElementById('resultMessage');
-            rm.innerHTML += '<br><br><div style="background:#E8F5E9;border:2px solid var(--accent-success);border-radius:var(--radius-md);padding:var(--space-lg);margin:var(--space-md) 0;text-align:center;">' +
-                '<h3 style="color:var(--accent-success);margin:0 0 var(--space-sm) 0;">Your User ID</h3>' +
-                '<div style="font-size:2em;font-weight:900;color:var(--accent-primary);letter-spacing:3px;margin:var(--space-sm) 0;font-family:monospace;">' + userId + '</div>' +
-                '<p style="color:var(--text-secondary);font-size:var(--font-size-sm);">Save this ID to access your results later!</p>' +
-                '<button onclick="proceedToMainPage()" class="btn btn-primary btn-lg" style="margin-top:var(--space-md);">Start Color Matching</button></div>';
+            document.getElementById('userIdText').textContent = userId;
+            document.getElementById('idCard').hidden = false;
+            document.getElementById('startBtn').hidden = false;
+        }
+
+        function copyUserId() {
+            const userId = document.getElementById('userIdText').textContent;
+            const btn = document.getElementById('copyIdBtn');
+            const confirmCopied = () => {
+                btn.textContent = 'Copied';
+                setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(userId).then(confirmCopied).catch(() => {});
+            }
         }
 
         function proceedToMainPage() {
             const userId = localStorage.getItem('userId');
             if (userId) { localStorage.setItem('justRegistered', 'true'); window.location.href = '/'; }
-            else alert('Error: User ID not found.');
         }
 
-        document.getElementById('nextBtn').addEventListener('click', nextPlate);
-        document.getElementById('prevBtn').addEventListener('click', prevPlate);
-        document.getElementById('restartBtn').addEventListener('click', function() {
-            stopTimerFn();
-            document.getElementById('results').style.display = 'none';
-            document.getElementById('plateContainer').style.display = 'block';
-            testCompleted = false;
-            document.getElementById('timer').textContent = 'Time: 00:00';
+        document.getElementById('backBtn').addEventListener('click', prevPlate);
+        document.getElementById('copyIdBtn').addEventListener('click', copyUserId);
+        document.getElementById('startBtn').addEventListener('click', proceedToMainPage);
+        document.getElementById('retryBtn').addEventListener('click', function () {
+            document.getElementById('failScreen').hidden = true;
+            document.getElementById('plateContainer').hidden = false;
             initTest();
-        });
-        document.getElementById('homeBtn').addEventListener('click', () => {
-            const correctAnswers = userAnswers.filter((a, i) => a === ishiharaPlates[i].correct_answer).length;
-            const score = Math.round((correctAnswers / ishiharaPlates.length) * 100);
-            if (hasPassedTest(score)) window.location.href = '/';
-            else alert('You must pass the Ishihara test to access other features.');
         });
 
         document.addEventListener('DOMContentLoaded', loadTestData);
