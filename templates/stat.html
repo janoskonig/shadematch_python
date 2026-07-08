@@ -184,6 +184,10 @@
         <p class="chart-title">Plays by device kind</p>
         <div class="table-wrap"><table id="qualityDeviceKindTable"></table></div>
       </div>
+      <div class="chart-card">
+        <p class="chart-title">Plays by country (from timezone)</p>
+        <div class="table-wrap"><table id="qualityCountryTable"></table></div>
+      </div>
     </div>
   </section>
 
@@ -1278,6 +1282,14 @@
         { key: 'n_attempts', label: 'Attempts' }
       ],
       (qc && qc.plays_by_device_kind) || []
+    );
+    buildTable(
+      document.getElementById('qualityCountryTable'),
+      [
+        { key: 'country', label: 'Country' },
+        { key: 'n_attempts', label: 'Attempts' }
+      ],
+      (qc && qc.plays_by_country) || []
     );
   }
 

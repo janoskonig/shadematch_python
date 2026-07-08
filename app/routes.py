@@ -3713,6 +3713,32 @@ def stat_quality_summary():
             )
         ).mappings().all()
 
+        from .tz_country import tz_to_country
+        plays_by_tz = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  client_env_json->>'tz' AS tz,
+                  COUNT(*)::bigint AS n_attempts
+                FROM mixing_attempts
+                WHERE user_id IS NOT NULL
+                  AND client_env_json IS NOT NULL
+                  AND client_env_json->>'tz' IS NOT NULL
+                GROUP BY 1
+                ORDER BY n_attempts DESC
+                """
+            )
+        ).mappings().all()
+        country_agg = {}
+        for row in plays_by_tz:
+            cc, name = tz_to_country(row['tz'])
+            label = name or 'Unknown'
+            country_agg[label] = country_agg.get(label, 0) + int(row['n_attempts'])
+        plays_by_country = sorted(
+            [{'country': k, 'n_attempts': v} for k, v in country_agg.items()],
+            key=lambda r: -r['n_attempts'],
+        )
+
         coverage_total = db.session.execute(
             db.text(
                 """
@@ -3732,6 +3758,7 @@ def stat_quality_summary():
             'plays_by_color_gamut': [dict(r) for r in plays_by_gamut],
             'plays_by_fullscreen': [dict(r) for r in plays_by_fullscreen],
             'plays_by_device_kind': [dict(r) for r in plays_by_device_kind],
+            'plays_by_country': plays_by_country,
         }
         _set_cached_stat_quality_payload(payload)
         return jsonify(payload)
