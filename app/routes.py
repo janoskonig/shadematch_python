@@ -3193,7 +3193,18 @@ def stat_summary():
                   (SELECT COUNT(*)::bigint FROM mixing_attempts) AS total_plays,
                   (SELECT COUNT(DISTINCT user_id)::bigint FROM mixing_attempts WHERE user_id IS NOT NULL) AS users_with_plays,
                   (SELECT MIN(attempt_started_server_ts)::text FROM mixing_attempts) AS first_play_ts,
-                  (SELECT MAX(attempt_started_server_ts)::text FROM mixing_attempts) AS last_play_ts
+                  (SELECT MAX(attempt_started_server_ts)::text FROM mixing_attempts) AS last_play_ts,
+                  (SELECT AVG(final_delta_e)::double precision FROM mixing_attempts WHERE final_delta_e IS NOT NULL) AS mean_delta_e,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)::double precision FROM mixing_attempts WHERE final_delta_e IS NOT NULL) AS median_delta_e,
+                  (SELECT COUNT(CASE WHEN final_delta_e <= 0.01 THEN 1 END)::double precision
+                        / NULLIF(COUNT(*)::double precision, 0)
+                   FROM mixing_attempts WHERE final_delta_e IS NOT NULL) AS perfect_match_rate,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec)::double precision
+                   FROM mixing_attempts WHERE duration_sec IS NOT NULL AND duration_sec <= 300) AS median_time_sec,
+                  (SELECT COUNT(*)::bigint FROM users WHERE lower(coalesce(gender,'')) LIKE 'f%') AS n_female,
+                  (SELECT COUNT(*)::bigint FROM users WHERE lower(coalesce(gender,'')) LIKE 'm%') AS n_male,
+                  (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY EXTRACT(YEAR FROM age(CURRENT_DATE, birthdate)))::double precision
+                   FROM users WHERE birthdate IS NOT NULL) AS median_age
                 """
             )
         ).mappings().first()
@@ -3386,6 +3397,32 @@ def stat_summary():
             )
         ).mappings().all()
 
+        from .tz_country import tz_to_country as _tz_to_country
+        _plays_by_tz = db.session.execute(
+            db.text(
+                """
+                SELECT
+                  client_env_json->>'tz' AS tz,
+                  COUNT(*)::bigint AS n_attempts
+                FROM mixing_attempts
+                WHERE user_id IS NOT NULL
+                  AND client_env_json IS NOT NULL
+                  AND client_env_json->>'tz' IS NOT NULL
+                GROUP BY 1
+                ORDER BY n_attempts DESC
+                """
+            )
+        ).mappings().all()
+        _country_agg = {}
+        for _row in _plays_by_tz:
+            _cc, _name = _tz_to_country(_row['tz'])
+            _label = _name or 'Unknown'
+            _country_agg[_label] = _country_agg.get(_label, 0) + int(_row['n_attempts'])
+        plays_by_country = sorted(
+            [{'country': k, 'n_attempts': v} for k, v in _country_agg.items()],
+            key=lambda r: -r['n_attempts'],
+        )
+
         if scope == 'basic':
             payload = {
                 'status': 'success',
@@ -3398,6 +3435,7 @@ def stat_summary():
                 'delta_e_per_color': [dict(r) for r in delta_e_per_color],
                 'elapsed_per_color': [dict(r) for r in elapsed_per_color],
                 'controlled_by_attempt': [dict(r) for r in controlled_by_attempt],
+                'plays_by_country': plays_by_country,
             }
             _set_cached_stat_summary_payload(payload, scope)
             return jsonify(payload)
@@ -3577,6 +3615,7 @@ def stat_summary():
             'delta_e_per_color': [dict(r) for r in delta_e_per_color],
             'elapsed_per_color': [dict(r) for r in elapsed_per_color],
             'controlled_by_attempt': [dict(r) for r in controlled_by_attempt],
+            'plays_by_country': plays_by_country,
             'archetypes': archetypes,
             'recipe_similarity': recipe_similarity,
             'mixed_models': mixed_models,

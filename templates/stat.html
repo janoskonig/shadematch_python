@@ -159,6 +159,13 @@
   <section class="section tab-panel is-active" data-tab="core" id="stat-overview">
     <h2>Overview</h2>
     <div class="cards" id="overviewCards"></div>
+    <h3 style="font-size:0.95rem;margin:16px 0 6px;">Player locations (from timezone)</h3>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <p class="chart-title">Plays by country</p>
+        <div class="table-wrap"><table id="overviewCountryTable"></table></div>
+      </div>
+    </div>
   </section>
 
   <section class="section tab-panel" data-tab="quality" id="stat-quality-controls">
@@ -899,15 +906,22 @@
   }
 
   function renderOverview(overview) {
+    var perfectPct = overview.perfect_match_rate != null ? pctFmt(overview.perfect_match_rate) : '—';
     var cards = [
       { k: 'Registered users', v: overview.registered_users || 0 },
       { k: 'Total plays', v: overview.total_plays || 0 },
       { k: 'Users with plays', v: overview.users_with_plays || 0 },
+      { k: 'Perfect match rate', v: perfectPct },
+      { k: 'Mean ΔE', v: fmtNumber(overview.mean_delta_e, 2) },
+      { k: 'Median ΔE', v: fmtNumber(overview.median_delta_e, 2) },
+      { k: 'Median time (s)', v: fmtNumber(overview.median_time_sec, 1) },
+      { k: 'Female / Male', v: (overview.n_female || 0) + ' / ' + (overview.n_male || 0) },
+      { k: 'Median age', v: fmtNumber(overview.median_age, 1) },
       { k: 'First play (UTC)', v: overview.first_play_ts || '—' },
       { k: 'Last play (UTC)', v: overview.last_play_ts || '—' }
     ];
     document.getElementById('overviewCards').innerHTML = cards.map(function(c) {
-      return '<div class="card"><div class="k">' + c.k + '</div><div class="v">' + c.v + '</div></div>';
+      return '<div class="card"><div class="k">' + escapeHtml(c.k) + '</div><div class="v">' + escapeHtml(String(c.v)) + '</div></div>';
     }).join('');
   }
 
@@ -1399,6 +1413,18 @@
       ],
       data.controlled_by_attempt || []
     );
+
+    var countryTable = document.getElementById('overviewCountryTable');
+    if (countryTable) {
+      buildTable(
+        countryTable,
+        [
+          { key: 'country', label: 'Country' },
+          { key: 'n_attempts', label: 'Plays' }
+        ],
+        data.plays_by_country || []
+      );
+    }
 
     var rs = data.recipe_similarity || {};
     var rsCards = [
