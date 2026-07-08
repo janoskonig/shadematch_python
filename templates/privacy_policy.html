@@ -99,7 +99,7 @@
     
     <h1>Privacy Policy</h1>
     
-    <p><strong>Last Updated:</strong> December 2024</p>
+    <p><strong>Last Updated:</strong> 8 July 2026</p>
     
     <h2>1. Introduction</h2>
     <p>
@@ -117,11 +117,17 @@
         <li><strong>Birthdate:</strong> For demographic analysis in color vision research</li>
         <li><strong>Gender:</strong> For demographic analysis in color vision research</li>
         <li><strong>Email (optional):</strong> Used for ID recovery and reminder emails if you opt in</li>
-        <li><strong>Email verification status:</strong> Timestamp indicating whether your email address is verified</li>
+        <li><strong>Email verification status:</strong> Timestamp indicating whether your email address is verified. Verification links use single-use, expiring tokens; we store only a cryptographic hash of the token.</li>
         <li><strong>Account Creation Date:</strong> Timestamp of user registration</li>
+        <li><strong>Consent record:</strong> When you agree to take part, we store an audit record of that agreement: the consent version, a hash of the exact consent text you were shown, the agreement timestamp, your browser's language setting, and its user-agent string</li>
     </ul>
-    
-    <h3>2.2 Color Mixing Session Data</h3>
+
+    <h3>2.2 Color Vision Screening (Ishihara Test)</h3>
+    <p>
+        Before registration you take a short color vision screening test. Your answers and the result of this test are evaluated <strong>in your browser, on your device</strong>; the plate-by-plate answers are not transmitted to our servers. A summary of your latest result (number of correct plates, time taken, completion timestamp) is kept only in your browser's local storage. Passing the screening is required to take part in the study.
+    </p>
+
+    <h3>2.3 Color Mixing Session Data</h3>
     <p>For each color mixing session, we collect:</p>
     <ul>
         <li><strong>Target Color:</strong> RGB values of the target color to be mixed</li>
@@ -131,14 +137,34 @@
         <li><strong>Session Timestamp:</strong> When the session was completed</li>
         <li><strong>Skip Status:</strong> Whether the session was skipped</li>
         <li><strong>Skip perception (when applicable):</strong> If you skip a trial while still mixing, we may ask you to rate how acceptable your mix was compared to the target (e.g., in a facial-prosthesis color-matching context). For analysis, this may be combined with the computed color difference into a short outcome label (e.g. perfect match vs. acceptable vs. large difference).</li>
+        <li><strong>Step-by-step mixing actions:</strong> For research on mixing strategies, we record each drop you add or remove during a mixing attempt, with timestamps, the mix state before and after each step, and the app version in use</li>
     </ul>
-    
-    <h3>2.3 Technical Information</h3>
-    <p>We automatically collect minimal technical information:</p>
+
+    <h3>2.4 Color Difference Calibration Data</h3>
+    <p>If you complete an optional color-difference calibration task, we store your trial responses and the resulting perceptibility/acceptability thresholds under your pseudonymous user ID.</p>
+
+    <h3>2.5 Gameplay Progress Data</h3>
+    <p>To make the study engaging, the app tracks pseudonymous gameplay data: experience points, level, daily streaks, unlocked awards, and daily-challenge scores (including daily winners, identified only by pseudonymous user ID).</p>
+
+    <h3>2.6 Device and Technical Information</h3>
+    <p>Together with mixing and calibration data we record technical details of the device and viewing conditions, because they can affect how colors are displayed:</p>
+    <ul>
+        <li>Browser and operating system (user-agent string)</li>
+        <li>Device type (phone/tablet/desktop), screen and viewport size, pixel density, touch capability</li>
+        <li>Display color-gamut capability, dark-mode and accessibility preferences (e.g. reduced motion, increased contrast)</li>
+        <li>Time zone, browser language, and local time of day</li>
+        <li>Approximate device performance indicators (memory class, CPU core count) and connection type</li>
+    </ul>
+    <p>This information is <strong>not</strong> used to identify you and does not include your IP address, precise location, or advertising identifiers.</p>
+    <p>We also collect:</p>
     <ul>
         <li>Session management data for application functionality</li>
         <li>Cookie consent preferences</li>
+        <li><strong>In-app usage events:</strong> We log first-party, pseudonymous app events (e.g. that a tutorial was completed or a reminder was shown) to understand how the application is used. No third-party analytics services are involved.</li>
     </ul>
+
+    <h3>2.7 Push Notification Data</h3>
+    <p>If you enable optional push reminders, your browser creates a push subscription and we store its delivery endpoint and encryption keys, linked to your pseudonymous user ID. We use it only to send the reminders you asked for. You can revoke this at any time in your browser or device notification settings, which invalidates the subscription; you can also ask us to delete it.</p>
     
     <h2>3. How We Use Your Information</h2>
     <p>We use your information for the following purposes:</p>
@@ -146,7 +172,7 @@
         <li><strong>Research:</strong> To study color vision and color mixing performance</li>
         <li><strong>Application Functionality:</strong> To provide personalized color testing experiences</li>
         <li><strong>Email Recovery:</strong> To send secure links so you can recover your user ID</li>
-        <li><strong>Reminders:</strong> To send optional daily challenge reminders if you explicitly opt in</li>
+        <li><strong>Reminders:</strong> To send optional daily challenge reminders (by email or push notification) if you explicitly opt in</li>
         <li><strong>Analytics:</strong> To understand how users interact with our application</li>
         <li><strong>Improvement:</strong> To enhance our application and research methods</li>
     </ul>
@@ -174,8 +200,11 @@
         <li><strong>cookie_consent:</strong> Your consent preferences for different cookie categories</li>
     </ul>
     
-    <p><strong>Note:</strong> We do not use analytics, marketing, or advertising cookies. All data collection is anonymous and for research purposes only.</p>
-    
+    <p><strong>Note:</strong> We do not use third-party analytics, marketing, or advertising cookies. All data collection is pseudonymous and for research purposes only.</p>
+
+    <h3>4.4 Browser Local Storage</h3>
+    <p>Besides cookies, the application stores data in your browser's local storage so you stay logged in and the app works offline-friendly. This includes your pseudonymous user ID, the registration details you entered (birthdate, gender, email), reminder and interface preferences, and your latest color vision screening result. This data stays on your device; clearing your browser's site data removes it (you can log back in with your user ID).</p>
+
     <h2>5. Data Sharing</h2>
     <p>Research data may be shared in anonymized or aggregated form:</p>
     <ul>
@@ -237,7 +266,7 @@
     </div>
     
     <div class="last-updated">
-        <p>This Privacy Policy was last updated on December 2024.</p>
+        <p>This Privacy Policy was last updated on 8 July 2026.</p>
     </div>
 </div>
 {% endblock %}
