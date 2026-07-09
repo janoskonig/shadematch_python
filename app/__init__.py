@@ -49,6 +49,9 @@ def create_app():
             {'Content-Type': 'text/html; charset=utf-8'},
         )
 
+    from .i18n import init_i18n
+    init_i18n(app)
+
     from .routes import main
     app.register_blueprint(main)
 

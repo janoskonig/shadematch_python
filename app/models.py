@@ -15,6 +15,8 @@ class User(db.Model):
     email = db.Column(db.String(255), nullable=True, unique=True, index=True)
     email_verified_at = db.Column(db.DateTime, nullable=True)
     email_opt_in_reminders = db.Column(db.Boolean, nullable=False, default=False)
+    # UI/notification language ('en'/'hu'); null = follow browser/cookie.
+    locale = db.Column(db.String(5), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
@@ -33,6 +35,9 @@ class TargetColor(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(128), nullable=False)
+    # Hungarian gloss shown alongside the English name when locale=hu
+    # (populated by scripts/add_hu_color_glosses.py; null = no gloss).
+    name_hu = db.Column(db.String(120), nullable=True)
     color_type = db.Column(db.String(32), nullable=False)
     classification = db.Column(db.String(64), nullable=True)
     r = db.Column(db.Integer, nullable=False)

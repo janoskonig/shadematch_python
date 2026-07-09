@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ locale }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,10 +7,10 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
     <title>{% block title %}ShadeMatch{% endblock %}</title>
-    <meta name="description" content="Mix five pigments to match a target shade, scored by real colour science. Every round contributes to Semmelweis University's colour-vision research.">
+    <meta name="description" content="{{ t("Mix five pigments to match a target shade, scored by real colour science. Every round contributes to Semmelweis University's colour-vision research.") }}">
     <meta property="og:site_name" content="ShadeMatch">
-    <meta property="og:title" content="ShadeMatch — match real paint colours">
-    <meta property="og:description" content="Mix five pigments to match a target shade, scored by real colour science. Can you beat ΔE 1?">
+    <meta property="og:title" content="{{ t('ShadeMatch — match real paint colours') }}">
+    <meta property="og:description" content="{{ t('Mix five pigments to match a target shade, scored by real colour science. Can you beat ΔE 1?') }}">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ request.url_root if request else 'https://shadematch.app/' }}">
     <meta property="og:image" content="{{ url_for('static', filename='icons/icon-512.png', _external=True) if request else '' }}">
@@ -50,6 +50,13 @@
         }
       } catch (e) { /* private mode / blocked storage */ }
     })();
+    </script>
+    <script>
+    // i18n bootstrap: key = English text, value = translation for the active
+    // locale (empty object for English). t() falls back to the key itself.
+    window.LANG = {{ locale|tojson }};
+    window.I18N = {{ i18n_client|tojson }};
+    window.t = function (s) { return (window.I18N && window.I18N[s]) || s; };
     </script>
     {% block content %}{% endblock %}
 

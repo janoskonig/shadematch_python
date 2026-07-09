@@ -1403,6 +1403,29 @@ def user_email_settings():
     })
 
 
+@main.route('/api/user/locale', methods=['POST'])
+def set_user_locale():
+    """Persist the user's UI/notification language; also sets the sm_lang cookie."""
+    from .i18n import SUPPORTED_LOCALES, LANG_COOKIE
+    data = request.get_json() or {}
+    locale = (data.get('locale') or '').strip().lower()
+    if locale not in SUPPORTED_LOCALES:
+        return jsonify({'status': 'error', 'message': 'Unsupported locale'}), 400
+
+    user_id = (data.get('user_id') or '').strip().upper()
+    if user_id:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'status': 'error', 'message': 'Unknown user'}), 404
+        user.locale = locale
+        db.session.commit()
+
+    resp = jsonify({'status': 'success', 'locale': locale})
+    resp.set_cookie(LANG_COOKIE, locale, max_age=60 * 60 * 24 * 365,
+                    samesite='Lax', secure=request.is_secure)
+    return resp
+
+
 @main.route('/api/user/nickname', methods=['POST'])
 def set_user_nickname():
     """Set, change, or clear (empty string) the user's public display name."""
