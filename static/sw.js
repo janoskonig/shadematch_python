@@ -1,4 +1,4 @@
-var CACHE_NAME = 'shadematch-static-v6';
+var CACHE_NAME = 'shadematch-static-v7';
 
 var PRECACHE_URLS = [
   '/static/mixbox.js',

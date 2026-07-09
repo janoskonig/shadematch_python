@@ -2,6 +2,21 @@
 
 {% block title %}{{ t('ShadeMatch — Match Real Paint Colours') }}{% endblock %}
 
+{% block og %}
+{% if challenge_og %}
+    <meta name="description" content="{{ challenge_og.description }}">
+    <meta property="og:site_name" content="ShadeMatch">
+    <meta property="og:title" content="{{ challenge_og.title }}">
+    <meta property="og:description" content="{{ challenge_og.description }}">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:image" content="{{ challenge_og.image }}">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+    <meta name="twitter:card" content="summary_large_image">
+{% else %}{{ super() }}{% endif %}
+{% endblock %}
+
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
 <style>
@@ -1373,7 +1388,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260709-i18n1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-i18n1"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-share1"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>

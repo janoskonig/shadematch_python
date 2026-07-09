@@ -315,6 +315,42 @@ def index():
     )
 
 
+def _challenge_stats_line(link):
+    """'12 drops · 37s' from the creator snapshot, localized, skipping gaps."""
+    bits = []
+    if link.creator_drops is not None:
+        bits.append(t('{n} drops', n=link.creator_drops))
+    if link.creator_time_sec is not None:
+        bits.append(t('{n}s', n=int(round(link.creator_time_sec))))
+    return ' · '.join(bits)
+
+
+def _challenge_og_context(link, challenge):
+    """og:title/description/image for a challenge landing, in the URL's locale
+    (share links carry ?lang=hu, so WhatsApp/LINE scrapers fetch that variant)."""
+    tc = (db.session.get(TargetColor, link.target_color_id)
+          if link.target_color_id else None)
+    color_name = _color_display_name(tc) if tc else t('a secret colour')
+    title = t('⚔️ {name} challenges you: {color}',
+              name=challenge['creator'], color=color_name)
+    desc_bits = []
+    if link.creator_delta_e is not None:
+        desc_bits.append(f'ΔE {link.creator_delta_e:.2f}')
+    stats = _challenge_stats_line(link)
+    if stats:
+        desc_bits.append(stats)
+    desc_bits.append(t('Can you beat it? Play in your browser — no install, no sign-up.'))
+    lang = get_locale()
+    image_kwargs = {'lang': lang} if lang != 'en' else {}
+    return {
+        'title': title,
+        'description': ' — '.join([' · '.join(desc_bits[:-1]), desc_bits[-1]])
+                       if len(desc_bits) > 1 else desc_bits[0],
+        'image': url_for('main.challenge_og_image', code=link.code,
+                         _external=True, **image_kwargs),
+    }
+
+
 @main.route('/c/<string:code>')
 def challenge_page(code):
     """Head-to-head challenge landing: the game page with the challenge target
@@ -322,6 +358,7 @@ def challenge_page(code):
     normal game with a notice instead of a dead 404."""
     link = db.session.get(ChallengeLink, code)
     challenge = None
+    challenge_og = None
     if link:
         creator = db.session.get(User, link.creator_user_id)
         challenge = {
@@ -334,6 +371,7 @@ def challenge_page(code):
             'drops': link.creator_drops,
             'time_sec': link.creator_time_sec,
         }
+        challenge_og = _challenge_og_context(link, challenge)
     return render_template(
         'index.html',
         research_consent_intro=RESEARCH_CONSENT_INTRO,
@@ -344,7 +382,55 @@ def challenge_page(code):
         ),
         challenge=challenge,
         challenge_missing=(link is None),
+        challenge_og=challenge_og,
     )
+
+
+def _challenge_journey(link, cap=40):
+    """The creator round's DeltaE trajectory (add/remove steps, in order) for
+    the spoiler-free journey strip. Empty when telemetry is missing."""
+    if not link.source_attempt_uuid:
+        return []
+    rows = (MixingAttemptEvent.query
+            .filter_by(attempt_uuid=link.source_attempt_uuid)
+            .order_by(MixingAttemptEvent.seq)
+            .limit(500)
+            .all())
+    vals = []
+    for ev in rows:
+        if ev.action_type not in ('add', 'remove'):
+            continue
+        state = ev.state_after_json or {}
+        de = state.get('delta_e')
+        if isinstance(de, (int, float)):
+            vals.append(float(de))
+        if len(vals) >= cap:
+            break
+    # The snapshot's final DeltaE is authoritative for the last square.
+    if link.creator_delta_e is not None:
+        vals.append(float(link.creator_delta_e))
+    return vals
+
+
+@main.route('/c/<string:code>/og.png')
+def challenge_og_image(code):
+    """Link-preview card for messenger unfurls (WhatsApp/LINE/iMessage)."""
+    link = db.session.get(ChallengeLink, code)
+    if link is None:
+        return jsonify({'status': 'error', 'message': 'Unknown challenge'}), 404
+    tc = (db.session.get(TargetColor, link.target_color_id)
+          if link.target_color_id else None)
+    from .og_card import render_challenge_card
+    png = render_challenge_card(
+        target_rgb=[link.target_r, link.target_g, link.target_b],
+        color_name=_color_display_name(tc) if tc else '',
+        delta_e=link.creator_delta_e,
+        stats_line=_challenge_stats_line(link),
+        journey=_challenge_journey(link),
+        footer=t('Can you beat it?') + ' · shadestudy.com',
+    )
+    return Response(png, mimetype='image/png',
+                    headers={'Cache-Control': 'public, max-age=86400'})
 
 
 @main.route('/lab')

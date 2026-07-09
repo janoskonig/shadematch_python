@@ -3,7 +3,7 @@
 import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 import { captureEnv } from './env_capture.js?v=20260508-qc2';
 import { sfx } from './sfx.js?v=20260709';
-import { shareCard } from './share-card.js?v=20260709-i18n1';
+import { shareCard } from './share-card.js?v=20260709-share1';
 
 console.log('✅ main.js loaded');
 let sessionLogs = [];
@@ -47,6 +47,27 @@ let telemetryAttempt = null;
 let telemetryEventBuffer = [];
 let currentMixedRgb = [255, 255, 255];
 let mixStateStepId = 0;
+// DeltaE after each add/remove step of the current round — outlives the
+// telemetry buffer (which flushes mid-round) so share texts can tell the
+// story of the solve without leaking the recipe.
+let deltaJourney = [];
+
+function journeyGlyphs(finalDeltaE) {
+  const vals = deltaJourney.filter(Number.isFinite);
+  if (Number.isFinite(finalDeltaE)) vals.push(finalDeltaE);
+  if (!vals.length) return '';
+  const cap = 10;
+  let picked = vals;
+  if (vals.length > cap) {
+    picked = [];
+    const step = (vals.length - 1) / (cap - 1);
+    for (let i = 0; i < cap; i++) picked.push(vals[Math.round(i * step)]);
+  }
+  const sq = d => (d <= 1 ? '🟩' : d <= 3 ? '🟨' : d <= 8 ? '🟧' : '🟥');
+  let s = picked.map(sq).join('');
+  if (picked[picked.length - 1] <= 0.01) s += '⭐';
+  return s;
+}
 
 function getAuthenticatedUserId() {
   const id = window.currentUserId || localStorage.getItem('userId') || '';
@@ -243,6 +264,7 @@ function updateBufferedEventDelta(stepId, deltaE) {
 function beginAttemptForCurrentTarget() {
   // A new round starts here — retire any post-match share prompt from the slot.
   setCta('share', null);
+  deltaJourney = [];
   if (!Array.isArray(targetColor) || targetColor.length !== 3) return;
   if (!getAuthenticatedUserId()) {
     // Never start an attempt (and thus never write a mixing_attempts row) for
@@ -958,6 +980,7 @@ function resetMix() {
   if (matchContainer) matchContainer.style.display = 'none';
 
   _calcColorGen++;          // invalidate any in-flight /calculate responses for the old color
+  deltaJourney = [];        // fresh journey for the new color (guests included)
   mixStateStepId = 0;
   currentSessionSaved = false;
   window.currentSessionSaved = false;
@@ -1594,6 +1617,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.lastMixDeltaE = data.delta_e;
         updateMatchBar(data.delta_e);
         updateBufferedEventDelta(stepId, data.delta_e);
+        if (Number.isFinite(data.delta_e)) deltaJourney.push(data.delta_e);
 
         // Guest demo round: complete at a forgiving threshold, never persist.
         if (isGuest()) {
@@ -2365,6 +2389,10 @@ function challengeBeats(mine, theirs) {
   return false;
 }
 
+// Journey access for share-card.js (text glyphs + canvas squares).
+window.shadeMatchJourneyGlyphs = journeyGlyphs;
+window.shadeMatchDeltaJourney = function () { return deltaJourney.slice(); };
+
 // Create a counter-challenge from a saved round and hand the link to the
 // share sheet (clipboard on desktop). Exposed for share-card.js too.
 window.shadeMatchCreateChallenge = async function (attemptUuid, { text } = {}) {
@@ -2381,7 +2409,16 @@ window.shadeMatchCreateChallenge = async function (attemptUuid, { text } = {}) {
       showToast(d.message || t('Could not create the challenge link.'), 'info', 4000);
       return false;
     }
-    const msg = (text || t('⚔️ Beat my ShadeMatch result:')) + ' ' + d.url;
+    // Carry the sharer's language on the link: the recipient lands localized
+    // and messenger scrapers fetch the localized OG preview.
+    let url = d.url;
+    if (window.LANG && window.LANG !== 'en') {
+      url += (url.includes('?') ? '&' : '?') + 'lang=' + window.LANG;
+    }
+    // The round's ΔE-journey squares — the story of the solve, recipe-free.
+    const glyphs = journeyGlyphs(window.lastMixDeltaE);
+    const msg = (text || t('⚔️ Beat my ShadeMatch result:'))
+      + (glyphs ? '\n' + glyphs : '') + '\n' + url;
     if (navigator.share) {
       try { await navigator.share({ text: msg }); return true; } catch (e) {
         if (e && e.name === 'AbortError') return false;

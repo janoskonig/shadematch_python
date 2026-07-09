@@ -34,7 +34,22 @@ function shareText({ kind, deltaE, drops, timeSec, targetRgb, date }) {
   if (Number.isFinite(drops)) bits.push(t('{n} drops').replace('{n}', String(drops)));
   if (Number.isFinite(timeSec)) bits.push(`${timeSec.toFixed(0)}s`);
   const emoji = Array.isArray(targetRgb) ? hueEmoji(targetRgb) : '🎨';
-  return `${emoji} ${what} · ${bits.join(' · ')} — ${t('can you beat me?')} ${APP_URL}`;
+  // The ΔE-journey squares tell the story of the solve (Wordle-grid style)
+  // without revealing the recipe.
+  const glyphs = (typeof window.shadeMatchJourneyGlyphs === 'function')
+    ? window.shadeMatchJourneyGlyphs(deltaE) : '';
+  return `${emoji} ${what} · ${bits.join(' · ')}`
+    + (glyphs ? `\n${glyphs}` : '')
+    + `\n${t('can you beat me?')} ${APP_URL}`;
+}
+
+// Same ΔE→colour bands as the emoji glyphs and the server OG card.
+function journeyFill(d) {
+  if (d <= 0.01) return '#2ecc71';
+  if (d <= 1) return '#7ed321';
+  if (d <= 3) return '#f8e71c';
+  if (d <= 8) return '#f5a623';
+  return '#e15241';
 }
 
 // Render the card. Square 1080×1080 so it looks right in every feed.
@@ -75,6 +90,31 @@ function renderCard({ kind, targetRgb, mixedRgb, deltaE, drops, timeSec, date })
   ctx.textAlign = 'center';
   ctx.fillText(t('the target'), 72 + swW / 2, swY + swH + 52);
   ctx.fillText(t('my mix'), 72 + swW + 8 + swW / 2, swY + swH + 52);
+
+  // Journey strip: the round's ΔE trajectory as coloured squares.
+  const journey = (typeof window.shadeMatchDeltaJourney === 'function')
+    ? window.shadeMatchDeltaJourney().filter(Number.isFinite) : [];
+  if (Number.isFinite(deltaE)) journey.push(deltaE);
+  if (journey.length) {
+    const cap = 14;
+    let picked = journey;
+    if (journey.length > cap) {
+      picked = [];
+      const step = (journey.length - 1) / (cap - 1);
+      for (let i = 0; i < cap; i++) picked.push(journey[Math.round(i * step)]);
+    }
+    const sq = 40, gap = 10;
+    const total = picked.length * sq + (picked.length - 1) * gap;
+    let jx = (S - total) / 2;
+    const jy = 742;
+    picked.forEach((v) => {
+      ctx.fillStyle = journeyFill(v);
+      ctx.beginPath();
+      ctx.roundRect(jx, jy, sq, sq, 8);
+      ctx.fill();
+      jx += sq + gap;
+    });
+  }
 
   // Score row.
   const statY = 850;
