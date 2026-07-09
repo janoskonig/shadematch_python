@@ -3,7 +3,7 @@
 import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 import { captureEnv } from './env_capture.js?v=20260508-qc2';
 import { sfx } from './sfx.js?v=20260709';
-import { shareCard } from './share-card.js?v=20260709';
+import { shareCard } from './share-card.js?v=20260709-cta2';
 
 console.log('✅ main.js loaded');
 let sessionLogs = [];
@@ -241,6 +241,8 @@ function updateBufferedEventDelta(stepId, deltaE) {
 }
 
 function beginAttemptForCurrentTarget() {
+  // A new round starts here — retire any post-match share prompt from the slot.
+  setCta('share', null);
   if (!Array.isArray(targetColor) || targetColor.length !== 3) return;
   if (!getAuthenticatedUserId()) {
     // Never start an attempt (and thus never write a mixing_attempts row) for
@@ -652,38 +654,88 @@ function setDailyChip(on) {
   if (chip) chip.style.display = on ? '' : 'none';
 }
 
+// ── Unified CTA slot ──────────────────────────────────────────────────────
+// One in-page surface for every transient message that used to have its own
+// banner (post-match share, challenge invite, streak-at-risk, verify-email,
+// enable-reminders, install-app, daily-missions). Sources call
+// setCta(key, descriptor|null); the slot renders only the highest-priority
+// eligible message, so at most one shows at a time in one consistent style.
+// Exposed on window so the inline template script (push/email prompts) and
+// share-card.js can register too.
+//   descriptor: { icon, labelHtml, reasonHtml?, onDismiss?, variant?,
+//                  actions?: [{ label, onClick, variant? }],
+//                  actionLabel?, onAction? (single-action shorthand) }
+const CTA_PRIORITY = ['share', 'challenge', 'streak', 'emailVerify', 'push', 'pwa', 'missions'];
+const _ctaState = {};
+
+function setCta(key, descriptor) {
+  if (descriptor) _ctaState[key] = descriptor;
+  else delete _ctaState[key];
+  renderCtaSlot();
+}
+
+function renderCtaSlot() {
+  const el = document.getElementById('ctaSlot');
+  if (!el) return;
+  let chosen = null;
+  for (const key of CTA_PRIORITY) {
+    if (_ctaState[key]) { chosen = _ctaState[key]; break; }
+  }
+  if (!chosen) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    el.className = 'next-action-cta cta-slot';
+    return;
+  }
+  const actions = chosen.actions
+    || (chosen.actionLabel ? [{ label: chosen.actionLabel, onClick: chosen.onAction }] : []);
+  const parts = [
+    `<span class="na-icon">${chosen.icon || '→'}</span>`,
+    `<span class="na-label">${chosen.labelHtml || ''}</span>`,
+  ];
+  const cluster = actions.map((a, i) =>
+    `<button type="button" class="btn btn-${a.variant || 'primary'} cta-action" data-cta-action="${i}">${a.label}</button>`);
+  if (chosen.onDismiss) {
+    cluster.push('<button type="button" class="cta-dismiss" data-cta-dismiss aria-label="Dismiss">✕</button>');
+  }
+  if (cluster.length) parts.push(`<span class="cta-actions">${cluster.join('')}</span>`);
+  if (chosen.reasonHtml) parts.push(`<span class="na-reason">${chosen.reasonHtml}</span>`);
+  el.innerHTML = parts.join('');
+  el.className = 'next-action-cta cta-slot' + (chosen.variant ? ' cta-' + chosen.variant : '');
+  el.style.display = 'flex';
+
+  actions.forEach((a, i) => {
+    const b = el.querySelector(`[data-cta-action="${i}"]`);
+    if (b && a.onClick) b.onclick = a.onClick;
+  });
+  const dismissBtn = el.querySelector('[data-cta-dismiss]');
+  if (dismissBtn && chosen.onDismiss) dismissBtn.onclick = chosen.onDismiss;
+}
+
+window.setCta = setCta;
+window.renderCtaSlot = renderCtaSlot;
+
 // ── Next-action renderer ──────────────────────────────────────────────────
-// The banner is reserved for urgent, action-required states. The daily
+// The slot is reserved for urgent, action-required states. The daily
 // challenge is auto-served as the first round of the day (with the target
 // swatch chip) and tracked by the header badge, so it no longer needs a
 // persistent banner; routine practice suggestions stay ambient.
 const BANNER_ACTION_IDS = new Set(['streak_at_risk']);
 
 function renderNextAction(na) {
-  const el = document.getElementById('nextActionCta');
   const p = na && na.primary;
-  if (!p || !BANNER_ACTION_IDS.has(p.id)) {
-    if (el) el.style.display = 'none';
-    return;
-  }
-  if (!el) return;
-
+  if (!p || !BANNER_ACTION_IDS.has(p.id)) { setCta('streak', null); return; }
   const typeIcon = {
     daily_challenge: '📅',
     practice: '🎨',
     navigate: '→',
   }[p.type] || '→';
-
-  el.innerHTML = `
-    <span class="na-icon">${typeIcon}</span>
-    <span class="na-label">${p.label}</span>
-    <span class="na-reason">${p.reason}</span>
-  `;
-  el.dataset.actionId = p.id;
-  el.dataset.route = (p.payload && p.payload.route) || '';
-  el.style.display = 'flex';
-  el.style.cursor = '';
-  el.onclick = null;
+  setCta('streak', {
+    icon: typeIcon,
+    labelHtml: p.label,
+    reasonHtml: p.reason,
+    variant: 'streak',
+  });
 }
 
 // ── Daily-challenge status badge (always-visible header indicator) ────────
@@ -734,31 +786,19 @@ function renderDailyStatusBadge(status) {
 }
 
 function renderDailyMissions(dm) {
-  if (!dm || !Array.isArray(dm.missions)) return;
-  let el = document.getElementById('dailyMissions');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'dailyMissions';
-    el.className = 'next-action-cta';
-    const anchor = document.getElementById('nextActionCta') || document.getElementById('progressStrip');
-    if (anchor && anchor.parentNode) {
-      anchor.parentNode.insertBefore(el, anchor.nextSibling);
-    } else {
-      document.body.appendChild(el);
-    }
-  }
+  if (!dm || !Array.isArray(dm.missions)) { setCta('missions', null); return; }
   const completed = dm.missions.filter(m => m.completed).length;
   const total = dm.missions.length;
   const chips = dm.missions.map((m) => {
     const state = m.completed ? '✅' : '⬜';
     return `<span class="na-label">${state} ${m.icon || '🎯'} ${m.label}</span>`;
   }).join('');
-  el.innerHTML = `
-    <span class="na-icon">📆</span>
-    <span class="na-label">Daily missions ${completed}/${total}</span>
-    <span class="na-reason">${chips}</span>
-  `;
-  el.style.display = 'flex';
+  setCta('missions', {
+    icon: '📆',
+    labelHtml: `Daily missions ${completed}/${total}`,
+    reasonHtml: chips,
+    variant: 'missions',
+  });
 }
 
 // ── Badge helper ──────────────────────────────────────────────────────────
@@ -1128,25 +1168,25 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function renderChallengeBanner() {
     const ch = window.__challenge;
-    const el = document.getElementById('challengeBanner');
-    if (!ch || !el) {
+    if (!ch) {
       if (window.__challengeMissing) {
         showToast('That challenge link is invalid or gone — free play instead.', 'info', 4200);
       }
+      setCta('challenge', null);
       return;
     }
     const bits = [];
     if (Number.isFinite(ch.delta_e)) bits.push(`ΔE ${ch.delta_e.toFixed(2)}`);
     if (Number.isFinite(ch.drops)) bits.push(`${ch.drops} drops`);
     if (Number.isFinite(ch.time_sec)) bits.push(`${Math.round(ch.time_sec)}s`);
-    el.innerHTML = `
-      <span class="na-icon">⚔️</span>
-      <span class="na-label">${escapeHtml(ch.creator)} challenges you</span>
-      <button id="challengeAcceptBtn" class="btn btn-primary" style="margin-left:auto;font-size:0.8rem;padding:6px 14px;">Accept</button>
-      <span class="na-reason">Their result: ${bits.join(' · ') || 'on record'} — same colour. Beat it.</span>
-    `;
-    el.style.display = 'flex';
-    document.getElementById('challengeAcceptBtn').onclick = startChallengeRound;
+    setCta('challenge', {
+      icon: '⚔️',
+      labelHtml: `${escapeHtml(ch.creator)} challenges you`,
+      reasonHtml: `Their result: ${bits.join(' · ') || 'on record'} — same colour. Beat it.`,
+      actionLabel: 'Accept',
+      onAction: startChallengeRound,
+      variant: 'challenge',
+    });
   }
 
   async function startChallengeRound() {
@@ -1171,8 +1211,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     enableColorMixing();
     setControlState('mixing');
     beginAttemptForCurrentTarget();
-    const banner = document.getElementById('challengeBanner');
-    if (banner) banner.style.display = 'none';
+    setCta('challenge', null);
     showToast(`⚔️ Beat ${escapeHtml(ch.creator)} — same colour, your mix`, 'info', 3000);
   }
 
@@ -2101,10 +2140,19 @@ window.addEventListener('appinstalled', () => {
   _deferredInstallPrompt = null;
 });
 
-function _showPwaInstallCta() {
-  let el = document.getElementById('pwaInstallCta');
-  if (!el) return;
-  el.style.display = 'flex';
+function _showPwaInstallCta(opts) {
+  const isIos = !!(opts && opts.ios);
+  setCta('pwa', {
+    icon: '📲',
+    labelHtml: 'Install ShadeMatch',
+    reasonHtml: isIos
+      ? 'Quick access from your home screen. Tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.'
+      : 'Quick access from your home screen.',
+    actionLabel: isIos ? null : 'Install',
+    onAction: isIos ? null : window.triggerPwaInstall,
+    onDismiss: window.dismissPwaInstall,
+    variant: 'pwa',
+  });
 }
 
 // The install card is the LAST voice in the first-visit sequence: it stays
@@ -2120,15 +2168,14 @@ function _firstVisitOverlayActive() {
   });
 }
 
-function _showPwaInstallCtaWhenClear() {
+function _showPwaInstallCtaWhenClear(opts) {
   if (localStorage.getItem('pwaDismissed')) return;
-  if (!_firstVisitOverlayActive()) { _showPwaInstallCta(); return; }
-  setTimeout(_showPwaInstallCtaWhenClear, 1000);
+  if (!_firstVisitOverlayActive()) { _showPwaInstallCta(opts); return; }
+  setTimeout(() => _showPwaInstallCtaWhenClear(opts), 1000);
 }
 
 function _hidePwaInstallCta() {
-  const el = document.getElementById('pwaInstallCta');
-  if (el) el.style.display = 'none';
+  setCta('pwa', null);
 }
 
 window.triggerPwaInstall = async function () {
@@ -2167,18 +2214,12 @@ document.addEventListener('DOMContentLoaded', function () {
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isInStandaloneMode = window.navigator.standalone === true;
   if (isIos && !isInStandaloneMode) {
-    _showPwaInstallCtaWhenClear();
-    const hint = document.getElementById('pwaIosHint');
-    if (hint) hint.style.display = '';
-    const btn = document.getElementById('pwaInstallBtn');
-    if (btn) btn.style.display = 'none';
+    _showPwaInstallCtaWhenClear({ ios: true });
   }
 });
 
 // ── Push notification opt-in ──────────────────────────────────────────────
 window.requestPushPermission = async function () {
-  const btn = document.getElementById('pushOptInBtn');
-
   if (!('Notification' in window) || !('serviceWorker' in navigator)) {
     showToast('Push notifications are not supported in this browser.', 'info', 4000);
     return;
@@ -2190,17 +2231,13 @@ window.requestPushPermission = async function () {
     return;
   }
 
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Setting up…'; }
-
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'denied') {
       showToast('Notifications blocked. Enable them in browser settings.', 'info', 5000);
-      if (btn) { btn.disabled = false; btn.innerHTML = '🔔 Enable daily reminders'; }
       return;
     }
     if (permission !== 'granted') {
-      if (btn) { btn.disabled = false; btn.innerHTML = '🔔 Enable daily reminders'; }
       return;
     }
 
@@ -2209,7 +2246,7 @@ window.requestPushPermission = async function () {
     const vapidKey = keyData.vapid_public_key;
     if (!vapidKey) {
       showToast('Push notifications not configured on this server.', 'info', 4000);
-      if (btn) btn.style.display = 'none';
+      setCta('push', null);
       return;
     }
 
@@ -2238,7 +2275,7 @@ window.requestPushPermission = async function () {
     const data = await res.json();
     if (data.status === 'success') {
       showToast('🔔 Daily reminders enabled!', 'award', 4000);
-      if (btn) btn.style.display = 'none';
+      setCta('push', null);
       localStorage.setItem('pushSubscribed', '1');
     } else {
       throw new Error(data.message || 'Subscribe failed');
@@ -2246,7 +2283,6 @@ window.requestPushPermission = async function () {
   } catch (err) {
     console.error('Push subscribe error:', err);
     showToast('Could not enable reminders. Try again later.', 'info', 4000);
-    if (btn) { btn.disabled = false; btn.innerHTML = '🔔 Enable daily reminders'; }
   }
 };
 

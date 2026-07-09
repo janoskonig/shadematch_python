@@ -164,6 +164,17 @@
 .na-label { font-weight: 700; color: var(--text-primary); }
 .na-reason { color: var(--text-secondary); font-size: 0.75rem; flex-basis: 100%; margin-top: 2px; }
 
+/* Unified CTA slot: at most one message shows; action button(s) + optional
+   dismiss (✕) float right in one cluster. Reuses the .next-action-cta base. */
+.cta-slot .cta-actions { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+.cta-slot .cta-action { font-size: 0.8rem; padding: 6px 14px; white-space: nowrap; }
+.cta-slot .cta-dismiss {
+  flex-shrink: 0;
+  background: none; border: 0; cursor: pointer;
+  color: var(--text-secondary); font-size: 0.95rem; line-height: 1; padding: 2px 4px;
+}
+.cta-slot .cta-dismiss:hover { color: var(--text-primary); }
+
 /* ── PWA install CTA ─────────────────────────────────────────── */
 .pwa-install-cta {
   display: flex;
@@ -525,13 +536,13 @@
   <div class="app-row">
     <div class="main-content" id="mainContent">
 
-      <!-- Head-to-head challenge banner (populated when arriving via /c/<code>) -->
-      <div id="challengeBanner" class="next-action-cta" style="display:none;"></div>
-
-      <!-- Next-action CTA (populated by renderNextAction after saves/progress
-           load). Above the game panel so the daily challenge is discoverable
-           without scrolling. -->
-      <div id="nextActionCta" class="next-action-cta" style="display:none;"></div>
+      <!-- Unified CTA slot: the single surface for every transient message
+           (challenge invite, streak-at-risk, verify-email, enable-reminders,
+           install-app, daily-missions). At most one shows at a time, chosen by
+           priority in renderCtaSlot(). Above the game panel so the daily
+           challenge is discoverable without scrolling. See static/main.js. -->
+      <div id="ctaSlot" class="next-action-cta cta-slot" style="display:none;"
+           role="status" aria-label="Notifications"></div>
 
       <div class="mixing-workspace">
         <div class="mixing-canvas-zone">
@@ -627,42 +638,6 @@
       </div>
 
       <div id="stats"></div>
-
-      <button id="pushOptInBtn" class="push-optin-btn" type="button"
-              onclick="window.requestPushPermission && window.requestPushPermission()"
-              title="Get notified when the daily challenge starts">
-        🔔 Enable daily reminders
-      </button>
-      <div id="emailVerifyNotice" class="next-action-cta" style="display:none;">
-        <span class="na-icon">✉️</span>
-        <span class="na-label">Email not verified</span>
-        <span class="na-reason">Please verify your email to receive reminder emails.</span>
-        <button id="resendVerifyBtn" class="btn btn-secondary" type="button">Resend verification email</button>
-      </div>
-
-      <!-- PWA install affordance -->
-      <div id="pwaInstallCta" class="pwa-install-cta" style="display:none;">
-        <div class="pwa-install-body">
-          <span class="pwa-install-icon">📲</span>
-          <div class="pwa-install-text">
-            <strong>Install ShadeMatch</strong>
-            <span>Quick access from your home screen</span>
-            <span id="pwaIosHint" class="pwa-ios-hint" style="display:none;">
-              Tap <strong>Share</strong> → <strong>Add to Home Screen</strong>
-            </span>
-          </div>
-        </div>
-        <div class="pwa-install-actions">
-          <button id="pwaInstallBtn" class="btn btn-primary" style="font-size:0.8rem;padding:6px 14px;"
-                  onclick="window.triggerPwaInstall && window.triggerPwaInstall()">
-            Install
-          </button>
-          <button class="btn btn-secondary" style="font-size:0.8rem;padding:6px 10px;"
-                  onclick="window.dismissPwaInstall && window.dismissPwaInstall()">
-            ✕
-          </button>
-        </div>
-      </div>
     </div>
 
   </div>
@@ -1196,30 +1171,38 @@
     location.reload();
   }
 
-  /* Show push opt-in after SW is ready, user is logged in, and not already subscribed */
+  /* Route push-reminder + email-verify prompts through the unified CTA slot
+     (renderCtaSlot in main.js). Each registers its message; the slot shows the
+     single highest-priority one. */
   window.addEventListener('DOMContentLoaded', function() {
-    var pushBtn = document.getElementById('pushOptInBtn');
-    if (!pushBtn || !('Notification' in window) || !('serviceWorker' in navigator)) return;
     var uid = localStorage.getItem('userId');
-    if (!uid) return;
-    if (localStorage.getItem('pushSubscribed')) return;
-    if (Notification.permission === 'granted') {
-      // Permission was granted but this device never (successfully) subscribed
-      // — resubscribe silently; no prompt is shown when permission is granted.
-      navigator.serviceWorker.ready.then(function() {
-        window.requestPushPermission && window.requestPushPermission();
-      }).catch(function() {});
-      return;
+    var pushSupported = ('Notification' in window) && ('serviceWorker' in navigator);
+
+    /* ---- Push opt-in ---- */
+    if (pushSupported && uid && !localStorage.getItem('pushSubscribed')) {
+      if (Notification.permission === 'granted') {
+        // Permission was granted but this device never (successfully) subscribed
+        // — resubscribe silently; no CTA is shown when permission is granted.
+        navigator.serviceWorker.ready.then(function() {
+          window.requestPushPermission && window.requestPushPermission();
+        }).catch(function() {});
+      } else if (Notification.permission !== 'denied') {
+        /* Only offer once SW is confirmed registered */
+        navigator.serviceWorker.ready.then(function() {
+          if (Notification.permission === 'denied') return;
+          window.setCta && window.setCta('push', {
+            icon: '🔔',
+            labelHtml: 'Daily reminders',
+            reasonHtml: 'Get notified when the daily challenge goes live — one tap, turn off any time.',
+            actionLabel: 'Enable',
+            onAction: function() { window.requestPushPermission && window.requestPushPermission(); },
+            onDismiss: function() { window.setCta('push', null); },
+            variant: 'push',
+          });
+          if (Notification.permission === 'default') schedulePushNag();
+        }).catch(function() {});
+      }
     }
-    /* Only show once SW is confirmed registered */
-    navigator.serviceWorker.ready.then(function() {
-      if (Notification.permission !== 'denied') {
-        pushBtn.style.display = 'flex';
-      }
-      if (Notification.permission === 'default') {
-        schedulePushNag();
-      }
-    }).catch(function() {});
 
     /* Recurring opt-in prompt: shown on every visit until the user subscribes.
        Waits until no other modal overlay is open so it never stacks on top of
@@ -1263,31 +1246,33 @@
       laterBtn.onclick = function() { nag.style.display = 'none'; };
     }
 
-    var emailVerifyNotice = document.getElementById('emailVerifyNotice');
-    var uid = localStorage.getItem('userId');
+    /* ---- Email verification ---- */
     var email = localStorage.getItem('userEmail');
     var verified = localStorage.getItem('userEmailVerified') === '1';
     var optedIn = localStorage.getItem('emailOptInReminders') === '1';
-    if (emailVerifyNotice && uid && email && optedIn && !verified) {
-      emailVerifyNotice.style.display = 'flex';
-    }
-    var resendBtn = document.getElementById('resendVerifyBtn');
-    if (resendBtn) {
-      resendBtn.onclick = function() {
-        fetch('/email/verification/request', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: uid })
-        }).then(function(r) { return r.json(); }).then(function(data) {
-          if (data.status === 'success') {
-            alert('Verification email sent.');
-          } else {
-            alert(data.message || 'Could not send verification email.');
-          }
-        }).catch(function() {
-          alert('Could not send verification email.');
-        });
-      };
+    if (uid && email && optedIn && !verified) {
+      window.setCta && window.setCta('emailVerify', {
+        icon: '✉️',
+        labelHtml: 'Email not verified',
+        reasonHtml: 'Please verify your email to receive reminder emails.',
+        actionLabel: 'Resend email',
+        onAction: function() {
+          fetch('/email/verification/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: uid })
+          }).then(function(r) { return r.json(); }).then(function(data) {
+            if (data.status === 'success') {
+              alert('Verification email sent.');
+            } else {
+              alert(data.message || 'Could not send verification email.');
+            }
+          }).catch(function() {
+            alert('Could not send verification email.');
+          });
+        },
+        variant: 'emailVerify',
+      });
     }
   });
 
@@ -1364,7 +1349,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260706-flow1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-nick1"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-cta2"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>

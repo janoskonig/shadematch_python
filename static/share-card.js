@@ -138,54 +138,43 @@ async function share(payload) {
   return 'downloaded';
 }
 
-// Dismissible "share your result" banner under the game panel.
+// Post-match "share your result" prompt. Registered through the unified CTA
+// slot (window.setCta, defined in main.js) so it shares one surface and style
+// with every other transient banner. It sits at the top of the slot's priority
+// order — at match-completion, sharing is the natural next action — and is
+// retired on the next round start (see beginAttemptForCurrentTarget).
 function offer(payload) {
-  let el = document.getElementById('shareCta');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'shareCta';
-    el.className = 'pwa-install-cta'; // same visual language as the install card
-    const anchor = document.getElementById('nextActionCta');
-    if (anchor && anchor.parentNode) {
-      anchor.parentNode.insertBefore(el, anchor.nextSibling);
-    } else {
-      document.body.appendChild(el);
-    }
-  }
+  const setCta = window.setCta;
+  if (!setCta) return; // slot manager not ready — nothing to attach to
   const label = payload.kind === 'daily' ? "Share today's result" : 'Share this match';
   const canChallenge = !!(payload.attemptUuid && localStorage.getItem('userId')
     && window.shadeMatchCreateChallenge);
-  const challengeBtn = canChallenge
-    ? '<button id="shareCtaChallengeBtn" class="btn btn-secondary" style="font-size:0.8rem;padding:6px 14px;">⚔️ Challenge</button>'
-    : '';
-  el.innerHTML = `
-    <div class="pwa-install-body">
-      <span class="pwa-install-icon">📤</span>
-      <div class="pwa-install-text">
-        <strong>${label}</strong>
-        <span>Send the card — see if a friend can beat you</span>
-      </div>
-    </div>
-    <div class="pwa-install-actions">
-      <button id="shareCtaBtn" class="btn btn-primary" style="font-size:0.8rem;padding:6px 14px;">Share</button>
-      ${challengeBtn}
-      <button id="shareCtaDismiss" class="btn btn-secondary" style="font-size:0.8rem;padding:6px 10px;">✕</button>
-    </div>
-  `;
-  el.style.display = 'flex';
-  document.getElementById('shareCtaBtn').onclick = async () => {
-    const outcome = await share(payload);
-    if (outcome === 'downloaded' && window.showToast) {
-      window.showToast('📋 Card downloaded and text copied — paste it anywhere', 'info', 4200);
-    }
-    if (outcome === 'shared') el.style.display = 'none';
-  };
+  const actions = [{
+    label: 'Share',
+    variant: 'primary',
+    onClick: async () => {
+      const outcome = await share(payload);
+      if (outcome === 'downloaded' && window.showToast) {
+        window.showToast('📋 Card downloaded and text copied — paste it anywhere', 'info', 4200);
+      }
+      if (outcome === 'shared') setCta('share', null);
+    },
+  }];
   if (canChallenge) {
-    document.getElementById('shareCtaChallengeBtn').onclick = () => {
-      window.shadeMatchCreateChallenge(payload.attemptUuid);
-    };
+    actions.push({
+      label: '⚔️ Challenge',
+      variant: 'secondary',
+      onClick: () => window.shadeMatchCreateChallenge(payload.attemptUuid),
+    });
   }
-  document.getElementById('shareCtaDismiss').onclick = () => { el.style.display = 'none'; };
+  setCta('share', {
+    icon: '📤',
+    labelHtml: label,
+    reasonHtml: 'Send the card — see if a friend can beat you.',
+    actions,
+    onDismiss: () => setCta('share', null),
+    variant: 'share',
+  });
 }
 
 export const shareCard = { share, offer, shareText };
