@@ -22,6 +22,10 @@ def create_app():
     static_dir = os.path.join(base_dir, '..', 'static')
 
     app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
+    # Render terminates TLS at its proxy; trust one hop of X-Forwarded-* so
+    # url_for(_external=True) builds https URLs (OG image/link previews).
+    from werkzeug.middleware.proxy_fix import ProxyFix
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
     print("Template folder used:", app.template_folder)
     print("Static folder used:", app.static_folder)
     app.config.from_object('config.Config')
