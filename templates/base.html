@@ -7,6 +7,14 @@
     <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/icon-192.png') }}">
     <title>{% block title %}ShadeMatch{% endblock %}</title>
+    <meta name="description" content="Mix five pigments to match a target shade, scored by real colour science. Every round contributes to Semmelweis University's colour-vision research.">
+    <meta property="og:site_name" content="ShadeMatch">
+    <meta property="og:title" content="ShadeMatch — match real paint colours">
+    <meta property="og:description" content="Mix five pigments to match a target shade, scored by real colour science. Can you beat ΔE 1?">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ request.url_root if request else 'https://shadematch.app/' }}">
+    <meta property="og:image" content="{{ url_for('static', filename='icons/icon-512.png', _external=True) if request else '' }}">
+    <meta name="twitter:card" content="summary">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

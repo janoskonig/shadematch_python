@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Color Mixing App{% endblock %}
+{% block title %}ShadeMatch — Match Real Paint Colours{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
@@ -429,6 +429,7 @@
       </p>
       <button id="guestSaveBtn" class="btn btn-primary btn-full btn-lg">Save my progress — join in</button>
       <button id="guestAgainBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">Try another colour</button>
+      <button id="guestShareBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">📤 Share this match</button>
       <p class="modal-alt-text" style="margin-top:var(--space-sm);">Demo rounds aren't stored — nothing is collected until you register.</p>
     </div>
   </div>
@@ -970,6 +971,14 @@
       guestAgainBtn.onclick = function() {
         guestResult.style.display = 'none';
         if (window.__startGuestRound) window.__startGuestRound();
+      };
+    }
+    var guestShareBtn = document.getElementById('guestShareBtn');
+    if (guestShareBtn) {
+      guestShareBtn.onclick = function() {
+        if (window.shadeMatchShare && window.__lastGuestResult) {
+          window.shadeMatchShare.share(window.__lastGuestResult);
+        }
       };
     }
 

@@ -3,6 +3,7 @@
 import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 import { captureEnv } from './env_capture.js?v=20260508-qc2';
 import { sfx } from './sfx.js?v=20260709';
+import { shareCard } from './share-card.js?v=20260709';
 
 console.log('✅ main.js loaded');
 let sessionLogs = [];
@@ -1452,6 +1453,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           window.currentSessionSaved = true;
           sessionLogs.push(session);
           const stepsForDaily = telemetryAttempt?.decisionStepIndex ?? null;
+          const wasDailyRound = !!dailyMode; // captured before submit clears it
           await flushTelemetry({
             finalize: true,
             endReason: 'saved_match',
@@ -1460,6 +1462,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           await saveSessionToServer(session);
           await maybeSubmitDailyRun(session.attempt_uuid, data.delta_e, stepsForDaily);
           setControlState('completed');
+          shareCard.offer({
+            kind: wasDailyRound ? 'daily' : 'perfect',
+            targetRgb: [...session.target],
+            mixedRgb: [...session.mixed_rgb],
+            deltaE: data.delta_e,
+            drops: Object.values(session.drops).reduce((a, b) => a + b, 0),
+            timeSec: session.time,
+          });
         }
       });
 
@@ -2087,6 +2097,15 @@ function showGuestResult(deltaE, { delayMs = 0 } = {}) {
   if (de) de.textContent = Number.isFinite(deltaE) ? deltaE.toFixed(2) : '—';
   const timeEl = document.getElementById('guestResultTime');
   if (timeEl) timeEl.textContent = getTimerSec().toFixed(1) + 's';
+  // Stash the payload for the modal's Share button (wired in index.html).
+  window.__lastGuestResult = {
+    kind: 'perfect',
+    targetRgb: Array.isArray(window.shadeMatchTargetRgb) ? [...window.shadeMatchTargetRgb] : [255, 255, 255],
+    mixedRgb: [...currentMixedRgb],
+    deltaE: Number.isFinite(deltaE) ? deltaE : null,
+    drops: Object.values(window.shadeMatchDropCounts || {}).reduce((a, b) => a + (b | 0), 0),
+    timeSec: getTimerSec(),
+  };
   setTimeout(() => { modal.style.display = 'flex'; }, delayMs);
 }
 
