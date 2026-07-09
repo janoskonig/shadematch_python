@@ -14,7 +14,7 @@ from .models import (
     DailyChallengeRun, DailyChallengeWinner, PushSubscription,
     AnalyticsEvent, MixingAttempt, MixingAttemptEvent, EmailVerificationToken,
     ConsentRecord, CalibrationSession, CalibrationTrial,
-    ProbeSlot, ProbeSchedule,
+    ProbeSlot, ProbeSchedule, ChallengeLink,
 )
 from .probe import (
     maybe_assign_flow_probe,
@@ -284,6 +284,36 @@ def index():
         has_semmelweis_logo=os.path.exists(
             os.path.join(current_app.static_folder, 'img', 'semmelweis-logo.png')
         ),
+    )
+
+
+@main.route('/c/<string:code>')
+def challenge_page(code):
+    """Head-to-head challenge landing: the game page with the challenge target
+    and the challenger's frozen result injected. Unknown codes fall back to the
+    normal game with a notice instead of a dead 404."""
+    link = db.session.get(ChallengeLink, code)
+    challenge = None
+    if link:
+        challenge = {
+            'code': link.code,
+            'creator': link.creator_user_id,
+            'target_color_id': link.target_color_id,
+            'target_rgb': [link.target_r, link.target_g, link.target_b],
+            'delta_e': link.creator_delta_e,
+            'drops': link.creator_drops,
+            'time_sec': link.creator_time_sec,
+        }
+    return render_template(
+        'index.html',
+        research_consent_intro=RESEARCH_CONSENT_INTRO,
+        research_consent_items=RESEARCH_CONSENT_ITEMS,
+        research_consent_version=RESEARCH_CONSENT_VERSION,
+        has_semmelweis_logo=os.path.exists(
+            os.path.join(current_app.static_folder, 'img', 'semmelweis-logo.png')
+        ),
+        challenge=challenge,
+        challenge_missing=(link is None),
     )
 
 
@@ -2292,6 +2322,7 @@ def save_session():
         is_probe = resolve_probe_for_attempt(
             attempt_uuid, user_id, data.get('target_color_id'), skipped=skipped,
         )
+        is_challenge, challenge_result = _resolve_challenge_result(data, user_id)
 
         xp_earned, new_awards, streak_event, level_up, heat_info = process_progression(
             user_id=user_id,
@@ -2300,6 +2331,7 @@ def save_session():
             target_color_id=data.get('target_color_id'),
             delta_e=data.get('delta_e'),
             is_probe=is_probe,
+            is_challenge=is_challenge,
         )
         new_awards.extend(grant_daily_mission_awards(user_id))
 
@@ -2320,6 +2352,7 @@ def save_session():
             'streak_event': streak_event,
             'level_up': level_up,
             'heat': heat_info,
+            'challenge': challenge_result,
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
@@ -2388,6 +2421,7 @@ def save_skip():
         is_probe = resolve_probe_for_attempt(
             attempt_uuid, user_id, data.get('target_color_id'), skipped=True,
         )
+        is_challenge, challenge_result = _resolve_challenge_result(data, user_id)
 
         xp_earned, new_awards, streak_event, level_up, heat_info = process_progression(
             user_id=user_id,
@@ -2396,6 +2430,7 @@ def save_skip():
             target_color_id=data.get('target_color_id'),
             delta_e=delta_e,
             is_probe=is_probe,
+            is_challenge=is_challenge,
         )
         new_awards.extend(grant_daily_mission_awards(user_id))
 
@@ -2411,6 +2446,7 @@ def save_skip():
             'streak_event': streak_event,
             'level_up': level_up,
             'heat': heat_info,
+            'challenge': challenge_result,
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
@@ -2796,6 +2832,122 @@ def _daily_target_ids(d=None):
     if not scheduled_ids:
         return seeded_ids
     return scheduled_ids + [cid for cid in seeded_ids if cid not in scheduled_ids]
+
+
+# ── Head-to-head challenge links ─────────────────────────────────────────────
+
+# Unambiguous code alphabet (no 0/O/1/l/I).
+CHALLENGE_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz'
+
+
+def _mint_challenge_code():
+    for _ in range(10):
+        code = ''.join(secrets.choice(CHALLENGE_CODE_ALPHABET) for _ in range(6))
+        if db.session.get(ChallengeLink, code) is None:
+            return code
+    raise RuntimeError('could not mint a unique challenge code')
+
+
+def _challenge_score_key(delta_e, drops, time_sec):
+    """Ordering for a challenge result: accuracy first (2-dp ΔE so all perfect
+    finishes tie at 0.0), then fewer drops, then faster time."""
+    return (
+        round(float(delta_e), 2) if delta_e is not None else float('inf'),
+        int(drops) if drops is not None else float('inf'),
+        float(time_sec) if time_sec is not None else float('inf'),
+    )
+
+
+def _resolve_challenge_result(data, user_id):
+    """If the save payload names a valid challenge, score it against the
+    creator's snapshot, bump counters, and return (is_challenge, result_dict).
+    Self-acceptance is allowed (racing your own ghost) but not counted."""
+    code = data.get('challenge_code')
+    if not code:
+        return False, None
+    link = db.session.get(ChallengeLink, str(code))
+    if link is None:
+        return False, None
+
+    my_drops = sum(int(data.get(k) or 0) for k in (
+        'drop_white', 'drop_black', 'drop_red', 'drop_yellow', 'drop_blue'))
+    my_delta = data.get('delta_e')
+    my_time = data.get('time_sec')
+    won = (
+        _challenge_score_key(my_delta, my_drops, my_time)
+        < _challenge_score_key(link.creator_delta_e, link.creator_drops, link.creator_time_sec)
+    )
+    if user_id != link.creator_user_id:
+        link.accept_count += 1
+        if won:
+            link.beat_count += 1
+    return True, {
+        'code': link.code,
+        'creator': link.creator_user_id,
+        'creator_delta_e': link.creator_delta_e,
+        'creator_drops': link.creator_drops,
+        'creator_time_sec': link.creator_time_sec,
+        'your_delta_e': my_delta,
+        'your_drops': my_drops,
+        'your_time_sec': my_time,
+        'won': won,
+    }
+
+
+@main.route('/api/challenge/create', methods=['POST'])
+def challenge_create():
+    data = request.get_json() or {}
+    user_id = (data.get('user_id') or '').strip().upper()
+    attempt_uuid = data.get('attempt_uuid')
+    if not user_id or not attempt_uuid:
+        return jsonify({'status': 'error', 'message': 'user_id and attempt_uuid required'}), 400
+    if not _rate_limit_allow(f'challenge:{user_id}', max_hits=20, window_sec=3600):
+        return jsonify({'status': 'error', 'message': 'Too many challenges — try again later'}), 429
+
+    session = MixingSession.query.filter_by(attempt_uuid=attempt_uuid, user_id=user_id).first()
+    if not session:
+        return jsonify({'status': 'error', 'message': 'Round not found'}), 404
+    if session.match_category not in COMPLETED_MATCH_CATEGORIES:
+        return jsonify({'status': 'error',
+                        'message': 'Only completed rounds can become challenges'}), 400
+
+    # Idempotent per source round: re-tapping returns the same link.
+    existing = ChallengeLink.query.filter_by(source_attempt_uuid=attempt_uuid).first()
+    if existing:
+        return jsonify({
+            'status': 'success', 'duplicate': True, 'code': existing.code,
+            'url': url_for('main.challenge_page', code=existing.code, _external=True),
+        })
+
+    drops = sum(int(v or 0) for v in (
+        session.drop_white, session.drop_black, session.drop_red,
+        session.drop_yellow, session.drop_blue))
+    try:
+        link = ChallengeLink(
+            code=_mint_challenge_code(),
+            creator_user_id=user_id,
+            source_attempt_uuid=attempt_uuid,
+            target_color_id=session.target_color_id,
+            target_r=session.target_r, target_g=session.target_g, target_b=session.target_b,
+            creator_delta_e=session.delta_e,
+            creator_drops=drops,
+            creator_time_sec=session.time_sec,
+        )
+        db.session.add(link)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        existing = ChallengeLink.query.filter_by(source_attempt_uuid=attempt_uuid).first()
+        if existing:
+            return jsonify({
+                'status': 'success', 'duplicate': True, 'code': existing.code,
+                'url': url_for('main.challenge_page', code=existing.code, _external=True),
+            })
+        raise
+    return jsonify({
+        'status': 'success', 'code': link.code,
+        'url': url_for('main.challenge_page', code=link.code, _external=True),
+    })
 
 
 @main.route('/api/daily-challenge/today', methods=['GET'])

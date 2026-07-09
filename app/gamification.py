@@ -913,13 +913,19 @@ def heat_bonus_pct(consecutive: int) -> float:
 # ---------------------------------------------------------------------------
 
 def process_progression(user_id, match_category, skipped, target_color_id, delta_e, today=None,
-                        is_probe=False):
+                        is_probe=False, is_challenge=False):
     """
     Must be called inside an open db.session transaction.
     Returns (xp_earned, new_awards, streak_event, level_up_event, heat_info).
 
     heat_info is None when the round is cold, else
         {'consecutive': int, 'bonus_pct': float, 'xp_bonus': int}.
+
+    is_challenge: head-to-head challenge rounds are quota-neutral like probes
+    (XP, streak and missions accrue; UserTargetColorStats and band unlocks do
+    not move) — otherwise challenge links on hand-picked colours could be used
+    to farm progression, and links on locked-band colours would corrupt the
+    deterministic cap recompute.
 
     level_up_event is now quota-driven: fires when quota coverage crosses a
     level boundary. XP is still accumulated but never drives level or maxed state.
@@ -1036,7 +1042,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
     # 'stopped' rows are persisted for analytics but do NOT advance progression.
     counts_toward_quota = match_category in COMPLETED_MATCH_CATEGORIES
 
-    if target_color_id is not None and not is_probe:
+    if target_color_id is not None and not is_probe and not is_challenge:
         stats = UserTargetColorStats.query.filter_by(
             user_id=user_id, target_color_id=target_color_id,
         ).first()

@@ -153,6 +153,11 @@ function offer(payload) {
     }
   }
   const label = payload.kind === 'daily' ? "Share today's result" : 'Share this match';
+  const canChallenge = !!(payload.attemptUuid && localStorage.getItem('userId')
+    && window.shadeMatchCreateChallenge);
+  const challengeBtn = canChallenge
+    ? '<button id="shareCtaChallengeBtn" class="btn btn-secondary" style="font-size:0.8rem;padding:6px 14px;">⚔️ Challenge</button>'
+    : '';
   el.innerHTML = `
     <div class="pwa-install-body">
       <span class="pwa-install-icon">📤</span>
@@ -163,6 +168,7 @@ function offer(payload) {
     </div>
     <div class="pwa-install-actions">
       <button id="shareCtaBtn" class="btn btn-primary" style="font-size:0.8rem;padding:6px 14px;">Share</button>
+      ${challengeBtn}
       <button id="shareCtaDismiss" class="btn btn-secondary" style="font-size:0.8rem;padding:6px 10px;">✕</button>
     </div>
   `;
@@ -174,6 +180,11 @@ function offer(payload) {
     }
     if (outcome === 'shared') el.style.display = 'none';
   };
+  if (canChallenge) {
+    document.getElementById('shareCtaChallengeBtn').onclick = () => {
+      window.shadeMatchCreateChallenge(payload.attemptUuid);
+    };
+  }
   document.getElementById('shareCtaDismiss').onclick = () => { el.style.display = 'none'; };
 }
 

@@ -203,6 +203,31 @@ class UserAward(db.Model):
     )
 
 
+class ChallengeLink(db.Model):
+    """Head-to-head challenge minted from a completed round.
+
+    The creator's result is snapshotted (immutable) at creation; the target RGB
+    is denormalised so the link keeps working even if the catalog row changes.
+    Challenge rounds are quota-neutral (see gamification.process_progression
+    is_challenge) so links can't be used to farm band unlocks.
+    """
+    __tablename__ = 'challenge_links'
+
+    code = db.Column(db.String(8), primary_key=True)
+    creator_user_id = db.Column(db.String(6), db.ForeignKey('users.id'), nullable=False)
+    source_attempt_uuid = db.Column(db.String(36), nullable=True, unique=True)
+    target_color_id = db.Column(db.Integer, db.ForeignKey('target_colors.id'), nullable=True)
+    target_r = db.Column(db.Integer, nullable=False)
+    target_g = db.Column(db.Integer, nullable=False)
+    target_b = db.Column(db.Integer, nullable=False)
+    creator_delta_e = db.Column(db.Float, nullable=True)
+    creator_drops = db.Column(db.Integer, nullable=True)
+    creator_time_sec = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    accept_count = db.Column(db.Integer, nullable=False, default=0)
+    beat_count = db.Column(db.Integer, nullable=False, default=0)
+
+
 class DailyChallengeRun(db.Model):
     __tablename__ = 'daily_challenge_runs'
 

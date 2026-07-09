@@ -539,6 +539,11 @@ async function handleProgressionResponse(data) {
   const mySeq = ++_seqId;
   const stale = () => mySeq !== _seqId;
 
+  // Phase 0 — Head-to-head comparison (a modal; shown over the toast stream)
+  if (data.challenge) {
+    showChallengeComparison(data.challenge, { delayMs: 1500 });
+  }
+
   // Phase 1 — Progress strip (render immediately, no toast)
   if (data.progress) renderProgressStrip(data.progress);
 
@@ -957,6 +962,7 @@ async function saveSessionToServer(session) {
       attempt_uuid: session.attempt_uuid || generateUUID(),
       user_id: window.currentUserId,
       target_color_id: session.target_color_id ?? null,
+      challenge_code: session.challenge_code ?? null,
       target_r: session.target[0], target_g: session.target[1], target_b: session.target[2],
       drop_white: session.drops.white, drop_black: session.drops.black,
       drop_red: session.drops.red, drop_yellow: session.drops.yellow, drop_blue: session.drops.blue,
@@ -1113,6 +1119,59 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) { /* server falls back to matching by target colour on save */ }
   }
 
+  // ── Head-to-head challenge mode (/c/<code> links) ───────────────────────
+  let challengeMode = null; // window.__challenge while a challenge round is active
+
+  function renderChallengeBanner() {
+    const ch = window.__challenge;
+    const el = document.getElementById('challengeBanner');
+    if (!ch || !el) {
+      if (window.__challengeMissing) {
+        showToast('That challenge link is invalid or gone — free play instead.', 'info', 4200);
+      }
+      return;
+    }
+    const bits = [];
+    if (Number.isFinite(ch.delta_e)) bits.push(`ΔE ${ch.delta_e.toFixed(2)}`);
+    if (Number.isFinite(ch.drops)) bits.push(`${ch.drops} drops`);
+    if (Number.isFinite(ch.time_sec)) bits.push(`${Math.round(ch.time_sec)}s`);
+    el.innerHTML = `
+      <span class="na-icon">⚔️</span>
+      <span class="na-label">${ch.creator} challenges you</span>
+      <button id="challengeAcceptBtn" class="btn btn-primary" style="margin-left:auto;font-size:0.8rem;padding:6px 14px;">Accept</button>
+      <span class="na-reason">Their result: ${bits.join(' · ') || 'on record'} — same colour. Beat it.</span>
+    `;
+    el.style.display = 'flex';
+    document.getElementById('challengeAcceptBtn').onclick = startChallengeRound;
+  }
+
+  async function startChallengeRound() {
+    const ch = window.__challenge;
+    if (!ch || !Array.isArray(ch.target_rgb)) return;
+    if (telemetryAttempt) {
+      await flushTelemetry({ finalize: true, endReason: 'abandoned' });
+    }
+    challengeMode = ch;
+    window.__guestRoundDone = false;
+    dailyMode = null;
+    currentProbeSlot = null;
+    currentTargetColor = {
+      id: ch.target_color_id, rgb: ch.target_rgb, name: 'Challenge colour',
+    };
+    setGameTarget(currentTargetColor);
+    updateBox('targetColor', targetColor);
+    resetMix();
+    stopTimer();
+    resetTimerDisplay();
+    startTimer();
+    enableColorMixing();
+    setControlState('mixing');
+    beginAttemptForCurrentTarget();
+    const banner = document.getElementById('challengeBanner');
+    if (banner) banner.style.display = 'none';
+    showToast(`⚔️ Beat ${ch.creator} — same colour, your mix`, 'info', 3000);
+  }
+
   // ── Daily challenge mode (probe carrier) ────────────────────────────────
   let dailyMode = null; // {slot_id} while today's challenge round is active
   let dailyAutoAttempted = false; // auto-serve at most once per session
@@ -1232,6 +1291,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Any transition ends the previous round's daily state (a submitted run
     // already cleared it; an unfinished one stays reachable via the badge).
     dailyMode = null;
+    challengeMode = null;
     if (window.__dailyPlaying) {
       window.__dailyPlaying = false;
       renderDailyStatusBadge(null);
@@ -1383,6 +1443,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     return pool[Math.floor(Math.random() * pool.length)] || null;
   }
 
+  function buildGuestChallengeComparison(deltaE) {
+    const ch = challengeMode;
+    const mine = {
+      delta_e: Number.isFinite(deltaE) ? deltaE : null,
+      drops: Object.values(dropCounts).reduce((a, b) => a + (b | 0), 0),
+      time_sec: getTimerSec(),
+    };
+    const theirs = { delta_e: ch.delta_e, drops: ch.drops, time_sec: ch.time_sec };
+    return {
+      code: ch.code,
+      creator: ch.creator,
+      creator_delta_e: ch.delta_e,
+      creator_drops: ch.drops,
+      creator_time_sec: ch.time_sec,
+      your_delta_e: mine.delta_e,
+      your_drops: mine.drops,
+      your_time_sec: mine.time_sec,
+      won: challengeBeats(mine, theirs),
+    };
+  }
+
   async function startGuestRound() {
     const tc = pickGuestTarget();
     if (!tc) return;
@@ -1476,7 +1557,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             stopTimer();
             celebratePerfectMatch();
             setControlState('completed');
-            showGuestResult(data.delta_e, { delayMs: 1500 });
+            if (challengeMode) {
+              // Client-side comparison — nothing is persisted for guests.
+              showChallengeComparison(buildGuestChallengeComparison(data.delta_e), { delayMs: 1500 });
+              challengeMode = null;
+            } else {
+              showGuestResult(data.delta_e, { delayMs: 1500 });
+            }
           }
           return;
         }
@@ -1489,6 +1576,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             user_id: window.currentUserId,
             target: targetColor,
             target_color_id: currentTargetColor.id,
+            challenge_code: challengeMode ? challengeMode.code : null,
             drops: { ...dropCounts },
             mixed_rgb: [...currentMixedRgb],
             deltaE: data.delta_e,
@@ -1507,6 +1595,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             endReason: 'saved_match',
             terminalBoundaryType: 'boundary_save',
           });
+          window.__lastSavedAttemptUuid = session.attempt_uuid;
+          challengeMode = null;
           await saveSessionToServer(session);
           await maybeSubmitDailyRun(session.attempt_uuid, data.delta_e, stepsForDaily);
           setControlState('completed');
@@ -1517,6 +1607,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             deltaE: data.delta_e,
             drops: Object.values(session.drops).reduce((a, b) => a + b, 0),
             timeSec: session.time,
+            attemptUuid: session.attempt_uuid,
           });
         }
       });
@@ -1526,8 +1617,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ── Button handlers ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', async () => {
+    if (window.__challenge && !challengeMode && !window.__challengeStarted) {
+      // Arriving via a challenge link: the first Start plays the challenge.
+      window.__challengeStarted = true;
+      await startChallengeRound();
+      return;
+    }
     if (isGuest()) { await startGuestRound(); return; }
     dailyMode = null;
+    challengeMode = null;
     if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
     setDailyChip(false);
     if (telemetryAttempt) {
@@ -1587,7 +1685,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       stopTimer();
       window.__guestRoundDone = true;
       const de = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
-      showGuestResult(de);
+      if (challengeMode) {
+        showChallengeComparison(buildGuestChallengeComparison(de));
+        challengeMode = null;
+      } else {
+        showGuestResult(de);
+      }
       return;
     }
     refreshDatabaseConnection();
@@ -1603,6 +1706,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         attempt_uuid: telemetryAttempt?.attempt_uuid || generateUUID(),
         user_id: window.currentUserId,
         target_color_id: currentTargetColor.id,
+        challenge_code: challengeMode ? challengeMode.code : null,
         target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
         drop_white: dropCounts.white || 0, drop_black: dropCounts.black || 0,
         drop_red: dropCounts.red || 0, drop_yellow: dropCounts.yellow || 0, drop_blue: dropCounts.blue || 0,
@@ -1632,6 +1736,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           alert('Failed to save skip data. Please try again.');
           return;
         }
+        window.__lastSavedAttemptUuid = skipData.attempt_uuid;
+        challengeMode = null;
         handleProgressionResponse(data);
         await maybeSubmitDailyRun(skipData.attempt_uuid, skipData.delta_e, stepsForDaily);
       } catch {
@@ -1646,6 +1752,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('restartBtn').addEventListener('click', async () => {
     if (isGuest()) { await startGuestRound(); return; }
     dailyMode = null;
+    challengeMode = null;
     if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
     setDailyChip(false);
     await flushTelemetry({
@@ -1830,6 +1937,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   });
+
+  // Head-to-head challenge landing (/c/<code>): show the banner last, once
+  // the board is ready.
+  renderChallengeBanner();
 });
 
 // ── Login form handler ────────────────────────────────────────────────────
@@ -2154,6 +2265,116 @@ function showGuestResult(deltaE, { delayMs = 0 } = {}) {
     drops: Object.values(window.shadeMatchDropCounts || {}).reduce((a, b) => a + (b | 0), 0),
     timeSec: getTimerSec(),
   };
+  setTimeout(() => { modal.style.display = 'flex'; }, delayMs);
+}
+
+// ── Head-to-head challenges ───────────────────────────────────────────────
+// Result ordering mirrors the server: accuracy first (2-dp ΔE so perfect
+// finishes tie), then fewer drops, then faster time.
+function challengeScoreKey(de, drops, t) {
+  return [
+    Number.isFinite(de) ? Math.round(de * 100) / 100 : Infinity,
+    Number.isFinite(drops) ? drops : Infinity,
+    Number.isFinite(t) ? t : Infinity,
+  ];
+}
+
+function challengeBeats(mine, theirs) {
+  const a = challengeScoreKey(mine.delta_e, mine.drops, mine.time_sec);
+  const b = challengeScoreKey(theirs.delta_e, theirs.drops, theirs.time_sec);
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] < b[i]) return true;
+    if (a[i] > b[i]) return false;
+  }
+  return false;
+}
+
+// Create a counter-challenge from a saved round and hand the link to the
+// share sheet (clipboard on desktop). Exposed for share-card.js too.
+window.shadeMatchCreateChallenge = async function (attemptUuid, { text } = {}) {
+  const uid = getAuthenticatedUserId();
+  if (!uid || !attemptUuid) return false;
+  try {
+    const res = await fetch('/api/challenge/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: uid, attempt_uuid: attemptUuid }),
+    });
+    const d = await res.json();
+    if (d.status !== 'success' || !d.url) {
+      showToast(d.message || 'Could not create the challenge link.', 'info', 4000);
+      return false;
+    }
+    const msg = (text || '⚔️ Beat my ShadeMatch result:') + ' ' + d.url;
+    if (navigator.share) {
+      try { await navigator.share({ text: msg }); return true; } catch (e) {
+        if (e && e.name === 'AbortError') return false;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(msg);
+      showToast('🔗 Challenge link copied — send it to a friend!', 'award', 4200);
+    } catch { /* clipboard may be blocked */ }
+    return true;
+  } catch {
+    showToast('Could not create the challenge link.', 'info', 4000);
+    return false;
+  }
+};
+
+function showChallengeComparison(c, { delayMs = 0 } = {}) {
+  const modal = document.getElementById('challengeResultModal');
+  if (!modal || !c) return;
+  const verdict = document.getElementById('challengeVerdict');
+  if (verdict) {
+    verdict.textContent = c.won
+      ? `🏆 You beat ${c.creator}!`
+      : `${c.creator} holds it — rematch?`;
+  }
+  const t = document.getElementById('challengeResultTarget');
+  const m = document.getElementById('challengeResultMix');
+  if (t && Array.isArray(window.shadeMatchTargetRgb)) {
+    t.style.backgroundColor = `rgb(${window.shadeMatchTargetRgb.join(',')})`;
+  }
+  if (m) m.style.backgroundColor = `rgb(${currentMixedRgb.join(',')})`;
+
+  const fmt = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : '—');
+  const row = (label, mine, theirs) =>
+    `<div style="display:flex;justify-content:space-between;font-size:0.9rem;padding:4px 0;border-bottom:1px solid var(--border);">` +
+    `<span style="color:var(--text-secondary);">${label}</span>` +
+    `<span><strong>${mine}</strong> vs ${theirs}</span></div>`;
+  const body = document.getElementById('challengeCompareBody');
+  if (body) {
+    body.innerHTML =
+      row('Match error ΔE', fmt(c.your_delta_e), fmt(c.creator_delta_e)) +
+      row('Drops', Number.isFinite(c.your_drops) ? c.your_drops : '—',
+        Number.isFinite(c.creator_drops) ? c.creator_drops : '—') +
+      row('Time', fmt(c.your_time_sec, 1) + 's', fmt(c.creator_time_sec, 1) + 's') +
+      `<div style="font-size:0.72rem;color:var(--text-secondary);margin-top:6px;">` +
+      `you vs ${c.creator} — accuracy decides, then drops, then time</div>`;
+  }
+
+  const rematch = document.getElementById('challengeRematchBtn');
+  if (rematch) {
+    rematch.onclick = async () => {
+      modal.style.display = 'none';
+      if (isGuest()) {
+        // Conversion moment: registering is what unlocks challenging back.
+        if (window.__openRegistrationFlow) window.__openRegistrationFlow();
+        return;
+      }
+      const uuid = window.__lastSavedAttemptUuid;
+      if (!uuid) {
+        showToast('Finish a colour first, then challenge back.', 'info', 3500);
+        return;
+      }
+      await window.shadeMatchCreateChallenge(uuid, {
+        text: `⚔️ I took your ShadeMatch challenge — now beat mine:`,
+      });
+    };
+  }
+  const closeBtn = document.getElementById('challengeCloseBtn');
+  if (closeBtn) closeBtn.onclick = () => { modal.style.display = 'none'; };
   setTimeout(() => { modal.style.display = 'flex'; }, delayMs);
 }
 

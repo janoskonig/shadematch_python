@@ -261,6 +261,12 @@
 {% endblock %}
 
 {% block content %}
+  {% if challenge %}
+  <script>window.__challenge = {{ challenge|tojson }};</script>
+  {% elif challenge_missing %}
+  <script>window.__challengeMissing = true;</script>
+  {% endif %}
+
   <!-- ======== Registration / Login Modal ======== -->
   <!-- ======== Research informed-consent modal (blocking, pre-registration) ======== -->
   <div id="researchConsentModal" class="modal-overlay" style="display:none; z-index:10010;" data-consent-version="{{ research_consent_version }}">
@@ -389,6 +395,20 @@
     </div>
   </div>
 
+  <!-- ======== Challenge comparison (after a head-to-head round) ======== -->
+  <div id="challengeResultModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <h2 class="modal-title" id="challengeVerdict" style="text-align:center;"></h2>
+      <div style="display:flex;justify-content:center;gap:2px;margin:var(--space-md) 0;border-radius:12px;overflow:hidden;border:1px solid var(--border);">
+        <div id="challengeResultTarget" style="width:50%;height:80px;"></div>
+        <div id="challengeResultMix" style="width:50%;height:80px;"></div>
+      </div>
+      <div id="challengeCompareBody" style="margin-bottom:var(--space-md);"></div>
+      <button id="challengeRematchBtn" class="btn btn-primary btn-full btn-lg">Send one back</button>
+      <button id="challengeCloseBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">Keep playing</button>
+    </div>
+  </div>
+
   <!-- ======== Guest intro (new visitors: play before registering) ======== -->
   <div id="guestIntroModal" class="modal-overlay" style="display:none;">
     <div class="modal-card">
@@ -504,6 +524,9 @@
   <!-- ======== Main App ======== -->
   <div class="app-row">
     <div class="main-content" id="mainContent">
+
+      <!-- Head-to-head challenge banner (populated when arriving via /c/<code>) -->
+      <div id="challengeBanner" class="next-action-cta" style="display:none;"></div>
 
       <!-- Next-action CTA (populated by renderNextAction after saves/progress
            load). Above the game panel so the daily challenge is discoverable
@@ -925,6 +948,7 @@
       // gates data collection).
       modal.style.display = 'none';
       whenCookieConsentSettled(function() {
+        if (window.__challenge) return; // challenge banner is the onboarding
         var intro = document.getElementById('guestIntroModal');
         if (intro) {
           intro.style.display = 'flex';
@@ -1335,7 +1359,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260706-flow1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-guest1"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-challenge1"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>
