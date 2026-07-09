@@ -1,0 +1,22 @@
+{
+  "n_rows": 3504,
+  "n_users": 202,
+  "n_targets": 40,
+  "date_from": "2025-09-24",
+  "date_to": "2026-04-24",
+  "zero_share": 0.6181506849315068,
+  "deltae_mean": 3.050951420783391,
+  "stopped_share": 0.3464611872146119,
+  "time_median": 15.6,
+  "time_over_10min_share": 0.005136986301369863,
+  "time_max": 12360.0,
+  "players_female": 117,
+  "players_male": 85,
+  "age_median": 27.477070499657767,
+  "age_implausible": 1,
+  "users_ge5": 172,
+  "users_ge20": 49,
+  "users_ge50": 9,
+  "top1_user_share": 0.0990296803652968,
+  "top10_user_share": 0.2916666666666667
+}

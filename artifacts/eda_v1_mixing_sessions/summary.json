@@ -1,0 +1,23 @@
+{
+  "n_rows": 3504,
+  "n_users": 202,
+  "n_targets": 40,
+  "date_from": "2025-09-24 16:31:02.299000",
+  "date_to": "2026-04-24 12:08:43.436000",
+  "deltae_zero_share": 0.6181506849315068,
+  "deltae_median": 0.0,
+  "time_median_sec": 15.6,
+  "stopped_share": 0.3464611872146119,
+  "users_ge5": 172,
+  "users_ge20": 49,
+  "users_ge50": 9,
+  "gender": {
+    "female": 175,
+    "male": 131
+  },
+  "age_median": 27.392197125256672,
+  "color_type_rows": {
+    "basic": 2778,
+    "skin": 726
+  }
+}
