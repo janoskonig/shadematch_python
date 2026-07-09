@@ -267,10 +267,19 @@
   .summary-number { font-size: 1.6em; font-weight: 900; color: var(--accent-primary); line-height: 1.1; overflow-wrap: anywhere; }
   .summary-label { font-size: 0.72rem; color: var(--text-secondary); font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; }
 
-  .sessions-truncated-note {
-    text-align: center; font-size: 0.78rem; color: var(--text-secondary);
-    margin-top: var(--space-sm);
+  /* Collapsed-by-default lists: items beyond the cap get .extra-item and are
+     revealed by the section's show-more button. */
+  .extra-item.is-hidden { display: none; }
+  .show-more-btn {
+    display: block; margin: var(--space-md) auto 0;
+    padding: var(--space-xs) var(--space-lg);
+    background: var(--bg-primary); border: 1px solid var(--border);
+    border-radius: var(--radius-full); cursor: pointer;
+    font-family: inherit; font-weight: 700; font-size: 0.85rem;
+    color: var(--accent-primary);
+    min-height: var(--touch-min);
   }
+  .show-more-btn:hover { background: var(--surface); }
 
   .results-table {
     width: 100%; border-collapse: collapse; margin-top: var(--space-md);
@@ -496,6 +505,7 @@
         </button>
         <div class="collapsible-body" id="awardsBody">
           <div class="awards-grid" id="awardsGrid"></div>
+          <div id="awardsMore"></div>
         </div>
       </section>
 
@@ -511,6 +521,7 @@
         </button>
         <div class="collapsible-body" id="colorStatsBody">
           <div id="colorStatsList"></div>
+          <div id="colorStatsMore"></div>
         </div>
       </section>
 
@@ -915,6 +926,26 @@
 
     var MAX_AWARDS_SHOWN = 5;
 
+    // Shared collapsed-by-default helper: items beyond a cap carry
+    // class "extra-item is-hidden"; the button toggles them within scopeId.
+    function showMoreButtonHTML(scopeId, total, noun) {
+      var label = 'Show all ' + total + ' ' + noun;
+      return '<button type="button" class="show-more-btn" data-expanded="false"' +
+        ' data-collapsed-label="' + label + '"' +
+        ' onclick="toggleExtras(\'' + scopeId + '\', this)">' + label + '</button>';
+    }
+
+    function toggleExtras(scopeId, btn) {
+      var scope = document.getElementById(scopeId);
+      if (!scope) return;
+      var expanded = btn.dataset.expanded === 'true';
+      scope.querySelectorAll('.extra-item').forEach(function(el) {
+        el.classList.toggle('is-hidden', expanded);
+      });
+      btn.dataset.expanded = String(!expanded);
+      btn.textContent = expanded ? btn.dataset.collapsedLabel : 'Show fewer';
+    }
+
     function renderAwards(awards, coverageQuota) {
       const majorT = coverageQuota != null && coverageQuota > 0 ? coverageQuota : 10;
       const grid = document.getElementById('awardsGrid');
@@ -926,16 +957,18 @@
         if (meta) meta.textContent = '0';
         return;
       }
-      // Server orders by unlocked_at desc; show only the most recent few.
-      const recent = awards.slice(0, MAX_AWARDS_SHOWN);
-      if (meta) meta.textContent = recent.length < awards.length
-        ? `latest ${recent.length} of ${awards.length}` : String(awards.length);
-      grid.innerHTML = recent.map(a => {
+      // Server orders by unlocked_at desc: latest few visible, rest expandable.
+      if (meta) meta.textContent = awards.length > MAX_AWARDS_SHOWN
+        ? `latest ${MAX_AWARDS_SHOWN} of ${awards.length}` : String(awards.length);
+      grid.innerHTML = awards.map((a, i) => {
         const cls = awardTypeClass(a.key, a.metadata, majorT);
         const icon = awardIcon(a.key, a.metadata, majorT);
         const label = awardLabel(a.key, a.metadata, majorT);
-        return `<div class="award-badge ${cls}">${icon} ${label}</div>`;
+        const extra = i >= MAX_AWARDS_SHOWN ? ' extra-item is-hidden' : '';
+        return `<div class="award-badge ${cls}${extra}">${icon} ${label}</div>`;
       }).join('');
+      document.getElementById('awardsMore').innerHTML = awards.length > MAX_AWARDS_SHOWN
+        ? showMoreButtonHTML('awardsGrid', awards.length, 'badges') : '';
     }
 
     var MAX_QUOTA_COLORS_SHOWN = 5;
@@ -960,8 +993,9 @@
         return aRem - bRem;
       });
 
-      // Only the most promising few: nearest to quota first (at-quota sort last).
-      list.innerHTML = sorted.slice(0, MAX_QUOTA_COLORS_SHOWN).map(s => {
+      // Most promising few visible (nearest to quota first, at-quota sort
+      // last); the rest stay expandable.
+      list.innerHTML = sorted.map((s, i) => {
         const pct = Math.min(100, Math.round(s.attempt_count / q * 100));
         const remaining = Math.max(0, q - s.attempt_count);
         const atQuota = s.attempt_count >= q;
@@ -969,12 +1003,15 @@
         const countLabel = atQuota
           ? `${s.attempt_count}/${q} ✅`
           : `${s.attempt_count}/${q}`;
-        return `<div class="color-stat-bar-row">
+        const extra = i >= MAX_QUOTA_COLORS_SHOWN ? ' extra-item is-hidden' : '';
+        return `<div class="color-stat-bar-row${extra}">
           <span class="csr-label">Color #${s.target_color_id}</span>
           <div class="csr-bar-wrap"><div class="csr-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
           <span class="csr-count">${countLabel}</span>
         </div>`;
       }).join('');
+      document.getElementById('colorStatsMore').innerHTML = sorted.length > MAX_QUOTA_COLORS_SHOWN
+        ? showMoreButtonHTML('colorStatsList', sorted.length, 'colors') : '';
 
       card.style.display = '';
     }
@@ -1118,8 +1155,8 @@
         '<th>Date</th><th>Target</th><th>Drops</th><th>Outcome</th><th>Time</th><th>Status</th></tr></thead><tbody>';
       let cardsHTML = '<div class="result-cards">';
 
-      // Server orders newest-first; keep the page short.
-      results.slice(0, MAX_SESSIONS_SHOWN).forEach((r, idx) => {
+      // Server orders newest-first; recent rows visible, the rest expandable.
+      results.forEach((r, idx) => {
         const rgb = r.target_color.match(/\d+/g);
         const rgbStr = rgb ? rgb.join(',') : '128,128,128';
         const drops = [
@@ -1135,14 +1172,15 @@
         const statusClass = isCompleted ? 'status-completed' : 'status-skipped';
         const statusText = isCompleted ? 'Completed' : 'Skipped';
         const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A';
+        const extra = idx >= MAX_SESSIONS_SHOWN ? ' extra-item is-hidden' : '';
 
-        tableHTML += `<tr class="results-table-row"><td>${ts}</td>
+        tableHTML += `<tr class="results-table-row${extra}"><td>${ts}</td>
           <td><div class="color-preview" style="background-color:rgb(${rgbStr})"></div>${r.target_color}</td>
           <td>${drops}</td><td>${cat}</td>
           <td>${typeof r.time_sec === 'number' ? r.time_sec.toFixed(1) : r.time_sec}s</td>
           <td class="${statusClass}">${statusText}</td></tr>`;
 
-        cardsHTML += `<div class="result-card">
+        cardsHTML += `<div class="result-card${extra}">
           <div class="result-card-header">
             <div class="result-card-swatch" style="background-color:rgb(${rgbStr})"></div>
             <div>
@@ -1162,11 +1200,11 @@
       tableHTML += '</tbody></table>';
       cardsHTML += '</div>';
 
-      const truncatedNote = results.length > MAX_SESSIONS_SHOWN
-        ? `<p class="sessions-truncated-note">Showing your ${MAX_SESSIONS_SHOWN} most recent rounds (of ${totalSessions} total).</p>`
+      const showMoreHTML = results.length > MAX_SESSIONS_SHOWN
+        ? showMoreButtonHTML('results-content', results.length, 'sessions')
         : '';
 
-      document.getElementById('results-content').innerHTML = summaryHTML + tableHTML + cardsHTML + truncatedNote;
+      document.getElementById('results-content').innerHTML = summaryHTML + tableHTML + cardsHTML + showMoreHTML;
     }
 
     // ── Your Color Journey ────────────────────────────────────
