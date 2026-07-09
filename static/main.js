@@ -8,6 +8,9 @@ import { shareCard } from './share-card.js?v=20260709';
 console.log('✅ main.js loaded');
 let sessionLogs = [];
 let currentSessionSaved = false;
+// True once a give-up (skip) has been persisted for the current color, so
+// re-clicking "Next color" advances instead of re-opening the perception modal.
+let skipSavedThisColor = false;
 // Incremented on every color change (resetMix); used to discard stale /calculate responses.
 let _calcColorGen = 0;
 
@@ -913,6 +916,7 @@ function resetMix() {
   mixStateStepId = 0;
   currentSessionSaved = false;
   window.currentSessionSaved = false;
+  skipSavedThisColor = false;
 }
 
 window.addEventListener('storage', (e) => {
@@ -1697,11 +1701,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     const alreadyCompletedThisColor = window.currentSessionSaved === true;
 
-    const shouldSaveSkip = Number.isFinite(currentDeltaE) && !isPerfectMatch(currentDeltaE) && !alreadyCompletedThisColor;
+    const shouldSaveSkip = Number.isFinite(currentDeltaE) && !isPerfectMatch(currentDeltaE)
+      && !alreadyCompletedThisColor && !skipSavedThisColor;
 
     if (shouldSaveSkip) {
       const skipPerception = await showSkipPerceptionModal();
       if (!skipPerception) return;
+      const wasDailyRound = !!dailyMode; // captured before save clears daily state
       const skipData = {
         attempt_uuid: telemetryAttempt?.attempt_uuid || generateUUID(),
         user_id: window.currentUserId,
@@ -1737,11 +1743,32 @@ document.addEventListener('DOMContentLoaded', async () => {
           return;
         }
         window.__lastSavedAttemptUuid = skipData.attempt_uuid;
+        skipSavedThisColor = true;
         challengeMode = null;
         handleProgressionResponse(data);
         await maybeSubmitDailyRun(skipData.attempt_uuid, skipData.delta_e, stepsForDaily);
       } catch {
         alert('Error saving skip data. Please check your connection and try again.');
+        return;
+      }
+
+      // A close-enough give-up is worth bragging about: after a long mix that
+      // the player judged identical or acceptable, hold on the result and
+      // surface the share card instead of jumping straight to the next colour.
+      if (skipPerception === 'identical' || skipPerception === 'acceptable') {
+        stopTimer();
+        setControlState('completed');
+        const totalSkipDrops = skipData.drop_white + skipData.drop_black
+          + skipData.drop_red + skipData.drop_yellow + skipData.drop_blue;
+        shareCard.offer({
+          kind: wasDailyRound ? 'daily' : 'perfect',
+          targetRgb: [skipData.target_r, skipData.target_g, skipData.target_b],
+          mixedRgb: [skipData.mixed_r, skipData.mixed_g, skipData.mixed_b],
+          deltaE: skipData.delta_e,
+          drops: totalSkipDrops,
+          timeSec: skipData.time_sec,
+          attemptUuid: skipData.attempt_uuid,
+        });
         return;
       }
     }
