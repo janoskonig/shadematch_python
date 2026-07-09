@@ -169,6 +169,33 @@ def _normalize_email(raw_email):
     return email
 
 
+# Public display name: 3-20 chars of unicode letters/digits/underscore, space,
+# hyphen. Keep in sync with the hint text in templates/index.html.
+NICKNAME_REGEX = re.compile(r'^[\w \-]{3,20}$', re.UNICODE)
+
+
+def _normalize_nickname(raw):
+    """Trimmed nickname, or None if absent/invalid. Case is preserved for
+    display; uniqueness comparisons lowercase separately."""
+    if raw is None:
+        return None
+    nickname = str(raw).strip()
+    if not nickname:
+        return None
+    if not NICKNAME_REGEX.match(nickname):
+        return None
+    return nickname
+
+
+def _nickname_taken(nickname, exclude_user_id=None):
+    """Case-insensitive availability check (app-side; the DB partial unique
+    index on LOWER(nickname) is the backstop against races)."""
+    q = User.query.filter(func.lower(User.nickname) == nickname.lower())
+    if exclude_user_id:
+        q = q.filter(User.id != exclude_user_id)
+    return q.first() is not None
+
+
 def _sha256(text):
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
@@ -295,9 +322,11 @@ def challenge_page(code):
     link = db.session.get(ChallengeLink, code)
     challenge = None
     if link:
+        creator = db.session.get(User, link.creator_user_id)
         challenge = {
             'code': link.code,
-            'creator': link.creator_user_id,
+            'creator': (creator.nickname if creator and creator.nickname
+                        else link.creator_user_id),
             'target_color_id': link.target_color_id,
             'target_rgb': [link.target_r, link.target_g, link.target_b],
             'delta_e': link.creator_delta_e,
@@ -967,6 +996,23 @@ def register():
     if email and User.query.filter_by(email=email).first():
         return jsonify({'status': 'error', 'message': 'This email is already in use'}), 409
 
+    # Optional public display name.
+    nickname = None
+    nickname_raw = (data.get('nickname') or '').strip()
+    if nickname_raw:
+        nickname = _normalize_nickname(nickname_raw)
+        if nickname is None:
+            return jsonify({
+                'status': 'error',
+                'message': 'Nicknames are 3-20 characters: letters, numbers, spaces, - or _.',
+            }), 400
+        if _nickname_taken(nickname):
+            return jsonify({
+                'status': 'error',
+                'code': 'NICKNAME_TAKEN',
+                'message': 'That nickname is taken — try another.',
+            }), 409
+
     user_id = generate_user_id()
     while User.query.get(user_id) is not None:
         user_id = generate_user_id()
@@ -975,6 +1021,7 @@ def register():
         id=user_id,
         birthdate=birthdate,
         gender=gender,
+        nickname=nickname,
         email=email,
         email_opt_in_reminders=email_opt_in_reminders,
     )
@@ -1028,7 +1075,12 @@ def register():
             db.session.rollback()
             print(f'email verify send failed for user {user.id}: {exc}')
 
-    return jsonify({'status': 'success', 'userId': user_id, 'email_verification_pending': bool(email)})
+    return jsonify({
+        'status': 'success',
+        'userId': user_id,
+        'nickname': nickname,
+        'email_verification_pending': bool(email),
+    })
 
 
 @main.route('/login', methods=['POST'])
@@ -1057,6 +1109,7 @@ def login():
                 'status': 'success',
                 'birthdate': user.birthdate.isoformat(),
                 'gender': user.gender,
+                'nickname': user.nickname,
                 'email': user.email,
                 'email_verified': bool(user.email_verified_at),
                 'email_opt_in_reminders': bool(user.email_opt_in_reminders),
@@ -1348,6 +1401,53 @@ def user_email_settings():
         'email_verified': bool(user.email_verified_at),
         'email_opt_in_reminders': bool(user.email_opt_in_reminders),
     })
+
+
+@main.route('/api/user/nickname', methods=['POST'])
+def set_user_nickname():
+    """Set, change, or clear (empty string) the user's public display name."""
+    data = request.get_json() or {}
+    user_id = (data.get('user_id') or '').strip().upper()
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Unknown user'}), 404
+    if not _rate_limit_allow(f'nick:{user_id}', max_hits=5, window_sec=3600):
+        return jsonify({'status': 'error',
+                        'message': 'Too many nickname changes — try again later.'}), 429
+
+    raw = (data.get('nickname') or '').strip()
+    if not raw:
+        user.nickname = None
+        db.session.commit()
+        return jsonify({'status': 'success', 'nickname': None})
+
+    nickname = _normalize_nickname(raw)
+    if nickname is None:
+        return jsonify({
+            'status': 'error',
+            'message': 'Nicknames are 3-20 characters: letters, numbers, spaces, - or _.',
+        }), 400
+    if _nickname_taken(nickname, exclude_user_id=user_id):
+        return jsonify({
+            'status': 'error',
+            'code': 'NICKNAME_TAKEN',
+            'message': 'That nickname is taken — try another.',
+        }), 409
+
+    user.nickname = nickname
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Race lost against the partial unique index on LOWER(nickname).
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'code': 'NICKNAME_TAKEN',
+            'message': 'That nickname is taken — try another.',
+        }), 409
+    return jsonify({'status': 'success', 'nickname': nickname})
 
 
 # ── Target colors ──────────────────────────────────────────────────────────
@@ -2667,6 +2767,7 @@ def get_leaderboard():
         rows = (
             db.session.query(
                 User.id.label('user_id'),
+                User.nickname.label('nickname'),
                 func.coalesce(UserProgress.xp, 0).label('xp'),
                 func.coalesce(UserProgress.level, 1).label('level'),
                 func.coalesce(UserProgress.current_streak, 0).label('current_streak'),
@@ -2710,7 +2811,8 @@ def get_leaderboard():
             .select_from(User)
             .outerjoin(UserProgress, UserProgress.user_id == User.id)
             .outerjoin(MixingSession, MixingSession.user_id == User.id)
-            .group_by(User.id, UserProgress.xp, UserProgress.level, UserProgress.current_streak)
+            .group_by(User.id, User.nickname,
+                      UserProgress.xp, UserProgress.level, UserProgress.current_streak)
             .all()
         )
 
@@ -2745,9 +2847,15 @@ def get_leaderboard():
             avg_match_time_sec = (
                 float(row.avg_match_time_sec) if row.avg_match_time_sec is not None else None
             )
+            # Players who set a nickname appear by it (explicit opt-in to
+            # visibility); everyone else stays anonymized as Player #rank.
+            if is_current_user:
+                display_name = f'You ({row.nickname or row.user_id})'
+            else:
+                display_name = row.nickname or f'Player #{rank}'
             entry = {
                 'rank': rank,
-                'display_name': f'You ({row.user_id})' if is_current_user else f'Player #{rank}',
+                'display_name': display_name,
                 'is_current_user': is_current_user,
                 'level': _xp_level(int(row.xp or 0)),
                 'xp': int(row.xp or 0),
@@ -2881,9 +2989,11 @@ def _resolve_challenge_result(data, user_id):
         link.accept_count += 1
         if won:
             link.beat_count += 1
+    creator = db.session.get(User, link.creator_user_id)
     return True, {
         'code': link.code,
-        'creator': link.creator_user_id,
+        'creator': (creator.nickname if creator and creator.nickname
+                    else link.creator_user_id),
         'creator_delta_e': link.creator_delta_e,
         'creator_drops': link.creator_drops,
         'creator_time_sec': link.creator_time_sec,

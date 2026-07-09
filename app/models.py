@@ -8,6 +8,10 @@ class User(db.Model):
     id = db.Column(db.String(6), primary_key=True)
     birthdate = db.Column(db.Date, nullable=False)
     gender = db.Column(db.String(20), nullable=False)
+    # Optional public display name (leaderboard, challenge links). Uniqueness is
+    # case-insensitive: enforced app-side (see routes._nickname_taken) and by a
+    # partial unique index on LOWER(nickname) created in migrate_add_nickname.py.
+    nickname = db.Column(db.String(20), nullable=True)
     email = db.Column(db.String(255), nullable=True, unique=True, index=True)
     email_verified_at = db.Column(db.DateTime, nullable=True)
     email_opt_in_reminders = db.Column(db.Boolean, nullable=False, default=False)

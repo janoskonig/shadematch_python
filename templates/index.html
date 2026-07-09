@@ -336,6 +336,14 @@
               <option value="male">Male</option>
             </select>
           </div>
+          <div class="form-group">
+            <label for="userNickname" class="form-label">Nickname (optional)</label>
+            <input type="text" id="userNickname" class="form-input" maxlength="20"
+                   placeholder="e.g. ColorWizard" autocomplete="nickname">
+            <div style="color:var(--text-secondary); margin-top:var(--space-xs); font-size:var(--font-size-sm);">
+              Shown on the leaderboard and challenges — leave empty to stay anonymous.
+            </div>
+          </div>
           <button type="submit" class="btn btn-primary btn-full btn-lg">Start Color Vision Test</button>
         </form>
         <div class="modal-divider"></div>
@@ -1085,12 +1093,15 @@
       if (errorDiv) errorDiv.style.display = 'none';
 
       var researchConsent = (window.getStoredResearchConsent && window.getStoredResearchConsent()) || {};
+      var nicknameEl = document.getElementById('userNickname');
+      var nickname = nicknameEl ? nicknameEl.value.trim() : '';
       fetch('/register', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           birthdate: birthdate,
           gender: gender,
           email: email,
+          nickname: nickname,
           email_opt_in_reminders: emailOptIn,
           consent_version: researchConsent.version || '',
           consent_agreed_at: researchConsent.agreedAt || null
@@ -1107,6 +1118,8 @@
           localStorage.setItem('userId', data.userId);
           localStorage.setItem('userBirthdate', birthdate);
           localStorage.setItem('userGender', gender);
+          if (data.nickname) localStorage.setItem('userNickname', data.nickname);
+          else localStorage.removeItem('userNickname');
           if (email) localStorage.setItem('userEmail', email);
           localStorage.setItem('userEmailVerified', '0');
           localStorage.setItem('emailOptInReminders', emailOptIn ? '1' : '0');
@@ -1359,7 +1372,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260706-flow1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-challenge1"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-nick1"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>

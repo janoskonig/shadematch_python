@@ -1137,7 +1137,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (Number.isFinite(ch.time_sec)) bits.push(`${Math.round(ch.time_sec)}s`);
     el.innerHTML = `
       <span class="na-icon">⚔️</span>
-      <span class="na-label">${ch.creator} challenges you</span>
+      <span class="na-label">${escapeHtml(ch.creator)} challenges you</span>
       <button id="challengeAcceptBtn" class="btn btn-primary" style="margin-left:auto;font-size:0.8rem;padding:6px 14px;">Accept</button>
       <span class="na-reason">Their result: ${bits.join(' · ') || 'on record'} — same colour. Beat it.</span>
     `;
@@ -1169,7 +1169,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     beginAttemptForCurrentTarget();
     const banner = document.getElementById('challengeBanner');
     if (banner) banner.style.display = 'none';
-    showToast(`⚔️ Beat ${ch.creator} — same colour, your mix`, 'info', 3000);
+    showToast(`⚔️ Beat ${escapeHtml(ch.creator)} — same colour, your mix`, 'info', 3000);
   }
 
   // ── Daily challenge mode (probe carrier) ────────────────────────────────
@@ -1963,6 +1963,8 @@ document.addEventListener('DOMContentLoaded', function () {
             localStorage.setItem('userId', userId);
             localStorage.setItem('userBirthdate', data.birthdate);
             localStorage.setItem('userGender', data.gender);
+            if (data.nickname) localStorage.setItem('userNickname', data.nickname);
+            else localStorage.removeItem('userNickname');
             if (data.email) localStorage.setItem('userEmail', data.email);
             localStorage.setItem('userEmailVerified', data.email_verified ? '1' : '0');
             localStorage.setItem('emailOptInReminders', data.email_opt_in_reminders ? '1' : '0');
@@ -2268,6 +2270,16 @@ function showGuestResult(deltaE, { delayMs = 0 } = {}) {
   setTimeout(() => { modal.style.display = 'flex'; }, delayMs);
 }
 
+// ── HTML escaping (for user-chosen strings rendered via innerHTML) ─────────
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // ── Head-to-head challenges ───────────────────────────────────────────────
 // Result ordering mirrors the server: accuracy first (2-dp ΔE so perfect
 // finishes tie), then fewer drops, then faster time.
@@ -2351,7 +2363,7 @@ function showChallengeComparison(c, { delayMs = 0 } = {}) {
         Number.isFinite(c.creator_drops) ? c.creator_drops : '—') +
       row('Time', fmt(c.your_time_sec, 1) + 's', fmt(c.creator_time_sec, 1) + 's') +
       `<div style="font-size:0.72rem;color:var(--text-secondary);margin-top:6px;">` +
-      `you vs ${c.creator} — accuracy decides, then drops, then time</div>`;
+      `you vs ${escapeHtml(c.creator)} — accuracy decides, then drops, then time</div>`;
   }
 
   const rematch = document.getElementById('challengeRematchBtn');

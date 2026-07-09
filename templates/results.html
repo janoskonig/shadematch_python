@@ -419,6 +419,20 @@
     <section class="user-input-section" aria-label="Account and user ID">
       <div id="stored-user-info" style="display:none;">
         <p id="welcome-message" class="welcome-message">Welcome back! Loading your results…</p>
+        <div id="nicknameRow" style="margin-top:var(--space-sm); font-size:0.9rem; color:var(--text-secondary);">
+          <span id="nicknameView">
+            Nickname: <strong id="nicknameValue" style="color:var(--text-primary);">— anonymous</strong>
+            <button id="nicknameEditBtn" type="button" class="btn-link" style="margin-left:6px;">✏️ Edit</button>
+          </span>
+          <span id="nicknameEdit" style="display:none;">
+            <input type="text" id="nicknameInput" maxlength="20" placeholder="3–20 characters"
+                   style="min-height:32px; padding:4px 10px; border:2px solid var(--border); border-radius:var(--radius-md); font-size:0.9rem; color:var(--text-primary); background:var(--surface);">
+            <button id="nicknameSaveBtn" type="button" style="min-height:32px; padding:4px 12px;">Save</button>
+            <button id="nicknameCancelBtn" type="button" class="btn-link">Cancel</button>
+            <span id="nicknameError" style="display:none; color:var(--accent-danger); font-size:0.8rem; margin-left:6px;"></span>
+          </span>
+          <div style="font-size:0.72rem; margin-top:2px;">Shown on the leaderboard and challenges — leave empty to stay anonymous.</div>
+        </div>
         <button onclick="clearUserAndReload()" type="button" style="margin-top:var(--space-sm);">Switch User</button>
       </div>
       <div id="user-input-form">
@@ -534,10 +548,62 @@
         document.getElementById('stored-user-info').style.display = 'block';
         document.getElementById('user-input-form').style.display = 'none';
         document.getElementById('welcome-message').textContent = 'Welcome back, ' + storedUserId + '!';
+        initNicknameEditor(storedUserId);
         loadUserResults(storedUserId);
         loadUserProfile(storedUserId);
       }
     });
+
+    // ── Nickname editor ───────────────────────────────────────
+    function initNicknameEditor(userId) {
+      const view = document.getElementById('nicknameView');
+      const edit = document.getElementById('nicknameEdit');
+      const valueEl = document.getElementById('nicknameValue');
+      const input = document.getElementById('nicknameInput');
+      const errEl = document.getElementById('nicknameError');
+      if (!view || !edit || !valueEl || !input) return;
+
+      function render() {
+        const nick = localStorage.getItem('userNickname');
+        valueEl.textContent = nick || '— anonymous';
+      }
+      render();
+
+      document.getElementById('nicknameEditBtn').onclick = function () {
+        input.value = localStorage.getItem('userNickname') || '';
+        errEl.style.display = 'none';
+        view.style.display = 'none';
+        edit.style.display = '';
+        input.focus();
+      };
+      document.getElementById('nicknameCancelBtn').onclick = function () {
+        edit.style.display = 'none';
+        view.style.display = '';
+      };
+      document.getElementById('nicknameSaveBtn').onclick = async function () {
+        errEl.style.display = 'none';
+        try {
+          const res = await fetch('/api/user/nickname', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, nickname: input.value.trim() }),
+          });
+          const data = await res.json();
+          if (data.status === 'success') {
+            if (data.nickname) localStorage.setItem('userNickname', data.nickname);
+            else localStorage.removeItem('userNickname');
+            render();
+            edit.style.display = 'none';
+            view.style.display = '';
+          } else {
+            errEl.textContent = data.message || 'Could not save nickname.';
+            errEl.style.display = '';
+          }
+        } catch (e) {
+          errEl.textContent = 'Could not save nickname. Check your connection.';
+          errEl.style.display = '';
+        }
+      };
+    }
 
     // ── Profile loader ────────────────────────────────────────
     async function loadUserProfile(userId) {
