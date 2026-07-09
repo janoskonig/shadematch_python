@@ -345,6 +345,56 @@
     .back-link { margin-bottom: var(--space-sm); }
   }
 
+  /* ── Your Color Journey ─────────────────────────────────── */
+  .journey-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-md) var(--space-lg);
+    margin-bottom: var(--space-md);
+    box-shadow: var(--shadow-sm);
+  }
+  .journey-title {
+    font-size: var(--font-size-sm); font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-secondary); margin: 0 0 var(--space-sm);
+  }
+  .journey-headline {
+    font-size: 1.05rem; font-weight: 700; color: var(--text-primary);
+    margin: 0 0 var(--space-sm); line-height: 1.4;
+  }
+  .journey-spark-wrap { position: relative; margin-bottom: var(--space-xs); }
+  .journey-spark { width: 100%; height: 72px; display: block; }
+  .journey-spark-label {
+    display: flex; justify-content: space-between;
+    font-size: 0.68rem; color: var(--text-secondary);
+    margin-bottom: var(--space-sm);
+  }
+  .journey-bests {
+    display: flex; flex-wrap: wrap; gap: var(--space-md);
+    padding: 6px var(--space-sm);
+    background: var(--bg-primary); border-radius: var(--radius-md);
+    font-size: 0.82rem; margin-bottom: var(--space-sm);
+  }
+  .journey-weeks {
+    display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-sm);
+  }
+  .journey-week {
+    background: var(--bg-primary); border-radius: var(--radius-md);
+    padding: var(--space-sm) var(--space-md);
+  }
+  .journey-week-title {
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--text-secondary); margin-bottom: 4px;
+  }
+  .journey-week-rows { font-size: 0.82rem; color: var(--text-secondary); }
+  .journey-week-rows strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .journey-delta-up { color: var(--accent-success, #00b894); font-weight: 700; }
+  .journey-delta-down { color: var(--accent-warning, #e67e22); font-weight: 700; }
+  @media (max-width: 600px) {
+    .journey-card { padding: var(--space-sm) var(--space-md); }
+  }
+
   /* Hue accuracy / effort roses */
   .hue-roses {
     display: flex; flex-wrap: wrap; gap: var(--space-md);
@@ -369,6 +419,20 @@
     <section class="user-input-section" aria-label="Account and user ID">
       <div id="stored-user-info" style="display:none;">
         <p id="welcome-message" class="welcome-message">Welcome back! Loading your results…</p>
+        <div id="nicknameRow" style="margin-top:var(--space-sm); font-size:0.9rem; color:var(--text-secondary);">
+          <span id="nicknameView">
+            Nickname: <strong id="nicknameValue" style="color:var(--text-primary);">— anonymous</strong>
+            <button id="nicknameEditBtn" type="button" class="btn-link" style="margin-left:6px;">✏️ Edit</button>
+          </span>
+          <span id="nicknameEdit" style="display:none;">
+            <input type="text" id="nicknameInput" maxlength="20" placeholder="3–20 characters"
+                   style="min-height:32px; padding:4px 10px; border:2px solid var(--border); border-radius:var(--radius-md); font-size:0.9rem; color:var(--text-primary); background:var(--surface);">
+            <button id="nicknameSaveBtn" type="button" style="min-height:32px; padding:4px 12px;">Save</button>
+            <button id="nicknameCancelBtn" type="button" class="btn-link">Cancel</button>
+            <span id="nicknameError" style="display:none; color:var(--accent-danger); font-size:0.8rem; margin-left:6px;"></span>
+          </span>
+          <div style="font-size:0.72rem; margin-top:2px;">Shown on the leaderboard and challenges — leave empty to stay anonymous.</div>
+        </div>
         <button onclick="clearUserAndReload()" type="button" style="margin-top:var(--space-sm);">Switch User</button>
       </div>
       <div id="user-input-form">
@@ -376,6 +440,22 @@
         <input type="text" id="userIdInput" placeholder="e.g., ABC123" maxlength="6">
         <button onclick="loadUserResults()" type="button">View Results</button>
       </div>
+    </section>
+
+    <!-- Your Color Journey (improvement narrative, rendered from session data) -->
+    <section class="journey-card" id="journeyCard" style="display:none;" aria-labelledby="journeyHeading">
+      <h2 id="journeyHeading" class="journey-title">Your Color Journey</h2>
+      <p class="journey-headline" id="journeyHeadline"></p>
+      <div class="journey-spark-wrap">
+        <canvas class="journey-spark" id="journeySpark" aria-label="Match error over time"></canvas>
+      </div>
+      <div class="journey-spark-label">
+        <span>← earlier rounds</span>
+        <span>match error (ΔE) per round, rolling average — lower is better</span>
+        <span>latest →</span>
+      </div>
+      <div class="journey-bests" id="journeyBests"></div>
+      <div class="journey-weeks" id="journeyWeeks"></div>
     </section>
 
     <!-- Gamification profile card (injected by JS) -->
@@ -468,10 +548,62 @@
         document.getElementById('stored-user-info').style.display = 'block';
         document.getElementById('user-input-form').style.display = 'none';
         document.getElementById('welcome-message').textContent = 'Welcome back, ' + storedUserId + '!';
+        initNicknameEditor(storedUserId);
         loadUserResults(storedUserId);
         loadUserProfile(storedUserId);
       }
     });
+
+    // ── Nickname editor ───────────────────────────────────────
+    function initNicknameEditor(userId) {
+      const view = document.getElementById('nicknameView');
+      const edit = document.getElementById('nicknameEdit');
+      const valueEl = document.getElementById('nicknameValue');
+      const input = document.getElementById('nicknameInput');
+      const errEl = document.getElementById('nicknameError');
+      if (!view || !edit || !valueEl || !input) return;
+
+      function render() {
+        const nick = localStorage.getItem('userNickname');
+        valueEl.textContent = nick || '— anonymous';
+      }
+      render();
+
+      document.getElementById('nicknameEditBtn').onclick = function () {
+        input.value = localStorage.getItem('userNickname') || '';
+        errEl.style.display = 'none';
+        view.style.display = 'none';
+        edit.style.display = '';
+        input.focus();
+      };
+      document.getElementById('nicknameCancelBtn').onclick = function () {
+        edit.style.display = 'none';
+        view.style.display = '';
+      };
+      document.getElementById('nicknameSaveBtn').onclick = async function () {
+        errEl.style.display = 'none';
+        try {
+          const res = await fetch('/api/user/nickname', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ user_id: userId, nickname: input.value.trim() }),
+          });
+          const data = await res.json();
+          if (data.status === 'success') {
+            if (data.nickname) localStorage.setItem('userNickname', data.nickname);
+            else localStorage.removeItem('userNickname');
+            render();
+            edit.style.display = 'none';
+            view.style.display = '';
+          } else {
+            errEl.textContent = data.message || 'Could not save nickname.';
+            errEl.style.display = '';
+          }
+        } catch (e) {
+          errEl.textContent = 'Could not save nickname. Check your connection.';
+          errEl.style.display = '';
+        }
+      };
+    }
 
     // ── Profile loader ────────────────────────────────────────
     async function loadUserProfile(userId) {
@@ -873,8 +1005,12 @@
       })
         .then(r => r.json())
         .then(data => {
-          if (data.status === 'success') displayResults(data.results, data.total_sessions);
-          else showError(data.message || 'Failed to load results');
+          if (data.status === 'success') {
+            displayResults(data.results, data.total_sessions);
+            try { renderJourney(data.results); } catch (e) { console.error('Journey render error:', e); }
+          } else {
+            showError(data.message || 'Failed to load results');
+          }
         })
         .catch(() => showError('Failed to load results. Please try again.'));
     }
@@ -1031,6 +1167,185 @@
         : '';
 
       document.getElementById('results-content').innerHTML = summaryHTML + tableHTML + cardsHTML + truncatedNote;
+    }
+
+    // ── Your Color Journey ────────────────────────────────────
+    // Solved rounds always end near ΔE 0, so the improvement signal is the
+    // end-of-round ΔE across ALL rounds: completions pull the rolling average
+    // to zero, near-miss give-ups pull it down, distant give-ups push it up.
+    var JOURNEY_MIN_ROUNDS = 8;
+    var JOURNEY_ROLL_WINDOW = 8;
+
+    function journeyRounds(results) {
+      // Chronological rounds with a finite final ΔE and a timestamp.
+      return results
+        .filter(r => r.timestamp != null && typeof r.delta_e === 'number' && isFinite(r.delta_e))
+        .map(r => ({
+          t: new Date(r.timestamp),
+          deltaE: r.delta_e,
+          timeSec: typeof r.time_sec === 'number' ? r.time_sec : null,
+          completed: isCompletedResult(r),
+          perfect: r.match_category === 'perfect',
+        }))
+        .sort((a, b) => a.t - b.t);
+    }
+
+    function rollingMean(values, windowSize) {
+      const out = [];
+      for (let i = 0; i < values.length; i++) {
+        const from = Math.max(0, i - windowSize + 1);
+        let sum = 0;
+        for (let j = from; j <= i; j++) sum += values[j];
+        out.push(sum / (i - from + 1));
+      }
+      return out;
+    }
+
+    function drawJourneySpark(canvas, series) {
+      const dpr = window.devicePixelRatio || 1;
+      const w = canvas.clientWidth || canvas.parentElement.clientWidth || 300;
+      const h = 72;
+      canvas.width = w * dpr;
+      canvas.height = h * dpr;
+      const ctx = canvas.getContext('2d');
+      ctx.scale(dpr, dpr);
+      ctx.clearRect(0, 0, w, h);
+
+      const pad = 6;
+      const max = Math.max(...series, 0.5);
+      const min = 0;
+      const x = i => pad + (w - 2 * pad) * (series.length === 1 ? 0.5 : i / (series.length - 1));
+      const y = v => pad + (h - 2 * pad) * (1 - (v - min) / (max - min));
+
+      // Soft area fill under the line.
+      ctx.beginPath();
+      ctx.moveTo(x(0), y(series[0]));
+      series.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+      ctx.lineTo(x(series.length - 1), h - pad);
+      ctx.lineTo(x(0), h - pad);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(102, 126, 234, 0.12)';
+      ctx.fill();
+
+      // Line.
+      ctx.beginPath();
+      ctx.moveTo(x(0), y(series[0]));
+      series.forEach((v, i) => ctx.lineTo(x(i), y(v)));
+      ctx.strokeStyle = '#667eea';
+      ctx.lineWidth = 2;
+      ctx.lineJoin = 'round';
+      ctx.stroke();
+
+      // Emphasized endpoint.
+      const lastX = x(series.length - 1);
+      const lastY = y(series[series.length - 1]);
+      ctx.beginPath();
+      ctx.arc(lastX, lastY, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#667eea';
+      ctx.fill();
+    }
+
+    function journeyHeadline(rounds) {
+      const n = rounds.length;
+      const half = Math.floor(n / 2);
+      const avg = arr => arr.reduce((a, r) => a + r.deltaE, 0) / arr.length;
+      const early = avg(rounds.slice(0, half));
+      const late = avg(rounds.slice(half));
+      if (early <= 0) return 'Your accuracy has been razor-sharp from the start.';
+      const change = (early - late) / early;
+      const pct = Math.abs(Math.round(change * 100));
+      if (change >= 0.08) {
+        return 'Your average match error is down ' + pct + '% since your early rounds — your color eye is sharpening. 📉';
+      }
+      if (change <= -0.08) {
+        return 'Your recent rounds run ' + pct + '% harder than your early ones — higher bands are tougher shades. Keep at it.';
+      }
+      return 'Your accuracy is holding steady across ' + n + ' rounds — consistency is a skill too.';
+    }
+
+    function renderJourney(results) {
+      const card = document.getElementById('journeyCard');
+      const rounds = journeyRounds(results);
+      if (rounds.length < JOURNEY_MIN_ROUNDS) {
+        if (rounds.length > 0) {
+          card.style.display = '';
+          document.getElementById('journeyHeadline').textContent =
+            'Play ' + (JOURNEY_MIN_ROUNDS - rounds.length) + ' more rounds to unlock your improvement story.';
+          document.getElementById('journeySpark').style.display = 'none';
+          document.getElementById('journeyBests').style.display = 'none';
+          document.getElementById('journeyWeeks').style.display = 'none';
+        }
+        return;
+      }
+
+      card.style.display = '';
+      document.getElementById('journeyHeadline').textContent = journeyHeadline(rounds);
+
+      const spark = document.getElementById('journeySpark');
+      spark.style.display = '';
+      drawJourneySpark(spark, rollingMean(rounds.map(r => r.deltaE), JOURNEY_ROLL_WINDOW));
+
+      // Personal bests.
+      const bests = document.getElementById('journeyBests');
+      bests.style.display = '';
+      const perfectTimes = rounds.filter(r => r.perfect && r.timeSec != null && r.timeSec <= SESSION_TIME_CAP_SEC);
+      const giveUps = rounds.filter(r => !r.completed && r.deltaE > 0);
+      const parts = [];
+      if (perfectTimes.length) {
+        const fastest = perfectTimes.reduce((a, b) => (a.timeSec <= b.timeSec ? a : b));
+        parts.push('<span class="ps-mini" title="Your fastest perfect match">⚡ <span class="ps-mini-val">' +
+          fastest.timeSec.toFixed(1) + 's</span> fastest match <span style="font-weight:400">(' +
+          fastest.t.toLocaleDateString() + ')</span></span>');
+        parts.push('<span class="ps-mini" title="Perfect matches so far">🎯 <span class="ps-mini-val">' +
+          perfectTimes.length + '</span> perfect</span>');
+      }
+      if (giveUps.length) {
+        const closest = giveUps.reduce((a, b) => (a.deltaE <= b.deltaE ? a : b));
+        parts.push('<span class="ps-mini" title="Closest you came before moving on">🔍 <span class="ps-mini-val">ΔE ' +
+          closest.deltaE.toFixed(2) + '</span> closest give-up</span>');
+      }
+      bests.innerHTML = parts.join('');
+      if (!parts.length) bests.style.display = 'none';
+
+      // This week vs last week.
+      const weeks = document.getElementById('journeyWeeks');
+      weeks.style.display = '';
+      const now = Date.now();
+      const WEEK = 7 * 24 * 3600 * 1000;
+      const thisWeek = rounds.filter(r => now - r.t.getTime() < WEEK);
+      const lastWeek = rounds.filter(r => { const age = now - r.t.getTime(); return age >= WEEK && age < 2 * WEEK; });
+
+      function weekStats(rs) {
+        if (!rs.length) return null;
+        const avgDe = rs.reduce((a, r) => a + r.deltaE, 0) / rs.length;
+        const completion = rs.filter(r => r.completed).length / rs.length;
+        return { n: rs.length, avgDe: avgDe, completion: completion };
+      }
+      const tw = weekStats(thisWeek);
+      const lw = weekStats(lastWeek);
+
+      function weekBlock(title, s, other) {
+        if (!s) {
+          return '<div class="journey-week"><div class="journey-week-title">' + title +
+            '</div><div class="journey-week-rows">No rounds played</div></div>';
+        }
+        let deDelta = '';
+        if (other && other.avgDe > 0) {
+          const d = (other.avgDe - s.avgDe) / other.avgDe;
+          if (Math.abs(d) >= 0.03) {
+            deDelta = d > 0
+              ? ' <span class="journey-delta-up">▼ ' + Math.round(d * 100) + '%</span>'
+              : ' <span class="journey-delta-down">▲ ' + Math.round(-d * 100) + '%</span>';
+          }
+        }
+        return '<div class="journey-week"><div class="journey-week-title">' + title + '</div>' +
+          '<div class="journey-week-rows">' +
+          '<div><strong>' + s.n + '</strong> rounds</div>' +
+          '<div>avg error <strong>ΔE ' + s.avgDe.toFixed(2) + '</strong>' + deDelta + '</div>' +
+          '<div>completed <strong>' + Math.round(s.completion * 100) + '%</strong></div>' +
+          '</div></div>';
+      }
+      weeks.innerHTML = weekBlock('Last week', lw, null) + weekBlock('This week', tw, lw);
     }
 
     function showError(message) {

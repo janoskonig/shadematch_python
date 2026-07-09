@@ -2,6 +2,8 @@
 
 import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 import { captureEnv } from './env_capture.js?v=20260508-qc2';
+import { sfx } from './sfx.js?v=20260709';
+import { shareCard } from './share-card.js?v=20260709';
 
 console.log('✅ main.js loaded');
 let sessionLogs = [];
@@ -537,6 +539,11 @@ async function handleProgressionResponse(data) {
   const mySeq = ++_seqId;
   const stale = () => mySeq !== _seqId;
 
+  // Phase 0 — Head-to-head comparison (a modal; shown over the toast stream)
+  if (data.challenge) {
+    showChallengeComparison(data.challenge, { delayMs: 1500 });
+  }
+
   // Phase 1 — Progress strip (render immediately, no toast)
   if (data.progress) renderProgressStrip(data.progress);
 
@@ -575,6 +582,14 @@ async function handleProgressionResponse(data) {
 
   await _delay(SEQ_GAP); if (stale()) return;
 
+  // Phase 4.5 — In-session heat (server-computed consecutive completions)
+  renderHeatState(data.heat);
+  if (data.heat && data.heat.consecutive != null) {
+    const pct = Math.round((data.heat.bonus_pct || 0) * 100);
+    showToast(`🔥 On fire! ${data.heat.consecutive} in a row — +${pct}% XP`, 'streak', 3200);
+    await _delay(SEQ_GAP); if (stale()) return;
+  }
+
   // Phase 5 — XP (secondary reinforcement — shown after quota signals)
   if (data.xp_earned && data.xp_earned > 0) {
     showToast(`+${data.xp_earned} XP`, 'xp', 2500);
@@ -601,6 +616,30 @@ async function handleProgressionResponse(data) {
   }
   if (data.daily_missions) {
     renderDailyMissions(data.daily_missions);
+  }
+}
+
+// ── In-session heat indicator (flame chip on the target swatch) ───────────
+function renderHeatState(heat) {
+  let chip = document.getElementById('heatChip');
+  const on = heat && heat.consecutive != null;
+  if (!chip) {
+    if (!on) return;
+    chip = document.createElement('div');
+    chip.id = 'heatChip';
+    chip.className = 'daily-chip'; // reuse the swatch-overlay chip styling
+    chip.style.top = 'auto';
+    chip.style.bottom = '10px';
+    const pair = document.querySelector('.color-pair');
+    if (!pair) return;
+    pair.appendChild(chip);
+  }
+  if (on) {
+    const pct = Math.round((heat.bonus_pct || 0) * 100);
+    chip.textContent = `🔥 ${heat.consecutive} in a row · +${pct}% XP`;
+    chip.style.display = '';
+  } else {
+    chip.style.display = 'none';
   }
 }
 
@@ -923,6 +962,7 @@ async function saveSessionToServer(session) {
       attempt_uuid: session.attempt_uuid || generateUUID(),
       user_id: window.currentUserId,
       target_color_id: session.target_color_id ?? null,
+      challenge_code: session.challenge_code ?? null,
       target_r: session.target[0], target_g: session.target[1], target_b: session.target[2],
       drop_white: session.drops.white, drop_black: session.drops.black,
       drop_red: session.drops.red, drop_yellow: session.drops.yellow, drop_blue: session.drops.blue,
@@ -1079,6 +1119,59 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (e) { /* server falls back to matching by target colour on save */ }
   }
 
+  // ── Head-to-head challenge mode (/c/<code> links) ───────────────────────
+  let challengeMode = null; // window.__challenge while a challenge round is active
+
+  function renderChallengeBanner() {
+    const ch = window.__challenge;
+    const el = document.getElementById('challengeBanner');
+    if (!ch || !el) {
+      if (window.__challengeMissing) {
+        showToast('That challenge link is invalid or gone — free play instead.', 'info', 4200);
+      }
+      return;
+    }
+    const bits = [];
+    if (Number.isFinite(ch.delta_e)) bits.push(`ΔE ${ch.delta_e.toFixed(2)}`);
+    if (Number.isFinite(ch.drops)) bits.push(`${ch.drops} drops`);
+    if (Number.isFinite(ch.time_sec)) bits.push(`${Math.round(ch.time_sec)}s`);
+    el.innerHTML = `
+      <span class="na-icon">⚔️</span>
+      <span class="na-label">${escapeHtml(ch.creator)} challenges you</span>
+      <button id="challengeAcceptBtn" class="btn btn-primary" style="margin-left:auto;font-size:0.8rem;padding:6px 14px;">Accept</button>
+      <span class="na-reason">Their result: ${bits.join(' · ') || 'on record'} — same colour. Beat it.</span>
+    `;
+    el.style.display = 'flex';
+    document.getElementById('challengeAcceptBtn').onclick = startChallengeRound;
+  }
+
+  async function startChallengeRound() {
+    const ch = window.__challenge;
+    if (!ch || !Array.isArray(ch.target_rgb)) return;
+    if (telemetryAttempt) {
+      await flushTelemetry({ finalize: true, endReason: 'abandoned' });
+    }
+    challengeMode = ch;
+    window.__guestRoundDone = false;
+    dailyMode = null;
+    currentProbeSlot = null;
+    currentTargetColor = {
+      id: ch.target_color_id, rgb: ch.target_rgb, name: 'Challenge colour',
+    };
+    setGameTarget(currentTargetColor);
+    updateBox('targetColor', targetColor);
+    resetMix();
+    stopTimer();
+    resetTimerDisplay();
+    startTimer();
+    enableColorMixing();
+    setControlState('mixing');
+    beginAttemptForCurrentTarget();
+    const banner = document.getElementById('challengeBanner');
+    if (banner) banner.style.display = 'none';
+    showToast(`⚔️ Beat ${escapeHtml(ch.creator)} — same colour, your mix`, 'info', 3000);
+  }
+
   // ── Daily challenge mode (probe carrier) ────────────────────────────────
   let dailyMode = null; // {slot_id} while today's challenge round is active
   let dailyAutoAttempted = false; // auto-serve at most once per session
@@ -1198,6 +1291,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Any transition ends the previous round's daily state (a submitted run
     // already cleared it; an unfinished one stays reachable via the badge).
     dailyMode = null;
+    challengeMode = null;
     if (window.__dailyPlaying) {
       window.__dailyPlaying = false;
       renderDailyStatusBadge(null);
@@ -1222,6 +1316,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentTargetColor = currentProbeSlot.target_color;
     } else {
       let nextIndex = currentTargetIndex + 1;
+      // Heat escalation: after a completed round, pull the next queued colour
+      // that sits one band up (more recipe drops) into the next slot, so a
+      // streak ramps in difficulty instead of staying flat.
+      if (window.currentSessionSaved && nextIndex < targetColors.length) {
+        const justPlayed = currentTargetColor && currentTargetColor.sum_drop_count;
+        if (Number.isFinite(justPlayed)) {
+          for (let i = nextIndex; i < targetColors.length; i++) {
+            const s = targetColors[i] && targetColors[i].sum_drop_count;
+            if (Number.isFinite(s) && s > justPlayed) {
+              const [harder] = targetColors.splice(i, 1);
+              targetColors.splice(nextIndex, 0, harder);
+              break;
+            }
+          }
+        }
+      }
       if (nextIndex >= targetColors.length) {
         await refreshCatalogFromServer();
         const next = buildShuffledPlayQueue(fullCatalog);
@@ -1321,6 +1431,58 @@ document.addEventListener('DOMContentLoaded', async () => {
   setGameTarget(currentTargetColor);
   updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
 
+  // ── Guest demo round ─────────────────────────────────────────────────────
+  function pickGuestTarget() {
+    // Prefer an easy shade (few recipe drops) so the demo is winnable fast.
+    const withRgb = fullCatalog.filter((c) => Array.isArray(c.rgb) && c.rgb.length === 3);
+    const easy = withRgb.filter((c) => {
+      const s = c.sum_drop_count;
+      return Number.isFinite(s) && s >= 3 && s <= 7;
+    });
+    const pool = easy.length ? easy : withRgb;
+    return pool[Math.floor(Math.random() * pool.length)] || null;
+  }
+
+  function buildGuestChallengeComparison(deltaE) {
+    const ch = challengeMode;
+    const mine = {
+      delta_e: Number.isFinite(deltaE) ? deltaE : null,
+      drops: Object.values(dropCounts).reduce((a, b) => a + (b | 0), 0),
+      time_sec: getTimerSec(),
+    };
+    const theirs = { delta_e: ch.delta_e, drops: ch.drops, time_sec: ch.time_sec };
+    return {
+      code: ch.code,
+      creator: ch.creator,
+      creator_delta_e: ch.delta_e,
+      creator_drops: ch.drops,
+      creator_time_sec: ch.time_sec,
+      your_delta_e: mine.delta_e,
+      your_drops: mine.drops,
+      your_time_sec: mine.time_sec,
+      won: challengeBeats(mine, theirs),
+    };
+  }
+
+  async function startGuestRound() {
+    const tc = pickGuestTarget();
+    if (!tc) return;
+    window.__guestRoundDone = false;
+    dailyMode = null;
+    currentProbeSlot = null;
+    currentTargetColor = tc;
+    setGameTarget(currentTargetColor);
+    updateBox('targetColor', targetColor);
+    resetMix();
+    stopTimer();
+    resetTimerDisplay();
+    startTimer();
+    enableColorMixing();
+    setControlState('mixing');
+    showToast('🎨 Tap the pigments below to match the colour on the left', 'info', 3600);
+  }
+  window.__startGuestRound = startGuestRound;
+
   function showSkipPerceptionModal() {
     return new Promise((resolve) => {
       const modal = document.getElementById('skipPerceptionModal');
@@ -1387,13 +1549,34 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateMatchBar(data.delta_e);
         updateBufferedEventDelta(stepId, data.delta_e);
 
+        // Guest demo round: complete at a forgiving threshold, never persist.
+        if (isGuest()) {
+          if (!window.__guestRoundDone
+              && Number.isFinite(data.delta_e) && data.delta_e <= GUEST_GOOD_DELTA_E) {
+            window.__guestRoundDone = true;
+            stopTimer();
+            celebratePerfectMatch();
+            setControlState('completed');
+            if (challengeMode) {
+              // Client-side comparison — nothing is persisted for guests.
+              showChallengeComparison(buildGuestChallengeComparison(data.delta_e), { delayMs: 1500 });
+              challengeMode = null;
+            } else {
+              showGuestResult(data.delta_e, { delayMs: 1500 });
+            }
+          }
+          return;
+        }
+
         if (isPerfectMatch(data.delta_e) && !currentSessionSaved) {
           stopTimer();
+          celebratePerfectMatch();
           const session = {
             attempt_uuid: telemetryAttempt?.attempt_uuid || generateUUID(),
             user_id: window.currentUserId,
             target: targetColor,
             target_color_id: currentTargetColor.id,
+            challenge_code: challengeMode ? challengeMode.code : null,
             drops: { ...dropCounts },
             mixed_rgb: [...currentMixedRgb],
             deltaE: data.delta_e,
@@ -1406,14 +1589,26 @@ document.addEventListener('DOMContentLoaded', async () => {
           window.currentSessionSaved = true;
           sessionLogs.push(session);
           const stepsForDaily = telemetryAttempt?.decisionStepIndex ?? null;
+          const wasDailyRound = !!dailyMode; // captured before submit clears it
           await flushTelemetry({
             finalize: true,
             endReason: 'saved_match',
             terminalBoundaryType: 'boundary_save',
           });
+          window.__lastSavedAttemptUuid = session.attempt_uuid;
+          challengeMode = null;
           await saveSessionToServer(session);
           await maybeSubmitDailyRun(session.attempt_uuid, data.delta_e, stepsForDaily);
           setControlState('completed');
+          shareCard.offer({
+            kind: wasDailyRound ? 'daily' : 'perfect',
+            targetRgb: [...session.target],
+            mixedRgb: [...session.mixed_rgb],
+            deltaE: data.delta_e,
+            drops: Object.values(session.drops).reduce((a, b) => a + b, 0),
+            timeSec: session.time,
+            attemptUuid: session.attempt_uuid,
+          });
         }
       });
 
@@ -1422,8 +1617,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ── Button handlers ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', async () => {
-    if (!requireAuthenticatedUser()) return;
+    if (window.__challenge && !challengeMode && !window.__challengeStarted) {
+      // Arriving via a challenge link: the first Start plays the challenge.
+      window.__challengeStarted = true;
+      await startChallengeRound();
+      return;
+    }
+    if (isGuest()) { await startGuestRound(); return; }
     dailyMode = null;
+    challengeMode = null;
     if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
     setDailyChip(false);
     if (telemetryAttempt) {
@@ -1476,7 +1678,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('skipBtn').addEventListener('click', async () => {
-    if (!requireAuthenticatedUser()) return;
+    if (isGuest()) {
+      // Guest: no perception modal, no save — either move on after a
+      // completed demo, or end the demo and show the conversion card.
+      if (window.__guestRoundDone) { await startGuestRound(); return; }
+      stopTimer();
+      window.__guestRoundDone = true;
+      const de = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
+      if (challengeMode) {
+        showChallengeComparison(buildGuestChallengeComparison(de));
+        challengeMode = null;
+      } else {
+        showGuestResult(de);
+      }
+      return;
+    }
     refreshDatabaseConnection();
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     const alreadyCompletedThisColor = window.currentSessionSaved === true;
@@ -1490,6 +1706,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         attempt_uuid: telemetryAttempt?.attempt_uuid || generateUUID(),
         user_id: window.currentUserId,
         target_color_id: currentTargetColor.id,
+        challenge_code: challengeMode ? challengeMode.code : null,
         target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
         drop_white: dropCounts.white || 0, drop_black: dropCounts.black || 0,
         drop_red: dropCounts.red || 0, drop_yellow: dropCounts.yellow || 0, drop_blue: dropCounts.blue || 0,
@@ -1519,6 +1736,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           alert('Failed to save skip data. Please try again.');
           return;
         }
+        window.__lastSavedAttemptUuid = skipData.attempt_uuid;
+        challengeMode = null;
         handleProgressionResponse(data);
         await maybeSubmitDailyRun(skipData.attempt_uuid, skipData.delta_e, stepsForDaily);
       } catch {
@@ -1531,8 +1750,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('restartBtn').addEventListener('click', async () => {
-    if (!requireAuthenticatedUser()) return;
+    if (isGuest()) { await startGuestRound(); return; }
     dailyMode = null;
+    challengeMode = null;
     if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
     setDailyChip(false);
     await flushTelemetry({
@@ -1571,7 +1791,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('retryBtn').addEventListener('click', async () => {
-    if (!requireAuthenticatedUser()) return;
+    if (isGuest()) {
+      // Guest: just clear the mix and restart the clock on the same target.
+      window.__guestRoundDone = false;
+      resetMix();
+      resetTimerDisplay();
+      stopTimer();
+      startTimer();
+      enableColorMixing();
+      setControlState('mixing');
+      return;
+    }
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     if (!isNaN(currentDeltaE)) {
       const session = {
@@ -1641,6 +1871,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       circle.classList.add('is-tapped');
       setTimeout(() => circle.classList.remove('is-tapped'), 200);
       if (navigator.vibrate) navigator.vibrate(15);
+      try { sfx.drop(dropCounts[color]); } catch { /* audio is best-effort */ }
+      animateDropToMix(color, circle);
 
       const mixResult = updateCurrentMix();
       const afterSnapshot = buildMixSnapshot({
@@ -1677,6 +1909,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         dropCounts[color]--;
         document.querySelector(`.color-circle[data-color='${color}']`).textContent = dropCounts[color];
         updateBadge(color, dropCounts[color]);
+        if (navigator.vibrate) navigator.vibrate(10);
+        try { sfx.remove(); } catch { /* audio is best-effort */ }
+        pulseMix();
         const mixResult = updateCurrentMix();
         const afterSnapshot = buildMixSnapshot({
           mixedRgbOverride: mixResult?.mixedRGB,
@@ -1702,6 +1937,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     });
   });
+
+  // Head-to-head challenge landing (/c/<code>): show the banner last, once
+  // the board is ready.
+  renderChallengeBanner();
 });
 
 // ── Login form handler ────────────────────────────────────────────────────
@@ -1724,6 +1963,8 @@ document.addEventListener('DOMContentLoaded', function () {
             localStorage.setItem('userId', userId);
             localStorage.setItem('userBirthdate', data.birthdate);
             localStorage.setItem('userGender', data.gender);
+            if (data.nickname) localStorage.setItem('userNickname', data.nickname);
+            else localStorage.removeItem('userNickname');
             if (data.email) localStorage.setItem('userEmail', data.email);
             localStorage.setItem('userEmailVerified', data.email_verified ? '1' : '0');
             localStorage.setItem('emailOptInReminders', data.email_opt_in_reminders ? '1' : '0');
@@ -1991,11 +2232,240 @@ function urlBase64ToUint8Array(base64String) {
   return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
 }
 
+// ── Guest mode ────────────────────────────────────────────────────────────
+// A brand-new visitor can play one fully client-side demo round before any
+// consent or registration. Nothing is persisted: telemetry never starts for
+// unauthenticated users, the save path is skipped, and only the stateless
+// /calculate endpoint is called for scoring.
+function isGuest() {
+  return !getAuthenticatedUserId();
+}
+
+// Demo rounds complete at a forgiving threshold so the first experience is a
+// success moment, not a grind toward delta-E 0.01.
+const GUEST_GOOD_DELTA_E = 2.0;
+
+function showGuestResult(deltaE, { delayMs = 0 } = {}) {
+  const modal = document.getElementById('guestResultModal');
+  if (!modal) return;
+  const t = document.getElementById('guestResultTarget');
+  const m = document.getElementById('guestResultMix');
+  if (t && Array.isArray(window.shadeMatchTargetRgb)) {
+    t.style.backgroundColor = `rgb(${window.shadeMatchTargetRgb.join(',')})`;
+  }
+  if (m) m.style.backgroundColor = `rgb(${currentMixedRgb.join(',')})`;
+  const de = document.getElementById('guestResultDeltaE');
+  if (de) de.textContent = Number.isFinite(deltaE) ? deltaE.toFixed(2) : '—';
+  const timeEl = document.getElementById('guestResultTime');
+  if (timeEl) timeEl.textContent = getTimerSec().toFixed(1) + 's';
+  // Stash the payload for the modal's Share button (wired in index.html).
+  window.__lastGuestResult = {
+    kind: 'perfect',
+    targetRgb: Array.isArray(window.shadeMatchTargetRgb) ? [...window.shadeMatchTargetRgb] : [255, 255, 255],
+    mixedRgb: [...currentMixedRgb],
+    deltaE: Number.isFinite(deltaE) ? deltaE : null,
+    drops: Object.values(window.shadeMatchDropCounts || {}).reduce((a, b) => a + (b | 0), 0),
+    timeSec: getTimerSec(),
+  };
+  setTimeout(() => { modal.style.display = 'flex'; }, delayMs);
+}
+
+// ── HTML escaping (for user-chosen strings rendered via innerHTML) ─────────
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ── Head-to-head challenges ───────────────────────────────────────────────
+// Result ordering mirrors the server: accuracy first (2-dp ΔE so perfect
+// finishes tie), then fewer drops, then faster time.
+function challengeScoreKey(de, drops, t) {
+  return [
+    Number.isFinite(de) ? Math.round(de * 100) / 100 : Infinity,
+    Number.isFinite(drops) ? drops : Infinity,
+    Number.isFinite(t) ? t : Infinity,
+  ];
+}
+
+function challengeBeats(mine, theirs) {
+  const a = challengeScoreKey(mine.delta_e, mine.drops, mine.time_sec);
+  const b = challengeScoreKey(theirs.delta_e, theirs.drops, theirs.time_sec);
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] < b[i]) return true;
+    if (a[i] > b[i]) return false;
+  }
+  return false;
+}
+
+// Create a counter-challenge from a saved round and hand the link to the
+// share sheet (clipboard on desktop). Exposed for share-card.js too.
+window.shadeMatchCreateChallenge = async function (attemptUuid, { text } = {}) {
+  const uid = getAuthenticatedUserId();
+  if (!uid || !attemptUuid) return false;
+  try {
+    const res = await fetch('/api/challenge/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: uid, attempt_uuid: attemptUuid }),
+    });
+    const d = await res.json();
+    if (d.status !== 'success' || !d.url) {
+      showToast(d.message || 'Could not create the challenge link.', 'info', 4000);
+      return false;
+    }
+    const msg = (text || '⚔️ Beat my ShadeMatch result:') + ' ' + d.url;
+    if (navigator.share) {
+      try { await navigator.share({ text: msg }); return true; } catch (e) {
+        if (e && e.name === 'AbortError') return false;
+      }
+    }
+    try {
+      await navigator.clipboard.writeText(msg);
+      showToast('🔗 Challenge link copied — send it to a friend!', 'award', 4200);
+    } catch { /* clipboard may be blocked */ }
+    return true;
+  } catch {
+    showToast('Could not create the challenge link.', 'info', 4000);
+    return false;
+  }
+};
+
+function showChallengeComparison(c, { delayMs = 0 } = {}) {
+  const modal = document.getElementById('challengeResultModal');
+  if (!modal || !c) return;
+  const verdict = document.getElementById('challengeVerdict');
+  if (verdict) {
+    verdict.textContent = c.won
+      ? `🏆 You beat ${c.creator}!`
+      : `${c.creator} holds it — rematch?`;
+  }
+  const t = document.getElementById('challengeResultTarget');
+  const m = document.getElementById('challengeResultMix');
+  if (t && Array.isArray(window.shadeMatchTargetRgb)) {
+    t.style.backgroundColor = `rgb(${window.shadeMatchTargetRgb.join(',')})`;
+  }
+  if (m) m.style.backgroundColor = `rgb(${currentMixedRgb.join(',')})`;
+
+  const fmt = (v, d = 2) => (Number.isFinite(v) ? v.toFixed(d) : '—');
+  const row = (label, mine, theirs) =>
+    `<div style="display:flex;justify-content:space-between;font-size:0.9rem;padding:4px 0;border-bottom:1px solid var(--border);">` +
+    `<span style="color:var(--text-secondary);">${label}</span>` +
+    `<span><strong>${mine}</strong> vs ${theirs}</span></div>`;
+  const body = document.getElementById('challengeCompareBody');
+  if (body) {
+    body.innerHTML =
+      row('Match error ΔE', fmt(c.your_delta_e), fmt(c.creator_delta_e)) +
+      row('Drops', Number.isFinite(c.your_drops) ? c.your_drops : '—',
+        Number.isFinite(c.creator_drops) ? c.creator_drops : '—') +
+      row('Time', fmt(c.your_time_sec, 1) + 's', fmt(c.creator_time_sec, 1) + 's') +
+      `<div style="font-size:0.72rem;color:var(--text-secondary);margin-top:6px;">` +
+      `you vs ${escapeHtml(c.creator)} — accuracy decides, then drops, then time</div>`;
+  }
+
+  const rematch = document.getElementById('challengeRematchBtn');
+  if (rematch) {
+    rematch.onclick = async () => {
+      modal.style.display = 'none';
+      if (isGuest()) {
+        // Conversion moment: registering is what unlocks challenging back.
+        if (window.__openRegistrationFlow) window.__openRegistrationFlow();
+        return;
+      }
+      const uuid = window.__lastSavedAttemptUuid;
+      if (!uuid) {
+        showToast('Finish a colour first, then challenge back.', 'info', 3500);
+        return;
+      }
+      await window.shadeMatchCreateChallenge(uuid, {
+        text: `⚔️ I took your ShadeMatch challenge — now beat mine:`,
+      });
+    };
+  }
+  const closeBtn = document.getElementById('challengeCloseBtn');
+  if (closeBtn) closeBtn.onclick = () => { modal.style.display = 'none'; };
+  setTimeout(() => { modal.style.display = 'flex'; }, delayMs);
+}
+
+// ── Sensory feedback ──────────────────────────────────────────────────────
+function prefersReducedMotion() {
+  return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
+// A small paint blob flies from the tapped palette circle into the mix swatch.
+function animateDropToMix(color, sourceEl) {
+  if (prefersReducedMotion()) return;
+  const mixEl = document.getElementById('currentMix');
+  if (!mixEl || !sourceEl || typeof sourceEl.getBoundingClientRect !== 'function') return;
+  if (getComputedStyle(mixEl).display === 'none') return;
+  const from = sourceEl.getBoundingClientRect();
+  const to = mixEl.getBoundingClientRect();
+  if (!from.width || !to.width) return;
+
+  const blobColors = {
+    white: '#f4f4f4', black: '#111', red: '#e53935', yellow: '#fdd835', blue: '#1e88e5',
+  };
+  const blob = document.createElement('div');
+  const size = 14;
+  const x0 = from.left + from.width / 2 - size / 2;
+  const y0 = from.top + from.height / 2 - size / 2;
+  const x1 = to.left + to.width / 2 - size / 2;
+  const y1 = to.top + to.height * 0.6 - size / 2;
+  blob.style.cssText = `
+    position:fixed;left:${x0}px;top:${y0}px;width:${size}px;height:${size}px;
+    background:${blobColors[color] || '#888'};border-radius:50% 50% 50% 65%;
+    pointer-events:none;z-index:10002;
+    box-shadow:0 1px 4px rgba(0,0,0,0.25);
+  `;
+  document.body.appendChild(blob);
+  const anim = blob.animate([
+    { transform: 'translate(0,0) scale(1)', opacity: 1 },
+    { transform: `translate(${(x1 - x0) * 0.5}px, ${(y1 - y0) * 0.5 - 40}px) scale(0.9)`, opacity: 1, offset: 0.5 },
+    { transform: `translate(${x1 - x0}px, ${y1 - y0}px) scale(0.4)`, opacity: 0.2 },
+  ], { duration: 380, easing: 'cubic-bezier(0.3, 0, 0.8, 1)' });
+  anim.onfinish = () => {
+    blob.remove();
+    pulseMix();
+  };
+}
+
+// Quick ripple on the mix swatch when the recipe changes.
+function pulseMix() {
+  if (prefersReducedMotion()) return;
+  const mixEl = document.getElementById('currentMix');
+  if (!mixEl) return;
+  mixEl.classList.remove('mix-bump');
+  // Force reflow so re-adding the class restarts the animation.
+  void mixEl.offsetWidth;
+  mixEl.classList.add('mix-bump');
+}
+
+// Full celebration for a perfect match: chime + haptic + confetti + overlay.
+function celebratePerfectMatch() {
+  try { sfx.perfect(); } catch { /* audio is best-effort */ }
+  if (navigator.vibrate) navigator.vibrate([30, 50, 30]);
+
+  const overlay = document.createElement('div');
+  overlay.className = 'perfect-overlay';
+  overlay.innerHTML = '<div class="perfect-overlay-inner">🎯<span>Perfect match!</span></div>';
+  document.body.appendChild(overlay);
+  requestAnimationFrame(() => overlay.classList.add('is-visible'));
+  setTimeout(() => {
+    overlay.classList.remove('is-visible');
+    setTimeout(() => overlay.remove(), 400);
+  }, 1400);
+
+  if (!prefersReducedMotion()) createConfetti();
+}
+
 // ── Confetti ──────────────────────────────────────────────────────────────
 function createConfetti() {
   const colors = ['#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4', '#feca57', '#ff9ff3', '#54a0ff', '#5f27cd'];
-  for (let i = 0; i < 150; i++) {
-    setTimeout(() => createConfettiPiece(colors), i * 20);
+  for (let i = 0; i < 90; i++) {
+    setTimeout(() => createConfettiPiece(colors), i * 15);
   }
 }
 

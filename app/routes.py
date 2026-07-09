@@ -14,7 +14,7 @@ from .models import (
     DailyChallengeRun, DailyChallengeWinner, PushSubscription,
     AnalyticsEvent, MixingAttempt, MixingAttemptEvent, EmailVerificationToken,
     ConsentRecord, CalibrationSession, CalibrationTrial,
-    ProbeSlot, ProbeSchedule,
+    ProbeSlot, ProbeSchedule, ChallengeLink,
 )
 from .probe import (
     maybe_assign_flow_probe,
@@ -169,6 +169,33 @@ def _normalize_email(raw_email):
     return email
 
 
+# Public display name: 3-20 chars of unicode letters/digits/underscore, space,
+# hyphen. Keep in sync with the hint text in templates/index.html.
+NICKNAME_REGEX = re.compile(r'^[\w \-]{3,20}$', re.UNICODE)
+
+
+def _normalize_nickname(raw):
+    """Trimmed nickname, or None if absent/invalid. Case is preserved for
+    display; uniqueness comparisons lowercase separately."""
+    if raw is None:
+        return None
+    nickname = str(raw).strip()
+    if not nickname:
+        return None
+    if not NICKNAME_REGEX.match(nickname):
+        return None
+    return nickname
+
+
+def _nickname_taken(nickname, exclude_user_id=None):
+    """Case-insensitive availability check (app-side; the DB partial unique
+    index on LOWER(nickname) is the backstop against races)."""
+    q = User.query.filter(func.lower(User.nickname) == nickname.lower())
+    if exclude_user_id:
+        q = q.filter(User.id != exclude_user_id)
+    return q.first() is not None
+
+
 def _sha256(text):
     return hashlib.sha256(text.encode('utf-8')).hexdigest()
 
@@ -284,6 +311,38 @@ def index():
         has_semmelweis_logo=os.path.exists(
             os.path.join(current_app.static_folder, 'img', 'semmelweis-logo.png')
         ),
+    )
+
+
+@main.route('/c/<string:code>')
+def challenge_page(code):
+    """Head-to-head challenge landing: the game page with the challenge target
+    and the challenger's frozen result injected. Unknown codes fall back to the
+    normal game with a notice instead of a dead 404."""
+    link = db.session.get(ChallengeLink, code)
+    challenge = None
+    if link:
+        creator = db.session.get(User, link.creator_user_id)
+        challenge = {
+            'code': link.code,
+            'creator': (creator.nickname if creator and creator.nickname
+                        else link.creator_user_id),
+            'target_color_id': link.target_color_id,
+            'target_rgb': [link.target_r, link.target_g, link.target_b],
+            'delta_e': link.creator_delta_e,
+            'drops': link.creator_drops,
+            'time_sec': link.creator_time_sec,
+        }
+    return render_template(
+        'index.html',
+        research_consent_intro=RESEARCH_CONSENT_INTRO,
+        research_consent_items=RESEARCH_CONSENT_ITEMS,
+        research_consent_version=RESEARCH_CONSENT_VERSION,
+        has_semmelweis_logo=os.path.exists(
+            os.path.join(current_app.static_folder, 'img', 'semmelweis-logo.png')
+        ),
+        challenge=challenge,
+        challenge_missing=(link is None),
     )
 
 
@@ -937,6 +996,23 @@ def register():
     if email and User.query.filter_by(email=email).first():
         return jsonify({'status': 'error', 'message': 'This email is already in use'}), 409
 
+    # Optional public display name.
+    nickname = None
+    nickname_raw = (data.get('nickname') or '').strip()
+    if nickname_raw:
+        nickname = _normalize_nickname(nickname_raw)
+        if nickname is None:
+            return jsonify({
+                'status': 'error',
+                'message': 'Nicknames are 3-20 characters: letters, numbers, spaces, - or _.',
+            }), 400
+        if _nickname_taken(nickname):
+            return jsonify({
+                'status': 'error',
+                'code': 'NICKNAME_TAKEN',
+                'message': 'That nickname is taken — try another.',
+            }), 409
+
     user_id = generate_user_id()
     while User.query.get(user_id) is not None:
         user_id = generate_user_id()
@@ -945,6 +1021,7 @@ def register():
         id=user_id,
         birthdate=birthdate,
         gender=gender,
+        nickname=nickname,
         email=email,
         email_opt_in_reminders=email_opt_in_reminders,
     )
@@ -998,7 +1075,12 @@ def register():
             db.session.rollback()
             print(f'email verify send failed for user {user.id}: {exc}')
 
-    return jsonify({'status': 'success', 'userId': user_id, 'email_verification_pending': bool(email)})
+    return jsonify({
+        'status': 'success',
+        'userId': user_id,
+        'nickname': nickname,
+        'email_verification_pending': bool(email),
+    })
 
 
 @main.route('/login', methods=['POST'])
@@ -1027,6 +1109,7 @@ def login():
                 'status': 'success',
                 'birthdate': user.birthdate.isoformat(),
                 'gender': user.gender,
+                'nickname': user.nickname,
                 'email': user.email,
                 'email_verified': bool(user.email_verified_at),
                 'email_opt_in_reminders': bool(user.email_opt_in_reminders),
@@ -1318,6 +1401,53 @@ def user_email_settings():
         'email_verified': bool(user.email_verified_at),
         'email_opt_in_reminders': bool(user.email_opt_in_reminders),
     })
+
+
+@main.route('/api/user/nickname', methods=['POST'])
+def set_user_nickname():
+    """Set, change, or clear (empty string) the user's public display name."""
+    data = request.get_json() or {}
+    user_id = (data.get('user_id') or '').strip().upper()
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'status': 'error', 'message': 'Unknown user'}), 404
+    if not _rate_limit_allow(f'nick:{user_id}', max_hits=5, window_sec=3600):
+        return jsonify({'status': 'error',
+                        'message': 'Too many nickname changes — try again later.'}), 429
+
+    raw = (data.get('nickname') or '').strip()
+    if not raw:
+        user.nickname = None
+        db.session.commit()
+        return jsonify({'status': 'success', 'nickname': None})
+
+    nickname = _normalize_nickname(raw)
+    if nickname is None:
+        return jsonify({
+            'status': 'error',
+            'message': 'Nicknames are 3-20 characters: letters, numbers, spaces, - or _.',
+        }), 400
+    if _nickname_taken(nickname, exclude_user_id=user_id):
+        return jsonify({
+            'status': 'error',
+            'code': 'NICKNAME_TAKEN',
+            'message': 'That nickname is taken — try another.',
+        }), 409
+
+    user.nickname = nickname
+    try:
+        db.session.commit()
+    except IntegrityError:
+        # Race lost against the partial unique index on LOWER(nickname).
+        db.session.rollback()
+        return jsonify({
+            'status': 'error',
+            'code': 'NICKNAME_TAKEN',
+            'message': 'That nickname is taken — try another.',
+        }), 409
+    return jsonify({'status': 'success', 'nickname': nickname})
 
 
 # ── Target colors ──────────────────────────────────────────────────────────
@@ -2292,14 +2422,16 @@ def save_session():
         is_probe = resolve_probe_for_attempt(
             attempt_uuid, user_id, data.get('target_color_id'), skipped=skipped,
         )
+        is_challenge, challenge_result = _resolve_challenge_result(data, user_id)
 
-        xp_earned, new_awards, streak_event, level_up = process_progression(
+        xp_earned, new_awards, streak_event, level_up, heat_info = process_progression(
             user_id=user_id,
             match_category=mc,
             skipped=skipped,
             target_color_id=data.get('target_color_id'),
             delta_e=data.get('delta_e'),
             is_probe=is_probe,
+            is_challenge=is_challenge,
         )
         new_awards.extend(grant_daily_mission_awards(user_id))
 
@@ -2319,6 +2451,8 @@ def save_session():
             'new_awards': new_awards,
             'streak_event': streak_event,
             'level_up': level_up,
+            'heat': heat_info,
+            'challenge': challenge_result,
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
@@ -2387,14 +2521,16 @@ def save_skip():
         is_probe = resolve_probe_for_attempt(
             attempt_uuid, user_id, data.get('target_color_id'), skipped=True,
         )
+        is_challenge, challenge_result = _resolve_challenge_result(data, user_id)
 
-        xp_earned, new_awards, streak_event, level_up = process_progression(
+        xp_earned, new_awards, streak_event, level_up, heat_info = process_progression(
             user_id=user_id,
             match_category=mc,
             skipped=True,
             target_color_id=data.get('target_color_id'),
             delta_e=delta_e,
             is_probe=is_probe,
+            is_challenge=is_challenge,
         )
         new_awards.extend(grant_daily_mission_awards(user_id))
 
@@ -2409,6 +2545,8 @@ def save_skip():
             'new_awards': new_awards,
             'streak_event': streak_event,
             'level_up': level_up,
+            'heat': heat_info,
+            'challenge': challenge_result,
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
@@ -2629,6 +2767,7 @@ def get_leaderboard():
         rows = (
             db.session.query(
                 User.id.label('user_id'),
+                User.nickname.label('nickname'),
                 func.coalesce(UserProgress.xp, 0).label('xp'),
                 func.coalesce(UserProgress.level, 1).label('level'),
                 func.coalesce(UserProgress.current_streak, 0).label('current_streak'),
@@ -2672,7 +2811,8 @@ def get_leaderboard():
             .select_from(User)
             .outerjoin(UserProgress, UserProgress.user_id == User.id)
             .outerjoin(MixingSession, MixingSession.user_id == User.id)
-            .group_by(User.id, UserProgress.xp, UserProgress.level, UserProgress.current_streak)
+            .group_by(User.id, User.nickname,
+                      UserProgress.xp, UserProgress.level, UserProgress.current_streak)
             .all()
         )
 
@@ -2707,9 +2847,15 @@ def get_leaderboard():
             avg_match_time_sec = (
                 float(row.avg_match_time_sec) if row.avg_match_time_sec is not None else None
             )
+            # Players who set a nickname appear by it (explicit opt-in to
+            # visibility); everyone else stays anonymized as Player #rank.
+            if is_current_user:
+                display_name = f'You ({row.nickname or row.user_id})'
+            else:
+                display_name = row.nickname or f'Player #{rank}'
             entry = {
                 'rank': rank,
-                'display_name': f'You ({row.user_id})' if is_current_user else f'Player #{rank}',
+                'display_name': display_name,
                 'is_current_user': is_current_user,
                 'level': _xp_level(int(row.xp or 0)),
                 'xp': int(row.xp or 0),
@@ -2794,6 +2940,124 @@ def _daily_target_ids(d=None):
     if not scheduled_ids:
         return seeded_ids
     return scheduled_ids + [cid for cid in seeded_ids if cid not in scheduled_ids]
+
+
+# ── Head-to-head challenge links ─────────────────────────────────────────────
+
+# Unambiguous code alphabet (no 0/O/1/l/I).
+CHALLENGE_CODE_ALPHABET = '23456789ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz'
+
+
+def _mint_challenge_code():
+    for _ in range(10):
+        code = ''.join(secrets.choice(CHALLENGE_CODE_ALPHABET) for _ in range(6))
+        if db.session.get(ChallengeLink, code) is None:
+            return code
+    raise RuntimeError('could not mint a unique challenge code')
+
+
+def _challenge_score_key(delta_e, drops, time_sec):
+    """Ordering for a challenge result: accuracy first (2-dp ΔE so all perfect
+    finishes tie at 0.0), then fewer drops, then faster time."""
+    return (
+        round(float(delta_e), 2) if delta_e is not None else float('inf'),
+        int(drops) if drops is not None else float('inf'),
+        float(time_sec) if time_sec is not None else float('inf'),
+    )
+
+
+def _resolve_challenge_result(data, user_id):
+    """If the save payload names a valid challenge, score it against the
+    creator's snapshot, bump counters, and return (is_challenge, result_dict).
+    Self-acceptance is allowed (racing your own ghost) but not counted."""
+    code = data.get('challenge_code')
+    if not code:
+        return False, None
+    link = db.session.get(ChallengeLink, str(code))
+    if link is None:
+        return False, None
+
+    my_drops = sum(int(data.get(k) or 0) for k in (
+        'drop_white', 'drop_black', 'drop_red', 'drop_yellow', 'drop_blue'))
+    my_delta = data.get('delta_e')
+    my_time = data.get('time_sec')
+    won = (
+        _challenge_score_key(my_delta, my_drops, my_time)
+        < _challenge_score_key(link.creator_delta_e, link.creator_drops, link.creator_time_sec)
+    )
+    if user_id != link.creator_user_id:
+        link.accept_count += 1
+        if won:
+            link.beat_count += 1
+    creator = db.session.get(User, link.creator_user_id)
+    return True, {
+        'code': link.code,
+        'creator': (creator.nickname if creator and creator.nickname
+                    else link.creator_user_id),
+        'creator_delta_e': link.creator_delta_e,
+        'creator_drops': link.creator_drops,
+        'creator_time_sec': link.creator_time_sec,
+        'your_delta_e': my_delta,
+        'your_drops': my_drops,
+        'your_time_sec': my_time,
+        'won': won,
+    }
+
+
+@main.route('/api/challenge/create', methods=['POST'])
+def challenge_create():
+    data = request.get_json() or {}
+    user_id = (data.get('user_id') or '').strip().upper()
+    attempt_uuid = data.get('attempt_uuid')
+    if not user_id or not attempt_uuid:
+        return jsonify({'status': 'error', 'message': 'user_id and attempt_uuid required'}), 400
+    if not _rate_limit_allow(f'challenge:{user_id}', max_hits=20, window_sec=3600):
+        return jsonify({'status': 'error', 'message': 'Too many challenges — try again later'}), 429
+
+    session = MixingSession.query.filter_by(attempt_uuid=attempt_uuid, user_id=user_id).first()
+    if not session:
+        return jsonify({'status': 'error', 'message': 'Round not found'}), 404
+    if session.match_category not in COMPLETED_MATCH_CATEGORIES:
+        return jsonify({'status': 'error',
+                        'message': 'Only completed rounds can become challenges'}), 400
+
+    # Idempotent per source round: re-tapping returns the same link.
+    existing = ChallengeLink.query.filter_by(source_attempt_uuid=attempt_uuid).first()
+    if existing:
+        return jsonify({
+            'status': 'success', 'duplicate': True, 'code': existing.code,
+            'url': url_for('main.challenge_page', code=existing.code, _external=True),
+        })
+
+    drops = sum(int(v or 0) for v in (
+        session.drop_white, session.drop_black, session.drop_red,
+        session.drop_yellow, session.drop_blue))
+    try:
+        link = ChallengeLink(
+            code=_mint_challenge_code(),
+            creator_user_id=user_id,
+            source_attempt_uuid=attempt_uuid,
+            target_color_id=session.target_color_id,
+            target_r=session.target_r, target_g=session.target_g, target_b=session.target_b,
+            creator_delta_e=session.delta_e,
+            creator_drops=drops,
+            creator_time_sec=session.time_sec,
+        )
+        db.session.add(link)
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        existing = ChallengeLink.query.filter_by(source_attempt_uuid=attempt_uuid).first()
+        if existing:
+            return jsonify({
+                'status': 'success', 'duplicate': True, 'code': existing.code,
+                'url': url_for('main.challenge_page', code=existing.code, _external=True),
+            })
+        raise
+    return jsonify({
+        'status': 'success', 'code': link.code,
+        'url': url_for('main.challenge_page', code=link.code, _external=True),
+    })
 
 
 @main.route('/api/daily-challenge/today', methods=['GET'])
