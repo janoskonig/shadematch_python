@@ -286,6 +286,7 @@ function beginAttemptForCurrentTarget() {
   });
 
   postAttemptHeaderUpdate();
+  maybeReturningPlayerToast(currentTargetColor?.id);
 }
 
 async function flushTelemetry({ finalize = false, endReason = null, terminalBoundaryType = null, useBeacon = false } = {}) {
@@ -569,8 +570,10 @@ async function handleProgressionResponse(data) {
   } else if (data.streak_event === 'freeze_consumed') {
     const freeze = data.progress ? data.progress.streak_freeze_available : '?';
     showToast(`🧊 Streak protected — 1 freeze used (${freeze} left)`, 'freeze', 5000);
-  } else if (data.streak_event === 'reset') {
-    showToast('Streak reset. Keep going!', 'info', 3000);
+  } else if (data.streak_event === 'decayed') {
+    showToast('Welcome back! Your streak adjusted — let\'s keep building.', 'info', 3500);
+  } else if (data.streak_event === 'restarted') {
+    showToast('Fresh start — your first day of a new streak!', 'info', 3000);
   }
 
   await _delay(SEQ_GAP); if (stale()) return;
@@ -581,6 +584,26 @@ async function handleProgressionResponse(data) {
   }
 
   await _delay(SEQ_GAP); if (stale()) return;
+
+  // Phase 5b — Mastery feedback (personal best celebration)
+  if (data.mastery_feedback && data.mastery_feedback.is_new_pb) {
+    const mf = data.mastery_feedback;
+    if (mf.old_best_delta_e != null) {
+      const improvement = (mf.old_best_delta_e - mf.new_best_delta_e).toFixed(1);
+      showToast(`🎯 New personal best! ΔE improved by ${improvement}`, 'levelup', 4500);
+    } else {
+      showToast(`🎯 First record set — ΔE ${mf.new_best_delta_e.toFixed(1)}`, 'levelup', 4000);
+    }
+    if (mf.new_best_delta_e != null && currentTargetColor?.id) {
+      window.__colorBestDeltaE[currentTargetColor.id] = mf.new_best_delta_e;
+    }
+    await _delay(SEQ_GAP); if (stale()) return;
+  }
+
+  // Phase 5c — Session pacing
+  if (data.progress && data.progress.session_pacing) {
+    window.__sessionPacing = data.progress.session_pacing;
+  }
 
   // Phase 6 — Reinforcement badges (streak, achievement, level badges etc.)
   if (Array.isArray(data.new_awards)) {
@@ -615,7 +638,7 @@ function setDailyChip(on) {
 // challenge is auto-served as the first round of the day (with the target
 // swatch chip) and tracked by the header badge, so it no longer needs a
 // persistent banner; routine practice suggestions stay ambient.
-const BANNER_ACTION_IDS = new Set(['streak_at_risk']);
+const BANNER_ACTION_IDS = new Set(['streak_welcome_back']);
 
 function renderNextAction(na) {
   const el = document.getElementById('nextActionCta');
@@ -805,6 +828,7 @@ function setControlState(state) {
   const startBtn = document.getElementById('startBtn');
   const stopBtn = document.getElementById('stopBtn');
   const skipBtn = document.getElementById('skipBtn');
+  const refineBtn = document.getElementById('refineBtn');
   const retryBtn = document.getElementById('retryBtn');
   const restartBtn = document.getElementById('restartBtn');
 
@@ -814,21 +838,25 @@ function setControlState(state) {
   if (state === 'idle') {
     startBtn.style.display = ''; startBtn.disabled = false;
     skipBtn.style.display = 'none';
+    if (refineBtn) { refineBtn.style.display = 'none'; }
     retryBtn.style.display = 'none';
     restartBtn.disabled = true;
   } else if (state === 'mixing') {
     startBtn.style.display = 'none';
     skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = 'Skip';
+    if (refineBtn) { refineBtn.style.display = ''; refineBtn.disabled = false; }
     retryBtn.style.display = ''; retryBtn.disabled = false;
     restartBtn.disabled = false;
   } else if (state === 'stopped') {
     startBtn.style.display = 'none';
     skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = 'Skip';
+    if (refineBtn) { refineBtn.style.display = 'none'; }
     retryBtn.style.display = 'none';
     restartBtn.disabled = false;
   } else if (state === 'completed') {
     startBtn.style.display = 'none';
     skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = 'Next color';
+    if (refineBtn) { refineBtn.style.display = 'none'; }
     retryBtn.style.display = 'none';
     restartBtn.disabled = false;
   }
@@ -874,6 +902,113 @@ function resetMix() {
   mixStateStepId = 0;
   currentSessionSaved = false;
   window.currentSessionSaved = false;
+  resetMixFeedbackFlags();
+}
+
+// ── Scalar multiply (×2 refine) ──────────────────────────────────────────
+let _scalarUsedThisAttempt = false;
+
+function scalarMultiply(factor) {
+  for (const color in dropCounts) {
+    dropCounts[color] *= factor;
+  }
+  document.querySelectorAll('.color-circle').forEach(circle => {
+    const color = circle.dataset.color;
+    if (color && dropCounts[color] !== undefined) {
+      circle.textContent = String(dropCounts[color]);
+    }
+  });
+  document.querySelectorAll('.drop-badge').forEach(badge => {
+    const color = badge.dataset.badgeFor;
+    if (color && dropCounts[color] !== undefined) {
+      badge.textContent = String(dropCounts[color]);
+    }
+  });
+  updateRecipeStrip(dropCounts);
+  updateCurrentMix();
+  _scalarUsedThisAttempt = true;
+  if (telemetryAttempt) {
+    telemetryEventBuffer.push({
+      event_type: 'scalar_multiply',
+      step_id: mixStateStepId,
+      amount: factor,
+      ts: Date.now(),
+    });
+  }
+}
+
+// ── Personalized feedback during mixing ──────────────────────────────────
+window.__colorBestDeltaE = {};
+let _pbToastFired = false;
+let _nearPbToastFired = false;
+let _momentumToastFired = false;
+let _overshootToastFired = false;
+let _refineTipFired = false;
+let _returningToastFired = false;
+let _deltaEHistory = [];
+let _sessionStartTs = null;
+
+function resetMixFeedbackFlags() {
+  _pbToastFired = false;
+  _nearPbToastFired = false;
+  _momentumToastFired = false;
+  _overshootToastFired = false;
+  _refineTipFired = false;
+  _returningToastFired = false;
+  _scalarUsedThisAttempt = false;
+  _deltaEHistory = [];
+}
+
+function maybePersonalizedMixFeedback(deltaE, targetColorId) {
+  if (!Number.isFinite(deltaE) || !targetColorId) return;
+  const pb = window.__colorBestDeltaE[targetColorId];
+
+  _deltaEHistory.push(deltaE);
+
+  if (pb != null && !_pbToastFired && deltaE < pb) {
+    _pbToastFired = true;
+    showToast('New personal best! You\'re beating your previous record.', 'levelup', 3500);
+    return;
+  }
+
+  if (pb != null && !_nearPbToastFired && !_pbToastFired && deltaE <= pb * 1.2) {
+    _nearPbToastFired = true;
+    showToast('Getting close to your best.', 'info', 2500);
+    return;
+  }
+
+  if (_deltaEHistory.length >= 4 && !_momentumToastFired) {
+    const recent = _deltaEHistory.slice(-3);
+    const prior = _deltaEHistory[_deltaEHistory.length - 4];
+    if (recent.every((v, i) => i === 0 ? v < prior : v < recent[i - 1])) {
+      _momentumToastFired = true;
+      showToast('Nice momentum — each drop is getting you closer.', 'info', 3000);
+      return;
+    }
+  }
+
+  if (_deltaEHistory.length >= 2 && !_overshootToastFired) {
+    const prev = _deltaEHistory[_deltaEHistory.length - 2];
+    if (deltaE > prev + 2 && prev < 10) {
+      _overshootToastFired = true;
+      showToast('Overshot a bit — try ×2 to refine with smaller steps.', 'info', 3500);
+      return;
+    }
+  }
+
+  if (!_refineTipFired && !_scalarUsedThisAttempt && deltaE < 5) {
+    _refineTipFired = true;
+    showToast('Close! Tap ×2 to double all drops — same color, finer control for the last mile.', 'info', 4500);
+  }
+}
+
+function maybeReturningPlayerToast(targetColorId) {
+  if (_returningToastFired || !targetColorId) return;
+  const pb = window.__colorBestDeltaE[targetColorId];
+  if (pb != null) {
+    _returningToastFired = true;
+    showToast(`You've matched this shade before (best: ΔE ${pb.toFixed(1)}). Can you do better?`, 'info', 4000);
+  }
 }
 
 window.addEventListener('storage', (e) => {
@@ -1019,6 +1154,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       const d = await res.json();
       if (d.status === 'success' && Array.isArray(d.colors) && d.colors.length > 0) {
         fullCatalog = d.colors;
+        window.__colorBestDeltaE = {};
+        d.colors.forEach(c => {
+          if (c.best_delta_e != null) window.__colorBestDeltaE[c.id] = c.best_delta_e;
+        });
         return true;
       }
     } catch { /* keep existing catalog */ }
@@ -1027,6 +1166,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function maybeRhythmFeedback(sessionN, reshuffled) {
     if (reshuffled || sessionN <= 0) return;
+    const pacing = window.__sessionPacing;
+    if (pacing) {
+      if (sessionN === pacing.done_enough_rounds) {
+        showToast('Great session — you\'ve done plenty. Come back fresh tomorrow!', 'info', 5000);
+        return;
+      }
+      if (sessionN === pacing.gentle_nudge_rounds) {
+        showToast('Nice stretch! Your eye learns best in shorter bursts.', 'info', 4000);
+        return;
+      }
+    }
     if (sessionN % 12 === 0) {
       showToast('Strong stretch — open Results anytime for awards and coverage.', 'info', 4200);
       return;
@@ -1042,6 +1192,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         'When stuck: one drop of black or white, then reassess.',
       ];
       showToast(tips[Math.floor(sessionN / 4) % tips.length], 'info', 3000);
+    }
+
+    if (pacing && _sessionStartTs) {
+      const minutesPlayed = (Date.now() - _sessionStartTs) / 60000;
+      if (minutesPlayed >= pacing.done_enough_minutes) {
+        showToast('You\'ve been mixing for a while — take a break, your eye will thank you.', 'info', 5000);
+      } else if (minutesPlayed >= pacing.gentle_nudge_minutes) {
+        showToast('Your colour perception stays sharpest in shorter sessions.', 'info', 4000);
+      }
     }
   }
 
@@ -1386,6 +1545,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.lastMixDeltaE = data.delta_e;
         updateMatchBar(data.delta_e);
         updateBufferedEventDelta(stepId, data.delta_e);
+        maybePersonalizedMixFeedback(data.delta_e, currentTargetColor?.id);
 
         if (isPerfectMatch(data.delta_e) && !currentSessionSaved) {
           stopTimer();
@@ -1423,6 +1583,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ── Button handlers ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', async () => {
     if (!requireAuthenticatedUser()) return;
+    _sessionStartTs = Date.now();
     dailyMode = null;
     if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
     setDailyChip(false);
@@ -1620,6 +1781,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       } catch (e) { /* the save-time colour fallback still applies */ }
     }
   });
+
+  // ── Refine (×2) button ─────────────────────────────────────────────────
+  const _refineBtn = document.getElementById('refineBtn');
+  if (_refineBtn) {
+    _refineBtn.addEventListener('click', () => {
+      const totalDrops = Object.values(dropCounts).reduce((a, b) => a + b, 0);
+      if (totalDrops === 0) return;
+      scalarMultiply(2);
+    });
+  }
 
   // ── Palette interaction ────────────────────────────────────────────────
   let _firstInteractionFired = false;

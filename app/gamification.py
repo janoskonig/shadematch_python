@@ -725,6 +725,12 @@ def compute_quota_progress(user_id: str) -> dict:
     )
 
     # ── Per-color map: hide-after-quota signals (`remaining == 0`) ─────────
+    best_delta_map = {}
+    if user_id:
+        for s in UserTargetColorStats.query.filter_by(user_id=user_id).all():
+            if s.best_delta_e is not None:
+                best_delta_map[s.target_color_id] = float(s.best_delta_e)
+
     color_quota_map = {}
     for tc in all_tracked:
         ac = stats_map.get(tc.id, 0)
@@ -738,6 +744,7 @@ def compute_quota_progress(user_id: str) -> dict:
             'attempt_count': ac,
             'quota_contribution': quota_contribution,
             'remaining': remaining,
+            'best_delta_e': best_delta_map.get(tc.id),
         }
 
     # ── Nearest deficit (within band, smallest remaining wins) ─────────────
@@ -854,6 +861,13 @@ def build_progress_response(user_id: str, user_progress, _catalog_size_ignored=N
         'xp': xp,
         'xp_in_level': xp_in_level,
         'xp_to_next_level': xp_to_next,
+        # ── Session pacing (ethical boundaries) ────────────────────
+        'session_pacing': {
+            'gentle_nudge_rounds': 15,
+            'done_enough_rounds': 25,
+            'gentle_nudge_minutes': 20,
+            'done_enough_minutes': 40,
+        },
     }
 
 
@@ -865,7 +879,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
                         is_probe=False):
     """
     Must be called inside an open db.session transaction.
-    Returns (xp_earned, new_awards, streak_event, level_up_event).
+    Returns (xp_earned, new_awards, streak_event, level_up_event, mastery_feedback).
 
     level_up_event is now quota-driven: fires when quota coverage crosses a
     level boundary. XP is still accumulated but never drives level or maxed state.
@@ -877,7 +891,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
     locked-band colours would corrupt the deterministic level recompute.
 
     streak_event values:
-        None | 'started' | 'same_day' | 'incremented' | 'freeze_consumed' | 'reset'
+        None | 'started' | 'same_day' | 'incremented' | 'freeze_consumed' | 'decayed' | 'restarted'
     level_up_event:
         None | {'from': int, 'to': int}
     """
@@ -931,8 +945,13 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             streak_event = 'freeze_consumed'
             up.last_activity_date = today
         else:
-            up.current_streak = 1
-            streak_event = 'reset'
+            days_missed = (today - last).days - 1
+            old_streak = up.current_streak
+            up.current_streak = max(0, up.current_streak - days_missed) + 1
+            if old_streak > 0 and up.current_streak > 1:
+                streak_event = 'decayed'
+            else:
+                streak_event = 'restarted'
             up.last_activity_date = today
 
         up.longest_streak = max(up.longest_streak, up.current_streak)
@@ -963,6 +982,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             })
 
     # ── Color stats + quota awards ────────────────────────────────────────
+    mastery_feedback = None
     color_crossed_quota = False
 
     # Only attempts that landed in a completed bucket (perfect match, or a skip
@@ -982,14 +1002,23 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             )
             db.session.add(stats)
 
+        old_best_delta_e = stats.best_delta_e
         old_count = stats.attempt_count
         if counts_toward_quota:
             stats.attempt_count += 1
         if not skipped:
             stats.completed_count += 1
-        if delta_e is not None and (stats.best_delta_e is None or delta_e < stats.best_delta_e):
+        is_new_pb = (delta_e is not None
+                     and (stats.best_delta_e is None or delta_e < stats.best_delta_e))
+        if is_new_pb:
             stats.best_delta_e = delta_e
         stats.last_attempt_at = datetime.utcnow()
+        mastery_feedback = {
+            'is_new_pb': is_new_pb,
+            'old_best_delta_e': float(old_best_delta_e) if old_best_delta_e is not None else None,
+            'new_best_delta_e': float(stats.best_delta_e) if stats.best_delta_e is not None else None,
+            'delta_e': float(delta_e) if delta_e is not None else None,
+        }
 
         color_crossed_quota = (old_count < COVERAGE_QUOTA <= stats.attempt_count)
 
@@ -1083,7 +1112,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
                 })
     up.level = final_level
 
-    return xp_earned, new_awards, streak_event, level_up
+    return xp_earned, new_awards, streak_event, level_up, mastery_feedback
 
 
 # ---------------------------------------------------------------------------
@@ -1141,6 +1170,7 @@ def get_quota_ordered_catalog(user_id, full_catalog, quota=None):
         meta = cq.get(c['id'], {})
         c_copy['attempt_count'] = int(meta.get('attempt_count', 0))
         c_copy['under_quota'] = c_copy['attempt_count'] < COVERAGE_QUOTA
+        c_copy['best_delta_e'] = meta.get('best_delta_e')
         s = c.get('sum_drop_count')
         c_copy['unlocked'] = (
             s is not None

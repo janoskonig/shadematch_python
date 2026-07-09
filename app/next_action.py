@@ -1,12 +1,12 @@
 """
 Next-action policy: single server-authoritative CTA envelope.
 
-Policy version: v2  (quota-first)
+Policy version: v3  (mastery-first)
 Policy order:
   1. daily_unfinished  — final run for today not yet submitted
-  2. streak_at_risk    — active streak may lapse today
-  3. quota_deficit     — nearest actionable (unlocked) under-quota color
+  2. quota_deficit     — nearest actionable (unlocked) under-quota color
                          tie-break: smallest remaining, then lowest catalog_order
+  3. streak_welcome_back — active streak continuable today (demoted from #2)
   4. quota_maxed       — all colors mastered: maintenance goal
   4. quota_locked      — no unlocked deficit (shouldn't normally occur)
 
@@ -36,14 +36,14 @@ from .gamification import (
 )
 from .regions import region_of_target, TARGET_EXPOSURES_PER_REGION
 
-POLICY_VERSION = 'v2'
+POLICY_VERSION = 'v3'
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
-def _streak_at_risk(up: UserProgress, today: date) -> bool:
+def _streak_continuable(up: UserProgress, today: date) -> bool:
     """True iff the at-risk predicate holds — never fires for brand-new users."""
     if up is None or up.last_activity_date is None:
         return False
@@ -200,24 +200,7 @@ def build_next_action(user_id: str, today: date = None, quota=None):
             'payload': {'route': 'daily_challenge', 'challenge_date': policy_day},
         }
 
-    # ── 2. Streak at risk ─────────────────────────────────────────────────
-    if primary is None and _streak_at_risk(up, today):
-        tc, remaining = _nearest_deficit_pair()
-        primary = {
-            'id': 'streak_at_risk',
-            'type': 'practice',
-            'label': 'Save your streak',
-            'reason': (
-                f'Your {up.current_streak}-day streak is on the line'
-                ' — play once today to keep it'
-            ),
-            'payload': {
-                'route': 'free_play',
-                'target_color_id': tc.id if tc else None,
-            },
-        }
-
-    # ── 3. Nearest unlocked quota deficit ────────────────────────────────
+    # ── 2. Nearest unlocked quota deficit ────────────────────────────────
     if primary is None and not is_maxed_out:
         tc, remaining = _nearest_deficit_pair()
         if tc:
@@ -257,6 +240,23 @@ def build_next_action(user_id: str, today: date = None, quota=None):
                 ),
                 'payload': {'route': 'free_play', 'target_color_id': None},
             }
+
+    # ── 3. Streak continuable (demoted — mastery before pressure) ───────
+    if primary is None and _streak_continuable(up, today):
+        tc, remaining = _nearest_deficit_pair()
+        primary = {
+            'id': 'streak_welcome_back',
+            'type': 'practice',
+            'label': 'Continue your journey',
+            'reason': (
+                f'Your {up.current_streak}-day streak — '
+                'pick up where you left off'
+            ),
+            'payload': {
+                'route': 'free_play',
+                'target_color_id': tc.id if tc else None,
+            },
+        }
 
     # ── 4. Maxed-out maintenance ──────────────────────────────────────────
     if primary is None and is_maxed_out:

@@ -2293,7 +2293,7 @@ def save_session():
             attempt_uuid, user_id, data.get('target_color_id'), skipped=skipped,
         )
 
-        xp_earned, new_awards, streak_event, level_up = process_progression(
+        xp_earned, new_awards, streak_event, level_up, mastery_feedback = process_progression(
             user_id=user_id,
             match_category=mc,
             skipped=skipped,
@@ -2319,6 +2319,7 @@ def save_session():
             'new_awards': new_awards,
             'streak_event': streak_event,
             'level_up': level_up,
+            'mastery_feedback': mastery_feedback,
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
@@ -2388,7 +2389,7 @@ def save_skip():
             attempt_uuid, user_id, data.get('target_color_id'), skipped=True,
         )
 
-        xp_earned, new_awards, streak_event, level_up = process_progression(
+        xp_earned, new_awards, streak_event, level_up, mastery_feedback = process_progression(
             user_id=user_id,
             match_category=mc,
             skipped=True,
@@ -2409,6 +2410,7 @@ def save_skip():
             'new_awards': new_awards,
             'streak_event': streak_event,
             'level_up': level_up,
+            'mastery_feedback': mastery_feedback,
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
@@ -4034,78 +4036,78 @@ def push_unsubscribe():
 # {completed}, {total}.
 
 CTA_PUSH_STREAK = [
-    {'title': '🔥 Day {streak}. Don\'t blow it.',
-     'body': 'One 60-second mix keeps your streak breathing. That\'s it. That\'s the ask.'},
-    {'title': 'Your {streak}-day streak is sweating',
-     'body': 'It survived this long. Don\'t let today be the day it didn\'t.'},
-    {'title': 'Streaks don\'t die. They\'re abandoned.',
-     'body': '{streak} days strong. Open the app, mix one color, stay legendary.'},
-    {'title': 'This is a hostage situation 🔥',
-     'body': 'Your {streak}-day streak stays safe — as long as one color gets mixed today.'},
-    {'title': 'Quick maths: {streak} > 0',
-     'body': 'Keep it that way. One mix today and the streak lives on.'},
-    {'title': '{streak} days of perfect attendance',
-     'body': 'Don\'t make your streak start over from 1. It hates starting over.'},
+    {'title': 'Nice run — day {streak}! 🔥',
+     'body': 'Your color perception keeps sharpening. One mix today continues the momentum.'},
+    {'title': '{streak} days of colour science',
+     'body': 'No pressure — whenever you have a minute, a new shade is waiting.'},
+    {'title': 'Day {streak} and counting',
+     'body': 'Every session trains your eye a little more. Keep it rolling at your own pace.'},
+    {'title': '{streak} days strong 🎨',
+     'body': 'Your colour sense is building. One quick mix keeps the streak alive.'},
+    {'title': 'Your {streak}-day journey continues',
+     'body': 'Each day sharpens your eye. Today\'s colour is ready when you are.'},
+    {'title': 'Streak check: {streak} days',
+     'body': 'Impressive dedication. A single mix today keeps the rhythm going.'},
 ]
 
 CTA_PUSH_COLOR = [
-    {'title': '{color} is judging you',
-     'body': 'Only {rem} {rem_word} left to master it. It\'s basically begging at this point.'},
-    {'title': 'You left {color} on read',
-     'body': 'It needs {rem} more {rem_word}. Reply with drops.'},
-    {'title': '{color} won\'t mix itself',
-     'body': 'Believe us, it\'s tried. {rem} {rem_word} to go — finish the job.'},
+    {'title': '{color} is waiting to be explored',
+     'body': 'Only {rem} {rem_word} left — see how close you can get this time.'},
+    {'title': 'Ready for {color}?',
+     'body': '{rem} {rem_word} to go. Each attempt sharpens your colour sense.'},
+    {'title': '{color}: {rem} {rem_word} to mastery',
+     'body': 'You\'re getting closer with every mix. Give it another go.'},
     {'title': 'So close to mastering {color}',
-     'body': '{rem} {rem_word} left. Future you is already bragging about it.'},
-    {'title': 'A wild {color} appeared!',
-     'body': 'It\'s weak — {rem} {rem_word} from defeat. Choose your drops wisely.'},
+     'body': '{rem} {rem_word} left. Your eye has already improved — finish strong.'},
+    {'title': 'New attempt at {color}?',
+     'body': '{rem} more {rem_word} and this shade is yours. Each mix counts.'},
     {'title': 'Today\'s target: {color}',
-     'body': '{rem} {rem_word} between you and mastery. The pipette is right there.'},
+     'body': '{rem} {rem_word} to mastery. See if you can beat your personal best.'},
 ]
 
 CTA_PUSH_GENERIC = [
-    {'title': 'The pigments miss you 🎨',
-     'body': 'It\'s been a whole day. One mix and they\'ll stop sulking.'},
+    {'title': 'New challenge is live 🎨',
+     'body': 'Today\'s color is ready — see how close you can match it.'},
     {'title': 'Doing science today?',
      'body': 'Every mix you make is a real data point in a real study. Be the data.'},
-    {'title': '5 pigments. 1 target. 0 excuses.',
-     'body': 'Today\'s challenge is live. Show it who owns the pipette.'},
-    {'title': 'Your daily color fix is ready',
-     'body': '60 seconds of mixing beats 60 minutes of scrolling. Probably.'},
-    {'title': 'Beep beep. Palette delivery 🚚',
-     'body': 'A fresh daily challenge just dropped. Sign here with 5 drops.'},
-    {'title': 'Color theory won\'t learn itself',
+    {'title': 'A fresh colour awaits',
      'body': 'Today\'s challenge is live — go mix something beautiful.'},
+    {'title': 'Your daily color challenge is ready',
+     'body': 'At your own pace — a quick mix sharpens your colour perception.'},
+    {'title': 'Fresh palette, fresh challenge 🎨',
+     'body': 'Today\'s shade is waiting. One mix and you\'re contributing to science.'},
+    {'title': 'Colour science at your pace',
+     'body': 'Today\'s challenge is live — mix when you\'re ready.'},
 ]
 
 CTA_PUSH_MAXED = [
-    {'title': 'Palette master. Streak guardian?',
-     'body': 'Every color is mastered — the only thing left to lose is your streak. Don\'t.'},
-    {'title': 'Nothing left to prove. Except today.',
-     'body': 'One quick mix keeps your run alive. Masters don\'t skip.'},
-    {'title': 'The catalog fears you',
-     'body': 'You\'ve mastered every shade. Defend your streak with one mix today.'},
+    {'title': 'Palette master — what\'s next?',
+     'body': 'Every color is mastered. Push your precision further — aim for a new personal best.'},
+    {'title': 'All shades mastered 🏆',
+     'body': 'Challenge yourself: try to lower your best delta-E on any color.'},
+    {'title': 'The catalog bows to you',
+     'body': 'Every shade is complete. Refine your technique with today\'s daily challenge.'},
 ]
 
 CTA_EMAIL_SUBJECT_STREAK = [
-    '🔥 Your {streak}-day streak is on the line',
-    'Day {streak}: don\'t stop now',
-    'One mix keeps the streak alive',
-    'Your streak survived {streak} days. Then came today.',
+    '🔥 {streak}-day momentum — keep it going',
+    'Day {streak}: your colour sense is growing',
+    'Your {streak}-day streak continues',
+    'Nice run! {streak} days of colour science',
 ]
 
 CTA_EMAIL_SUBJECT_COLOR = [
-    '{color} is still waiting for you',
+    '{color} — a new challenge awaits',
     '{rem} {rem_word} from mastering {color}',
-    'You left {color} unfinished…',
-    'Today\'s mission: {color}',
+    '{color} is ready for another attempt',
+    'Today\'s target: {color}',
 ]
 
 CTA_EMAIL_SUBJECT_GENERIC = [
-    'The pigments miss you 🎨',
-    'Your daily challenge is getting cold',
-    '60 seconds. 5 drops. Go.',
-    'Science needs you (seriously)',
+    'A fresh colour challenge is ready 🎨',
+    'Your daily challenge awaits',
+    'New shade to explore today',
+    'Science needs you — at your own pace',
 ]
 
 
@@ -4221,13 +4223,13 @@ def push_send_daily():
         }
 
     def _pick_cta_pool(ctx, streak_pool, color_pool, generic_pool, maxed_pool):
-        """Priority: maxed-out > streak in danger (>=3) > specific color > generic."""
+        """Priority: maxed-out > specific color > streak (>=7) > generic."""
         if ctx['is_maxed_out']:
             return maxed_pool
-        if ctx['current_streak'] >= 3:
-            return streak_pool
         if ctx['best_tc']:
             return color_pool
+        if ctx['current_streak'] >= 7:
+            return streak_pool
         return generic_pool
 
     def _build_push_payload(user_id):
@@ -4251,8 +4253,7 @@ def push_send_daily():
         fields = _cta_fields(ctx)
 
         def _subject(pool):
-            # Streak-danger copy wins whenever there is a streak worth guarding.
-            if ctx['current_streak'] >= 3:
+            if ctx['current_streak'] >= 7:
                 pool = CTA_EMAIL_SUBJECT_STREAK
             return _pick_daily_cta(pool, user.id).format(**fields)
 
@@ -4269,8 +4270,8 @@ def push_send_daily():
             return {
                 'subject': _subject(CTA_EMAIL_SUBJECT_GENERIC),
                 'eyebrow': 'You mastered the palette',
-                'headline': "Keep your streak alive today",
-                'subhead': "Every color in the catalog is mastered. A single mix today keeps your run going — go for a personal best Delta-E?",
+                'headline': "Continue your colour science today",
+                'subhead': "Every color in the catalog is mastered. Try for a new personal best delta-E — see how precise your eye has become.",
                 'preheader': 'A quick mix today protects your streak.',
                 'cta_url': cta_url,
                 'cta_label': 'Open today\'s challenge →',
@@ -4285,7 +4286,7 @@ def push_send_daily():
             return {
                 'subject': _subject(CTA_EMAIL_SUBJECT_COLOR),
                 'eyebrow': "Today's target color",
-                'headline': f"{best_tc.name} is calling, {user.id}",
+                'headline': f"{best_tc.name} is ready for you",
                 'subhead': f"You're {ctx['best_rem']} {attempts_word} away from mastering this shade. Today is a great day to close it out.",
                 'preheader': f"{best_tc.name} needs {ctx['best_rem']} more {attempts_word} — open the daily challenge.",
                 'swatch_hex': swatch_hex,
@@ -4301,7 +4302,7 @@ def push_send_daily():
             'subject': _subject(CTA_EMAIL_SUBJECT_GENERIC),
             'eyebrow': "Today's palette",
             'headline': "Your daily challenge is ready",
-            'subhead': "Mix today's colors and watch your progress climb. Even one attempt keeps the streak alive.",
+            'subhead': "Mix today's colors and watch your progress climb. Even one attempt builds your colour perception.",
             'preheader': 'Open the daily challenge — every drop counts.',
             'cta_url': cta_url,
             'cta_label': "Open today's challenge →",
