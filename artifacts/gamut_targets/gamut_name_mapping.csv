@@ -1,0 +1,333 @@
+id,old_name,new_name,r,g,b,de00
+65,Gamut 001,Blue,0,0,255,0.0
+66,Gamut 002,Red,255,0,0,0.0
+67,Gamut 003,Yellow,255,255,0,0.0
+68,Gamut 004,White,255,255,255,0.0
+69,Gamut 005,Clover,56,82,10,3.74
+70,Gamut 006,Turkish Rose,196,108,119,4.78
+71,Gamut 007,Faded Jade,59,125,123,1.97
+72,Gamut 008,Torch Red,255,34,49,2.3
+73,Gamut 009,Black Russian,3,1,29,2.49
+74,Gamut 010,Pine Tree,22,34,4,2.09
+75,Gamut 011,Brown Bramble,95,36,5,3.14
+76,Gamut 012,Vivid Tangerine,255,162,131,3.04
+77,Gamut 013,Guardsman Red,218,5,0,6.69
+78,Gamut 014,Jacaranda,51,3,47,1.64
+79,Gamut 015,Lonestar,102,8,0,1.6
+80,Gamut 016,Maroon,131,9,0,1.34
+81,Gamut 017,Bouquet,165,127,164,3.49
+82,Gamut 018,Feijoa,149,202,121,4.64
+83,Gamut 019,Rio Grande,196,211,77,4.03
+84,Gamut 020,Macaroni and Cheese,255,188,133,1.67
+85,Gamut 021,Cherokee,255,220,155,0.65
+86,Gamut 022,Stratos,5,1,58,1.53
+87,Gamut 023,Cinnamon,123,64,10,1.4
+88,Gamut 024,Avocado,134,139,108,2.7
+89,Gamut 025,Lemon Ginger,169,159,28,1.2
+90,Gamut 026,Affair,136,75,152,5.24
+91,Gamut 027,Red Ribbon,234,36,61,1.91
+92,Gamut 028,Blue Smoke,109,139,134,3.22
+93,Gamut 029,Thatch,185,163,156,2.31
+94,Gamut 030,Pine Glade,186,194,131,3.01
+95,Gamut 031,Denim,51,96,204,3.98
+96,Gamut 032,Lima,126,193,62,2.98
+97,Gamut 033,Supernova,255,201,18,0.38
+98,Gamut 034,Kumera,152,102,25,4.35
+99,Gamut 035,Olive Drab,126,156,59,5.37
+100,Gamut 036,Silver Chalice,168,165,164,2.43
+101,Gamut 037,Bud,163,171,158,2.28
+102,Gamut 038,Turbo,255,229,10,1.38
+103,Gamut 039,Chartreuse Yellow,218,241,16,3.0
+104,Gamut 040,Sweet Corn,255,230,136,2.28
+105,Gamut 041,Negroni,255,229,205,1.78
+106,Gamut 042,Half and Half,255,255,227,0.51
+107,Gamut 043,Deep Sapphire,23,40,100,1.66
+108,Gamut 044,Royal Heath,164,50,137,6.48
+109,Gamut 045,Fern Frond,95,105,45,4.71
+110,Gamut 046,Amethyst,158,99,197,2.05
+111,Gamut 047,Trendy Green,125,131,16,2.29
+112,Gamut 048,Bandicoot,126,128,110,2.32
+113,Gamut 049,Twine,200,164,116,4.85
+114,Gamut 050,Lilac,215,171,213,3.28
+115,Gamut 051,Claret,119,17,52,2.55
+116,Gamut 052,Voodoo,92,66,107,5.52
+117,Gamut 053,Green Leaf,78,109,13,2.43
+118,Gamut 054,Fuchsia Blue,125,97,225,5.71
+119,Gamut 055,Muddy Waters,179,142,91,1.43
+120,Gamut 056,Muesli,176,143,103,3.07
+121,Gamut 057,Limed Spruce,43,67,77,3.66
+122,Gamut 058,Royal Blue,92,117,255,6.78
+123,Gamut 059,Limeade,115,148,15,3.24
+124,Gamut 060,Bittersweet,255,128,113,3.79
+125,Gamut 061,Eagle,182,183,159,1.58
+126,Gamut 062,Sun,255,175,24,0.84
+127,Gamut 063,International Klein Blue,24,29,182,5.04
+128,Gamut 064,Punga,88,70,39,4.56
+129,Gamut 065,Gun Powder,73,74,102,3.89
+130,Gamut 066,Fern Green,73,123,60,1.95
+131,Gamut 067,Matrix,169,103,88,4.16
+132,Gamut 068,Lynch,104,123,167,4.66
+133,Gamut 069,Pharlap,155,127,119,3.21
+134,Gamut 070,Burning Sand,206,147,119,2.53
+135,Gamut 071,Dull Lavender,165,160,244,3.56
+136,Gamut 072,Neon Carrot,255,149,68,3.94
+137,Gamut 073,Lily,193,173,194,3.15
+138,Gamut 074,Moon Raker,218,204,238,2.82
+139,Gamut 075,Brown Tumbleweed,51,38,5,1.74
+140,Gamut 076,Blue Diamond,62,0,117,1.09
+141,Gamut 077,Thatch Green,63,68,37,4.75
+142,Gamut 078,Copper Canyon,135,49,8,3.47
+143,Gamut 079,Cerulean Blue,45,79,208,2.94
+144,Gamut 080,Mule Fawn,156,73,48,3.55
+145,Gamut 081,Potters Clay,140,92,67,2.59
+146,Gamut 082,Toast,155,106,88,2.52
+147,Gamut 083,Meteor,193,120,21,3.32
+148,Gamut 084,True V,142,120,230,2.85
+149,Gamut 085,Hillary,182,173,130,4.03
+150,Gamut 086,Mandys Pink,255,200,187,3.37
+151,Gamut 087,Cosmos,255,217,221,1.23
+152,Gamut 088,Charade,42,40,55,1.32
+153,Gamut 089,Paprika,154,15,60,5.9
+154,Gamut 090,Emperor,87,81,83,4.37
+155,Gamut 091,Vin Rouge,158,43,87,3.76
+156,Gamut 092,Cape Palliser,169,109,75,2.7
+157,Gamut 093,Limed Oak,158,124,87,6.31
+158,Gamut 094,Contessa,194,124,117,3.2
+159,Gamut 095,Persimmon,255,94,79,2.85
+160,Gamut 096,Burnt Sienna,233,124,80,3.22
+161,Gamut 097,Sorrell Brown,202,185,151,2.36
+162,Gamut 098,Cameo,217,181,150,1.54
+163,Gamut 099,Inch Worm,183,225,32,1.34
+164,Gamut 100,Dandelion,255,220,100,1.15
+165,Gamut 101,Sepia Black,43,4,20,5.17
+166,Gamut 102,Eclipse,49,25,22,1.98
+167,Gamut 103,Valhalla,44,25,74,1.44
+168,Gamut 104,Mulberry Wood,87,5,48,1.6
+169,Gamut 105,Turtle Green,38,58,7,1.98
+170,Gamut 106,Dark Blue,15,0,196,0.48
+171,Gamut 107,Bronze Olive,74,69,10,3.09
+172,Gamut 108,Studio,110,72,178,0.8
+173,Gamut 109,Thunderbird,207,41,27,2.97
+174,Gamut 110,Cement,151,108,71,7.79
+175,Gamut 111,Terracotta,206,108,84,4.21
+176,Gamut 112,Donkey Brown,171,143,125,5.57
+177,Gamut 113,Gurkha,152,152,110,4.23
+178,Gamut 114,Fern,103,171,104,3.58
+179,Gamut 115,Gumbo,115,168,173,3.83
+180,Gamut 116,Apricot,198,151,135,9.05
+181,Gamut 117,Locust,164,169,135,1.84
+182,Gamut 118,Cashmere,216,185,166,3.33
+183,Gamut 119,Disco,135,5,82,1.75
+184,Gamut 120,Daisy Bush,96,35,152,3.09
+185,Gamut 121,St Tropaz,44,86,139,2.28
+186,Gamut 122,Night Shadz,153,67,86,4.17
+187,Gamut 123,Blue Violet,113,65,205,6.96
+188,Gamut 124,Copper Rust,156,74,70,2.49
+189,Gamut 125,Trendy Pink,134,91,145,3.21
+190,Gamut 126,Cadillac,178,79,121,4.01
+191,Gamut 127,Tuscany,185,83,39,3.45
+192,Gamut 128,Chestnut,190,77,75,1.45
+193,Gamut 129,Grenadier,207,78,18,1.67
+194,Gamut 130,Sycamore,135,130,58,4.19
+195,Gamut 131,Hemp,143,123,127,4.17
+196,Gamut 132,Clay Creek,137,134,93,2.59
+197,Gamut 133,Mountain Mist,146,143,142,2.61
+198,Gamut 134,Apple,102,165,66,3.1
+199,Gamut 135,Teak,169,154,103,5.06
+200,Gamut 136,West Side,252,141,27,1.79
+201,Gamut 137,Tumbleweed,218,163,129,1.24
+202,Gamut 138,Tea,189,182,172,1.07
+203,Gamut 139,Flesh,255,207,166,1.65
+204,Gamut 140,Cream,255,255,202,2.02
+205,Gamut 141,Cod Gray,24,22,20,3.13
+206,Gamut 142,Arapawa,7,1,96,2.83
+207,Gamut 143,Saddle Brown,86,53,15,2.51
+208,Gamut 144,Crown of Thorns,121,43,38,2.53
+209,Gamut 145,Electric Violet,43,26,237,10.5
+210,Gamut 146,Blue Ribbon,40,65,255,10.83
+211,Gamut 147,Spicy Mix,135,97,76,6.21
+212,Gamut 148,Coffee,117,104,81,2.99
+213,Gamut 149,Hawaiian Tan,158,93,42,3.04
+214,Gamut 150,Rich Gold,166,89,16,2.17
+215,Gamut 151,Mojo,200,66,52,1.58
+216,Gamut 152,Yellow Metal,138,111,65,7.45
+217,Gamut 153,Beaver,145,108,95,3.54
+218,Gamut 154,Almond Frost,167,121,113,8.88
+219,Gamut 155,Barley Corn,160,134,81,2.34
+220,Gamut 156,Old Rose,182,123,126,2.53
+221,Gamut 157,Copper,179,128,92,7.53
+222,Gamut 158,Charm,223,99,143,4.05
+223,Gamut 159,Lemon Grass,144,146,130,3.9
+224,Gamut 160,Del Rio,168,139,138,5.49
+225,Gamut 161,Burning Orange,255,122,61,2.17
+226,Gamut 162,Pink Salmon,255,144,158,1.65
+227,Gamut 163,Perano,179,197,255,2.31
+228,Gamut 164,Cotton Candy,245,182,201,3.38
+229,Gamut 165,Moss Green,180,215,161,3.67
+230,Gamut 166,Brown Pod,62,22,3,1.51
+231,Gamut 167,Torea Bay,21,42,159,1.04
+232,Gamut 168,Eggplant,83,53,73,4.15
+233,Gamut 169,Tom Thumb,54,89,46,4.49
+234,Gamut 170,Au Chico,139,91,82,4.21
+235,Gamut 171,Cactus,89,116,83,2.12
+236,Gamut 172,Yukon Gold,125,110,15,3.36
+237,Gamut 173,Go Ben,124,120,91,4.39
+238,Gamut 174,Vida Loca,86,135,48,4.5
+239,Gamut 175,Arrowtown,149,131,95,4.83
+240,Gamut 176,Careys Pink,180,145,153,6.89
+241,Gamut 177,Quicksand,187,149,145,2.29
+242,Gamut 178,My Pink,212,146,131,2.44
+243,Gamut 179,Chelsea Cucumber,141,172,117,4.69
+244,Gamut 180,Petite Orchid,215,153,147,1.45
+245,Gamut 181,Sushi,155,181,66,4.06
+246,Gamut 182,Nepal,144,181,214,4.32
+247,Gamut 183,Clam Shell,204,174,172,3.08
+248,Gamut 184,Earls Green,206,189,43,2.02
+249,Gamut 185,Cornflower Lilac,255,171,168,1.27
+250,Gamut 186,Surf Crest,211,228,208,1.67
+251,Gamut 187,Pale Canary,255,255,150,0.43
+252,Gamut 188,Jagger,48,1,78,2.62
+253,Gamut 189,Navy Blue,15,0,128,0.65
+254,Gamut 190,Maroon Oak,82,6,23,1.25
+255,Gamut 191,Timber Green,37,54,44,4.21
+256,Gamut 192,Meteorite,67,36,125,1.75
+257,Gamut 193,Bossanova,78,42,103,3.53
+258,Gamut 194,Pigment Indigo,83,2,156,3.98
+259,Gamut 195,Bay of Many,31,65,148,3.62
+260,Gamut 196,Mineral Green,66,90,76,2.63
+261,Gamut 197,Shiraz,178,9,43,1.83
+262,Gamut 198,Casal,48,97,107,1.62
+263,Gamut 199,Vivid Violet,144,53,160,3.59
+264,Gamut 200,Opium,131,104,100,4.37
+265,Gamut 201,Sandstone,124,111,100,1.01
+266,Gamut 202,Smalt Blue,65,127,145,2.47
+267,Gamut 203,Santa Fe,173,117,93,3.19
+268,Gamut 204,Mountbatten Pink,164,126,136,4.56
+269,Gamut 205,Flame Pea,228,97,60,2.55
+270,Gamut 206,Copperfield,187,136,112,6.92
+271,Gamut 207,Cornflower Blue,112,146,254,3.65
+272,Gamut 208,Lucky,160,157,66,6.07
+273,Gamut 209,Oriental Pink,204,147,151,2.01
+274,Gamut 210,Portage,147,175,250,4.5
+275,Gamut 211,Eunry,215,169,162,1.88
+276,Gamut 212,Galliano,219,175,40,2.02
+277,Gamut 213,Wild Willow,177,194,105,1.73
+278,Gamut 214,Shadow Green,160,199,184,2.32
+279,Gamut 215,Swiss Coffee,215,212,212,1.95
+280,Gamut 216,Revolver,40,21,49,1.16
+281,Gamut 217,Lucky Point,16,24,100,1.22
+282,Gamut 218,Wine Berry,76,27,45,3.13
+283,Gamut 219,Cloud Burst,35,44,81,1.51
+284,Gamut 220,Cardinal Pink,124,8,106,5.72
+285,Gamut 221,Camelot,128,44,83,2.88
+286,Gamut 222,Tabasco,169,44,8,3.34
+287,Gamut 223,Roof Terracotta,163,53,36,1.15
+288,Gamut 224,Roman Coffee,122,95,79,0.84
+289,Gamut 225,Shuttle Gray,91,106,123,3.42
+290,Gamut 226,Rum,119,102,140,2.1
+291,Gamut 227,Shadow,125,110,73,3.04
+292,Gamut 228,Copper Rose,154,104,107,1.51
+293,Gamut 229,Spring Leaves,76,138,102,3.54
+294,Gamut 230,Pesto,143,125,78,7.69
+295,Gamut 231,Makara,141,125,106,1.94
+296,Gamut 232,Highland,114,139,89,2.81
+297,Gamut 233,Fuchsia Pink,178,106,186,5.34
+298,Gamut 234,Roman,231,90,91,2.1
+299,Gamut 235,Sandal,164,131,105,4.02
+300,Gamut 236,Squirrel,149,135,124,2.17
+301,Gamut 237,Hot Cinnamon,214,110,23,2.39
+302,Gamut 238,Patina,90,154,138,2.48
+303,Gamut 239,Vermilion,255,84,28,1.98
+304,Gamut 240,Pale Oyster,154,143,118,1.3
+305,Gamut 241,Sage,145,157,131,3.56
+306,Gamut 242,Blue Bell,153,152,191,3.24
+307,Gamut 243,Danube,120,158,209,4.47
+308,Gamut 244,Pizza,200,147,34,1.16
+309,Gamut 245,Mongoose,174,158,124,1.83
+310,Gamut 246,Bay Leaf,126,181,149,3.69
+311,Gamut 247,Cold Purple,183,165,224,2.59
+312,Gamut 248,Sea Buckthorn,240,162,61,2.58
+313,Gamut 249,Laser,204,183,107,0.93
+314,Gamut 250,Key Lime Pie,200,203,17,2.13
+315,Gamut 251,Saffron Mango,255,190,73,1.97
+316,Gamut 252,Beryl Green,216,218,172,3.85
+317,Gamut 253,Pompadour,93,3,77,3.96
+318,Gamut 254,Finn,98,43,84,1.97
+319,Gamut 255,Persian Blue,55,53,191,2.86
+320,Gamut 256,Plum,131,49,114,1.63
+321,Gamut 257,Victoria,94,67,148,2.56
+322,Gamut 258,Antique Bronze,111,80,18,2.92
+323,Gamut 259,Bahama Blue,52,106,142,4.03
+324,Gamut 260,Hippie Pink,183,65,89,3.05
+325,Gamut 261,Brick Red,200,53,78,2.88
+326,Gamut 262,Cerise Red,206,51,101,3.73
+327,Gamut 263,Tapestry,169,98,121,3.26
+328,Gamut 264,Radical Red,240,60,91,2.48
+329,Gamut 265,Mulberry,194,100,167,7.16
+330,Gamut 266,Havelock Blue,96,130,218,6.22
+331,Gamut 267,Mandy,204,102,115,5.42
+332,Gamut 268,Japonica,190,119,100,5.44
+333,Gamut 269,Sunglo,181,125,112,11.03
+334,Gamut 270,Boston Blue,91,145,179,4.3
+335,Gamut 271,Ship Cove,108,138,206,4.29
+336,Gamut 272,Raw Sienna,199,124,66,2.92
+337,Gamut 273,Purple Mountain's Majesty,170,125,192,4.51
+338,Gamut 274,Regent Gray,127,144,163,3.67
+339,Gamut 275,Antique Brass,200,134,102,2.33
+340,Gamut 276,Pumpkin,255,119,28,0.43
+341,Gamut 277,Di Serria,219,159,88,3.93
+342,Gamut 278,Zinnwaldite,199,165,146,8.34
+343,Gamut 279,Tonys Pink,224,168,149,3.69
+344,Gamut 280,Tan Hide,253,162,98,1.34
+345,Gamut 281,Sulu,174,219,108,4.72
+346,Gamut 282,Spindle,190,211,230,2.3
+347,Gamut 283,Deco,221,231,154,3.28
+348,Gamut 284,Golden Fizz,242,250,78,1.45
+349,Gamut 285,Canary,242,250,115,1.88
+350,Gamut 286,Honey Flower,98,0,115,4.81
+351,Gamut 287,Mondo,68,54,43,2.01
+352,Gamut 288,Buccaneer,98,50,51,1.04
+353,Gamut 289,Eminence,103,35,114,3.76
+354,Gamut 290,Tawny Port,110,54,75,4.65
+355,Gamut 291,Pohutukawa,144,28,37,2.37
+356,Gamut 292,Nutmeg,113,60,41,3.78
+357,Gamut 293,Governor Bay,54,63,166,2.12
+358,Gamut 294,Purple Heart,84,51,220,4.42
+359,Gamut 295,Butterfly Bush,91,79,140,3.21
+360,Gamut 296,Cobalt,42,72,228,8.82
+361,Gamut 297,Falcon,124,83,104,6.36
+362,Gamut 298,Cannon Pink,144,76,119,3.96
+363,Gamut 299,Tobacco Brown,124,96,66,3.93
+364,Gamut 300,San Marino,53,103,180,2.39
+365,Gamut 301,Medium Red Violet,188,55,122,3.03
+366,Gamut 302,Blue Marguerite,111,104,188,2.36
+367,Gamut 303,Domino,139,116,88,1.71
+368,Gamut 304,Leather,150,113,88,1.03
+369,Gamut 305,Bazaar,151,115,117,1.84
+370,Gamut 306,Coral Tree,170,108,104,1.7
+371,Gamut 307,Kimberly,127,117,178,4.71
+372,Gamut 308,Friar Gray,131,126,120,1.63
+373,Gamut 309,Driftwood,169,125,75,3.67
+374,Gamut 310,Wasabi,125,146,73,5.59
+375,Gamut 311,Martini,179,136,122,11.5
+376,Gamut 312,Hopbush,199,125,163,4.5
+377,Gamut 313,Brandy Rose,192,138,132,1.16
+378,Gamut 314,Dusty Gray,166,149,152,0.97
+379,Gamut 315,Zorba,165,151,140,2.11
+380,Gamut 316,Sandrift,177,149,120,2.47
+381,Gamut 317,Brink Pink,253,105,130,1.88
+382,Gamut 318,Marigold,187,150,61,3.33
+383,Gamut 319,Tacao,194,149,115,10.05
+384,Gamut 320,Gray Olive,164,160,138,1.93
+385,Gamut 321,Whiskey,201,149,105,2.83
+386,Gamut 322,New York Pink,234,135,125,4.17
+387,Gamut 323,Rodeo Dust,200,163,131,5.97
+388,Gamut 324,Pistachio,149,183,19,3.03
+389,Gamut 325,Malta,185,168,149,3.68
+390,Gamut 326,Mauvelous,239,152,180,2.63
+391,Gamut 327,Tan,205,177,134,1.65
+392,Gamut 328,Tacha,214,200,93,1.47
+393,Gamut 329,Conifer,170,219,72,0.58
+394,Gamut 330,Golden Tainoi,250,198,104,3.03
+395,Gamut 331,Yellow Green,209,227,125,2.32
+396,Gamut 332,Golden Dream,248,222,67,2.21

@@ -102,6 +102,8 @@ def main():
         total_after = TargetColor.query.count()
         print(f'INSERTED {len(rows)} gamut targets. catalog rows now: {total_after}')
         print("rollback: DELETE FROM target_colors WHERE color_type = 'gamut';")
+        print('next: python3 scripts/rename_gamut_targets.py --env <env> --commit '
+              '(replaces Gamut NNN with friendly color names)')
 
 
 if __name__ == '__main__':
