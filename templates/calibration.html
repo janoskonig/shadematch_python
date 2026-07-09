@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Eye calibration — ShadeMatch{% endblock %}
+{% block title %}{{ t('Eye calibration — ShadeMatch') }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
@@ -64,41 +64,33 @@
 {% block content %}
 <div class="cal-wrap">
   <header class="cal-header">
-    <h1>Eye calibration</h1>
-    <a href="/" class="btn btn-secondary">← Main app</a>
+    <h1>{{ t('Eye calibration') }}</h1>
+    <a href="/" class="btn btn-secondary">{{ t('← Main app') }}</a>
   </header>
 
   <!-- Registration gate: the calibration game is for registered players only (data is tied
        to a consented participant and pooled per user across sessions). -->
   <section class="cal-card cal-hidden" id="calGate">
-    <h2>Registered players only</h2>
+    <h2>{{ t('Registered players only') }}</h2>
     <p>
-      Eye calibration is part of the research study, so it's tied to your player ID. Open the
-      main app to create an ID (or sign in), then come back here — your progress will be saved
-      to that ID across sessions.
+      {{ t("Eye calibration is part of the research study, so it's tied to your player ID. Open the main app to create an ID (or sign in), then come back here — your progress will be saved to that ID across sessions.") }}
     </p>
-    <a href="/" class="btn btn-primary btn-lg">Go to the main app</a>
+    <a href="/" class="btn btn-primary btn-lg">{{ t('Go to the main app') }}</a>
   </section>
 
   <!-- Intro -->
   <section class="cal-card cal-hidden" id="calIntro">
-    <h2>How sharp are your eyes today?</h2>
+    <h2>{{ t('How sharp are your eyes today?') }}</h2>
     <p>
-      You'll see <strong>pairs of skin colours</strong>, one after another. For each pair you
-      answer up to two quick questions: first <strong>“Are they identical?”</strong> — and if
-      not, <strong>“Would that difference be acceptable on your face?”</strong> Some pairs are
-      identical, some are obvious; most are subtle. There are no right answers and no
-      feedback — just judge what you see.
+      {{ t("You'll see <strong>pairs of skin colours</strong>, one after another. For each pair you answer up to two quick questions: first <strong>“Are they identical?”</strong> — and if not, <strong>“Would that difference be acceptable on your face?”</strong> Some pairs are identical, some are obvious; most are subtle. There are no right answers and no feedback — just judge what you see.")|safe }}
     </p>
     <p>
-      It takes under <strong>2 minutes</strong>. Best on a non-dimmed screen in even lighting.
-      Do it across a few short sessions on different days — that's by design, and the picture
-      of your eyes gets sharper each time. <span id="calUserLine" style="opacity:.7;"></span>
+      {{ t("It takes under <strong>2 minutes</strong>. Best on a non-dimmed screen in even lighting. Do it across a few short sessions on different days — that's by design, and the picture of your eyes gets sharper each time.")|safe }} <span id="calUserLine" style="opacity:.7;"></span>
     </p>
     <div class="cal-sessprog" id="calIntroProgress" style="margin-bottom:14px;"></div>
-    <button type="button" id="calStartBtn" class="btn btn-primary btn-lg">Start</button>
+    <button type="button" id="calStartBtn" class="btn btn-primary btn-lg">{{ t('Start') }}</button>
     <p class="cal-note" style="margin-top:12px;">
-      Tip: you can also press <span class="cal-kbd">1</span> for yes, <span class="cal-kbd">2</span> for no.
+      {{ t('Tip: you can also press <span class="cal-kbd">1</span> for yes, <span class="cal-kbd">2</span> for no.')|safe }}
     </p>
   </section>
 
@@ -106,20 +98,20 @@
   <section id="calRunner" class="cal-hidden">
     <div class="cal-progress"><div id="calProgressFill"></div></div>
     <div class="cal-count" id="calCount">—</div>
-    <div class="cal-stage" aria-label="Colour pair to compare">
+    <div class="cal-stage" aria-label="{{ t('Colour pair to compare') }}">
       <div class="cal-patch" id="calPatchA"></div>
       <div class="cal-patch" id="calPatchB"></div>
     </div>
-    <p class="cal-prompt" id="calPrompt">Are they identical?</p>
+    <p class="cal-prompt" id="calPrompt">{{ t('Are they identical?') }}</p>
     <div class="cal-btns">
-      <button type="button" class="btn btn-primary" data-ans="yes" id="calBtnYes"><span class="cal-kbd">1</span>Yes</button>
-      <button type="button" class="btn btn-secondary" data-ans="no" id="calBtnNo"><span class="cal-kbd">2</span>No</button>
+      <button type="button" class="btn btn-primary" data-ans="yes" id="calBtnYes"><span class="cal-kbd">1</span>{{ t('Yes') }}</button>
+      <button type="button" class="btn btn-secondary" data-ans="no" id="calBtnNo"><span class="cal-kbd">2</span>{{ t('No') }}</button>
     </div>
   </section>
 
   <!-- Results -->
   <section class="cal-card cal-hidden" id="calResult">
-    <h2 id="calResultTitle">Session complete</h2>
+    <h2 id="calResultTitle">{{ t('Session complete') }}</h2>
     <div class="cal-sessprog" id="calResultProgress"></div>
     <div class="cal-quality" id="calQuality"></div>
 
@@ -131,26 +123,24 @@
 
     <!-- Final: revealed once all sessions are done. -->
     <div id="calFinal" class="cal-hidden">
-      <div class="cal-subh">Your results</div>
+      <div class="cal-subh">{{ t('Your results') }}</div>
       <div class="cal-result-grid">
-        <div class="cal-metric"><div class="v" id="calPoolPt">—</div><div class="k">Perceptibility ΔE₀₀</div></div>
-        <div class="cal-metric"><div class="v" id="calPoolAt">—</div><div class="k">Acceptability ΔE₀₀</div></div>
+        <div class="cal-metric"><div class="v" id="calPoolPt">—</div><div class="k">{{ t('Perceptibility ΔE₀₀') }}</div></div>
+        <div class="cal-metric"><div class="v" id="calPoolAt">—</div><div class="k">{{ t('Acceptability ΔE₀₀') }}</div></div>
       </div>
       <div class="cal-history" id="calHistory"></div>
       <div class="cal-history-cap" id="calHistoryCap"></div>
       <p class="cal-note" id="calResultNote">
-        Pooled across all your sessions. The smaller the perceptibility figure, the finer the
-        colour differences you can tell apart; acceptability is how far a match can drift before
-        you'd call it too different on a face.
+        {{ t("Pooled across all your sessions. The smaller the perceptibility figure, the finer the colour differences you can tell apart; acceptability is how far a match can drift before you'd call it too different on a face.") }}
       </p>
     </div>
 
-    <button type="button" id="calAgainBtn" class="btn btn-primary btn-lg" style="margin-top:8px;">Next session</button>
-    <a href="/" class="btn btn-tertiary btn-lg" style="margin-top:8px;display:block;text-align:center;">Back to the game</a>
+    <button type="button" id="calAgainBtn" class="btn btn-primary btn-lg" style="margin-top:8px;">{{ t('Next session') }}</button>
+    <a href="/" class="btn btn-tertiary btn-lg" style="margin-top:8px;display:block;text-align:center;">{{ t('Back to the game') }}</a>
   </section>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='calibration.js') }}?v=20260622d"></script>
+<script src="{{ url_for('static', filename='calibration.js') }}?v=20260709-i18n1"></script>
 {% endblock %}

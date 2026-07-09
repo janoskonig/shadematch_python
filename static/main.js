@@ -3,7 +3,7 @@
 import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 import { captureEnv } from './env_capture.js?v=20260508-qc2';
 import { sfx } from './sfx.js?v=20260709';
-import { shareCard } from './share-card.js?v=20260709-cta2';
+import { shareCard } from './share-card.js?v=20260709-i18n1';
 
 console.log('✅ main.js loaded');
 let sessionLogs = [];
@@ -55,7 +55,7 @@ function getAuthenticatedUserId() {
 
 function promptLoginRequired(reason) {
   const msg = reason
-    || 'You must be logged in with a valid user ID to play. Please log in or register to continue.';
+    || t('You must be logged in with a valid user ID to play. Please log in or register to continue.');
   try {
     if (typeof showToast === 'function') {
       showToast(msg, 'info', 5000);
@@ -503,7 +503,7 @@ function renderProgressStrip(p) {
   const quotaPct = p.level_progress_pct != null ? p.level_progress_pct : 0;
 
   const freezeHtml = p.streak_freeze_available > 0
-    ? `<span class="ps-freeze" title="Streak freezes available">🧊 ${p.streak_freeze_available}</span>`
+    ? `<span class="ps-freeze" title="${t('Streak freezes available')}">🧊 ${p.streak_freeze_available}</span>`
     : '';
 
   const completedColors = p.completed_colors != null ? p.completed_colors : 0;
@@ -511,17 +511,20 @@ function renderProgressStrip(p) {
   const coveragePct = p.catalog_coverage_pct != null ? p.catalog_coverage_pct.toFixed(1) : '0.0';
 
   const levelTitle = p.is_maxed_out
-    ? `${p.level_name} — All Colors Mastered!`
-    : `${p.level_name} — ${completedColors}/${totalColors} colors complete (${coveragePct}%)`;
+    ? `${p.level_name} — ${t('All Colors Mastered!')}`
+    : `${p.level_name} — ${t('{done}/{total} colors complete ({pct}%)').replace('{done}', String(completedColors)).replace('{total}', String(totalColors)).replace('{pct}', String(coveragePct))}`;
+
+  const colorsAtQuotaTitle = t('{done} of {total} colors at quota')
+    .replace('{done}', String(completedColors)).replace('{total}', String(totalColors));
 
   strip.innerHTML = `
-    <div class="ps-rank" style="color:${p.rank_color}" title="${p.rank}">${p.rank}</div>
+    <div class="ps-rank" style="color:${p.rank_color}" title="${t(p.rank)}">${t(p.rank)}</div>
     <div class="ps-level">${p.level_name}</div>
     <div class="ps-xpbar-wrap" title="${levelTitle}">
       <div class="ps-xpbar-fill" style="width:${quotaPct}%"></div>
     </div>
-    <div class="ps-colors" title="${completedColors} of ${totalColors} colors at quota">${completedColors}/${totalColors}</div>
-    <div class="ps-streak" title="Current streak">🔥 ${p.current_streak}</div>
+    <div class="ps-colors" title="${colorsAtQuotaTitle}">${completedColors}/${totalColors}</div>
+    <div class="ps-streak" title="${t('Current streak')}">🔥 ${p.current_streak}</div>
     ${freezeHtml}
   `;
   strip.style.display = 'flex';
@@ -567,22 +570,22 @@ async function handleProgressionResponse(data) {
   // Phase 3 — Level-up (quota-based)
   if (data.level_up) {
     const p = data.progress;
-    const colorsCtx = p ? ` (${p.completed_colors}/${p.total_tracked_colors} colors)` : '';
-    showToast(`⬆️ Level ${data.level_up.to} reached${colorsCtx}`, 'levelup', 5500);
+    const colorsCtx = p ? ' ' + t('({done}/{total} colors)').replace('{done}', String(p.completed_colors)).replace('{total}', String(p.total_tracked_colors)) : '';
+    showToast('⬆️ ' + t('Level {n} reached').replace('{n}', String(data.level_up.to)) + colorsCtx, 'levelup', 5500);
     await _delay(SEQ_GAP * 2); if (stale()) return;
   }
 
   // Phase 4 — Streak event
   if (data.streak_event === 'started') {
-    showToast('🔥 Streak started — play again tomorrow!', 'streak', 3500);
+    showToast(t('🔥 Streak started — play again tomorrow!'), 'streak', 3500);
   } else if (data.streak_event === 'incremented' && data.progress) {
     const s = data.progress.current_streak;
-    showToast(`🔥 ${s}-day streak!`, 'streak', 3000);
+    showToast(t('🔥 {n}-day streak!').replace('{n}', String(s)), 'streak', 3000);
   } else if (data.streak_event === 'freeze_consumed') {
     const freeze = data.progress ? data.progress.streak_freeze_available : '?';
-    showToast(`🧊 Streak protected — 1 freeze used (${freeze} left)`, 'freeze', 5000);
+    showToast(t('🧊 Streak protected — 1 freeze used ({n} left)').replace('{n}', String(freeze)), 'freeze', 5000);
   } else if (data.streak_event === 'reset') {
-    showToast('Streak reset. Keep going!', 'info', 3000);
+    showToast(t('Streak reset. Keep going!'), 'info', 3000);
   }
 
   await _delay(SEQ_GAP); if (stale()) return;
@@ -591,13 +594,13 @@ async function handleProgressionResponse(data) {
   renderHeatState(data.heat);
   if (data.heat && data.heat.consecutive != null) {
     const pct = Math.round((data.heat.bonus_pct || 0) * 100);
-    showToast(`🔥 On fire! ${data.heat.consecutive} in a row — +${pct}% XP`, 'streak', 3200);
+    showToast(t('🔥 On fire! {n} in a row — +{pct}% XP').replace('{n}', String(data.heat.consecutive)).replace('{pct}', String(pct)), 'streak', 3200);
     await _delay(SEQ_GAP); if (stale()) return;
   }
 
   // Phase 5 — XP (secondary reinforcement — shown after quota signals)
   if (data.xp_earned && data.xp_earned > 0) {
-    showToast(`+${data.xp_earned} XP`, 'xp', 2500);
+    showToast(t('+{n} XP').replace('{n}', String(data.xp_earned)), 'xp', 2500);
   }
 
   await _delay(SEQ_GAP); if (stale()) return;
@@ -641,7 +644,7 @@ function renderHeatState(heat) {
   }
   if (on) {
     const pct = Math.round((heat.bonus_pct || 0) * 100);
-    chip.textContent = `🔥 ${heat.consecutive} in a row · +${pct}% XP`;
+    chip.textContent = t('🔥 {n} in a row · +{pct}% XP').replace('{n}', String(heat.consecutive)).replace('{pct}', String(pct));
     chip.style.display = '';
   } else {
     chip.style.display = 'none';
@@ -696,7 +699,7 @@ function renderCtaSlot() {
   const cluster = actions.map((a, i) =>
     `<button type="button" class="btn btn-${a.variant || 'primary'} cta-action" data-cta-action="${i}">${a.label}</button>`);
   if (chosen.onDismiss) {
-    cluster.push('<button type="button" class="cta-dismiss" data-cta-dismiss aria-label="Dismiss">✕</button>');
+    cluster.push('<button type="button" class="cta-dismiss" data-cta-dismiss aria-label="' + t('Dismiss') + '">✕</button>');
   }
   if (cluster.length) parts.push(`<span class="cta-actions">${cluster.join('')}</span>`);
   if (chosen.reasonHtml) parts.push(`<span class="na-reason">${chosen.reasonHtml}</span>`);
@@ -766,20 +769,20 @@ function renderDailyStatusBadge(status) {
   el.classList.remove('daily-pending', 'daily-done', 'daily-playing');
   if (window.__dailyPlaying) {
     el.classList.add('daily-playing');
-    el.innerHTML = '📅<span class="daily-status-text">Daily…</span>';
-    el.title = 'Daily round in progress — save or skip to submit';
+    el.innerHTML = '📅<span class="daily-status-text">' + t('Daily…') + '</span>';
+    el.title = t('Daily round in progress — save or skip to submit');
     el.onclick = null;
     el.style.cursor = 'default';
   } else if (st.submitted) {
     el.classList.add('daily-done');
-    el.innerHTML = '📅<span class="daily-status-text">Daily ✓</span>';
-    el.title = "Today's challenge completed — come back tomorrow!";
+    el.innerHTML = '📅<span class="daily-status-text">' + t('Daily ✓') + '</span>';
+    el.title = t("Today's challenge completed — come back tomorrow!");
     el.onclick = null;
     el.style.cursor = 'default';
   } else {
     el.classList.add('daily-pending');
-    el.innerHTML = '📅<span class="daily-status-text">Daily</span><span class="daily-dot"></span>';
-    el.title = "Today's challenge is waiting — tap to play";
+    el.innerHTML = '📅<span class="daily-status-text">' + t('Daily') + '</span><span class="daily-dot"></span>';
+    el.title = t("Today's challenge is waiting — tap to play");
     el.onclick = () => { if (window.__startDailyChallenge) window.__startDailyChallenge(); };
     el.style.cursor = 'pointer';
   }
@@ -795,7 +798,7 @@ function renderDailyMissions(dm) {
   }).join('');
   setCta('missions', {
     icon: '📆',
-    labelHtml: `Daily missions ${completed}/${total}`,
+    labelHtml: t('Daily missions {done}/{total}').replace('{done}', String(completed)).replace('{total}', String(total)),
     reasonHtml: chips,
     variant: 'missions',
   });
@@ -840,7 +843,7 @@ function updateMatchBar(deltaE) {
   if (isPerfectMatch(deltaE)) {
     fill.style.width = '100%';
     fill.style.backgroundColor = 'var(--accent-success)';
-    label.textContent = 'Match!';
+    label.textContent = t('Match!');
     return;
   }
 
@@ -851,16 +854,16 @@ function updateMatchBar(deltaE) {
 
   if (progress < 19) {
     fill.style.backgroundColor = 'var(--accent-danger)';
-    label.textContent = 'Far';
+    label.textContent = t('Far');
   } else if (progress < 51) {
     fill.style.backgroundColor = 'var(--accent-warning)';
-    label.textContent = 'Closer';
+    label.textContent = t('Closer');
   } else if (progress < 85) {
     fill.style.backgroundColor = '#8BC34A';
-    label.textContent = 'Very close';
+    label.textContent = t('Very close');
   } else {
     fill.style.backgroundColor = '#8BC34A';
-    label.textContent = 'Nearly there!';
+    label.textContent = t('Nearly there!');
   }
 }
 
@@ -870,8 +873,10 @@ function updateProgressIndicator(currentIndex, total, visitCount) {
   const segEl = document.getElementById('progressSegments');
   if (!textEl || !segEl) return;
 
-  const suffix = visitCount != null && visitCount > 0 ? ` · ${visitCount} this visit` : '';
-  textEl.textContent = `Color ${currentIndex + 1} of ${total}${suffix}`;
+  const suffix = visitCount != null && visitCount > 0
+    ? ' · ' + t('{n} this visit').replace('{n}', String(visitCount))
+    : '';
+  textEl.textContent = t('Color {i} of {total}').replace('{i}', String(currentIndex + 1)).replace('{total}', String(total)) + suffix;
   segEl.innerHTML = '';
   for (let i = 0; i < total; i++) {
     const seg = document.createElement('div');
@@ -900,17 +905,17 @@ function setControlState(state) {
     restartBtn.disabled = true;
   } else if (state === 'mixing') {
     startBtn.style.display = 'none';
-    skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = 'Skip';
+    skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = t('Skip');
     retryBtn.style.display = ''; retryBtn.disabled = false;
     restartBtn.disabled = false;
   } else if (state === 'stopped') {
     startBtn.style.display = 'none';
-    skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = 'Skip';
+    skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = t('Skip');
     retryBtn.style.display = 'none';
     restartBtn.disabled = false;
   } else if (state === 'completed') {
     startBtn.style.display = 'none';
-    skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = 'Next color';
+    skipBtn.style.display = ''; skipBtn.disabled = false; skipBtn.textContent = t('Next color');
     retryBtn.style.display = 'none';
     restartBtn.disabled = false;
   }
@@ -1112,18 +1117,18 @@ document.addEventListener('DOMContentLoaded', async () => {
   function maybeRhythmFeedback(sessionN, reshuffled) {
     if (reshuffled || sessionN <= 0) return;
     if (sessionN % 12 === 0) {
-      showToast('Strong stretch — open Results anytime for awards and coverage.', 'info', 4200);
+      showToast(t('Strong stretch — open Results anytime for awards and coverage.'), 'info', 4200);
       return;
     }
     if (sessionN % 7 === 0) {
-      showToast('Coverage builds shade by shade. The strip above tracks your tier.', 'info', 3600);
+      showToast(t('Coverage builds shade by shade. The strip above tracks your tier.'), 'info', 3600);
       return;
     }
     if (sessionN % 4 === 0) {
       const tips = [
-        'Tiny nudges beat big jumps.',
-        'Compare the two squares from the side — distance reads clearer.',
-        'When stuck: one drop of black or white, then reassess.',
+        t('Tiny nudges beat big jumps.'),
+        t('Compare the two squares from the side — distance reads clearer.'),
+        t('When stuck: one drop of black or white, then reassess.'),
       ];
       showToast(tips[Math.floor(sessionN / 4) % tips.length], 'info', 3000);
     }
@@ -1170,20 +1175,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     const ch = window.__challenge;
     if (!ch) {
       if (window.__challengeMissing) {
-        showToast('That challenge link is invalid or gone — free play instead.', 'info', 4200);
+        showToast(t('That challenge link is invalid or gone — free play instead.'), 'info', 4200);
       }
       setCta('challenge', null);
       return;
     }
     const bits = [];
     if (Number.isFinite(ch.delta_e)) bits.push(`ΔE ${ch.delta_e.toFixed(2)}`);
-    if (Number.isFinite(ch.drops)) bits.push(`${ch.drops} drops`);
-    if (Number.isFinite(ch.time_sec)) bits.push(`${Math.round(ch.time_sec)}s`);
+    if (Number.isFinite(ch.drops)) bits.push(t('{n} drops').replace('{n}', String(ch.drops)));
+    if (Number.isFinite(ch.time_sec)) bits.push(t('{n}s').replace('{n}', String(Math.round(ch.time_sec))));
     setCta('challenge', {
       icon: '⚔️',
-      labelHtml: `${escapeHtml(ch.creator)} challenges you`,
-      reasonHtml: `Their result: ${bits.join(' · ') || 'on record'} — same colour. Beat it.`,
-      actionLabel: 'Accept',
+      labelHtml: t('{name} challenges you').replace('{name}', escapeHtml(ch.creator)),
+      reasonHtml: t('Their result: {bits} — same colour. Beat it.').replace('{bits}', bits.join(' · ') || t('on record')),
+      actionLabel: t('Accept'),
       onAction: startChallengeRound,
       variant: 'challenge',
     });
@@ -1200,7 +1205,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     dailyMode = null;
     currentProbeSlot = null;
     currentTargetColor = {
-      id: ch.target_color_id, rgb: ch.target_rgb, name: 'Challenge colour',
+      id: ch.target_color_id, rgb: ch.target_rgb, name: t('Challenge colour'),
     };
     setGameTarget(currentTargetColor);
     updateBox('targetColor', targetColor);
@@ -1212,7 +1217,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     setControlState('mixing');
     beginAttemptForCurrentTarget();
     setCta('challenge', null);
-    showToast(`⚔️ Beat ${escapeHtml(ch.creator)} — same colour, your mix`, 'info', 3000);
+    showToast(t('⚔️ Beat {name} — same colour, your mix').replace('{name}', escapeHtml(ch.creator)), 'info', 3000);
   }
 
   // ── Daily challenge mode (probe carrier) ────────────────────────────────
@@ -1260,7 +1265,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
       const d = await res.json().catch(() => ({}));
       if (d.already_submitted) {
-        showToast("You've already completed today's challenge — come back tomorrow!", 'info', 3200);
+        showToast(t("You've already completed today's challenge — come back tomorrow!"), 'info', 3200);
         return;
       }
       if (d.status !== 'success' || !d.target_color || !Array.isArray(d.target_color.rgb)) return;
@@ -1289,7 +1294,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.__dailyPlaying = true;
       renderDailyStatusBadge(null);
       setDailyChip(true);
-      showToast("📅 Today's challenge — one run, make it count!", 'info', 3000);
+      showToast(t("📅 Today's challenge — one run, make it count!"), 'info', 3000);
     } catch (e) {
       console.error('Daily challenge start failed:', e);
     }
@@ -1322,7 +1327,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           challenge_date: (window.__dailyStatus || {}).challenge_date,
           submitted: true,
         });
-        showToast('📅 Daily challenge submitted — see you tomorrow!', 'success', 3200);
+        showToast(t('📅 Daily challenge submitted — see you tomorrow!'), 'success', 3200);
         loadAndRenderProgress().catch(() => {}); // refresh the CTA (daily done)
       }
     } catch (e) { /* run stays playable tomorrow; never block the game */ }
@@ -1382,8 +1387,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           sessionShadesCompleted -= 1;
           alert(
             onlyBlockedByPracticeQuota(fullCatalog)
-              ? 'You have reached the practice attempt quota on every shade in your tier. Unlock higher sum-drop caps or add new shades to keep playing.'
-              : 'No target colors available. Check the catalog or your tier unlocks.',
+              ? t('You have reached the practice attempt quota on every shade in your tier. Unlock higher sum-drop caps or add new shades to keep playing.')
+              : t('No target colors available. Check the catalog or your tier unlocks.'),
           );
           return;
         }
@@ -1391,7 +1396,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         targetColors.push(...next);
         nextIndex = 0;
         reshuffled = true;
-        showToast('New shuffle — fresh order, same practice.', 'info', 3200);
+        showToast(t('New shuffle — fresh order, same practice.'), 'info', 3200);
       }
       currentTargetIndex = nextIndex;
       currentTargetColor = targetColors[currentTargetIndex];
@@ -1411,7 +1416,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.__dailyPlaying = true;
       renderDailyStatusBadge(null);
       setDailyChip(true);
-      showToast("📅 Today's challenge — mix the colour of the day!", 'info', 2800);
+      showToast(t("📅 Today's challenge — mix the colour of the day!"), 'info', 2800);
     } else if (currentProbeSlot && telemetryAttempt) {
       bindProbeAttempt(currentProbeSlot.slot_id, telemetryAttempt.attempt_uuid);
     }
@@ -1431,7 +1436,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!res.ok) {
       const hint = data.error === 'database_unavailable' && data.message
         ? data.message
-        : `Could not load target colors (HTTP ${res.status}). Check the server log.`;
+        : t('Could not load target colors (HTTP {status}). Check the server log.').replace('{status}', String(res.status));
       alert(hint);
       return;
     }
@@ -1443,8 +1448,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   if (!fullCatalog.length) {
     alert(
-      'Could not load target colors. '
-      + 'Ensure the database is reachable (DATABASE_URL / VPN / firewall), migrated (npm run db:migrate), and try again.',
+      t('Could not load target colors. Ensure the database is reachable (DATABASE_URL / VPN / firewall), migrated (npm run db:migrate), and try again.'),
     );
     return;
   }
@@ -1453,9 +1457,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (!initialQueue.length) {
     alert(
       onlyBlockedByPracticeQuota(fullCatalog)
-        ? 'You have reached the practice attempt quota on every shade in your tier. Open Results for coverage, or unlock higher sum-drop caps to access more shades.'
-        : 'No playable colors (logged-in users need unlocked shades with drop recipes). '
-          + 'See scripts/BACKFILL_TARGET_COLOR_DROPS.md or use Lab.',
+        ? t('You have reached the practice attempt quota on every shade in your tier. Open Results for coverage, or unlock higher sum-drop caps to access more shades.')
+        : t('No playable colors (logged-in users need unlocked shades with drop recipes). See scripts/BACKFILL_TARGET_COLOR_DROPS.md or use Lab.'),
     );
     return;
   }
@@ -1522,7 +1525,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTimer();
     enableColorMixing();
     setControlState('mixing');
-    showToast('🎨 Tap the pigments below to match the colour on the left', 'info', 3600);
+    showToast(t('🎨 Tap the pigments below to match the colour on the left'), 'info', 3600);
   }
   window.__startGuestRound = startGuestRound;
 
@@ -1685,8 +1688,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!newQueue.length) {
       alert(
         onlyBlockedByPracticeQuota(fullCatalog)
-          ? 'Every shade in your tier is already at the practice attempt quota. Unlock more shades or raise your sum-drop cap to continue.'
-          : 'No playable colors for your tier. See Lab / backfill docs.',
+          ? t('Every shade in your tier is already at the practice attempt quota. Unlock more shades or raise your sum-drop cap to continue.')
+          : t('No playable colors for your tier. See Lab / backfill docs.'),
       );
       return;
     }
@@ -1715,7 +1718,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await bindProbeAttempt(dailyMode.slot_id, telemetryAttempt.attempt_uuid);
       window.__dailyPlaying = true;
       renderDailyStatusBadge(null);
-      showToast("📅 Today's challenge — mix the colour of the day!", 'info', 2800);
+      showToast(t("📅 Today's challenge — mix the colour of the day!"), 'info', 2800);
     }
     setDailyChip(!!dailyMode);
   });
@@ -1778,7 +1781,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         const data = await res.json();
         if (!res.ok || data.status !== 'success') {
-          alert('Failed to save skip data. Please try again.');
+          alert(t('Failed to save skip data. Please try again.'));
           return;
         }
         window.__lastSavedAttemptUuid = skipData.attempt_uuid;
@@ -1787,7 +1790,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         handleProgressionResponse(data);
         await maybeSubmitDailyRun(skipData.attempt_uuid, skipData.delta_e, stepsForDaily);
       } catch {
-        alert('Error saving skip data. Please check your connection and try again.');
+        alert(t('Error saving skip data. Please check your connection and try again.'));
         return;
       }
 
@@ -1834,8 +1837,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!newQueue.length) {
       alert(
         onlyBlockedByPracticeQuota(fullCatalog)
-          ? 'Every shade in your tier is already at the practice attempt quota. Unlock more shades or raise your sum-drop cap to continue.'
-          : 'No playable colors. Check catalog / tier unlocks.',
+          ? t('Every shade in your tier is already at the practice attempt quota. Unlock more shades or raise your sum-drop cap to continue.')
+          : t('No playable colors. Check catalog / tier unlocks.'),
       );
       return;
     }
@@ -2067,7 +2070,7 @@ document.addEventListener('DOMContentLoaded', function () {
             finishLogin();
           }
         } else if (data.code === 'EMAIL_NOT_VERIFIED') {
-          const resend = confirm('Your email is not verified yet. Resend verification email now?');
+          const resend = confirm(t('Your email is not verified yet. Resend verification email now?'));
           if (resend) {
             try {
               const resendResp = await fetch('/email/verification/request', {
@@ -2077,19 +2080,19 @@ document.addEventListener('DOMContentLoaded', function () {
               });
               const resendData = await resendResp.json();
               if (resendData.status === 'success') {
-                alert('Verification email sent. Please verify first, then log in.');
+                alert(t('Verification email sent. Please verify first, then log in.'));
               } else {
-                alert(resendData.message || 'Could not send verification email.');
+                alert(resendData.message || t('Could not send verification email.'));
               }
             } catch {
-              alert('Could not send verification email.');
+              alert(t('Could not send verification email.'));
             }
           }
         } else {
-          alert(data.message || 'Invalid user ID. Please try again.');
+          alert(data.message || t('Invalid user ID. Please try again.'));
         }
       } catch {
-        alert('Invalid user ID. Please try again.');
+        alert(t('Invalid user ID. Please try again.'));
       }
     });
   }
@@ -2144,11 +2147,11 @@ function _showPwaInstallCta(opts) {
   const isIos = !!(opts && opts.ios);
   setCta('pwa', {
     icon: '📲',
-    labelHtml: 'Install ShadeMatch',
+    labelHtml: t('Install ShadeMatch'),
     reasonHtml: isIos
-      ? 'Quick access from your home screen. Tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.'
-      : 'Quick access from your home screen.',
-    actionLabel: isIos ? null : 'Install',
+      ? t('Quick access from your home screen. Tap <strong>Share</strong> → <strong>Add to Home Screen</strong>.')
+      : t('Quick access from your home screen.'),
+    actionLabel: isIos ? null : t('Install'),
     onAction: isIos ? null : window.triggerPwaInstall,
     onDismiss: window.dismissPwaInstall,
     variant: 'pwa',
@@ -2221,20 +2224,20 @@ document.addEventListener('DOMContentLoaded', function () {
 // ── Push notification opt-in ──────────────────────────────────────────────
 window.requestPushPermission = async function () {
   if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-    showToast('Push notifications are not supported in this browser.', 'info', 4000);
+    showToast(t('Push notifications are not supported in this browser.'), 'info', 4000);
     return;
   }
 
   const userId = window.currentUserId || localStorage.getItem('userId');
   if (!userId) {
-    showToast('Please log in before enabling reminders.', 'info', 4000);
+    showToast(t('Please log in before enabling reminders.'), 'info', 4000);
     return;
   }
 
   try {
     const permission = await Notification.requestPermission();
     if (permission === 'denied') {
-      showToast('Notifications blocked. Enable them in browser settings.', 'info', 5000);
+      showToast(t('Notifications blocked. Enable them in browser settings.'), 'info', 5000);
       return;
     }
     if (permission !== 'granted') {
@@ -2245,7 +2248,7 @@ window.requestPushPermission = async function () {
     const keyData = await keyRes.json();
     const vapidKey = keyData.vapid_public_key;
     if (!vapidKey) {
-      showToast('Push notifications not configured on this server.', 'info', 4000);
+      showToast(t('Push notifications not configured on this server.'), 'info', 4000);
       setCta('push', null);
       return;
     }
@@ -2274,7 +2277,7 @@ window.requestPushPermission = async function () {
     });
     const data = await res.json();
     if (data.status === 'success') {
-      showToast('🔔 Daily reminders enabled!', 'award', 4000);
+      showToast(t('🔔 Daily reminders enabled!'), 'award', 4000);
       setCta('push', null);
       localStorage.setItem('pushSubscribed', '1');
     } else {
@@ -2282,7 +2285,7 @@ window.requestPushPermission = async function () {
     }
   } catch (err) {
     console.error('Push subscribe error:', err);
-    showToast('Could not enable reminders. Try again later.', 'info', 4000);
+    showToast(t('Could not enable reminders. Try again later.'), 'info', 4000);
   }
 };
 
@@ -2309,16 +2312,16 @@ const GUEST_GOOD_DELTA_E = 2.0;
 function showGuestResult(deltaE, { delayMs = 0 } = {}) {
   const modal = document.getElementById('guestResultModal');
   if (!modal) return;
-  const t = document.getElementById('guestResultTarget');
+  const tEl = document.getElementById('guestResultTarget');
   const m = document.getElementById('guestResultMix');
-  if (t && Array.isArray(window.shadeMatchTargetRgb)) {
-    t.style.backgroundColor = `rgb(${window.shadeMatchTargetRgb.join(',')})`;
+  if (tEl && Array.isArray(window.shadeMatchTargetRgb)) {
+    tEl.style.backgroundColor = `rgb(${window.shadeMatchTargetRgb.join(',')})`;
   }
   if (m) m.style.backgroundColor = `rgb(${currentMixedRgb.join(',')})`;
   const de = document.getElementById('guestResultDeltaE');
   if (de) de.textContent = Number.isFinite(deltaE) ? deltaE.toFixed(2) : '—';
   const timeEl = document.getElementById('guestResultTime');
-  if (timeEl) timeEl.textContent = getTimerSec().toFixed(1) + 's';
+  if (timeEl) timeEl.textContent = t('{n}s').replace('{n}', getTimerSec().toFixed(1));
   // Stash the payload for the modal's Share button (wired in index.html).
   window.__lastGuestResult = {
     kind: 'perfect',
@@ -2375,10 +2378,10 @@ window.shadeMatchCreateChallenge = async function (attemptUuid, { text } = {}) {
     });
     const d = await res.json();
     if (d.status !== 'success' || !d.url) {
-      showToast(d.message || 'Could not create the challenge link.', 'info', 4000);
+      showToast(d.message || t('Could not create the challenge link.'), 'info', 4000);
       return false;
     }
-    const msg = (text || '⚔️ Beat my ShadeMatch result:') + ' ' + d.url;
+    const msg = (text || t('⚔️ Beat my ShadeMatch result:')) + ' ' + d.url;
     if (navigator.share) {
       try { await navigator.share({ text: msg }); return true; } catch (e) {
         if (e && e.name === 'AbortError') return false;
@@ -2386,11 +2389,11 @@ window.shadeMatchCreateChallenge = async function (attemptUuid, { text } = {}) {
     }
     try {
       await navigator.clipboard.writeText(msg);
-      showToast('🔗 Challenge link copied — send it to a friend!', 'award', 4200);
+      showToast(t('🔗 Challenge link copied — send it to a friend!'), 'award', 4200);
     } catch { /* clipboard may be blocked */ }
     return true;
   } catch {
-    showToast('Could not create the challenge link.', 'info', 4000);
+    showToast(t('Could not create the challenge link.'), 'info', 4000);
     return false;
   }
 };
@@ -2401,13 +2404,13 @@ function showChallengeComparison(c, { delayMs = 0 } = {}) {
   const verdict = document.getElementById('challengeVerdict');
   if (verdict) {
     verdict.textContent = c.won
-      ? `🏆 You beat ${c.creator}!`
-      : `${c.creator} holds it — rematch?`;
+      ? t('🏆 You beat {name}!').replace('{name}', String(c.creator))
+      : t('{name} holds it — rematch?').replace('{name}', String(c.creator));
   }
-  const t = document.getElementById('challengeResultTarget');
+  const tEl = document.getElementById('challengeResultTarget');
   const m = document.getElementById('challengeResultMix');
-  if (t && Array.isArray(window.shadeMatchTargetRgb)) {
-    t.style.backgroundColor = `rgb(${window.shadeMatchTargetRgb.join(',')})`;
+  if (tEl && Array.isArray(window.shadeMatchTargetRgb)) {
+    tEl.style.backgroundColor = `rgb(${window.shadeMatchTargetRgb.join(',')})`;
   }
   if (m) m.style.backgroundColor = `rgb(${currentMixedRgb.join(',')})`;
 
@@ -2419,12 +2422,12 @@ function showChallengeComparison(c, { delayMs = 0 } = {}) {
   const body = document.getElementById('challengeCompareBody');
   if (body) {
     body.innerHTML =
-      row('Match error ΔE', fmt(c.your_delta_e), fmt(c.creator_delta_e)) +
-      row('Drops', Number.isFinite(c.your_drops) ? c.your_drops : '—',
+      row(t('Match error ΔE'), fmt(c.your_delta_e), fmt(c.creator_delta_e)) +
+      row(t('Drops'), Number.isFinite(c.your_drops) ? c.your_drops : '—',
         Number.isFinite(c.creator_drops) ? c.creator_drops : '—') +
-      row('Time', fmt(c.your_time_sec, 1) + 's', fmt(c.creator_time_sec, 1) + 's') +
+      row(t('Time'), t('{n}s').replace('{n}', fmt(c.your_time_sec, 1)), t('{n}s').replace('{n}', fmt(c.creator_time_sec, 1))) +
       `<div style="font-size:0.72rem;color:var(--text-secondary);margin-top:6px;">` +
-      `you vs ${escapeHtml(c.creator)} — accuracy decides, then drops, then time</div>`;
+      `${t('you vs {name} — accuracy decides, then drops, then time').replace('{name}', escapeHtml(c.creator))}</div>`;
   }
 
   const rematch = document.getElementById('challengeRematchBtn');
@@ -2438,11 +2441,11 @@ function showChallengeComparison(c, { delayMs = 0 } = {}) {
       }
       const uuid = window.__lastSavedAttemptUuid;
       if (!uuid) {
-        showToast('Finish a colour first, then challenge back.', 'info', 3500);
+        showToast(t('Finish a colour first, then challenge back.'), 'info', 3500);
         return;
       }
       await window.shadeMatchCreateChallenge(uuid, {
-        text: `⚔️ I took your ShadeMatch challenge — now beat mine:`,
+        text: t('⚔️ I took your ShadeMatch challenge — now beat mine:'),
       });
     };
   }
@@ -2463,7 +2466,7 @@ function celebratePerfectMatch() {
 
   const overlay = document.createElement('div');
   overlay.className = 'perfect-overlay';
-  overlay.innerHTML = '<div class="perfect-overlay-inner">🎯<span>Perfect match!</span></div>';
+  overlay.innerHTML = '<div class="perfect-overlay-inner">🎯<span>' + t('Perfect match!') + '</span></div>';
   document.body.appendChild(overlay);
   requestAnimationFrame(() => overlay.classList.add('is-visible'));
   setTimeout(() => {

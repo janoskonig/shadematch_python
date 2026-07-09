@@ -17,20 +17,20 @@ class CookieConsentManager {
 
         this.cookieCategories = {
             necessary: {
-                name: 'Necessary Cookies',
-                description: 'These cookies are essential for the website to function properly. They cannot be disabled.',
+                name: t('Necessary Cookies'),
+                description: t('These cookies are essential for the website to function properly. They cannot be disabled.'),
                 required: true,
                 cookies: ['session_id', 'csrf_token', 'user_preferences']
             },
             analytics: {
-                name: 'Analytics Cookies',
-                description: 'These cookies help us understand how visitors interact with our website by collecting and reporting information anonymously.',
+                name: t('Analytics Cookies'),
+                description: t('These cookies help us understand how visitors interact with our website by collecting and reporting information anonymously.'),
                 required: false,
                 cookies: ['_ga', '_gid', '_gat', 'analytics_session']
             },
             preferences: {
-                name: 'Preference Cookies',
-                description: 'These cookies remember your choices and preferences to provide a more personalized experience.',
+                name: t('Preference Cookies'),
+                description: t('These cookies remember your choices and preferences to provide a more personalized experience.'),
                 required: false,
                 cookies: ['theme_preference', 'language_setting', 'display_options']
             }
@@ -207,27 +207,26 @@ class CookieConsentManager {
         banner.innerHTML = `
             <div class="cookie-consent-content">
                 <div class="cookie-consent-text">
-                    <h3>🍪 Cookie Consent</h3>
+                    <h3>${t('🍪 Cookie Consent')}</h3>
                     <p>
-                        We use cookies to enhance your browsing experience, serve personalized content, 
-                        and analyze our traffic. By clicking "Accept All", you consent to our use of cookies. 
-                        <a href="${this.options.privacyPolicyUrl}" class="privacy-policy-link" target="_blank">Privacy Policy</a>
+                        ${t('We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking "Accept All", you consent to our use of cookies.')}
+                        <a href="${this.options.privacyPolicyUrl}" class="privacy-policy-link" target="_blank">${t('Privacy Policy')}</a>
                     </p>
                 </div>
                 <div class="cookie-consent-buttons">
                     <button class="cookie-consent-btn cookie-consent-btn-decline" data-action="decline">
-                        Decline
+                        ${t('Decline')}
                     </button>
                     ${this.options.showSettings ? `
                         <button class="cookie-consent-btn cookie-consent-btn-settings" data-action="settings">
-                            Settings
+                            ${t('Settings')}
                         </button>
                     ` : ''}
                     <button class="cookie-consent-btn cookie-consent-btn-accept" data-action="accept">
-                        Accept
+                        ${t('Accept')}
                     </button>
                     <button class="cookie-consent-btn cookie-consent-btn-accept-all" data-action="accept-all">
-                        Accept All
+                        ${t('Accept All')}
                     </button>
                 </div>
             </div>
@@ -250,7 +249,7 @@ class CookieConsentManager {
         modal.innerHTML = `
             <div class="cookie-settings-content">
                 <div class="cookie-settings-header">
-                    <h2>Cookie Settings</h2>
+                    <h2>${t('Cookie Settings')}</h2>
                     <button class="cookie-settings-close" data-action="close">&times;</button>
                 </div>
                 <div class="cookie-settings-body">
@@ -271,10 +270,10 @@ class CookieConsentManager {
                 </div>
                 <div class="cookie-settings-footer">
                     <button class="cookie-settings-btn cookie-settings-btn-cancel" data-action="cancel">
-                        Cancel
+                        ${t('Cancel')}
                     </button>
                     <button class="cookie-settings-btn cookie-settings-btn-save" data-action="save">
-                        Save Preferences
+                        ${t('Save Preferences')}
                     </button>
                 </div>
             </div>

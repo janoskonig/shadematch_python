@@ -18,6 +18,10 @@
 
   let state = null;
 
+  // i18n: window.t is bootstrapped in base.html before this script runs;
+  // fall back to identity so the guide still works standalone.
+  const t = global.t || function (s) { return s; };
+
   function el(tag, cls) {
     const e = document.createElement(tag);
     if (cls) e.className = cls;
@@ -52,13 +56,13 @@
     const root = el('div', 'sg-root');
     const hole = el('div', 'sg-hole');
     const tip = el('div', 'sg-tip');
-    const skip = el('button', 'sg-skip'); skip.type = 'button'; skip.textContent = 'Skip';
+    const skip = el('button', 'sg-skip'); skip.type = 'button'; skip.textContent = t('Skip');
     const title = el('h3', 'sg-tip-title');
     const body = el('p', 'sg-tip-body');
     const foot = el('div', 'sg-tip-foot');
     const dots = el('div', 'sg-dots');
-    const back = el('button', 'sg-btn sg-back'); back.type = 'button'; back.textContent = 'Back';
-    const next = el('button', 'sg-btn sg-next'); next.type = 'button'; next.textContent = 'Next';
+    const back = el('button', 'sg-btn sg-back'); back.type = 'button'; back.textContent = t('Back');
+    const next = el('button', 'sg-btn sg-next'); next.type = 'button'; next.textContent = t('Next');
     const btnRow = el('div', 'sg-btn-row');
     btnRow.appendChild(back); btnRow.appendChild(next);
     foot.appendChild(dots); foot.appendChild(btnRow);
@@ -113,7 +117,7 @@
     state.title.textContent = steps[i].title || '';
     state.body.textContent = steps[i].body || '';
     state.back.style.visibility = hasResolvable(i, -1) ? 'visible' : 'hidden';
-    state.next.textContent = hasResolvable(i, 1) ? 'Next' : 'Done';
+    state.next.textContent = hasResolvable(i, 1) ? t('Next') : t('Done');
     renderDots();
   }
 

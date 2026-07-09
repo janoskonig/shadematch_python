@@ -31,7 +31,7 @@
   {# Preheader: hidden text used by Gmail/Apple Mail as inbox preview. The
      non-breaking spaces push real body content out of the preview. #}
   <div style="display:none; max-height:0px; overflow:hidden; mso-hide:all; font-size:1px; line-height:1px; color:#F8F6F3; opacity:0;">
-    {% block preheader %}{{ brand_name }} — color mixing made fun.{% endblock %}
+    {% block preheader %}{{ tr('{brand} — color mixing made fun.', brand=brand_name) }}{% endblock %}
     &zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;
   </div>
 
@@ -48,7 +48,7 @@
                     <span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#FFD166; margin-right:6px; vertical-align:middle;"></span><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#EF476F; margin-right:6px; vertical-align:middle;"></span><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background:#06D6A0; margin-right:10px; vertical-align:middle;"></span>{{ brand_name }}
                   </td>
                   <td align="right" style="font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-weight:700; font-size:11px; color:#E1ECFA; text-transform:uppercase; letter-spacing:1.4px;">
-                    {% block header_eyebrow %}Color Mixing Game{% endblock %}
+                    {% block header_eyebrow %}{{ tr('Color Mixing Game') }}{% endblock %}
                   </td>
                 </tr>
               </table>
@@ -67,12 +67,12 @@
             <td style="padding:22px 36px 28px; background:#F4F1ED; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-size:12px; line-height:1.65; color:#6B6B6B; border-top:1px solid #E8E4DD;">
               {% block footer_pre %}{% endblock %}
               <p style="margin:0 0 6px;">
-                You received this from <strong style="color:#2D2D2D;">{{ brand_name }}</strong>{% if username %}, sent to player <strong>{{ username }}</strong>{% endif %}.
+                {% if username %}{{ tr('You received this from <strong style="color:#2D2D2D;">{brand}</strong>, sent to player <strong>{user}</strong>.', brand=brand_name, user=username)|safe }}{% else %}{{ tr('You received this from <strong style="color:#2D2D2D;">{brand}</strong>.', brand=brand_name)|safe }}{% endif %}
               </p>
               {% if list_unsubscribe_url %}
                 <p style="margin:0 0 6px;">
-                  Don't want these reminders?
-                  <a href="{{ list_unsubscribe_url }}" style="color:#4A90D9; text-decoration:underline;">Unsubscribe in one click</a>.
+                  {{ tr("Don't want these reminders?") }}
+                  <a href="{{ list_unsubscribe_url }}" style="color:#4A90D9; text-decoration:underline;">{{ tr('Unsubscribe in one click') }}</a>.
                 </p>
               {% endif %}
               {% if footer_address %}
@@ -86,7 +86,7 @@
         <table role="presentation" class="sm-container" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:100%;">
           <tr>
             <td align="center" style="padding:14px 8px 0; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-size:11px; color:#9A9A9A;">
-              Mixing colors, drop by drop · Made with care for color enthusiasts.
+              {{ tr('Mixing colors, drop by drop · Made with care for color enthusiasts.') }}
             </td>
           </tr>
         </table>

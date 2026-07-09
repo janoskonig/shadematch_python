@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Your Color Matching Results{% endblock %}
+{% block title %}{{ t('Your Color Matching Results') }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -422,46 +422,46 @@
 {% block content %}
   <main class="results-container" id="results-main">
 
-    <a href="/" class="back-link">← Back to Color Mixing</a>
+    <a href="/" class="back-link">{{ t('← Back to Color Mixing') }}</a>
 
     <!-- User input / welcome -->
-    <section class="user-input-section" aria-label="Account and user ID">
+    <section class="user-input-section" aria-label="{{ t('Account and user ID') }}">
       <div id="stored-user-info" style="display:none;">
-        <p id="welcome-message" class="welcome-message">Welcome back! Loading your results…</p>
+        <p id="welcome-message" class="welcome-message">{{ t('Welcome back! Loading your results…') }}</p>
         <div id="nicknameRow" style="margin-top:var(--space-sm); font-size:0.9rem; color:var(--text-secondary);">
           <span id="nicknameView">
-            Nickname: <strong id="nicknameValue" style="color:var(--text-primary);">— anonymous</strong>
-            <button id="nicknameEditBtn" type="button" class="btn-link" style="margin-left:6px;">✏️ Edit</button>
+            {{ t('Nickname:') }} <strong id="nicknameValue" style="color:var(--text-primary);">{{ t('— anonymous') }}</strong>
+            <button id="nicknameEditBtn" type="button" class="btn-link" style="margin-left:6px;">✏️ {{ t('Edit') }}</button>
           </span>
           <span id="nicknameEdit" style="display:none;">
-            <input type="text" id="nicknameInput" maxlength="20" placeholder="3–20 characters"
+            <input type="text" id="nicknameInput" maxlength="20" placeholder="{{ t('3–20 characters') }}"
                    style="min-height:32px; padding:4px 10px; border:2px solid var(--border); border-radius:var(--radius-md); font-size:0.9rem; color:var(--text-primary); background:var(--surface);">
-            <button id="nicknameSaveBtn" type="button" style="min-height:32px; padding:4px 12px;">Save</button>
-            <button id="nicknameCancelBtn" type="button" class="btn-link">Cancel</button>
+            <button id="nicknameSaveBtn" type="button" style="min-height:32px; padding:4px 12px;">{{ t('Save') }}</button>
+            <button id="nicknameCancelBtn" type="button" class="btn-link">{{ t('Cancel') }}</button>
             <span id="nicknameError" style="display:none; color:var(--accent-danger); font-size:0.8rem; margin-left:6px;"></span>
           </span>
-          <div style="font-size:0.72rem; margin-top:2px;">Shown on the leaderboard and challenges — leave empty to stay anonymous.</div>
+          <div style="font-size:0.72rem; margin-top:2px;">{{ t('Shown on the leaderboard and challenges — leave empty to stay anonymous.') }}</div>
         </div>
-        <button onclick="clearUserAndReload()" type="button" style="margin-top:var(--space-sm);">Switch User</button>
+        <button onclick="clearUserAndReload()" type="button" style="margin-top:var(--space-sm);">{{ t('Switch User') }}</button>
       </div>
       <div id="user-input-form">
-        <p style="margin-bottom:var(--space-md); color:var(--text-secondary);">Enter your 6-character user ID to view your results:</p>
-        <input type="text" id="userIdInput" placeholder="e.g., ABC123" maxlength="6">
-        <button onclick="loadUserResults()" type="button">View Results</button>
+        <p style="margin-bottom:var(--space-md); color:var(--text-secondary);">{{ t('Enter your 6-character user ID to view your results:') }}</p>
+        <input type="text" id="userIdInput" placeholder="{{ t('e.g., ABC123') }}" maxlength="6">
+        <button onclick="loadUserResults()" type="button">{{ t('View Results') }}</button>
       </div>
     </section>
 
     <!-- Your Color Journey (improvement narrative, rendered from session data) -->
     <section class="journey-card" id="journeyCard" style="display:none;" aria-labelledby="journeyHeading">
-      <h2 id="journeyHeading" class="journey-title">Your Color Journey</h2>
+      <h2 id="journeyHeading" class="journey-title">{{ t('Your Color Journey') }}</h2>
       <p class="journey-headline" id="journeyHeadline"></p>
       <div class="journey-spark-wrap">
-        <canvas class="journey-spark" id="journeySpark" aria-label="Match error over time"></canvas>
+        <canvas class="journey-spark" id="journeySpark" aria-label="{{ t('Match error over time') }}"></canvas>
       </div>
       <div class="journey-spark-label">
-        <span>← earlier rounds</span>
-        <span>match error (ΔE) per round, rolling average — lower is better</span>
-        <span>latest →</span>
+        <span>{{ t('← earlier rounds') }}</span>
+        <span>{{ t('match error (ΔE) per round, rolling average — lower is better') }}</span>
+        <span>{{ t('latest →') }}</span>
       </div>
       <div class="journey-bests" id="journeyBests"></div>
       <div class="journey-weeks" id="journeyWeeks"></div>
@@ -471,12 +471,12 @@
     <div id="profileSection" style="display:none;">
       <!-- Mastered banner (shown only when is_maxed_out) -->
       <div id="masteredBanner" class="mastered-banner" style="display:none;">
-        🎊 All Colors Mastered — Palette Complete!
+        🎊 {{ t('All Colors Mastered — Palette Complete!') }}
       </div>
 
       <!-- Progress card -->
       <section class="progress-card" id="progressCard" aria-labelledby="progressHeading">
-        <h2 id="progressHeading" class="progress-card-title">Your Progress</h2>
+        <h2 id="progressHeading" class="progress-card-title">{{ t('Your Progress') }}</h2>
 
         <!-- 4 hero stats -->
         <div class="progress-stats-primary" id="progressStatsPrimary"></div>
@@ -497,7 +497,7 @@
       <section class="collapsible-card" id="awardsCard" data-open="true" style="display:none;" aria-labelledby="awardsHeading">
         <button type="button" class="collapsible-toggle" aria-expanded="true" aria-controls="awardsBody"
                 onclick="toggleCollapsible('awardsCard', this)">
-          <span class="collapsible-title" id="awardsHeading">Badges &amp; Awards</span>
+          <span class="collapsible-title" id="awardsHeading">{{ t('Badges & Awards') }}</span>
           <span class="collapsible-meta" id="awardsCount"></span>
           <svg class="collapsible-chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -513,7 +513,7 @@
       <section class="collapsible-card" id="colorStatsCard" data-open="false" style="display:none;" aria-labelledby="coverageHeading">
         <button type="button" class="collapsible-toggle" aria-expanded="false" aria-controls="colorStatsBody"
                 onclick="toggleCollapsible('colorStatsCard', this)">
-          <span class="collapsible-title" id="coverageHeading">Color Coverage</span>
+          <span class="collapsible-title" id="coverageHeading">{{ t('Color Coverage') }}</span>
           <span class="collapsible-meta" id="coverageMeta"></span>
           <svg class="collapsible-chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -529,7 +529,7 @@
       <section class="collapsible-card" id="hueAccuracyCard" data-open="true" style="display:none;" aria-labelledby="hueHeading">
         <button type="button" class="collapsible-toggle" aria-expanded="true" aria-controls="hueBody"
                 onclick="toggleCollapsible('hueAccuracyCard', this)">
-          <span class="collapsible-title" id="hueHeading">Your Palette by Hue</span>
+          <span class="collapsible-title" id="hueHeading">{{ t('Your Palette by Hue') }}</span>
           <span class="collapsible-meta" id="hueMeta"></span>
           <svg class="collapsible-chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -545,9 +545,9 @@
 
     <!-- Session history -->
     <section class="results-section" aria-labelledby="sessionsHeading">
-      <h2 id="sessionsHeading" class="sr-only">Session history</h2>
+      <h2 id="sessionsHeading" class="sr-only">{{ t('Session history') }}</h2>
       <div id="results-content">
-        <div class="loading">Enter your user ID above to view your results</div>
+        <div class="loading">{{ t('Enter your user ID above to view your results') }}</div>
       </div>
     </section>
   </main>
@@ -558,7 +558,7 @@
       if (storedUserId) {
         document.getElementById('stored-user-info').style.display = 'block';
         document.getElementById('user-input-form').style.display = 'none';
-        document.getElementById('welcome-message').textContent = 'Welcome back, ' + storedUserId + '!';
+        document.getElementById('welcome-message').textContent = t('Welcome back, {id}!').replace('{id}', storedUserId);
         initNicknameEditor(storedUserId);
         loadUserResults(storedUserId);
         loadUserProfile(storedUserId);
@@ -576,7 +576,7 @@
 
       function render() {
         const nick = localStorage.getItem('userNickname');
-        valueEl.textContent = nick || '— anonymous';
+        valueEl.textContent = nick || t('— anonymous');
       }
       render();
 
@@ -606,11 +606,11 @@
             edit.style.display = 'none';
             view.style.display = '';
           } else {
-            errEl.textContent = data.message || 'Could not save nickname.';
+            errEl.textContent = data.message || t('Could not save nickname.');
             errEl.style.display = '';
           }
         } catch (e) {
-          errEl.textContent = 'Could not save nickname. Check your connection.';
+          errEl.textContent = t('Could not save nickname. Check your connection.');
           errEl.style.display = '';
         }
       };
@@ -629,7 +629,7 @@
 
         const cq = data.coverage_quota != null ? data.coverage_quota : 10;
         const covHead = document.getElementById('coverageHeading');
-        if (covHead) covHead.textContent = 'Color Coverage';
+        if (covHead) covHead.textContent = t('Color Coverage');
 
         renderProgressCard(data.progress, data.coverage_quota);
         renderAwards(data.awards, cq);
@@ -642,8 +642,8 @@
     }
 
     // ── Accuracy / effort by hue ──────────────────────────────
-    const HUE_NAMES = { 30: 'Reds', 90: 'Yellows', 150: 'Greens',
-                        210: 'Cyans', 270: 'Blues', 330: 'Magentas' };
+    const HUE_NAMES = { 30: t('Reds'), 90: t('Yellows'), 150: t('Greens'),
+                        210: t('Cyans'), 270: t('Blues'), 330: t('Magentas') };
 
     async function loadHueAccuracy(userId) {
       try {
@@ -683,8 +683,9 @@
         let d = `M ${cx} ${cy} L ${P(a0, r).join(' ')} `;
         for (let a = a0; a <= a1; a += 10) d += `L ${P(a, r).join(' ')} `;
         d += 'Z';
-        const tip = `${name} · ${s.n} play${s.n === 1 ? '' : 's'}` +
-          (faint ? ' (few plays)' : '') + ` · ${fmt(s)}`;
+        const plays = (s.n === 1 ? t('{n} play') : t('{n} plays')).replace('{n}', String(s.n));
+        const tip = `${name} · ${plays}` +
+          (faint ? ' ' + t('(few plays)') : '') + ` · ${fmt(s)}`;
         svg += `<path d="${d}" fill="${s.color}" fill-opacity="${faint ? 0.28 : 0.9}" ` +
           `stroke="#555" stroke-width="0.6"${faint ? ' stroke-dasharray="2 2"' : ''}>` +
           `<title>${tip}</title></path>`;
@@ -705,7 +706,7 @@
       const eligible = sectors.filter(s => s.n >= minN && s.completion_rate != null);
 
       if (eligible.length < 2) {
-        return 'Play a few more colours across the wheel and a personal reading will appear here.';
+        return t('Play a few more colours across the wheel and a personal reading will appear here.');
       }
 
       const byRate = eligible.slice().sort((a, b) => b.completion_rate - a.completion_rate);
@@ -715,12 +716,13 @@
 
       const parts = [];
       const totalN = eligible.reduce((t, s) => t + s.n, 0);
-      let coverage = `This reading is based on ${totalN} matches across ` +
-        `${eligible.length} of 6 hue families.`;
+      let coverage = t('This reading is based on {n} matches across {k} of 6 hue families.')
+        .replace('{n}', String(totalN)).replace('{k}', String(eligible.length));
       const thin = sectors.filter(s => s.n > 0 && s.n < minN).map(fam);
       if (thin.length) {
         coverage = coverage.replace(/\.$/,
-          ` — ${thin.join(' and ')} have too few plays to judge yet.`);
+          ' — ' + t('{families} have too few plays to judge yet.')
+            .replace('{families}', thin.join(' ' + t('and') + ' ')));
       }
       parts.push(coverage);
 
@@ -730,43 +732,48 @@
         if (bySteps.length < 2) return null;
         const most = bySteps[0], least = bySteps[bySteps.length - 1];
         if (most === least || most.median_steps === least.median_steps) return null;
-        return `${fam(most)} take you the most work (typically ${most.median_steps} steps), ` +
-          `while ${fam(least)} come quickest (${least.median_steps}).`;
+        return t('{a} take you the most work (typically {x} steps), while {b} come quickest ({y}).')
+          .replace('{a}', fam(most)).replace('{x}', String(most.median_steps))
+          .replace('{b}', fam(least)).replace('{y}', String(least.median_steps));
       };
 
       if (best.completion_rate - worst.completion_rate < 0.15) {
-        parts.push(`Your accuracy is even across hues (${pct(worst)}–${pct(best)}) — ` +
-          'no weak spot stands out yet.');
+        parts.push(t('Your accuracy is even across hues ({low}–{high}) — no weak spot stands out yet.')
+          .replace('{low}', pct(worst)).replace('{high}', pct(best)));
         const eff = effortContrast();
         if (eff) parts.push(eff);
         const leastPlayed = sectors.slice().sort((a, b) => a.n - b.n)[0];
-        parts.push(`To firm up the picture, try a few more ${fam(leastPlayed)} — ` +
-          'they have the fewest plays so far.');
+        parts.push(t('To firm up the picture, try a few more {family} — they have the fewest plays so far.')
+          .replace('{family}', fam(leastPlayed)));
         return parts.join(' ');
       }
 
-      parts.push(`Your strongest family is ${fam(best)}: you finish ${pct(best)} of them.`);
+      parts.push(t('Your strongest family is {family}: you finish {pct} of them.')
+        .replace('{family}', fam(best)).replace('{pct}', pct(best)));
       const worstSlowest = bySteps.length && bySteps[0] === worst;
       if (worstSlowest) {
-        parts.push(`${fam(worst)} are your hardest — you finish ${pct(worst)}, ` +
-          `and they take your most steps (typically ${worst.median_steps}).`);
+        parts.push(t('{family} are your hardest — you finish {pct}, and they take your most steps (typically {n}).')
+          .replace('{family}', fam(worst)).replace('{pct}', pct(worst))
+          .replace('{n}', String(worst.median_steps)));
       } else {
-        parts.push(`${fam(worst)} are your hardest — you finish ${pct(worst)}.`);
+        parts.push(t('{family} are your hardest — you finish {pct}.')
+          .replace('{family}', fam(worst)).replace('{pct}', pct(worst)));
         const eff = effortContrast();
         if (eff) parts.push(eff);
       }
 
       const giveup = worst.median_giveup_delta_e;
       if (giveup != null) {
-        const closeness = giveup <= 1 ? "you're usually a hair's breadth away"
-          : giveup <= 2 ? "you're usually very close"
-          : giveup <= 5 ? "you're still close"
-          : "you're often still visibly off, so there's real room to grow there";
-        parts.push(`When you do give up on ${fam(worst)}, ${closeness}.`);
+        const closeness = giveup <= 1 ? t("you're usually a hair's breadth away")
+          : giveup <= 2 ? t("you're usually very close")
+          : giveup <= 5 ? t("you're still close")
+          : t("you're often still visibly off, so there's real room to grow there");
+        parts.push(t('When you do give up on {family}, {closeness}.')
+          .replace('{family}', fam(worst)).replace('{closeness}', closeness));
       }
 
-      parts.push(`Worth a few extra rounds on ${fam(worst)} — ` +
-        "that's where practice will show the fastest.");
+      parts.push(t("Worth a few extra rounds on {family} — that's where practice will show the fastest.")
+        .replace('{family}', fam(worst)));
       return parts.join(' ');
     }
 
@@ -783,21 +790,20 @@
         v => v, x => Math.round(x.completion_rate * 100) + '%', minN);
       const effSvg = makeHueRose(
         s, x => x.median_steps,
-        v => v / stepRef, x => x.median_steps + ' steps', minN);
+        v => v / stepRef, x => t('{n} steps').replace('{n}', String(x.median_steps)), minN);
 
       host.innerHTML =
-        `<div class="hue-rose"><p class="hue-rose-title">Accuracy</p>` +
-        `<p class="hue-rose-sub">longer = you finish more matches</p>${accSvg}</div>` +
-        `<div class="hue-rose"><p class="hue-rose-title">Effort</p>` +
-        `<p class="hue-rose-sub">longer = more steps to finish</p>${effSvg}</div>`;
+        `<div class="hue-rose"><p class="hue-rose-title">${t('Accuracy')}</p>` +
+        `<p class="hue-rose-sub">${t('longer = you finish more matches')}</p>${accSvg}</div>` +
+        `<div class="hue-rose"><p class="hue-rose-title">${t('Effort')}</p>` +
+        `<p class="hue-rose-sub">${t('longer = more steps to finish')}</p>${effSvg}</div>`;
 
       const covered = s.filter(x => x.n >= minN).length;
-      document.getElementById('hueMeta').textContent = `${covered}/6 hues`;
+      document.getElementById('hueMeta').textContent = t('{n}/6 hues').replace('{n}', String(covered));
       document.getElementById('hueInterpret').textContent = buildHueInterpretation(s, minN);
       document.getElementById('hueNote').textContent =
-        'Each petal is a hue family, painted its own colour. Left: share of matches you ' +
-        'complete (vs. give up). Right: typical number of mixing steps. Faint dashed ' +
-        `petals have fewer than ${minN} plays, so treat them loosely.`;
+        t('Each petal is a hue family, painted its own colour. Left: share of matches you complete (vs. give up). Right: typical number of mixing steps. Faint dashed petals have fewer than {n} plays, so treat them loosely.')
+          .replace('{n}', String(minN));
       card.style.display = '';
     }
 
@@ -813,26 +819,26 @@
       primary.innerHTML = `
         <div class="ps-stat ps-stat--primary">
           <div class="ps-stat-val">${completedColors}/${totalColors}</div>
-          <div class="ps-stat-lbl">Colors Done</div>
+          <div class="ps-stat-lbl">${t('Colors Done')}</div>
         </div>
         <div class="ps-stat ps-stat--primary">
           <div class="ps-stat-val">${covPct.toFixed(1)}%</div>
-          <div class="ps-stat-lbl">Coverage</div>
+          <div class="ps-stat-lbl">${t('Coverage')}</div>
         </div>
         <div class="ps-stat">
-          <div class="ps-stat-val" style="color:${rankColor}">${p.rank}</div>
-          <div class="ps-stat-lbl">Rank</div>
+          <div class="ps-stat-val" style="color:${rankColor}">${t(p.rank)}</div>
+          <div class="ps-stat-lbl">${t('Rank')}</div>
         </div>
         <div class="ps-stat">
           <div class="ps-stat-val">${p.level_name}</div>
-          <div class="ps-stat-lbl">Level</div>
+          <div class="ps-stat-lbl">${t('Level')}</div>
         </div>
       `;
 
       secondary.innerHTML = `
-        <span class="ps-mini" title="Current streak">🔥 <span class="ps-mini-val">${p.current_streak}</span> streak</span>
-        <span class="ps-mini" title="Longest streak">🏆 <span class="ps-mini-val">${p.longest_streak}</span> best</span>
-        <span class="ps-mini" title="Streak freezes available">🧊 <span class="ps-mini-val">${p.streak_freeze_available}</span> freezes</span>
+        <span class="ps-mini" title="${t('Current streak')}">🔥 <span class="ps-mini-val">${p.current_streak}</span> ${t('streak')}</span>
+        <span class="ps-mini" title="${t('Longest streak')}">🏆 <span class="ps-mini-val">${p.longest_streak}</span> ${t('best')}</span>
+        <span class="ps-mini" title="${t('Streak freezes available')}">🧊 <span class="ps-mini-val">${p.streak_freeze_available}</span> ${t('freezes')}</span>
       `;
 
       // Mastered banner
@@ -846,12 +852,12 @@
       document.getElementById('quotaBarFill').style.width = quotaBarPct + '%';
       if (p.is_maxed_out) {
         document.getElementById('quotaBarLabel').innerHTML =
-          '<span>All colors mastered</span><span>100%</span>';
+          '<span>' + t('All colors mastered') + '</span><span>100%</span>';
       } else {
         const remAttempts = p.remaining_attempts_total != null ? p.remaining_attempts_total.toLocaleString() : '—';
         document.getElementById('quotaBarLabel').innerHTML =
-          `<span>${completedColors}/${totalColors} colors at quota</span>` +
-          `<span>${remAttempts} attempts remaining</span>`;
+          `<span>${t('{done}/{total} colors at quota').replace('{done}', String(completedColors)).replace('{total}', String(totalColors))}</span>` +
+          `<span>${t('{n} attempts remaining').replace('{n}', remAttempts)}</span>`;
       }
 
       // Secondary bar: XP (reinforcement)
@@ -860,8 +866,10 @@
         : 100;
       document.getElementById('xpBarFill').style.width = xpPct + '%';
       document.getElementById('xpBarLabel').innerHTML =
-        `<span>XP: ${(p.xp || 0).toLocaleString()}</span>` +
-        (p.xp_to_next_level > 0 ? `<span>+${p.xp_to_next_level} to next level</span>` : '<span>Max XP level</span>');
+        `<span>${t('XP: {n}').replace('{n}', (p.xp || 0).toLocaleString())}</span>` +
+        (p.xp_to_next_level > 0
+          ? `<span>${t('+{n} to next level').replace('{n}', String(p.xp_to_next_level))}</span>`
+          : '<span>' + t('Max XP level') + '</span>');
     }
 
     function awardTypeClass(key, meta, majorThreshold) {
@@ -902,25 +910,25 @@
 
     function awardLabel(key, meta, majorThreshold) {
       const majorT = majorThreshold != null && majorThreshold > 0 ? majorThreshold : 10;
-      if (key === 'all_colors_complete') return 'All Colors Mastered!';
+      if (key === 'all_colors_complete') return t('All Colors Mastered!');
       if (key.startsWith('quota_milestone_')) {
         const pct = meta && meta.pct ? meta.pct : key.replace('quota_milestone_', '').replace('pct', '');
-        return pct + '% Coverage Milestone';
+        return t('{pct}% Coverage Milestone').replace('{pct}', String(pct));
       }
-      if (key.startsWith('daily_champion')) return 'Daily Champion' + (meta && meta.date ? ' ' + meta.date : '');
-      if (key === 'daily_fastest_match') return 'Fastest Color Match of the Day';
-      if (key === 'daily_fewest_steps') return 'Fewest Steps of the Day';
-      if (key === 'daily_mission_precision_hit') return 'Daily Mission: Precision Hit';
-      if (key === 'daily_mission_fast_finish') return 'Daily Mission: Fast Finish';
-      if (key === 'daily_mission_efficient_mixer') return 'Daily Mission: Efficient Mixer';
-      if (key.startsWith('streak_')) return (meta && meta.days ? meta.days : '?') + '-Day Streak';
-      if (key.startsWith('level_')) return 'Level ' + (meta && meta.level ? meta.level : '?');
+      if (key.startsWith('daily_champion')) return t('Daily Champion') + (meta && meta.date ? ' ' + meta.date : '');
+      if (key === 'daily_fastest_match') return t('Fastest Color Match of the Day');
+      if (key === 'daily_fewest_steps') return t('Fewest Steps of the Day');
+      if (key === 'daily_mission_precision_hit') return t('Daily Mission: Precision Hit');
+      if (key === 'daily_mission_fast_finish') return t('Daily Mission: Fast Finish');
+      if (key === 'daily_mission_efficient_mixer') return t('Daily Mission: Efficient Mixer');
+      if (key.startsWith('streak_')) return t('{n}-Day Streak').replace('{n}', String(meta && meta.days ? meta.days : '?'));
+      if (key.startsWith('level_')) return t('Level {n}').replace('{n}', String(meta && meta.level ? meta.level : '?'));
       if (key.startsWith('coverage_')) {
-        const t = meta && meta.threshold ? meta.threshold : '?';
-        if (meta && meta.threshold === majorT) return 'Color mastered (' + majorT + ' attempts)';
-        return t + ' attempts milestone';
+        const thr = meta && meta.threshold ? meta.threshold : '?';
+        if (meta && meta.threshold === majorT) return t('Color mastered ({n} attempts)').replace('{n}', String(majorT));
+        return t('{n} attempts milestone').replace('{n}', String(thr));
       }
-      if (key === 'first_perfect_match') return 'First Perfect Match';
+      if (key === 'first_perfect_match') return t('First Perfect Match');
       return key.replace(/_/g, ' ');
     }
 
@@ -928,8 +936,10 @@
 
     // Shared collapsed-by-default helper: items beyond a cap carry
     // class "extra-item is-hidden"; the button toggles them within scopeId.
+    // `noun` must be passed already translated (e.g. t('badges')) so word
+    // order works in every language via the full-pattern key.
     function showMoreButtonHTML(scopeId, total, noun) {
-      var label = 'Show all ' + total + ' ' + noun;
+      var label = t('Show all {n} {noun}').replace('{n}', String(total)).replace('{noun}', noun);
       return '<button type="button" class="show-more-btn" data-expanded="false"' +
         ' data-collapsed-label="' + label + '"' +
         ' onclick="toggleExtras(\'' + scopeId + '\', this)">' + label + '</button>';
@@ -943,7 +953,7 @@
         el.classList.toggle('is-hidden', expanded);
       });
       btn.dataset.expanded = String(!expanded);
-      btn.textContent = expanded ? btn.dataset.collapsedLabel : 'Show fewer';
+      btn.textContent = expanded ? btn.dataset.collapsedLabel : t('Show fewer');
     }
 
     function renderAwards(awards, coverageQuota) {
@@ -953,13 +963,14 @@
       const meta = document.getElementById('awardsCount');
       card.style.display = '';
       if (!awards || awards.length === 0) {
-        grid.innerHTML = '<span class="no-awards">No badges yet — keep playing!</span>';
+        grid.innerHTML = '<span class="no-awards">' + t('No badges yet — keep playing!') + '</span>';
         if (meta) meta.textContent = '0';
         return;
       }
       // Server orders by unlocked_at desc: latest few visible, rest expandable.
       if (meta) meta.textContent = awards.length > MAX_AWARDS_SHOWN
-        ? `latest ${MAX_AWARDS_SHOWN} of ${awards.length}` : String(awards.length);
+        ? t('latest {k} of {n}').replace('{k}', String(MAX_AWARDS_SHOWN)).replace('{n}', String(awards.length))
+        : String(awards.length);
       grid.innerHTML = awards.map((a, i) => {
         const cls = awardTypeClass(a.key, a.metadata, majorT);
         const icon = awardIcon(a.key, a.metadata, majorT);
@@ -968,7 +979,7 @@
         return `<div class="award-badge ${cls}${extra}">${icon} ${label}</div>`;
       }).join('');
       document.getElementById('awardsMore').innerHTML = awards.length > MAX_AWARDS_SHOWN
-        ? showMoreButtonHTML('awardsGrid', awards.length, 'badges') : '';
+        ? showMoreButtonHTML('awardsGrid', awards.length, t('badges')) : '';
     }
 
     var MAX_QUOTA_COLORS_SHOWN = 5;
@@ -981,7 +992,9 @@
 
       const q = quota != null && quota > 0 ? quota : 10;
       const completed = colorStats.filter(s => s.attempt_count >= q).length;
-      if (meta) meta.textContent = `${completed}/${colorStats.length} at quota · ${q} per color`;
+      if (meta) meta.textContent = t('{done}/{total} at quota · {q} per color')
+        .replace('{done}', String(completed)).replace('{total}', String(colorStats.length))
+        .replace('{q}', String(q));
 
       // Sort: at-quota colors last, then by remaining ascending (nearest to done first)
       const sorted = [...colorStats].sort((a, b) => {
@@ -1005,13 +1018,13 @@
           : `${s.attempt_count}/${q}`;
         const extra = i >= MAX_QUOTA_COLORS_SHOWN ? ' extra-item is-hidden' : '';
         return `<div class="color-stat-bar-row${extra}">
-          <span class="csr-label">Color #${s.target_color_id}</span>
+          <span class="csr-label">${t('Color #{id}').replace('{id}', String(s.target_color_id))}</span>
           <div class="csr-bar-wrap"><div class="csr-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
           <span class="csr-count">${countLabel}</span>
         </div>`;
       }).join('');
       document.getElementById('colorStatsMore').innerHTML = sorted.length > MAX_QUOTA_COLORS_SHOWN
-        ? showMoreButtonHTML('colorStatsList', sorted.length, 'colors') : '';
+        ? showMoreButtonHTML('colorStatsList', sorted.length, t('colors')) : '';
 
       card.style.display = '';
     }
@@ -1029,8 +1042,8 @@
     // ── Session results ───────────────────────────────────────
     function loadUserResults(userId) {
       const userIdToUse = userId || document.getElementById('userIdInput').value.toUpperCase();
-      if (!userIdToUse || userIdToUse.length !== 6) { showError('Please enter a valid 6-character user ID'); return; }
-      document.getElementById('results-content').innerHTML = '<div class="loading">Loading your results…</div>';
+      if (!userIdToUse || userIdToUse.length !== 6) { showError(t('Please enter a valid 6-character user ID')); return; }
+      document.getElementById('results-content').innerHTML = '<div class="loading">' + t('Loading your results…') + '</div>';
 
       if (!userId) {
         loadUserProfile(userIdToUse);
@@ -1046,10 +1059,10 @@
             displayResults(data.results, data.total_sessions);
             try { renderJourney(data.results); } catch (e) { console.error('Journey render error:', e); }
           } else {
-            showError(data.message || 'Failed to load results');
+            showError(data.message || t('Failed to load results'));
           }
         })
-        .catch(() => showError('Failed to load results. Please try again.'));
+        .catch(() => showError(t('Failed to load results. Please try again.')));
     }
 
     var MAX_SESSIONS_SHOWN = 15;
@@ -1097,7 +1110,7 @@
 
     function displayResults(results, totalSessions) {
       if (results.length === 0) {
-        document.getElementById('results-content').innerHTML = '<div class="no-results">No results found for this user ID.</div>';
+        document.getElementById('results-content').innerHTML = '<div class="no-results">' + t('No results found for this user ID.') + '</div>';
         return;
       }
       const completed = results.filter(isCompletedResult).length;
@@ -1122,37 +1135,37 @@
       function fmtCat(val, legacySkip, isSkipped) {
         if (val) {
           const labels = {
-            perfect: 'Perfect', perfect_match: 'Perfect',
-            no_perceivable_difference: 'No perceivable difference',
-            acceptable_difference: 'Acceptable difference',
-            big_difference: 'Big difference',
-            stopped: 'Stopped',
+            perfect: t('Perfect'), perfect_match: t('Perfect'),
+            no_perceivable_difference: t('No perceivable difference'),
+            acceptable_difference: t('Acceptable difference'),
+            big_difference: t('Big difference'),
+            stopped: t('Stopped'),
           };
           return labels[val] || val;
         }
         if (isSkipped && legacySkip) {
-          return ({ identical: 'Identical', acceptable: 'Acceptable', unacceptable: 'Not acceptable' }[legacySkip] || legacySkip) + ' (legacy)';
+          return ({ identical: t('Identical'), acceptable: t('Acceptable'), unacceptable: t('Not acceptable') }[legacySkip] || legacySkip) + ' (' + t('legacy') + ')';
         }
         return '—';
       }
 
       const summaryHTML = '<div class="results-summary">' +
-        '<div class="summary-item"><div class="summary-number">' + totalSessions + '</div><div class="summary-label">Total</div></div>' +
-        '<div class="summary-item"><div class="summary-number">' + completed + '</div><div class="summary-label">Completed</div></div>' +
-        '<div class="summary-item"><div class="summary-number">' + skipped + '</div><div class="summary-label">Skipped</div></div>' +
-        '<div class="summary-item" title="Sum of elapsed time across all rounds. Each round capped at 30 min to ignore abandoned tabs.">' +
+        '<div class="summary-item"><div class="summary-number">' + totalSessions + '</div><div class="summary-label">' + t('Total') + '</div></div>' +
+        '<div class="summary-item"><div class="summary-number">' + completed + '</div><div class="summary-label">' + t('Completed') + '</div></div>' +
+        '<div class="summary-item"><div class="summary-number">' + skipped + '</div><div class="summary-label">' + t('Skipped') + '</div></div>' +
+        '<div class="summary-item" title="' + t('Sum of elapsed time across all rounds. Each round capped at 30 min to ignore abandoned tabs.') + '">' +
           '<div class="summary-number">' + fmtDuration(totalTime) + '</div>' +
-          '<div class="summary-label">Total Time</div></div>' +
-        '<div class="summary-item" title="Average elapsed time per completed match (rounds &le; 30 min).">' +
+          '<div class="summary-label">' + t('Total Time') + '</div></div>' +
+        '<div class="summary-item" title="' + t('Average elapsed time per completed match (rounds &le; 30 min).') + '">' +
           '<div class="summary-number">' + fmtSecondsShort(avgMatchTime) + '</div>' +
-          '<div class="summary-label">Avg / Match</div></div>' +
-        '<div class="summary-item" title="Median elapsed time per completed match.">' +
+          '<div class="summary-label">' + t('Avg / Match') + '</div></div>' +
+        '<div class="summary-item" title="' + t('Median elapsed time per completed match.') + '">' +
           '<div class="summary-number">' + fmtSecondsShort(medianMatchTime) + '</div>' +
-          '<div class="summary-label">Median / Match</div></div>' +
+          '<div class="summary-label">' + t('Median / Match') + '</div></div>' +
         '</div>';
 
       let tableHTML = '<table class="results-table"><thead><tr>' +
-        '<th>Date</th><th>Target</th><th>Drops</th><th>Outcome</th><th>Time</th><th>Status</th></tr></thead><tbody>';
+        '<th>' + t('Date') + '</th><th>' + t('Target') + '</th><th>' + t('Drops') + '</th><th>' + t('Outcome') + '</th><th>' + t('Time') + '</th><th>' + t('Status') + '</th></tr></thead><tbody>';
       let cardsHTML = '<div class="result-cards">';
 
       // Server orders newest-first; recent rows visible, the rest expandable.
@@ -1165,13 +1178,13 @@
           r.drops.red > 0 ? 'R:' + r.drops.red : '',
           r.drops.yellow > 0 ? 'Y:' + r.drops.yellow : '',
           r.drops.blue > 0 ? 'Bl:' + r.drops.blue : '',
-        ].filter(Boolean).join(' ') || 'None';
+        ].filter(Boolean).join(' ') || t('None');
 
         const cat = fmtCat(r.match_category, r.skip_perception, r.skipped);
         const isCompleted = isCompletedResult(r);
         const statusClass = isCompleted ? 'status-completed' : 'status-skipped';
-        const statusText = isCompleted ? 'Completed' : 'Skipped';
-        const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : 'N/A';
+        const statusText = isCompleted ? t('Completed') : t('Skipped');
+        const ts = r.timestamp ? new Date(r.timestamp).toLocaleString() : t('N/A');
         const extra = idx >= MAX_SESSIONS_SHOWN ? ' extra-item is-hidden' : '';
 
         tableHTML += `<tr class="results-table-row${extra}"><td>${ts}</td>
@@ -1189,9 +1202,9 @@
             </div>
           </div>
           <div class="result-card-meta">
-            <div><strong>Drops:</strong> ${drops}</div>
-            <div><strong>Time:</strong> ${typeof r.time_sec === 'number' ? r.time_sec.toFixed(1) : r.time_sec}s</div>
-            <div><strong>Outcome:</strong> ${cat}</div>
+            <div><strong>${t('Drops:')}</strong> ${drops}</div>
+            <div><strong>${t('Time:')}</strong> ${typeof r.time_sec === 'number' ? r.time_sec.toFixed(1) : r.time_sec}s</div>
+            <div><strong>${t('Outcome:')}</strong> ${cat}</div>
             <div class="${statusClass}">${statusText}</div>
           </div>
         </div>`;
@@ -1201,7 +1214,7 @@
       cardsHTML += '</div>';
 
       const showMoreHTML = results.length > MAX_SESSIONS_SHOWN
-        ? showMoreButtonHTML('results-content', results.length, 'sessions')
+        ? showMoreButtonHTML('results-content', results.length, t('sessions'))
         : '';
 
       document.getElementById('results-content').innerHTML = summaryHTML + tableHTML + cardsHTML + showMoreHTML;
@@ -1289,16 +1302,16 @@
       const avg = arr => arr.reduce((a, r) => a + r.deltaE, 0) / arr.length;
       const early = avg(rounds.slice(0, half));
       const late = avg(rounds.slice(half));
-      if (early <= 0) return 'Your accuracy has been razor-sharp from the start.';
+      if (early <= 0) return t('Your accuracy has been razor-sharp from the start.');
       const change = (early - late) / early;
       const pct = Math.abs(Math.round(change * 100));
       if (change >= 0.08) {
-        return 'Your average match error is down ' + pct + '% since your early rounds — your color eye is sharpening. 📉';
+        return t('Your average match error is down {pct}% since your early rounds — your color eye is sharpening. 📉').replace('{pct}', String(pct));
       }
       if (change <= -0.08) {
-        return 'Your recent rounds run ' + pct + '% harder than your early ones — higher bands are tougher shades. Keep at it.';
+        return t('Your recent rounds run {pct}% harder than your early ones — higher bands are tougher shades. Keep at it.').replace('{pct}', String(pct));
       }
-      return 'Your accuracy is holding steady across ' + n + ' rounds — consistency is a skill too.';
+      return t('Your accuracy is holding steady across {n} rounds — consistency is a skill too.').replace('{n}', String(n));
     }
 
     function renderJourney(results) {
@@ -1308,7 +1321,8 @@
         if (rounds.length > 0) {
           card.style.display = '';
           document.getElementById('journeyHeadline').textContent =
-            'Play ' + (JOURNEY_MIN_ROUNDS - rounds.length) + ' more rounds to unlock your improvement story.';
+            t('Play {n} more rounds to unlock your improvement story.')
+              .replace('{n}', String(JOURNEY_MIN_ROUNDS - rounds.length));
           document.getElementById('journeySpark').style.display = 'none';
           document.getElementById('journeyBests').style.display = 'none';
           document.getElementById('journeyWeeks').style.display = 'none';
@@ -1331,16 +1345,16 @@
       const parts = [];
       if (perfectTimes.length) {
         const fastest = perfectTimes.reduce((a, b) => (a.timeSec <= b.timeSec ? a : b));
-        parts.push('<span class="ps-mini" title="Your fastest perfect match">⚡ <span class="ps-mini-val">' +
-          fastest.timeSec.toFixed(1) + 's</span> fastest match <span style="font-weight:400">(' +
+        parts.push('<span class="ps-mini" title="' + t('Your fastest perfect match') + '">⚡ <span class="ps-mini-val">' +
+          fastest.timeSec.toFixed(1) + 's</span> ' + t('fastest match') + ' <span style="font-weight:400">(' +
           fastest.t.toLocaleDateString() + ')</span></span>');
-        parts.push('<span class="ps-mini" title="Perfect matches so far">🎯 <span class="ps-mini-val">' +
-          perfectTimes.length + '</span> perfect</span>');
+        parts.push('<span class="ps-mini" title="' + t('Perfect matches so far') + '">🎯 <span class="ps-mini-val">' +
+          perfectTimes.length + '</span> ' + t('perfect') + '</span>');
       }
       if (giveUps.length) {
         const closest = giveUps.reduce((a, b) => (a.deltaE <= b.deltaE ? a : b));
-        parts.push('<span class="ps-mini" title="Closest you came before moving on">🔍 <span class="ps-mini-val">ΔE ' +
-          closest.deltaE.toFixed(2) + '</span> closest give-up</span>');
+        parts.push('<span class="ps-mini" title="' + t('Closest you came before moving on') + '">🔍 <span class="ps-mini-val">ΔE ' +
+          closest.deltaE.toFixed(2) + '</span> ' + t('closest give-up') + '</span>');
       }
       bests.innerHTML = parts.join('');
       if (!parts.length) bests.style.display = 'none';
@@ -1365,7 +1379,7 @@
       function weekBlock(title, s, other) {
         if (!s) {
           return '<div class="journey-week"><div class="journey-week-title">' + title +
-            '</div><div class="journey-week-rows">No rounds played</div></div>';
+            '</div><div class="journey-week-rows">' + t('No rounds played') + '</div></div>';
         }
         let deDelta = '';
         if (other && other.avgDe > 0) {
@@ -1378,12 +1392,12 @@
         }
         return '<div class="journey-week"><div class="journey-week-title">' + title + '</div>' +
           '<div class="journey-week-rows">' +
-          '<div><strong>' + s.n + '</strong> rounds</div>' +
-          '<div>avg error <strong>ΔE ' + s.avgDe.toFixed(2) + '</strong>' + deDelta + '</div>' +
-          '<div>completed <strong>' + Math.round(s.completion * 100) + '%</strong></div>' +
+          '<div><strong>' + s.n + '</strong> ' + t('rounds') + '</div>' +
+          '<div>' + t('avg error') + ' <strong>ΔE ' + s.avgDe.toFixed(2) + '</strong>' + deDelta + '</div>' +
+          '<div>' + t('completed') + ' <strong>' + Math.round(s.completion * 100) + '%</strong></div>' +
           '</div></div>';
       }
-      weeks.innerHTML = weekBlock('Last week', lw, null) + weekBlock('This week', tw, lw);
+      weeks.innerHTML = weekBlock(t('Last week'), lw, null) + weekBlock(t('This week'), tw, lw);
     }
 
     function showError(message) {

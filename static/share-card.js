@@ -28,13 +28,13 @@ function hueEmoji(rgb) {
 
 function shareText({ kind, deltaE, drops, timeSec, targetRgb, date }) {
   const day = date || new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  const what = kind === 'daily' ? `ShadeMatch Daily — ${day}` : 'ShadeMatch';
+  const what = kind === 'daily' ? t('ShadeMatch Daily — {day}').replace('{day}', day) : 'ShadeMatch';
   const bits = [];
   if (Number.isFinite(deltaE)) bits.push(`ΔE ${deltaE.toFixed(2)}`);
-  if (Number.isFinite(drops)) bits.push(`${drops} drops`);
+  if (Number.isFinite(drops)) bits.push(t('{n} drops').replace('{n}', String(drops)));
   if (Number.isFinite(timeSec)) bits.push(`${timeSec.toFixed(0)}s`);
   const emoji = Array.isArray(targetRgb) ? hueEmoji(targetRgb) : '🎨';
-  return `${emoji} ${what} · ${bits.join(' · ')} — can you beat me? ${APP_URL}`;
+  return `${emoji} ${what} · ${bits.join(' · ')} — ${t('can you beat me?')} ${APP_URL}`;
 }
 
 // Render the card. Square 1080×1080 so it looks right in every feed.
@@ -57,7 +57,7 @@ function renderCard({ kind, targetRgb, mixedRgb, deltaE, drops, timeSec, date })
   ctx.font = '400 34px Nunito, system-ui, sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
   const day = date || new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
-  ctx.fillText(kind === 'daily' ? `Daily challenge · ${day}` : day, 72, 165);
+  ctx.fillText(kind === 'daily' ? t('Daily challenge · {day}').replace('{day}', day) : day, 72, 165);
 
   // Swatch pair.
   const swY = 230, swH = 430, swW = (S - 144 - 8) / 2;
@@ -73,16 +73,16 @@ function renderCard({ kind, targetRgb, mixedRgb, deltaE, drops, timeSec, date })
   ctx.font = '600 30px Nunito, system-ui, sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.65)';
   ctx.textAlign = 'center';
-  ctx.fillText('the target', 72 + swW / 2, swY + swH + 52);
-  ctx.fillText('my mix', 72 + swW + 8 + swW / 2, swY + swH + 52);
+  ctx.fillText(t('the target'), 72 + swW / 2, swY + swH + 52);
+  ctx.fillText(t('my mix'), 72 + swW + 8 + swW / 2, swY + swH + 52);
 
   // Score row.
   const statY = 850;
   ctx.textAlign = 'center';
   const stats = [];
-  if (Number.isFinite(deltaE)) stats.push({ v: 'ΔE ' + deltaE.toFixed(2), l: 'match error' });
-  if (Number.isFinite(drops)) stats.push({ v: String(drops), l: 'drops' });
-  if (Number.isFinite(timeSec)) stats.push({ v: timeSec.toFixed(0) + 's', l: 'time' });
+  if (Number.isFinite(deltaE)) stats.push({ v: 'ΔE ' + deltaE.toFixed(2), l: t('match error') });
+  if (Number.isFinite(drops)) stats.push({ v: String(drops), l: t('drops') });
+  if (Number.isFinite(timeSec)) stats.push({ v: timeSec.toFixed(0) + 's', l: t('time') });
   const cellW = (S - 144) / Math.max(stats.length, 1);
   stats.forEach((s, i) => {
     const cx = 72 + cellW * i + cellW / 2;
@@ -97,7 +97,7 @@ function renderCard({ kind, targetRgb, mixedRgb, deltaE, drops, timeSec, date })
   // Footer.
   ctx.font = '700 36px Nunito, system-ui, sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.fillText('Can you beat me?  ·  shadematch.app', S / 2, 1010);
+  ctx.fillText(t('Can you beat me?  ·  shadematch.app'), S / 2, 1010);
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 }
@@ -146,23 +146,23 @@ async function share(payload) {
 function offer(payload) {
   const setCta = window.setCta;
   if (!setCta) return; // slot manager not ready — nothing to attach to
-  const label = payload.kind === 'daily' ? "Share today's result" : 'Share this match';
+  const label = payload.kind === 'daily' ? t("Share today's result") : t('Share this match');
   const canChallenge = !!(payload.attemptUuid && localStorage.getItem('userId')
     && window.shadeMatchCreateChallenge);
   const actions = [{
-    label: 'Share',
+    label: t('Share'),
     variant: 'primary',
     onClick: async () => {
       const outcome = await share(payload);
       if (outcome === 'downloaded' && window.showToast) {
-        window.showToast('📋 Card downloaded and text copied — paste it anywhere', 'info', 4200);
+        window.showToast(t('📋 Card downloaded and text copied — paste it anywhere'), 'info', 4200);
       }
       if (outcome === 'shared') setCta('share', null);
     },
   }];
   if (canChallenge) {
     actions.push({
-      label: '⚔️ Challenge',
+      label: '⚔️ ' + t('Challenge'),
       variant: 'secondary',
       onClick: () => window.shadeMatchCreateChallenge(payload.attemptUuid),
     });
@@ -170,7 +170,7 @@ function offer(payload) {
   setCta('share', {
     icon: '📤',
     labelHtml: label,
-    reasonHtml: 'Send the card — see if a friend can beat you.',
+    reasonHtml: t('Send the card — see if a friend can beat you.'),
     actions,
     onDismiss: () => setCta('share', null),
     variant: 'share',

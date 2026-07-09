@@ -1,11 +1,11 @@
 {% extends 'emails/_base.html' %}
 
-{% block preheader %}{{ preheader|default(headline ~ " — open the daily challenge.") }}{% endblock %}
-{% block header_eyebrow %}Daily challenge{% endblock %}
+{% block preheader %}{{ preheader|default(tr('{headline} — open the daily challenge.', headline=headline)) }}{% endblock %}
+{% block header_eyebrow %}{{ tr('Daily challenge') }}{% endblock %}
 
 {% block body %}
   <p style="margin:0 0 8px; font-size:12px; font-weight:800; letter-spacing:1.6px; color:#4A90D9; text-transform:uppercase;">
-    {{ eyebrow|default("Today's palette") }}
+    {{ eyebrow|default(tr("Today's palette")) }}
   </p>
   <h1 class="sm-h1" style="margin:0 0 12px; font-size:30px; line-height:1.18; font-weight:800; color:#2D2D2D;">
     {{ headline }}
@@ -24,7 +24,7 @@
           <table role="presentation" cellpadding="0" cellspacing="0" border="0">
             <tr>
               <td align="center" style="background:rgba(255,255,255,0.86); border-radius:999px; padding:8px 18px; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-weight:800; font-size:15px; color:#2D2D2D;">
-                {{ swatch_label|default('Today') }}
+                {{ swatch_label|default(tr('Today')) }}
                 {% if swatch_caption %}
                   <span style="font-weight:600; color:#6B6B6B; padding-left:6px;">· {{ swatch_caption }}</span>
                 {% endif %}
@@ -60,7 +60,7 @@
     <tr>
       <td align="center" bgcolor="#4A90D9" style="background-color:#4A90D9; border-radius:12px;">
         <a href="{{ cta_url }}" style="display:inline-block; padding:15px 30px; font-family:'Nunito','Trebuchet MS',Arial,sans-serif; font-size:16px; font-weight:800; color:#FFFFFF; text-decoration:none; border-radius:12px;">
-          {{ cta_label|default('Open today\'s challenge →') }}
+          {{ cta_label|default(tr("Open today's challenge →")) }}
         </a>
       </td>
     </tr>
@@ -70,7 +70,7 @@
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:18px 0 0;">
       <tr>
         <td style="padding:16px 18px; background:#F0F6FD; border:1px solid #DCE9F8; border-radius:12px; font-size:14px; line-height:1.55; color:#2D4F75;">
-          <strong style="color:#2D2D2D;">Tip:</strong> {{ tip }}
+          <strong style="color:#2D2D2D;">{{ tr('Tip:') }}</strong> {{ tip }}
         </td>
       </tr>
     </table>
@@ -78,6 +78,6 @@
 
   <hr style="border:none; border-top:1px solid #EFEAE2; margin:28px 0 18px;">
   <p style="margin:0; font-size:13px; color:#6B6B6B;">
-    Streaks are kind: a single attempt counts. Even a quick 30-second mix keeps your run alive.
+    {{ tr('Streaks are kind: a single attempt counts. Even a quick 30-second mix keeps your run alive.') }}
   </p>
 {% endblock %}

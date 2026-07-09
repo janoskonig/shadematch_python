@@ -35,6 +35,7 @@ from .gamification import (
     _effective_sum_cap,
 )
 from .regions import region_of_target, TARGET_EXPOSURES_PER_REGION
+from .i18n import t
 
 POLICY_VERSION = 'v2'
 
@@ -178,8 +179,8 @@ def build_next_action(user_id: str, today: date = None, quota=None):
     secondary = {
         'id': 'escape_free_play',
         'type': 'navigate',
-        'label': 'Browse colors',
-        'reason': 'Pick any color to practice',
+        'label': t('Browse colors'),
+        'reason': t('Pick any color to practice'),
         'payload': {'route': 'free_play'},
     }
 
@@ -195,8 +196,8 @@ def build_next_action(user_id: str, today: date = None, quota=None):
         primary = {
             'id': 'daily_unfinished',
             'type': 'daily_challenge',
-            'label': "Today's challenge",
-            'reason': "Complete today's daily color challenge",
+            'label': t("Today's challenge"),
+            'reason': t("Complete today's daily color challenge"),
             'payload': {'route': 'daily_challenge', 'challenge_date': policy_day},
         }
 
@@ -206,10 +207,10 @@ def build_next_action(user_id: str, today: date = None, quota=None):
         primary = {
             'id': 'streak_at_risk',
             'type': 'practice',
-            'label': 'Save your streak',
-            'reason': (
-                f'Your {up.current_streak}-day streak is on the line'
-                ' — play once today to keep it'
+            'label': t('Save your streak'),
+            'reason': t(
+                'Your {n}-day streak is on the line — play once today to keep it',
+                n=up.current_streak,
             ),
             'payload': {
                 'route': 'free_play',
@@ -224,16 +225,24 @@ def build_next_action(user_id: str, today: date = None, quota=None):
             never_qualified = up is None or up.last_activity_date is None
             if never_qualified:
                 action_id = 'streak_start'
-                label = 'Start your streak'
-                reason = f'Match {tc.name} to begin — {remaining} attempts to quota'
+                label = t('Start your streak')
+                reason = t('Match {color} to begin — {n} attempts to quota',
+                           color=tc.name, n=remaining)
             else:
                 action_id = 'quota_deficit'
-                label = f'Practice {tc.name}'
-                reason = (
-                    f'{remaining} attempt{"s" if remaining != 1 else ""} to '
-                    f'complete this color ({quota["completed_colors"]} of '
-                    f'{quota["total_tracked_colors"]} done)'
-                )
+                label = t('Practice {color}', color=tc.name)
+                if remaining != 1:
+                    reason = t(
+                        '{n} attempts to complete this color ({done} of {total} done)',
+                        n=remaining, done=quota['completed_colors'],
+                        total=quota['total_tracked_colors'],
+                    )
+                else:
+                    reason = t(
+                        '{n} attempt to complete this color ({done} of {total} done)',
+                        n=remaining, done=quota['completed_colors'],
+                        total=quota['total_tracked_colors'],
+                    )
             primary = {
                 'id': action_id,
                 'type': 'practice',
@@ -250,10 +259,10 @@ def build_next_action(user_id: str, today: date = None, quota=None):
             primary = {
                 'id': 'quota_locked_colors',
                 'type': 'practice',
-                'label': 'Build your coverage',
-                'reason': (
-                    f'Complete your current sum-drop tier to unlock harder shades — '
-                    f'{quota["remaining_attempts_total"]:,} attempts left in this tier'
+                'label': t('Build your coverage'),
+                'reason': t(
+                    'Complete your current sum-drop tier to unlock harder shades — {n} attempts left in this tier',
+                    n=f'{quota["remaining_attempts_total"]:,}',
                 ),
                 'payload': {'route': 'free_play', 'target_color_id': None},
             }
@@ -263,8 +272,8 @@ def build_next_action(user_id: str, today: date = None, quota=None):
         primary = {
             'id': 'maintenance_delta_e',
             'type': 'practice',
-            'label': 'Refine your precision',
-            'reason': 'All colors mastered — keep improving your delta-E accuracy',
+            'label': t('Refine your precision'),
+            'reason': t('All colors mastered — keep improving your delta-E accuracy'),
             'payload': {'route': 'free_play', 'target_color_id': None},
         }
 
@@ -274,10 +283,10 @@ def build_next_action(user_id: str, today: date = None, quota=None):
         primary = {
             'id': 'quota_progress',
             'type': 'practice',
-            'label': 'Build palette coverage',
+            'label': t('Build palette coverage'),
             'reason': (
-                f'{total_remaining:,} attempts remaining to complete all colors'
-                if total_remaining > 0 else 'Keep practicing!'
+                t('{n} attempts remaining to complete all colors', n=f'{total_remaining:,}')
+                if total_remaining > 0 else t('Keep practicing!')
             ),
             'payload': {'route': 'free_play', 'target_color_id': quota.get('nearest_deficit_color_id')},
         }

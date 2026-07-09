@@ -33,6 +33,19 @@ from dotenv import dotenv_values
 from flask import current_app, render_template
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
+from .i18n import t_for
+
+
+def tr_factory(locale):
+    """Recipient-locale translator for email templates.
+
+    Emails must render in the RECIPIENT's language (User.locale), never the
+    request locale, so templates receive an explicit ``tr`` callable bound to
+    the recipient's locale. For 'en' (or None) it degrades to identity.
+    """
+    loc = locale or 'en'
+    return lambda text, **kwargs: t_for(loc, text, **kwargs)
+
 
 # ── Branding / defaults ────────────────────────────────────────────────────
 
@@ -151,15 +164,18 @@ def build_unsubscribe_url(user_id: str, request_url_root: Optional[str] = None) 
 
 # ── Rendering ──────────────────────────────────────────────────────────────
 
-def render_email(template_name: str, **context) -> Tuple[str, str]:
+def render_email(template_name: str, locale: Optional[str] = None, **context) -> Tuple[str, str]:
     """Render the HTML and plain-text variants of an email template.
 
     Templates live at ``templates/emails/<template_name>.html`` and
-    ``templates/emails/<template_name>.txt``.
+    ``templates/emails/<template_name>.txt``. ``locale`` is the RECIPIENT's
+    language; a ``tr`` translator bound to it is always injected so templates
+    can use ``{{ tr('English text') }}`` (identity for 'en'/None).
     """
     ctx = {
         'brand_name': BRAND_NAME,
         'footer_address': footer_address(),
+        'tr': tr_factory(locale),
         **context,
     }
     html = render_template(f'emails/{template_name}.html', **ctx)
@@ -239,31 +255,35 @@ def send_email(
 
 # ── Convenience: high-level builders for our standard emails ──────────────
 
-def send_verification_email(*, to_email: str, verify_url: str, ttl_hours: int, username: Optional[str] = None) -> None:
+def send_verification_email(*, to_email: str, verify_url: str, ttl_hours: int, username: Optional[str] = None,
+                            locale: Optional[str] = None) -> None:
     html, text = render_email(
         'verify',
+        locale=locale,
         verify_url=verify_url,
         ttl_hours=ttl_hours,
         username=username,
     )
     send_email(
         to_email=to_email,
-        subject='Confirm your email and start mixing colors',
+        subject=t_for(locale or 'en', 'Confirm your email and start mixing colors'),
         html=html,
         text=text,
         transactional=True,
     )
 
 
-def send_recovery_email(*, to_email: str, recovery_url: str, ttl_minutes: int) -> None:
+def send_recovery_email(*, to_email: str, recovery_url: str, ttl_minutes: int,
+                        locale: Optional[str] = None) -> None:
     html, text = render_email(
         'recover_id',
+        locale=locale,
         recovery_url=recovery_url,
         ttl_minutes=ttl_minutes,
     )
     send_email(
         to_email=to_email,
-        subject='Recover your ShadeMatch player ID',
+        subject=t_for(locale or 'en', 'Recover your ShadeMatch player ID'),
         html=html,
         text=text,
         transactional=True,
@@ -276,6 +296,7 @@ def send_daily_reminder_email(
     user_id: str,
     context: dict,
     request_url_root: Optional[str] = None,
+    locale: Optional[str] = None,
 ) -> None:
     """Send a polished daily challenge reminder.
 
@@ -290,10 +311,10 @@ def send_daily_reminder_email(
         'list_unsubscribe_url': unsubscribe_url,
         **context,
     }
-    html, text = render_email('daily_reminder', **ctx)
+    html, text = render_email('daily_reminder', locale=locale, **ctx)
     send_email(
         to_email=to_email,
-        subject=context.get('subject') or "Today's ShadeMatch challenge is live",
+        subject=context.get('subject') or t_for(locale or 'en', "Today's ShadeMatch challenge is live"),
         html=html,
         text=text,
         list_unsubscribe_url=unsubscribe_url,

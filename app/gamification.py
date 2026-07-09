@@ -18,8 +18,20 @@ Tier-driven leveling (Option C — 30 levels):
 XP and streaks remain as secondary reinforcement and never drive the level.
 """
 from datetime import date, datetime, timedelta, time
+from flask import has_request_context
 from .models import UserProgress, UserAward, UserTargetColorStats, TargetColor, MixingSession, MixingAttempt
 from . import db
+from .i18n import t as _t_request
+
+
+def _t(text, **kwargs):
+    """Translate for the current request locale; identity (English) outside a
+    request context (scripts like verify_probe_pipeline call the engine
+    directly). Constants such as RANK_TIERS / DAILY_MISSIONS stay English in
+    code and DB — translation happens only here, at the response boundary."""
+    if has_request_context():
+        return _t_request(text, **kwargs)
+    return text.format(**kwargs) if kwargs else text
 
 # Attempts on a color before it counts as "completed" (and is hidden from the
 # picker). Lowered to 2: the gamut set has hundreds of colours evenly covering the
@@ -362,8 +374,8 @@ def build_daily_missions(user_id: str, day: date = None):
     for m in DAILY_MISSIONS:
         missions.append({
             'id': m['id'],
-            'label': m['label'],
-            'description': m['description'],
+            'label': _t(m['label']),
+            'description': _t(m['description']),
             'completed': m['id'] in completed_ids,
             'icon': m['icon'],
         })
@@ -396,7 +408,7 @@ def grant_daily_mission_awards(user_id: str, day: date = None):
         if is_new:
             new_awards.append({
                 'key': award_key,
-                'name': mission_def['award_name'],
+                'name': _t(mission_def['award_name']),
                 'type': 'daily_mission',
                 'award_class': 'daily',
                 'icon': mission_def['icon'],
@@ -839,9 +851,9 @@ def build_progress_response(user_id: str, user_progress, _catalog_size_ignored=N
     return {
         # ── Quota-first fields ──────────────────────────────────────
         'level': level,
-        'level_name': f'Level {level}',
+        'level_name': _t('Level {level}', level=level),
         'level_progress_pct': level_progress_pct,
-        'rank': rank,
+        'rank': _t(rank),
         'rank_color': rank_color,
         'completed_colors': quota['completed_colors'],
         'total_tracked_colors': quota['total_tracked_colors'],
@@ -1015,7 +1027,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
                 if is_new:
                     new_awards.append({
                         'key': f'streak_{milestone}',
-                        'name': f'{milestone}-Day Streak!',
+                        'name': _t('{n}-Day Streak!', n=milestone),
                         'type': 'streak',
                         'award_class': 'reinforcement',
                         'icon': '🔥',
@@ -1027,7 +1039,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
         if is_new:
             new_awards.append({
                 'key': 'first_perfect_match',
-                'name': 'First Perfect Match!',
+                'name': _t('First Perfect Match!'),
                 'type': 'achievement',
                 'award_class': 'reinforcement',
                 'icon': '🎯',
@@ -1090,7 +1102,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             if is_new:
                 new_awards.append({
                     'key': f'coverage_{COVERAGE_QUOTA}_{target_color_id}',
-                    'name': f'Color #{target_color_id} — {COVERAGE_QUOTA} Attempts!',
+                    'name': _t('Color #{id} — {n} Attempts!', id=target_color_id, n=COVERAGE_QUOTA),
                     'type': 'coverage',
                     'award_class': 'quota_major',
                     'icon': '✅',
@@ -1119,7 +1131,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             if is_new:
                 new_awards.append({
                     'key': key,
-                    'name': f'{milestone_pct}% of All Colors Complete!',
+                    'name': _t('{pct}% of All Colors Complete!', pct=milestone_pct),
                     'type': 'quota_milestone',
                     'award_class': 'quota_major',
                     'icon': '🏆',
@@ -1133,7 +1145,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
         if is_new:
             new_awards.append({
                 'key': 'all_colors_complete',
-                'name': 'All Colors Mastered!',
+                'name': _t('All Colors Mastered!'),
                 'type': 'quota_complete',
                 'award_class': 'quota_major',
                 'icon': '🎊',
@@ -1147,7 +1159,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             if is_new:
                 new_awards.append({
                     'key': f'level_{lvl}',
-                    'name': f'Level {lvl} Reached!',
+                    'name': _t('Level {n} Reached!', n=lvl),
                     'type': 'level',
                     'award_class': 'reinforcement',
                     'icon': '⬆️',

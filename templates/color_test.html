@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Ishihara Color Vision Test{% endblock %}
+{% block title %}{{ t('Ishihara Color Vision Test') }}{% endblock %}
 
 {% block extra_head %}
   <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -120,11 +120,11 @@
 {% block content %}
   <div class="test-container">
     <div class="ct-header">
-      <h1>Ishihara Color Vision Test</h1>
-      <p>Identify the number or pattern you see in each circle</p>
+      <h1>{{ t('Ishihara Color Vision Test') }}</h1>
+      <p>{{ t('Identify the number or pattern you see in each circle') }}</p>
       <div class="test-info">
-        <span id="timer">Time: 00:00</span> |
-        <span id="currentPlate">Loading...</span>
+        <span id="timer">{{ t('Time:') }} 00:00</span> |
+        <span id="currentPlate">{{ t('Loading...') }}</span>
       </div>
     </div>
 
@@ -134,7 +134,7 @@
 
     <div class="loading" id="loading">
       <div class="spinner"></div>
-      <p>Loading test data...</p>
+      <p>{{ t('Loading test data...') }}</p>
     </div>
 
     <div class="plate-container" id="plateContainer" style="display: none;">
@@ -143,16 +143,16 @@
       <div class="options" id="options"></div>
 
       <div class="navigation">
-        <button class="nav-btn" id="prevBtn" type="button" disabled>Previous</button>
-        <button class="nav-btn primary" id="nextBtn" type="button">Next</button>
+        <button class="nav-btn" id="prevBtn" type="button" disabled>{{ t('Previous') }}</button>
+        <button class="nav-btn primary" id="nextBtn" type="button">{{ t('Next') }}</button>
       </div>
     </div>
 
     <div class="results" id="results">
-      <h2>Test Complete!</h2>
+      <h2>{{ t('Test Complete!') }}</h2>
       <div class="score-display" id="scoreDisplay"></div>
       <div class="result-message" id="resultMessage"></div>
-      <a href="/" class="continue-btn">Continue to App</a>
+      <a href="/" class="continue-btn">{{ t('Continue to App') }}</a>
     </div>
   </div>
 
@@ -174,8 +174,8 @@
         initTest();
       } catch (error) {
         document.getElementById('loading').innerHTML =
-          '<p style="color:var(--accent-danger);">Error loading. Please refresh.</p>' +
-          '<button onclick="location.reload()" class="btn btn-primary" style="margin-top:var(--space-md);">Refresh</button>';
+          '<p style="color:var(--accent-danger);">' + t('Error loading. Please refresh.') + '</p>' +
+          '<button onclick="location.reload()" class="btn btn-primary" style="margin-top:var(--space-md);">' + t('Refresh') + '</button>';
       }
     }
 
@@ -188,7 +188,7 @@
         plates.push({
           id: parseInt(v[0]), image_file: v[1], correct_answer: v[7],
           options: [v[2], v[3], v[4], v[5], v[6]].filter(o => o && o.trim() !== ''),
-          question_text: 'What do you see in this plate?'
+          question_text: t('What do you see in this plate?')
         });
       }
       return plates;
@@ -205,14 +205,14 @@
     function updateTimer() {
       if (!startTime) return;
       const e = Math.floor((new Date() - startTime) / 1000);
-      document.getElementById('timer').textContent = 'Time: ' + Math.floor(e/60).toString().padStart(2,'0') + ':' + (e%60).toString().padStart(2,'0');
+      document.getElementById('timer').textContent = t('Time:') + ' ' + Math.floor(e/60).toString().padStart(2,'0') + ':' + (e%60).toString().padStart(2,'0');
     }
     function stopTimerFn() { if (timerInterval) { clearInterval(timerInterval); timerInterval = null; } }
 
     function showPlate(index) {
       const p = ishiharaPlates[index];
-      document.getElementById('plate').innerHTML = '<img src="/ishihara/' + p.image_file + '" alt="Plate ' + p.id + '" style="width:100%;height:100%;object-fit:contain;border-radius:50%;" onerror="this.style.display=\'none\'">';
-      document.getElementById('question').textContent = 'Plate ' + p.id + ': ' + p.question_text;
+      document.getElementById('plate').innerHTML = '<img src="/ishihara/' + p.image_file + '" alt="' + t('Plate {n}').replace('{n}', String(p.id)) + '" style="width:100%;height:100%;object-fit:contain;border-radius:50%;" onerror="this.style.display=\'none\'">';
+      document.getElementById('question').textContent = t('Plate {n}').replace('{n}', String(p.id)) + ': ' + p.question_text;
       const optEl = document.getElementById('options');
       optEl.innerHTML = '';
       p.options.forEach(opt => {
@@ -223,7 +223,7 @@
         optEl.appendChild(btn);
       });
       updateNavigationButtons();
-      document.getElementById('currentPlate').textContent = 'Plate ' + p.id + ' of ' + ishiharaPlates.length;
+      document.getElementById('currentPlate').textContent = t('Plate {i} of {n}').replace('{i}', String(p.id)).replace('{n}', String(ishiharaPlates.length));
     }
 
     function selectOption(sel) {
@@ -238,7 +238,7 @@
     function updateNavigationButtons() {
       document.getElementById('prevBtn').disabled = currentPlateIndex === 0;
       const nb = document.getElementById('nextBtn');
-      nb.textContent = currentPlateIndex === ishiharaPlates.length - 1 ? 'Finish Test' : 'Next';
+      nb.textContent = currentPlateIndex === ishiharaPlates.length - 1 ? t('Finish Test') : t('Next');
       nb.disabled = userAnswers[currentPlateIndex] === null;
     }
 
@@ -261,8 +261,8 @@
       const t = startTime ? Math.floor((new Date() - startTime) / 1000) : 0;
       document.getElementById('scoreDisplay').textContent = score + '%';
       document.getElementById('resultMessage').innerHTML =
-        getResultMessage(score) + '<br><br><strong>Results:</strong><br>Correct: ' + correct + '/' + ishiharaPlates.length +
-        '<br>Time: ' + Math.floor(t/60) + ':' + (t%60).toString().padStart(2,'0');
+        getResultMessage(score) + '<br><br><strong>' + window.t('Results:') + '</strong><br>' + window.t('Correct:') + ' ' + correct + '/' + ishiharaPlates.length +
+        '<br>' + window.t('Time:') + ' ' + Math.floor(t/60) + ':' + (t%60).toString().padStart(2,'0');
       document.getElementById('plateContainer').style.display = 'none';
       document.getElementById('results').style.display = 'block';
       testCompleted = true;
@@ -271,11 +271,11 @@
 
     function hasPassedTest(s) { return s >= 90; }
     function getResultMessage(s) {
-      if (s >= 90) return "Excellent color vision!";
-      if (s >= 80) return "Good color vision with minor difficulties.";
-      if (s >= 70) return "Moderate deficiency detected.";
-      if (s >= 60) return "Significant deficiency detected.";
-      return "Severe deficiency detected.";
+      if (s >= 90) return t("Excellent color vision!");
+      if (s >= 80) return t("Good color vision with minor difficulties.");
+      if (s >= 70) return t("Moderate deficiency detected.");
+      if (s >= 60) return t("Significant deficiency detected.");
+      return t("Severe deficiency detected.");
     }
 
     function checkTestResults() {
@@ -288,14 +288,14 @@
     function displayTestSuccess(score) {
       const rm = document.getElementById('resultMessage');
       rm.innerHTML += '<br><br><div style="background:#E8F5E9;border:2px solid var(--accent-success);border-radius:var(--radius-md);padding:var(--space-lg);text-align:center;">' +
-        '<h3 style="color:var(--accent-success);margin:0 0 var(--space-sm);">Test Passed!</h3>' +
-        '<p>Score: <strong>' + score + '%</strong></p></div>';
+        '<h3 style="color:var(--accent-success);margin:0 0 var(--space-sm);">' + t('Test Passed!') + '</h3>' +
+        '<p>' + t('Score:') + ' <strong>' + score + '%</strong></p></div>';
     }
     function displayTestFailure(score) {
       const rm = document.getElementById('resultMessage');
       rm.innerHTML += '<br><br><div style="background:#FFEBEE;border:2px solid var(--accent-danger);border-radius:var(--radius-md);padding:var(--space-lg);text-align:center;">' +
-        '<h3 style="color:var(--accent-danger);margin:0 0 var(--space-sm);">Test Failed</h3>' +
-        '<p>Score: <strong>' + score + '%</strong> (90% required)</p></div>';
+        '<h3 style="color:var(--accent-danger);margin:0 0 var(--space-sm);">' + t('Test Failed') + '</h3>' +
+        '<p>' + t('Score:') + ' <strong>' + score + '%</strong> ' + t('(90% required)') + '</p></div>';
     }
 
     async function registerUserAfterTest() {
@@ -307,7 +307,7 @@
         if (!bd || !g) return;
         if (!email) {
           const rm = document.getElementById('resultMessage');
-          rm.innerHTML += '<br><br><p style="color:var(--accent-danger);font-weight:700;">Use the home page to register with your email first.</p>';
+          rm.innerHTML += '<br><br><p style="color:var(--accent-danger);font-weight:700;">' + t('Use the home page to register with your email first.') + '</p>';
           return;
         }
         const r = await fetch('/register', {
@@ -325,7 +325,7 @@
           localStorage.setItem('userId', d.userId);
           displayUserID(d.userId);
           const cb = document.querySelector('.continue-btn');
-          if (cb) { cb.textContent = 'Continue to Color Mixing'; }
+          if (cb) { cb.textContent = t('Continue to Color Mixing'); }
         } else if (d.message) {
           const rm = document.getElementById('resultMessage');
           rm.innerHTML += '<br><br><p style="color:var(--accent-danger);">' + d.message + '</p>';
@@ -336,9 +336,9 @@
     function displayUserID(userId) {
       const rm = document.getElementById('resultMessage');
       rm.innerHTML += '<br><br><div style="background:#E8F5E9;border:2px solid var(--accent-success);border-radius:var(--radius-md);padding:var(--space-lg);text-align:center;">' +
-        '<h3 style="color:var(--accent-success);">Your User ID</h3>' +
+        '<h3 style="color:var(--accent-success);">' + t('Your User ID') + '</h3>' +
         '<div style="font-size:2em;font-weight:900;color:var(--accent-primary);letter-spacing:3px;font-family:monospace;">' + userId + '</div>' +
-        '<p style="color:var(--text-secondary);font-size:var(--font-size-sm);">Save this ID!</p></div>';
+        '<p style="color:var(--text-secondary);font-size:var(--font-size-sm);">' + t('Save this ID!') + '</p></div>';
     }
 
     document.getElementById('nextBtn').addEventListener('click', nextPlate);

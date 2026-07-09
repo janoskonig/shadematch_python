@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Privacy Policy - ShadeMatch{% endblock %}
+{% block title %}{{ t('Privacy Policy - ShadeMatch') }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -95,182 +95,182 @@
 
 {% block content %}
 <div class="container">
-    <a href="/" class="back-link">← Back to ShadeMatch</a>
-    
-    <h1>Privacy Policy</h1>
-    
-    <p><strong>Last Updated:</strong> 8 July 2026</p>
-    
-    <h2>1. Introduction</h2>
-    <p>
-        This Privacy Policy explains how ShadeMatch ("we", "our", or "us") collects, uses, and protects your information when you use our color vision testing and color mixing application. This research has been approved by the Semmelweis University Regional and Institutional Committee of Science and Research Ethics under approval number SE RKEB 167/2025.
-    </p>
-    
-    <p><strong>Important:</strong> Most research data is stored under a pseudonymous user ID. If you provide an email address, it is stored separately and used only for account recovery and optional reminders.</p>
-    
-    <h2>2. Information We Collect</h2>
-    
-    <h3>2.1 Pseudonymous User Data</h3>
-    <p>We collect the following pseudonymous data for research purposes:</p>
-    <ul>
-        <li><strong>User ID:</strong> A randomly generated 6-character identifier</li>
-        <li><strong>Birthdate:</strong> For demographic analysis in color vision research</li>
-        <li><strong>Gender:</strong> For demographic analysis in color vision research</li>
-        <li><strong>Email (optional):</strong> Used for ID recovery and reminder emails if you opt in</li>
-        <li><strong>Email verification status:</strong> Timestamp indicating whether your email address is verified. Verification links use single-use, expiring tokens; we store only a cryptographic hash of the token.</li>
-        <li><strong>Account Creation Date:</strong> Timestamp of user registration</li>
-        <li><strong>Consent record:</strong> When you agree to take part, we store an audit record of that agreement: the consent version, a hash of the exact consent text you were shown, the agreement timestamp, your browser's language setting, and its user-agent string</li>
-    </ul>
+    <a href="/" class="back-link">{{ t('← Back to ShadeMatch') }}</a>
 
-    <h3>2.2 Color Vision Screening (Ishihara Test)</h3>
+    <h1>{{ t('Privacy Policy') }}</h1>
+
+    <p><strong>{{ t('Last Updated:') }}</strong> {{ t('8 July 2026') }}</p>
+
+    <h2>{{ t('1. Introduction') }}</h2>
     <p>
-        Before registration you take a short color vision screening test. Your answers and the result of this test are evaluated <strong>in your browser, on your device</strong>; the plate-by-plate answers are not transmitted to our servers. A summary of your latest result (number of correct plates, time taken, completion timestamp) is kept only in your browser's local storage. Passing the screening is required to take part in the study.
+        {{ t('This Privacy Policy explains how ShadeMatch ("we", "our", or "us") collects, uses, and protects your information when you use our color vision testing and color mixing application. This research has been approved by the Semmelweis University Regional and Institutional Committee of Science and Research Ethics under approval number SE RKEB 167/2025.') }}
     </p>
 
-    <h3>2.3 Color Mixing Session Data</h3>
-    <p>For each color mixing session, we collect:</p>
+    <p><strong>{{ t('Important:') }}</strong> {{ t('Most research data is stored under a pseudonymous user ID. If you provide an email address, it is stored separately and used only for account recovery and optional reminders.') }}</p>
+
+    <h2>{{ t('2. Information We Collect') }}</h2>
+
+    <h3>{{ t('2.1 Pseudonymous User Data') }}</h3>
+    <p>{{ t('We collect the following pseudonymous data for research purposes:') }}</p>
     <ul>
-        <li><strong>Target Color:</strong> RGB values of the target color to be mixed</li>
-        <li><strong>Drop Counts:</strong> Number of drops used for each color (white, black, red, yellow, blue)</li>
-        <li><strong>Computed color difference:</strong> A technical color-difference score may be stored for research analysis; it is not shown to participants in the app interface.</li>
-        <li><strong>Session Duration:</strong> Time taken to complete the mixing task</li>
-        <li><strong>Session Timestamp:</strong> When the session was completed</li>
-        <li><strong>Skip Status:</strong> Whether the session was skipped</li>
-        <li><strong>Skip perception (when applicable):</strong> If you skip a trial while still mixing, we may ask you to rate how acceptable your mix was compared to the target (e.g., in a facial-prosthesis color-matching context). For analysis, this may be combined with the computed color difference into a short outcome label (e.g. perfect match vs. acceptable vs. large difference).</li>
-        <li><strong>Step-by-step mixing actions:</strong> For research on mixing strategies, we record each drop you add or remove during a mixing attempt, with timestamps, the mix state before and after each step, and the app version in use</li>
+        <li><strong>{{ t('User ID:') }}</strong> {{ t('A randomly generated 6-character identifier') }}</li>
+        <li><strong>{{ t('Birthdate:') }}</strong> {{ t('For demographic analysis in color vision research') }}</li>
+        <li><strong>{{ t('Gender:') }}</strong> {{ t('For demographic analysis in color vision research') }}</li>
+        <li><strong>{{ t('Email (optional):') }}</strong> {{ t('Used for ID recovery and reminder emails if you opt in') }}</li>
+        <li><strong>{{ t('Email verification status:') }}</strong> {{ t('Timestamp indicating whether your email address is verified. Verification links use single-use, expiring tokens; we store only a cryptographic hash of the token.') }}</li>
+        <li><strong>{{ t('Account Creation Date:') }}</strong> {{ t('Timestamp of user registration') }}</li>
+        <li><strong>{{ t('Consent record:') }}</strong> {{ t("When you agree to take part, we store an audit record of that agreement: the consent version, a hash of the exact consent text you were shown, the agreement timestamp, your browser's language setting, and its user-agent string") }}</li>
     </ul>
 
-    <h3>2.4 Color Difference Calibration Data</h3>
-    <p>If you complete an optional color-difference calibration task, we store your trial responses and the resulting perceptibility/acceptability thresholds under your pseudonymous user ID.</p>
+    <h3>{{ t('2.2 Color Vision Screening (Ishihara Test)') }}</h3>
+    <p>
+        {{ t("Before registration you take a short color vision screening test. Your answers and the result of this test are evaluated <strong>in your browser, on your device</strong>; the plate-by-plate answers are not transmitted to our servers. A summary of your latest result (number of correct plates, time taken, completion timestamp) is kept only in your browser's local storage. Passing the screening is required to take part in the study.")|safe }}
+    </p>
 
-    <h3>2.5 Gameplay Progress Data</h3>
-    <p>To make the study engaging, the app tracks pseudonymous gameplay data: experience points, level, daily streaks, unlocked awards, and daily-challenge scores (including daily winners, identified only by pseudonymous user ID).</p>
-
-    <h3>2.6 Device and Technical Information</h3>
-    <p>Together with mixing and calibration data we record technical details of the device and viewing conditions, because they can affect how colors are displayed:</p>
+    <h3>{{ t('2.3 Color Mixing Session Data') }}</h3>
+    <p>{{ t('For each color mixing session, we collect:') }}</p>
     <ul>
-        <li>Browser and operating system (user-agent string)</li>
-        <li>Device type (phone/tablet/desktop), screen and viewport size, pixel density, touch capability</li>
-        <li>Display color-gamut capability, dark-mode and accessibility preferences (e.g. reduced motion, increased contrast)</li>
-        <li>Time zone, browser language, and local time of day</li>
-        <li>Approximate device performance indicators (memory class, CPU core count) and connection type</li>
-    </ul>
-    <p>This information is <strong>not</strong> used to identify you and does not include your IP address, precise location, or advertising identifiers.</p>
-    <p>We also collect:</p>
-    <ul>
-        <li>Session management data for application functionality</li>
-        <li>Cookie consent preferences</li>
-        <li><strong>In-app usage events:</strong> We log first-party, pseudonymous app events (e.g. that a tutorial was completed or a reminder was shown) to understand how the application is used. No third-party analytics services are involved.</li>
+        <li><strong>{{ t('Target Color:') }}</strong> {{ t('RGB values of the target color to be mixed') }}</li>
+        <li><strong>{{ t('Drop Counts:') }}</strong> {{ t('Number of drops used for each color (white, black, red, yellow, blue)') }}</li>
+        <li><strong>{{ t('Computed color difference:') }}</strong> {{ t('A technical color-difference score may be stored for research analysis; it is not shown to participants in the app interface.') }}</li>
+        <li><strong>{{ t('Session Duration:') }}</strong> {{ t('Time taken to complete the mixing task') }}</li>
+        <li><strong>{{ t('Session Timestamp:') }}</strong> {{ t('When the session was completed') }}</li>
+        <li><strong>{{ t('Skip Status:') }}</strong> {{ t('Whether the session was skipped') }}</li>
+        <li><strong>{{ t('Skip perception (when applicable):') }}</strong> {{ t('If you skip a trial while still mixing, we may ask you to rate how acceptable your mix was compared to the target (e.g., in a facial-prosthesis color-matching context). For analysis, this may be combined with the computed color difference into a short outcome label (e.g. perfect match vs. acceptable vs. large difference).') }}</li>
+        <li><strong>{{ t('Step-by-step mixing actions:') }}</strong> {{ t('For research on mixing strategies, we record each drop you add or remove during a mixing attempt, with timestamps, the mix state before and after each step, and the app version in use') }}</li>
     </ul>
 
-    <h3>2.7 Push Notification Data</h3>
-    <p>If you enable optional push reminders, your browser creates a push subscription and we store its delivery endpoint and encryption keys, linked to your pseudonymous user ID. We use it only to send the reminders you asked for. You can revoke this at any time in your browser or device notification settings, which invalidates the subscription; you can also ask us to delete it.</p>
-    
-    <h2>3. How We Use Your Information</h2>
-    <p>We use your information for the following purposes:</p>
+    <h3>{{ t('2.4 Color Difference Calibration Data') }}</h3>
+    <p>{{ t('If you complete an optional color-difference calibration task, we store your trial responses and the resulting perceptibility/acceptability thresholds under your pseudonymous user ID.') }}</p>
+
+    <h3>{{ t('2.5 Gameplay Progress Data') }}</h3>
+    <p>{{ t('To make the study engaging, the app tracks pseudonymous gameplay data: experience points, level, daily streaks, unlocked awards, and daily-challenge scores (including daily winners, identified only by pseudonymous user ID).') }}</p>
+
+    <h3>{{ t('2.6 Device and Technical Information') }}</h3>
+    <p>{{ t('Together with mixing and calibration data we record technical details of the device and viewing conditions, because they can affect how colors are displayed:') }}</p>
     <ul>
-        <li><strong>Research:</strong> To study color vision and color mixing performance</li>
-        <li><strong>Application Functionality:</strong> To provide personalized color testing experiences</li>
-        <li><strong>Email Recovery:</strong> To send secure links so you can recover your user ID</li>
-        <li><strong>Reminders:</strong> To send optional daily challenge reminders (by email or push notification) if you explicitly opt in</li>
-        <li><strong>Analytics:</strong> To understand how users interact with our application</li>
-        <li><strong>Improvement:</strong> To enhance our application and research methods</li>
+        <li>{{ t('Browser and operating system (user-agent string)') }}</li>
+        <li>{{ t('Device type (phone/tablet/desktop), screen and viewport size, pixel density, touch capability') }}</li>
+        <li>{{ t('Display color-gamut capability, dark-mode and accessibility preferences (e.g. reduced motion, increased contrast)') }}</li>
+        <li>{{ t('Time zone, browser language, and local time of day') }}</li>
+        <li>{{ t('Approximate device performance indicators (memory class, CPU core count) and connection type') }}</li>
     </ul>
-    
-    <h2>4. Cookie Usage</h2>
-    <p>We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking "Accept All", you consent to our use of cookies.</p>
-    
-    <h3>4.1 Cookie Consent Banner</h3>
-    <p>When you first visit our application, you will see a cookie consent banner with the following message:</p>
+    <p>{{ t('This information is <strong>not</strong> used to identify you and does not include your IP address, precise location, or advertising identifiers.')|safe }}</p>
+    <p>{{ t('We also collect:') }}</p>
+    <ul>
+        <li>{{ t('Session management data for application functionality') }}</li>
+        <li>{{ t('Cookie consent preferences') }}</li>
+        <li><strong>{{ t('In-app usage events:') }}</strong> {{ t('We log first-party, pseudonymous app events (e.g. that a tutorial was completed or a reminder was shown) to understand how the application is used. No third-party analytics services are involved.') }}</li>
+    </ul>
+
+    <h3>{{ t('2.7 Push Notification Data') }}</h3>
+    <p>{{ t('If you enable optional push reminders, your browser creates a push subscription and we store its delivery endpoint and encryption keys, linked to your pseudonymous user ID. We use it only to send the reminders you asked for. You can revoke this at any time in your browser or device notification settings, which invalidates the subscription; you can also ask us to delete it.') }}</p>
+
+    <h2>{{ t('3. How We Use Your Information') }}</h2>
+    <p>{{ t('We use your information for the following purposes:') }}</p>
+    <ul>
+        <li><strong>{{ t('Research:') }}</strong> {{ t('To study color vision and color mixing performance') }}</li>
+        <li><strong>{{ t('Application Functionality:') }}</strong> {{ t('To provide personalized color testing experiences') }}</li>
+        <li><strong>{{ t('Email Recovery:') }}</strong> {{ t('To send secure links so you can recover your user ID') }}</li>
+        <li><strong>{{ t('Reminders:') }}</strong> {{ t('To send optional daily challenge reminders (by email or push notification) if you explicitly opt in') }}</li>
+        <li><strong>{{ t('Analytics:') }}</strong> {{ t('To understand how users interact with our application') }}</li>
+        <li><strong>{{ t('Improvement:') }}</strong> {{ t('To enhance our application and research methods') }}</li>
+    </ul>
+
+    <h2>{{ t('4. Cookie Usage') }}</h2>
+    <p>{{ t('We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking "Accept All", you consent to our use of cookies.') }}</p>
+
+    <h3>{{ t('4.1 Cookie Consent Banner') }}</h3>
+    <p>{{ t('When you first visit our application, you will see a cookie consent banner with the following message:') }}</p>
     <blockquote style="background-color: var(--bg-color); padding: 15px; border-left: 4px solid var(--accent-color); margin: 15px 0; font-style: italic;">
-        "We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking 'Accept All', you consent to our use of cookies."
+        "{{ t("We use cookies to enhance your browsing experience, serve personalized content, and analyze our traffic. By clicking 'Accept All', you consent to our use of cookies.") }}"
     </blockquote>
-    
-    <h3>4.2 Necessary Cookies</h3>
-    <p>These cookies are essential for the website to function properly and cannot be disabled:</p>
-    <ul>
-        <li><strong>session_id:</strong> Maintains your session during color mixing activities</li>
-        <li><strong>csrf_token:</strong> Security token to prevent cross-site request forgery</li>
-        <li><strong>user_preferences:</strong> Stores basic application preferences</li>
-    </ul>
-    
-    <h3>4.3 Cookie Consent Management</h3>
-    <p>We use a cookie consent management system that stores:</p>
-    <ul>
-        <li><strong>cookie_consent:</strong> Your consent preferences for different cookie categories</li>
-    </ul>
-    
-    <p><strong>Note:</strong> We do not use third-party analytics, marketing, or advertising cookies. All data collection is pseudonymous and for research purposes only.</p>
 
-    <h3>4.4 Browser Local Storage</h3>
-    <p>Besides cookies, the application stores data in your browser's local storage so you stay logged in and the app works offline-friendly. This includes your pseudonymous user ID, the registration details you entered (birthdate, gender, email), your chosen nickname (if any), reminder and interface preferences, and your latest color vision screening result. This data stays on your device; clearing your browser's site data removes it (you can log back in with your user ID).</p>
-
-    <h2>5. Data Sharing</h2>
-    <p>Research data may be shared in anonymized or aggregated form:</p>
+    <h3>{{ t('4.2 Necessary Cookies') }}</h3>
+    <p>{{ t('These cookies are essential for the website to function properly and cannot be disabled:') }}</p>
     <ul>
-        <li><strong>Research Collaboration:</strong> With other researchers for scientific advancement in color vision research</li>
-        <li><strong>Academic Publication:</strong> In scientific journals and conferences (data remains anonymous)</li>
-        <li><strong>Legal Requirements:</strong> When required by law or regulatory authorities</li>
+        <li><strong>session_id:</strong> {{ t('Maintains your session during color mixing activities') }}</li>
+        <li><strong>csrf_token:</strong> {{ t('Security token to prevent cross-site request forgery') }}</li>
+        <li><strong>user_preferences:</strong> {{ t('Stores basic application preferences') }}</li>
     </ul>
-    
-    <p><strong>Note:</strong> Email addresses are not shared for research publication and are used only for operational communication described above.</p>
 
-    <p><strong>Nicknames:</strong> You may optionally choose a nickname — a public display name shown on the leaderboard and on challenge links in place of your pseudonymous ID. Setting a nickname is entirely voluntary and you can change or remove it at any time on the Results page; without one you remain anonymized to other players.</p>
+    <h3>{{ t('4.3 Cookie Consent Management') }}</h3>
+    <p>{{ t('We use a cookie consent management system that stores:') }}</p>
+    <ul>
+        <li><strong>cookie_consent:</strong> {{ t('Your consent preferences for different cookie categories') }}</li>
+    </ul>
 
-    <p><strong>Challenge links:</strong> If you choose to create a "challenge a friend" link, that link exposes your nickname (or, if you have not set one, your pseudonymous 6-character ID) and the result of the shared round (match error, drop count, time) to anyone who opens it. Creating a challenge link is always an explicit action you take; no results are shared automatically.</p>
+    <p><strong>{{ t('Note:') }}</strong> {{ t('We do not use third-party analytics, marketing, or advertising cookies. All data collection is pseudonymous and for research purposes only.') }}</p>
 
-    <h2>6. Data Security</h2>
-    <p>We implement appropriate security measures to protect the anonymous research data:</p>
+    <h3>{{ t('4.4 Browser Local Storage') }}</h3>
+    <p>{{ t("Besides cookies, the application stores data in your browser's local storage so you stay logged in and the app works offline-friendly. This includes your pseudonymous user ID, the registration details you entered (birthdate, gender, email), your chosen nickname (if any), reminder and interface preferences, and your latest color vision screening result. This data stays on your device; clearing your browser's site data removes it (you can log back in with your user ID).") }}</p>
+
+    <h2>{{ t('5. Data Sharing') }}</h2>
+    <p>{{ t('Research data may be shared in anonymized or aggregated form:') }}</p>
     <ul>
-        <li>Encrypted data transmission (HTTPS)</li>
-        <li>Secure database storage with access controls</li>
-        <li>Regular security updates and monitoring</li>
-        <li>Pseudonymous data collection for research metrics</li>
-        <li>Email contact data is stored separately from research telemetry where feasible</li>
+        <li><strong>{{ t('Research Collaboration:') }}</strong> {{ t('With other researchers for scientific advancement in color vision research') }}</li>
+        <li><strong>{{ t('Academic Publication:') }}</strong> {{ t('In scientific journals and conferences (data remains anonymous)') }}</li>
+        <li><strong>{{ t('Legal Requirements:') }}</strong> {{ t('When required by law or regulatory authorities') }}</li>
     </ul>
-    
-    <h2>7. Your Rights (GDPR)</h2>
-    <p>You have GDPR rights regarding any personal data (such as your email address), including the right to access, correct, and request deletion where legally applicable. You also have the right to:</p>
+
+    <p><strong>{{ t('Note:') }}</strong> {{ t('Email addresses are not shared for research publication and are used only for operational communication described above.') }}</p>
+
+    <p><strong>{{ t('Nicknames:') }}</strong> {{ t('You may optionally choose a nickname — a public display name shown on the leaderboard and on challenge links in place of your pseudonymous ID. Setting a nickname is entirely voluntary and you can change or remove it at any time on the Results page; without one you remain anonymized to other players.') }}</p>
+
+    <p><strong>{{ t('Challenge links:') }}</strong> {{ t('If you choose to create a "challenge a friend" link, that link exposes your nickname (or, if you have not set one, your pseudonymous 6-character ID) and the result of the shared round (match error, drop count, time) to anyone who opens it. Creating a challenge link is always an explicit action you take; no results are shared automatically.') }}</p>
+
+    <h2>{{ t('6. Data Security') }}</h2>
+    <p>{{ t('We implement appropriate security measures to protect the anonymous research data:') }}</p>
     <ul>
-        <li><strong>Withdraw Participation:</strong> Stop using the application at any time</li>
-        <li><strong>Cookie Consent:</strong> Withdraw consent for cookie usage through our cookie consent banner</li>
-        <li><strong>Information:</strong> Request information about the research and data collection practices</li>
-        <li><strong>Contact:</strong> Contact us with any questions about the research</li>
+        <li>{{ t('Encrypted data transmission (HTTPS)') }}</li>
+        <li>{{ t('Secure database storage with access controls') }}</li>
+        <li>{{ t('Regular security updates and monitoring') }}</li>
+        <li>{{ t('Pseudonymous data collection for research metrics') }}</li>
+        <li>{{ t('Email contact data is stored separately from research telemetry where feasible') }}</li>
     </ul>
-    
-    <p><strong>Note:</strong> For pseudonymous research-only records, direct identification may be limited. For email-related data, you may contact us to manage or remove reminder contact details.</p>
-    
-    <h2>8. Data Retention</h2>
-    <p>We retain pseudonymous research data for as long as necessary to:</p>
+
+    <h2>{{ t('7. Your Rights (GDPR)') }}</h2>
+    <p>{{ t('You have GDPR rights regarding any personal data (such as your email address), including the right to access, correct, and request deletion where legally applicable. You also have the right to:') }}</p>
     <ul>
-        <li>Complete the research study</li>
-        <li>Publish research findings</li>
-        <li>Comply with academic and legal obligations</li>
-        <li>Support future research in color vision</li>
+        <li><strong>{{ t('Withdraw Participation:') }}</strong> {{ t('Stop using the application at any time') }}</li>
+        <li><strong>{{ t('Cookie Consent:') }}</strong> {{ t('Withdraw consent for cookie usage through our cookie consent banner') }}</li>
+        <li><strong>{{ t('Information:') }}</strong> {{ t('Request information about the research and data collection practices') }}</li>
+        <li><strong>{{ t('Contact:') }}</strong> {{ t('Contact us with any questions about the research') }}</li>
     </ul>
-    
-    <p><strong>Note:</strong> Email contact data is retained only while needed for reminders/recovery and can be removed on request where permitted.</p>
-    
-    <h2>9. Age Requirements</h2>
-    <p>This research application is intended for adults aged 18 and above. We do not knowingly collect data from individuals under 18 years of age. If you are under 18, please do not use this application.</p>
-    
-    <h2>10. Changes to This Policy</h2>
-    <p>We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page.</p>
-    
+
+    <p><strong>{{ t('Note:') }}</strong> {{ t('For pseudonymous research-only records, direct identification may be limited. For email-related data, you may contact us to manage or remove reminder contact details.') }}</p>
+
+    <h2>{{ t('8. Data Retention') }}</h2>
+    <p>{{ t('We retain pseudonymous research data for as long as necessary to:') }}</p>
+    <ul>
+        <li>{{ t('Complete the research study') }}</li>
+        <li>{{ t('Publish research findings') }}</li>
+        <li>{{ t('Comply with academic and legal obligations') }}</li>
+        <li>{{ t('Support future research in color vision') }}</li>
+    </ul>
+
+    <p><strong>{{ t('Note:') }}</strong> {{ t('Email contact data is retained only while needed for reminders/recovery and can be removed on request where permitted.') }}</p>
+
+    <h2>{{ t('9. Age Requirements') }}</h2>
+    <p>{{ t('This research application is intended for adults aged 18 and above. We do not knowingly collect data from individuals under 18 years of age. If you are under 18, please do not use this application.') }}</p>
+
+    <h2>{{ t('10. Changes to This Policy') }}</h2>
+    <p>{{ t('We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page.') }}</p>
+
     <div class="contact-info">
-        <h2>11. Contact Information</h2>
-        <p>If you have any questions about this Privacy Policy, the research, or our data practices, please contact us:</p>
+        <h2>{{ t('11. Contact Information') }}</h2>
+        <p>{{ t('If you have any questions about this Privacy Policy, the research, or our data practices, please contact us:') }}</p>
         <p>
-            <strong>Principal Investigator:</strong> Dr. János König<br>
-            <strong>Email:</strong> <a href="mailto:konig.janos@semmelweis.hu" style="color: var(--accent-color);">konig.janos@semmelweis.hu</a><br>
-            <strong>Subject Line:</strong> "SHADEMATCH Research Inquiry"<br>
-            <strong>Institution:</strong> Semmelweis University<br>
-            <strong>Research Ethics Approval:</strong> SE RKEB 167/2025
+            <strong>{{ t('Principal Investigator:') }}</strong> Dr. János König<br>
+            <strong>{{ t('Email:') }}</strong> <a href="mailto:konig.janos@semmelweis.hu" style="color: var(--accent-color);">konig.janos@semmelweis.hu</a><br>
+            <strong>{{ t('Subject Line:') }}</strong> "SHADEMATCH Research Inquiry"<br>
+            <strong>{{ t('Institution:') }}</strong> {{ t('Semmelweis University') }}<br>
+            <strong>{{ t('Research Ethics Approval:') }}</strong> SE RKEB 167/2025
         </p>
     </div>
-    
+
     <div class="last-updated">
-        <p>This Privacy Policy was last updated on 8 July 2026.</p>
+        <p>{{ t('This Privacy Policy was last updated on 8 July 2026.') }}</p>
     </div>
 </div>
 {% endblock %}

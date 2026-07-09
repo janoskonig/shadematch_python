@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Color Vision Test{% endblock %}
+{% block title %}{{ t('Color Vision Test') }}{% endblock %}
 
 {% block extra_head %}
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -149,26 +149,26 @@
     <div class="ish-wrap">
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>Loading test data...</p>
+            <p>{{ t('Loading test data...') }}</p>
         </div>
 
         <div id="plateContainer" hidden>
             <div class="topbar">
-                <button class="back-btn" id="backBtn" type="button" aria-label="Previous plate" disabled>
+                <button class="back-btn" id="backBtn" type="button" aria-label="{{ t('Previous plate') }}" disabled>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"/></svg>
                 </button>
-                <span class="topbar-title">Color vision test</span>
+                <span class="topbar-title">{{ t('Color vision test') }}</span>
                 <span class="topbar-count" id="plateCount" aria-live="polite"></span>
             </div>
             <div class="segments" id="segments" aria-hidden="true"></div>
-            <p class="rule-note" id="ruleNote">All 5 plates must be answered correctly to take part.</p>
+            <p class="rule-note" id="ruleNote">{{ t('All 5 plates must be answered correctly to take part.') }}</p>
 
             <div class="test-card">
                 <div class="plate"><img id="plateImg" src="" alt=""></div>
                 <div class="test-side">
-                    <div class="question">Which number do you see?</div>
-                    <div class="options" id="options" role="group" aria-label="Answer options"></div>
-                    <div class="hint">Tap an answer to continue &middot; use &lsaquo; to go back</div>
+                    <div class="question">{{ t('Which number do you see?') }}</div>
+                    <div class="options" id="options" role="group" aria-label="{{ t('Answer options') }}"></div>
+                    <div class="hint">{{ t('Tap an answer to continue · use ‹ to go back') }}</div>
                 </div>
             </div>
         </div>
@@ -177,31 +177,31 @@
             <div class="result-icon pass">
                 <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 13l4 4L19 7"/></svg>
             </div>
-            <h2>Normal color vision</h2>
-            <p>You identified all 5 plates correctly.</p>
+            <h2>{{ t('Normal color vision') }}</h2>
+            <p>{{ t('You identified all 5 plates correctly.') }}</p>
             <div class="id-card" id="idCard" hidden>
-                <div class="id-label">Your participant ID</div>
+                <div class="id-label">{{ t('Your participant ID') }}</div>
                 <div class="id-row">
                     <span class="id-value" id="userIdText"></span>
-                    <button class="copy-btn" id="copyIdBtn" type="button">Copy</button>
+                    <button class="copy-btn" id="copyIdBtn" type="button">{{ t('Copy') }}</button>
                 </div>
-                <div class="id-hint">Saved on this device &mdash; keep it to log in elsewhere.</div>
+                <div class="id-hint">{{ t('Saved on this device — keep it to log in elsewhere.') }}</div>
             </div>
             <div class="reg-message" id="regMessage" hidden></div>
-            <button class="btn btn-primary btn-lg btn-full" id="startBtn" type="button" hidden>Start color matching</button>
+            <button class="btn btn-primary btn-lg btn-full" id="startBtn" type="button" hidden>{{ t('Start color matching') }}</button>
         </div>
 
         <div id="failScreen" class="result-screen" hidden>
             <div class="result-icon fail">
                 <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6z"/><circle cx="12" cy="12" r="3"/></svg>
             </div>
-            <h2>We couldn't confirm typical color vision</h2>
+            <h2>{{ t("We couldn't confirm typical color vision") }}</h2>
             <p id="failDetail"></p>
-            <p>Screen glare or night mode can affect the result &mdash; you're welcome to try once more in good light.</p>
-            <button class="btn btn-secondary btn-lg btn-full" id="retryBtn" type="button">Retake the test</button>
+            <p>{{ t("Screen glare or night mode can affect the result — you're welcome to try once more in good light.") }}</p>
+            <button class="btn btn-secondary btn-lg btn-full" id="retryBtn" type="button">{{ t('Retake the test') }}</button>
             <details class="why-details">
-                <summary>Why does the study need this?</summary>
-                <p>ShadeStudy compares how people with typical color vision mix and match colors. Results from participants with reduced color discrimination would measure something different, so the color game needs a passing result on this screening test.</p>
+                <summary>{{ t('Why does the study need this?') }}</summary>
+                <p>{{ t('ShadeStudy compares how people with typical color vision mix and match colors. Results from participants with reduced color discrimination would measure something different, so the color game needs a passing result on this screening test.') }}</p>
             </details>
         </div>
     </div>
@@ -213,7 +213,7 @@
         let startTime = null;
         let advancing = false;
 
-        const LINES_LABEL = 'I only see lines';
+        const LINES_LABEL = t('I only see lines');
 
         async function loadTestData() {
             try {
@@ -226,8 +226,8 @@
             } catch (error) {
                 console.error('Error loading test data:', error);
                 document.getElementById('loading').innerHTML =
-                    '<p style="color:var(--accent-danger);">Error loading test data. Please refresh the page.</p>' +
-                    '<button onclick="location.reload()" class="btn btn-primary" style="margin-top:var(--space-md);">Refresh</button>';
+                    '<p style="color:var(--accent-danger);">' + t('Error loading test data. Please refresh the page.') + '</p>' +
+                    '<button onclick="location.reload()" class="btn btn-primary" style="margin-top:var(--space-md);">' + t('Refresh') + '</button>';
             }
         }
 
@@ -266,7 +266,7 @@
             const plate = ishiharaPlates[index];
             const img = document.getElementById('plateImg');
             img.src = '/ishihara/' + plate.image_file;
-            img.alt = 'Ishihara plate ' + (index + 1) + ' of ' + ishiharaPlates.length;
+            img.alt = t('Ishihara plate {i} of {n}').replace('{i}', String(index + 1)).replace('{n}', String(ishiharaPlates.length));
 
             const optionsEl = document.getElementById('options');
             optionsEl.innerHTML = '';
@@ -285,7 +285,7 @@
                 optionsEl.appendChild(btn);
             });
 
-            document.getElementById('plateCount').textContent = (index + 1) + ' of ' + ishiharaPlates.length;
+            document.getElementById('plateCount').textContent = t('{i} of {n}').replace('{i}', String(index + 1)).replace('{n}', String(ishiharaPlates.length));
             document.getElementById('backBtn').disabled = index === 0;
             document.getElementById('ruleNote').hidden = index !== 0;
             updateProgress();
@@ -348,7 +348,8 @@
                 registerUserAfterTest();
             } else {
                 document.getElementById('failDetail').textContent =
-                    'You matched ' + correctAnswers + ' of ' + ishiharaPlates.length + ' plates. The study compares how people with typical color vision mix colors, so the color game needs a passing result.';
+                    t('You matched {c} of {n} plates. The study compares how people with typical color vision mix colors, so the color game needs a passing result.')
+                        .replace('{c}', String(correctAnswers)).replace('{n}', String(ishiharaPlates.length));
                 document.getElementById('failScreen').hidden = false;
             }
         }
@@ -366,7 +367,7 @@
             // page, so this page cannot register on its own.
             const existingUserId = localStorage.getItem('userId');
             if (existingUserId) { displayUserID(existingUserId); return; }
-            showRegMessage('Complete registration on the <a href="/">home page</a> first, then take this test again.');
+            showRegMessage(t('Complete registration on the <a href="/">home page</a> first, then take this test again.'));
         }
 
         function displayUserID(userId) {
@@ -379,8 +380,8 @@
             const userId = document.getElementById('userIdText').textContent;
             const btn = document.getElementById('copyIdBtn');
             const confirmCopied = () => {
-                btn.textContent = 'Copied';
-                setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+                btn.textContent = t('Copied');
+                setTimeout(() => { btn.textContent = t('Copy'); }, 1500);
             };
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(userId).then(confirmCopied).catch(() => {});

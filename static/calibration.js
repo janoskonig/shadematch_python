@@ -62,13 +62,13 @@
   // Set the prompt + button labels for the current question stage.
   function renderStage() {
     if (stage === 'identical') {
-      prompt.textContent = 'Are they identical?';
-      btnYes.innerHTML = '<span class="cal-kbd">1</span>Yes — identical';
-      btnNo.innerHTML = '<span class="cal-kbd">2</span>No — different';
+      prompt.textContent = t('Are they identical?');
+      btnYes.innerHTML = '<span class="cal-kbd">1</span>' + t('Yes — identical');
+      btnNo.innerHTML = '<span class="cal-kbd">2</span>' + t('No — different');
     } else {
-      prompt.textContent = 'Would this difference be acceptable on your face?';
-      btnYes.innerHTML = '<span class="cal-kbd">1</span>Yes — acceptable';
-      btnNo.innerHTML = '<span class="cal-kbd">2</span>No — too different';
+      prompt.textContent = t('Would this difference be acceptable on your face?');
+      btnYes.innerHTML = '<span class="cal-kbd">1</span>' + t('Yes — acceptable');
+      btnNo.innerHTML = '<span class="cal-kbd">2</span>' + t('No — too different');
     }
   }
 
@@ -80,7 +80,7 @@
     patchB.style.backgroundColor = rgb(swap ? t.a : t.b);
     const n = session.trials.length;
     progressFill.style.width = (100 * idx / n).toFixed(1) + '%';
-    countLine.textContent = `Pair ${idx + 1} of ${n}`;
+    countLine.textContent = t('Pair {i} of {n}').replace('{i}', String(idx + 1)).replace('{n}', String(n));
     stage = 'identical';     // every pair starts with the perceptibility question
     renderStage();
     locked = false;
@@ -137,8 +137,8 @@
     let dots = '';
     for (let i = 0; i < t; i++) dots += `<span class="cal-dot${i < done ? ' done' : ''}"></span>`;
     const label = (completed >= t)
-      ? `All ${t} sessions done — thank you! Extra runs sharpen it further.`
-      : `Session ${Math.min(completed + 1, t)} of ${t}`;
+      ? window.t('All {n} sessions done — thank you! Extra runs sharpen it further.').replace('{n}', String(t))
+      : window.t('Session {i} of {n}').replace('{i}', String(Math.min(completed + 1, t))).replace('{n}', String(t));
     container.innerHTML = `<span class="cal-dots">${dots}</span><span class="lbl">${label}</span>`;
   }
 
@@ -149,7 +149,7 @@
     if (!host) return;
     const pts = (history || []).filter((h) => h.pt != null);
     if (!pts.length) {
-      host.innerHTML = '<span class="cal-history-empty">Your per-session history will build up here.</span>';
+      host.innerHTML = '<span class="cal-history-empty">' + t('Your per-session history will build up here.') + '</span>';
       if (cap) cap.textContent = '';
       return;
     }
@@ -159,7 +159,7 @@
       const frac = Math.max(0.08, 1 - (h.pt / (maxDe * 1.1)));
       return `<div class="hbar${h.low_quality ? ' lowq' : ''}" style="height:${(frac * 100).toFixed(0)}%" title="ΔE ${h.pt}"></div>`;
     }).join('');
-    if (cap) cap.textContent = 'Perceptibility per session (taller = finer discrimination). Amber = low-confidence run.';
+    if (cap) cap.textContent = t('Perceptibility per session (taller = finer discrimination). Amber = low-confidence run.');
   }
 
   function showResult(summary, progress) {
@@ -175,10 +175,10 @@
     const q = el('calQuality');
     if (summary && summary.low_quality) {
       q.className = 'cal-quality warn';
-      q.textContent = '⚠ Some attention-check pairs were missed, so this run is low-confidence. Take the next one when you can focus on each pair.';
+      q.textContent = t('⚠ Some attention-check pairs were missed, so this run is low-confidence. Take the next one when you can focus on each pair.');
     } else if (summary && summary.catch_pass_rate != null) {
       q.className = 'cal-quality';
-      q.textContent = `Attention checks passed: ${Math.round(summary.catch_pass_rate * 100)}%.`;
+      q.textContent = t('Attention checks passed: {pct}%.').replace('{pct}', String(Math.round(summary.catch_pass_rate * 100)));
     } else {
       q.className = 'cal-quality';
       q.textContent = '';
@@ -188,24 +188,24 @@
     const final = el('calFinal');
     if (isFinal) {
       // Reveal results only now that the protocol is done — pooled across all sessions.
-      el('calResultTitle').textContent = 'Your calibration is complete';
+      el('calResultTitle').textContent = t('Your calibration is complete');
       interim.classList.add('cal-hidden');
       final.classList.remove('cal-hidden');
       const pooled = progress && progress.pooled;
       el('calPoolPt').textContent = fmtDe(pooled && pooled.perceptibility_de);
       el('calPoolAt').textContent = fmtDe(pooled && pooled.acceptability_de);
       renderHistory(progress && progress.history);
-      el('calAgainBtn').textContent = 'Run another';
+      el('calAgainBtn').textContent = t('Run another');
     } else {
       // Sessions 1…N-1: progress only, no numbers (they'd bias the sessions still to come).
-      el('calResultTitle').textContent = 'Session complete';
+      el('calResultTitle').textContent = t('Session complete');
       final.classList.add('cal-hidden');
       interim.classList.remove('cal-hidden');
       const left = target - completed;
       el('calInterimMsg').textContent =
-        `Saved — ${completed} of ${target} sessions done. ${left} to go before your results unlock. ` +
-        `Come back for the next one, ideally on another day.`;
-      el('calAgainBtn').textContent = 'Next session';
+        t('Saved — {done} of {target} sessions done. {left} to go before your results unlock. Come back for the next one, ideally on another day.')
+          .replace('{done}', String(completed)).replace('{target}', String(target)).replace('{left}', String(left));
+      el('calAgainBtn').textContent = t('Next session');
     }
   }
 
@@ -233,7 +233,7 @@
       .catch(() => {
         el('calStartBtn').disabled = false;
         const p = intro.querySelector('p');
-        if (p) p.textContent = 'Could not start a calibration session — please reload and try again.';
+        if (p) p.textContent = t('Could not start a calibration session — please reload and try again.');
       });
   }
 
@@ -248,7 +248,7 @@
     gate.classList.add('cal-hidden');
     intro.classList.remove('cal-hidden');
     const uid = userId();
-    if (uid) el('calUserLine').textContent = `Signed in as ${uid}.`;
+    if (uid) el('calUserLine').textContent = t('Signed in as {id}.').replace('{id}', uid);
     // Load standing so the player sees how far along they are before starting.
     fetch('/calibration/progress?user_id=' + encodeURIComponent(uid))
       .then((r) => (r.ok ? r.json() : null))

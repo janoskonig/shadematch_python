@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}ShadeMatch — Match Real Paint Colours{% endblock %}
+{% block title %}{{ t('ShadeMatch — Match Real Paint Colours') }}{% endblock %}
 
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
@@ -280,7 +280,7 @@
            style="display:block; max-height:52px; width:auto; margin:0 auto var(--space-md);"
            onerror="this.style.display='none'">
       {% endif %}
-      <h2 class="modal-title">Before you take part</h2>
+      <h2 class="modal-title">{{ t('Before you take part') }}</h2>
       <div id="researchConsentText" style="line-height: 1.55; color: var(--text-primary); max-height: 48vh; overflow-y: auto; margin-bottom: var(--space-md); text-align: left;">
         <p style="margin: 0 0 var(--space-md);">{{ research_consent_intro }}</p>
         <ul style="margin: 0; padding-left: 1.2rem;">
@@ -290,14 +290,14 @@
         </ul>
       </div>
       <p class="modal-alt-text" style="text-align: left; margin-bottom: var(--space-md);">
-        Read our <a href="/privacy-policy" target="_blank" rel="noopener">Privacy Policy</a> for full details.
+        {{ t('Read our') }} <a href="/privacy-policy" target="_blank" rel="noopener">{{ t('Privacy Policy') }}</a> {{ t('for full details.') }}
       </p>
       <label class="form-label" for="researchConsentCheckbox" style="display:flex; align-items:flex-start; gap:8px; text-align:left; margin-bottom: var(--space-md); cursor:pointer;">
         <input type="checkbox" id="researchConsentCheckbox" style="margin-top:3px; flex-shrink:0;">
-        <span>I have read and understood the information above and I voluntarily agree to take part.</span>
+        <span>{{ t('I have read and understood the information above and I voluntarily agree to take part.') }}</span>
       </label>
       <button id="researchConsentBtn" type="button" class="btn btn-primary btn-full btn-lg" disabled>
-        I understand &mdash; begin
+        {{ t('I understand — begin') }}
       </button>
     </div>
   </div>
@@ -307,31 +307,31 @@
 
       <!-- Register -->
       <div id="registerSection">
-        <h2 class="modal-title">Welcome</h2>
-        <p class="modal-subtitle">Enter your details to get started.</p>
+        <h2 class="modal-title">{{ t('Welcome') }}</h2>
+        <p class="modal-subtitle">{{ t('Enter your details to get started.') }}</p>
         <form id="registerForm" class="form-stack">
           <div class="form-group">
-            <label for="userBirthdate" class="form-label">Date of birth</label>
+            <label for="userBirthdate" class="form-label">{{ t('Date of birth') }}</label>
             <input type="date" id="userBirthdate" class="form-input" required>
             <div id="birthdateError" style="display:none; color:var(--accent-danger); margin-top:var(--space-xs); font-size:var(--font-size-sm);"></div>
           </div>
           <div class="form-group">
-            <label for="userEmail" class="form-label">Email (for reminders and ID recovery)</label>
+            <label for="userEmail" class="form-label">{{ t('Email (for reminders and ID recovery)') }}</label>
             <input type="email" id="userEmail" class="form-input" required placeholder="you@example.com">
           </div>
           <div class="form-group">
             <label class="form-label" for="emailOptIn">
               <input type="checkbox" id="emailOptIn" checked>
-              I want daily reminder emails
+              {{ t('I want daily reminder emails') }}
             </label>
           </div>
           <div class="form-group">
-            <label class="form-label">Gender</label>
+            <label class="form-label">{{ t('Gender') }}</label>
             <div class="toggle-group">
               <input type="radio" name="gender" id="genderFemale" value="female" class="sr-only">
-              <label for="genderFemale" class="toggle-btn">Female</label>
+              <label for="genderFemale" class="toggle-btn">{{ t('Female') }}</label>
               <input type="radio" name="gender" id="genderMale" value="male" class="sr-only">
-              <label for="genderMale" class="toggle-btn">Male</label>
+              <label for="genderMale" class="toggle-btn">{{ t('Male') }}</label>
             </div>
             <select id="userGender" required style="display:none;">
               <option value="">Select…</option>
@@ -340,17 +340,17 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="userNickname" class="form-label">Nickname (optional)</label>
+            <label for="userNickname" class="form-label">{{ t('Nickname (optional)') }}</label>
             <input type="text" id="userNickname" class="form-input" maxlength="20"
-                   placeholder="e.g. ColorWizard" autocomplete="nickname">
+                   placeholder="{{ t('e.g. ColorWizard') }}" autocomplete="nickname">
             <div style="color:var(--text-secondary); margin-top:var(--space-xs); font-size:var(--font-size-sm);">
-              Shown on the leaderboard and challenges — leave empty to stay anonymous.
+              {{ t('Shown on the leaderboard and challenges — leave empty to stay anonymous.') }}
             </div>
           </div>
-          <button type="submit" class="btn btn-primary btn-full btn-lg">Start Color Vision Test</button>
+          <button type="submit" class="btn btn-primary btn-full btn-lg">{{ t('Start Color Vision Test') }}</button>
         </form>
         <div class="modal-divider"></div>
-        <p class="modal-alt-text">Already have an ID? <button id="showLoginBtn" type="button" class="btn-link">Log in</button></p>
+        <p class="modal-alt-text">{{ t('Already have an ID?') }} <button id="showLoginBtn" type="button" class="btn-link">{{ t('Log in') }}</button></p>
       </div>
 
       <!-- Color test placeholder (hidden, kept for selector compat) -->
@@ -358,49 +358,49 @@
 
       <!-- Login -->
       <div id="loginSection" style="display:none;">
-        <h2 class="modal-title">Log in</h2>
+        <h2 class="modal-title">{{ t('Log in') }}</h2>
         <form id="loginForm" class="form-stack">
           <div class="form-group">
-            <label for="loginId" class="form-label">Enter your ID</label>
+            <label for="loginId" class="form-label">{{ t('Enter your ID') }}</label>
             <input type="text" id="loginId" class="form-input form-input-mono" maxlength="6" minlength="6" required placeholder="ABC123" style="text-transform:uppercase">
           </div>
-          <button type="submit" class="btn btn-primary btn-full btn-lg">Log in</button>
+          <button type="submit" class="btn btn-primary btn-full btn-lg">{{ t('Log in') }}</button>
         </form>
         <div class="modal-divider"></div>
-        <p class="modal-alt-text">Forgot your ID?</p>
+        <p class="modal-alt-text">{{ t('Forgot your ID?') }}</p>
         <form id="recoverIdForm" class="form-stack">
           <div class="form-group">
-            <label for="recoverEmail" class="form-label">Email used at registration</label>
+            <label for="recoverEmail" class="form-label">{{ t('Email used at registration') }}</label>
             <input type="email" id="recoverEmail" class="form-input" placeholder="you@example.com" required>
           </div>
-          <button type="submit" class="btn btn-secondary btn-full">Email me my ID</button>
+          <button type="submit" class="btn btn-secondary btn-full">{{ t('Email me my ID') }}</button>
         </form>
         <div class="modal-divider"></div>
-        <p class="modal-alt-text">New user? <button id="showRegisterBtn" type="button" class="btn-link">Register</button></p>
+        <p class="modal-alt-text">{{ t('New user?') }} <button id="showRegisterBtn" type="button" class="btn-link">{{ t('Register') }}</button></p>
       </div>
 
       <!-- ID display -->
       <div id="idDisplaySection" style="display:none;">
-        <h2 class="modal-title">Your ID</h2>
+        <h2 class="modal-title">{{ t('Your ID') }}</h2>
         <p class="generated-id" id="generatedId"></p>
-        <p style="text-align:center; color:var(--text-secondary);">Please memorize this ID. You will need it to log in next time.</p>
-        <button id="continueBtn" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-lg);">Continue</button>
+        <p style="text-align:center; color:var(--text-secondary);">{{ t('Please memorize this ID. You will need it to log in next time.') }}</p>
+        <button id="continueBtn" class="btn btn-primary btn-full btn-lg" style="margin-top:var(--space-lg);">{{ t('Continue') }}</button>
       </div>
 
       <!-- Post-register: push opt-in CTA -->
       <div id="postRegisterSection" style="display:none;">
         <div style="text-align:center;margin-bottom:var(--space-md);">
           <div style="font-size:2.5rem;margin-bottom:12px;">🔔</div>
-          <h2 class="modal-title">Enable daily reminders?</h2>
-          <p class="modal-subtitle">Get notified when the daily challenge goes live — one tap, turn off any time.</p>
+          <h2 class="modal-title">{{ t('Enable daily reminders?') }}</h2>
+          <p class="modal-subtitle">{{ t('Get notified when the daily challenge goes live — one tap, turn off any time.') }}</p>
         </div>
         <button id="postRegPushBtn" class="btn btn-primary btn-full btn-lg"
                 onclick="window._postRegPushOptIn && window._postRegPushOptIn()">
-          Enable reminders
+          {{ t('Enable reminders') }}
         </button>
         <button class="btn btn-secondary btn-full" style="margin-top:8px;"
                 onclick="window.location.href='/ishihara-test'">
-          Not now
+          {{ t('Not now') }}
         </button>
       </div>
     </div>
@@ -415,8 +415,8 @@
         <div id="challengeResultMix" style="width:50%;height:80px;"></div>
       </div>
       <div id="challengeCompareBody" style="margin-bottom:var(--space-md);"></div>
-      <button id="challengeRematchBtn" class="btn btn-primary btn-full btn-lg">Send one back</button>
-      <button id="challengeCloseBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">Keep playing</button>
+      <button id="challengeRematchBtn" class="btn btn-primary btn-full btn-lg">{{ t('Send one back') }}</button>
+      <button id="challengeCloseBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">{{ t('Keep playing') }}</button>
     </div>
   </div>
 
@@ -425,18 +425,17 @@
     <div class="modal-card">
       <div style="text-align:center;margin-bottom:var(--space-md);">
         <div style="font-size:2.5rem;margin-bottom:12px;">🎨</div>
-        <h2 class="modal-title">Mix paint. Match the colour.</h2>
+        <h2 class="modal-title">{{ t('Mix paint. Match the colour.') }}</h2>
         <p class="modal-subtitle">
-          Five pigments, one target shade — how close can your eye get?
-          Try one round right now, no sign-up needed.
+          {{ t('Five pigments, one target shade — how close can your eye get? Try one round right now, no sign-up needed.') }}
         </p>
       </div>
-      <button id="guestTryBtn" class="btn btn-primary btn-full btn-lg">Try one round</button>
+      <button id="guestTryBtn" class="btn btn-primary btn-full btn-lg">{{ t('Try one round') }}</button>
       <div class="modal-divider"></div>
       <p class="modal-alt-text">
-        <button id="guestRegisterBtn" type="button" class="btn-link">Create an ID</button>
+        <button id="guestRegisterBtn" type="button" class="btn-link">{{ t('Create an ID') }}</button>
         &nbsp;·&nbsp;
-        <button id="guestLoginBtn" type="button" class="btn-link">I have an ID — log in</button>
+        <button id="guestLoginBtn" type="button" class="btn-link">{{ t('I have an ID — log in') }}</button>
       </p>
     </div>
   </div>
@@ -444,24 +443,22 @@
   <!-- ======== Guest result (conversion moment after the demo round) ======== -->
   <div id="guestResultModal" class="modal-overlay" style="display:none;">
     <div class="modal-card">
-      <h2 class="modal-title" style="text-align:center;">Your first match</h2>
+      <h2 class="modal-title" style="text-align:center;">{{ t('Your first match') }}</h2>
       <div style="display:flex;justify-content:center;gap:2px;margin:var(--space-md) 0;border-radius:12px;overflow:hidden;border:1px solid var(--border);">
         <div id="guestResultTarget" style="width:50%;height:90px;"></div>
         <div id="guestResultMix" style="width:50%;height:90px;"></div>
       </div>
       <div style="display:flex;justify-content:center;gap:var(--space-lg);margin-bottom:var(--space-md);font-size:0.9rem;color:var(--text-secondary);">
-        <span>match error <strong style="color:var(--text-primary);">ΔE <span id="guestResultDeltaE">—</span></strong></span>
-        <span>time <strong style="color:var(--text-primary);" id="guestResultTime">—</strong></span>
+        <span>{{ t('match error') }} <strong style="color:var(--text-primary);">ΔE <span id="guestResultDeltaE">—</span></strong></span>
+        <span>{{ t('time') }} <strong style="color:var(--text-primary);" id="guestResultTime">—</strong></span>
       </div>
       <p class="modal-subtitle" style="text-align:center;">
-        That's your colour eye at work. Create a free ID to save your progress,
-        play the daily challenge — and contribute to Semmelweis University's
-        colour-vision research as you play.
+        {{ t("That's your colour eye at work. Create a free ID to save your progress, play the daily challenge — and contribute to Semmelweis University's colour-vision research as you play.") }}
       </p>
-      <button id="guestSaveBtn" class="btn btn-primary btn-full btn-lg">Save my progress — join in</button>
-      <button id="guestAgainBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">Try another colour</button>
-      <button id="guestShareBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">📤 Share this match</button>
-      <p class="modal-alt-text" style="margin-top:var(--space-sm);">Demo rounds aren't stored — nothing is collected until you register.</p>
+      <button id="guestSaveBtn" class="btn btn-primary btn-full btn-lg">{{ t('Save my progress — join in') }}</button>
+      <button id="guestAgainBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">{{ t('Try another colour') }}</button>
+      <button id="guestShareBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">📤 {{ t('Share this match') }}</button>
+      <p class="modal-alt-text" style="margin-top:var(--space-sm);">{{ t("Demo rounds aren't stored — nothing is collected until you register.") }}</p>
     </div>
   </div>
 
@@ -473,27 +470,27 @@
         <h2 class="modal-title">Enable daily reminders?</h2>
         <p class="modal-subtitle">Get notified when the daily challenge goes live — one tap, turn off any time.</p>
       </div>
-      <button id="pushNagEnableBtn" class="btn btn-primary btn-full btn-lg">Enable reminders</button>
-      <button id="pushNagLaterBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">Not now</button>
+      <button id="pushNagEnableBtn" class="btn btn-primary btn-full btn-lg">{{ t('Enable reminders') }}</button>
+      <button id="pushNagLaterBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">{{ t('Not now') }}</button>
     </div>
   </div>
 
   <!-- ======== Display-setup instructions modal (one-shot, post-login) ======== -->
   <div id="instructionsModal" class="modal-overlay" style="display:none;">
     <div class="modal-card">
-      <h2 class="modal-title">Before you start</h2>
-      <p class="modal-subtitle">A few quick checks so your screen shows colors faithfully.</p>
+      <h2 class="modal-title">{{ t('Before you start') }}</h2>
+      <p class="modal-subtitle">{{ t('A few quick checks so your screen shows colors faithfully.') }}</p>
       <ul style="margin: 0 0 var(--space-md); padding-left: 1.2rem; line-height: 1.55; color: var(--text-primary);">
-        <li><strong>Turn off Night Shift / True Tone / Night Light</strong> and any blue-light filter (in your operating system).</li>
-        <li><strong>Use steady, indirect ambient lighting.</strong> Avoid direct sunlight on the screen and reflective glare.</li>
-        <li><strong>Set display brightness to about 50&ndash;75%.</strong></li>
-        <li>For best results, use full-screen mode.</li>
+        <li><strong>{{ t('Turn off Night Shift / True Tone / Night Light') }}</strong> {{ t('and any blue-light filter (in your operating system).') }}</li>
+        <li><strong>{{ t('Use steady, indirect ambient lighting.') }}</strong> {{ t('Avoid direct sunlight on the screen and reflective glare.') }}</li>
+        <li><strong>{{ t('Set display brightness to about 50–75%.') }}</strong></li>
+        <li>{{ t('For best results, use full-screen mode.') }}</li>
       </ul>
       <button id="instructionsFullscreenBtn" type="button" class="btn btn-secondary btn-full" style="margin-bottom: var(--space-sm);">
-        Enter full-screen
+        {{ t('Enter full-screen') }}
       </button>
       <button id="instructionsAckBtn" type="button" class="btn btn-primary btn-full btn-lg">
-        I have done this &mdash; start
+        {{ t('I have done this — start') }}
       </button>
     </div>
   </div>
@@ -501,11 +498,11 @@
   <!-- ======== Skip Perception Modal ======== -->
   <div id="skipPerceptionModal" class="skip-modal-overlay">
     <div class="skip-modal-panel">
-      <h2 class="skip-modal-title">Can you see a difference?</h2>
+      <h2 class="skip-modal-title">{{ t('Can you see a difference?') }}</h2>
       <div class="skip-choices">
-        <button type="button" id="skipPerceptionIdentical" class="skip-choice skip-choice--neutral">No difference</button>
-        <button type="button" id="skipPerceptionAcceptable" class="skip-choice skip-choice--accept">Small difference — acceptable</button>
-        <button type="button" id="skipPerceptionUnacceptable" class="skip-choice skip-choice--reject">Difference — not acceptable</button>
+        <button type="button" id="skipPerceptionIdentical" class="skip-choice skip-choice--neutral">{{ t('No difference') }}</button>
+        <button type="button" id="skipPerceptionAcceptable" class="skip-choice skip-choice--accept">{{ t('Small difference — acceptable') }}</button>
+        <button type="button" id="skipPerceptionUnacceptable" class="skip-choice skip-choice--reject">{{ t('Difference — not acceptable') }}</button>
       </div>
     </div>
   </div>
@@ -521,13 +518,13 @@
         <!-- Gamification progress strip -->
         <div class="progress-strip" id="progressStrip" style="display:none;"></div>
         <div class="user-badge" id="userInfo" style="display:none;">
-          <span class="user-badge-label">ID:</span>
+          <span class="user-badge-label">{{ t('ID:') }}</span>
           <span class="user-badge-id" id="userIdDisplay"></span>
         </div>
-        <button id="sfxToggleBtn" class="btn-icon" type="button" aria-label="Mute sounds"><span class="sfx-icon">&#128266;</span></button>
-        <a href="/results" class="btn-icon" aria-label="View results">&#128202; <span class="help-label">Results</span></a>
-        <a href="/leaderboard" class="btn-icon" aria-label="View leaderboard">&#127942; <span class="help-label">Leaderboard</span></a>
-        <button id="showGuideBtn" class="btn-icon" type="button" aria-label="Show the quick guide">&#128161; <span class="help-label">Guide</span></button>
+        <button id="sfxToggleBtn" class="btn-icon" type="button" aria-label="{{ t('Mute sounds') }}"><span class="sfx-icon">&#128266;</span></button>
+        <a href="/results" class="btn-icon" aria-label="{{ t('View results') }}">&#128202; <span class="help-label">{{ t('Results') }}</span></a>
+        <a href="/leaderboard" class="btn-icon" aria-label="{{ t('View leaderboard') }}">&#127942; <span class="help-label">{{ t('Leaderboard') }}</span></a>
+        <button id="showGuideBtn" class="btn-icon" type="button" aria-label="{{ t('Show the quick guide') }}">&#128161; <span class="help-label">{{ t('Guide') }}</span></button>
       </div>
     </div>
   </header>
@@ -542,14 +539,14 @@
            priority in renderCtaSlot(). Above the game panel so the daily
            challenge is discoverable without scrolling. See static/main.js. -->
       <div id="ctaSlot" class="next-action-cta cta-slot" style="display:none;"
-           role="status" aria-label="Notifications"></div>
+           role="status" aria-label="{{ t('Notifications') }}"></div>
 
       <div class="mixing-workspace">
         <div class="mixing-canvas-zone">
           <!-- Swatches (full-bleed canvas) -->
           <div class="swatches-container" id="swatchesContainer">
             <div class="color-pair">
-              <div id="dailyChip" class="daily-chip" style="display:none;">📅 Today's challenge</div>
+              <div id="dailyChip" class="daily-chip" style="display:none;">📅 {{ t("Today's challenge") }}</div>
               <div id="targetColor" class="color-half"></div>
               <div id="currentMix" class="color-half" style="background-color:rgb(255,255,255);"></div>
             </div>
@@ -567,8 +564,8 @@
 
             <!-- Hidden labels (kept for legacy selectors) -->
             <div class="swatch-labels-row" aria-hidden="true">
-              <span>Match this color</span>
-              <span>Your mix</span>
+              <span>{{ t('Match this color') }}</span>
+              <span>{{ t('Your mix') }}</span>
             </div>
           </div>
         </div>
@@ -589,49 +586,56 @@
         <div id="palette" class="palette">
           <div class="color-control">
             <span class="drop-badge" data-badge-for="white">0</span>
-            <button class="color-circle" data-color="white" style="background:white;" type="button" aria-label="Add white drop">0</button>
-            <button class="minus-button" data-color="white" type="button" aria-label="Remove white drop">−</button>
-            <span class="color-name">White</span>
+            <button class="color-circle" data-color="white" style="background:white;" type="button" aria-label="{{ t('Add white drop') }}">0</button>
+            <button class="minus-button" data-color="white" type="button" aria-label="{{ t('Remove white drop') }}">−</button>
+            <span class="color-name">{{ t('White') }}</span>
           </div>
           <div class="color-control">
             <span class="drop-badge" data-badge-for="black">0</span>
-            <button class="color-circle" data-color="black" style="background:black;" type="button" aria-label="Add black drop">0</button>
-            <button class="minus-button" data-color="black" type="button" aria-label="Remove black drop">−</button>
-            <span class="color-name">Black</span>
+            <button class="color-circle" data-color="black" style="background:black;" type="button" aria-label="{{ t('Add black drop') }}">0</button>
+            <button class="minus-button" data-color="black" type="button" aria-label="{{ t('Remove black drop') }}">−</button>
+            <span class="color-name">{{ t('Black') }}</span>
           </div>
           <div class="color-control">
             <span class="drop-badge" data-badge-for="red">0</span>
-            <button class="color-circle" data-color="red" style="background:red;" type="button" aria-label="Add red drop">0</button>
-            <button class="minus-button" data-color="red" type="button" aria-label="Remove red drop">−</button>
-            <span class="color-name">Red</span>
+            <button class="color-circle" data-color="red" style="background:red;" type="button" aria-label="{{ t('Add red drop') }}">0</button>
+            <button class="minus-button" data-color="red" type="button" aria-label="{{ t('Remove red drop') }}">−</button>
+            <span class="color-name">{{ t('Red') }}</span>
           </div>
           <div class="color-control">
             <span class="drop-badge" data-badge-for="yellow">0</span>
-            <button class="color-circle" data-color="yellow" style="background:yellow;" type="button" aria-label="Add yellow drop">0</button>
-            <button class="minus-button" data-color="yellow" type="button" aria-label="Remove yellow drop">−</button>
-            <span class="color-name">Yellow</span>
+            <button class="color-circle" data-color="yellow" style="background:yellow;" type="button" aria-label="{{ t('Add yellow drop') }}">0</button>
+            <button class="minus-button" data-color="yellow" type="button" aria-label="{{ t('Remove yellow drop') }}">−</button>
+            <span class="color-name">{{ t('Yellow') }}</span>
           </div>
           <div class="color-control">
             <span class="drop-badge" data-badge-for="blue">0</span>
-            <button class="color-circle" data-color="blue" style="background:blue;" type="button" aria-label="Add blue drop">0</button>
-            <button class="minus-button" data-color="blue" type="button" aria-label="Remove blue drop">−</button>
-            <span class="color-name">Blue</span>
+            <button class="color-circle" data-color="blue" style="background:blue;" type="button" aria-label="{{ t('Add blue drop') }}">0</button>
+            <button class="minus-button" data-color="blue" type="button" aria-label="{{ t('Remove blue drop') }}">−</button>
+            <span class="color-name">{{ t('Blue') }}</span>
           </div>
         </div>
 
         <!-- Controls + timer -->
         <div id="controls" class="controls-bar">
           <span class="timer-display" id="timerDisplay">⏱ <span id="timer">0.0</span>s</span>
-          <button id="startBtn" class="btn btn-primary btn-lg">Start</button>
+          <button id="startBtn" class="btn btn-primary btn-lg">{{ t('Start') }}</button>
           <button id="stopBtn" class="btn btn-primary btn-lg" disabled style="display:none;" aria-hidden="true"></button>
-          <button id="skipBtn" class="btn btn-secondary btn-lg" disabled style="display:none;">Skip</button>
-          <button id="retryBtn" class="btn btn-tertiary" disabled style="display:none;">Start over</button>
+          <button id="skipBtn" class="btn btn-secondary btn-lg" disabled style="display:none;">{{ t('Skip') }}</button>
+          <button id="retryBtn" class="btn btn-tertiary" disabled style="display:none;">{{ t('Start over') }}</button>
 
           <div class="overflow-menu" id="overflowMenu">
-            <button class="btn-icon overflow-trigger" id="overflowTrigger" type="button" aria-label="More options">⋮</button>
+            <button class="btn-icon overflow-trigger" id="overflowTrigger" type="button" aria-label="{{ t('More options') }}">⋮</button>
             <div class="overflow-dropdown" id="overflowDropdown">
-              <button id="restartBtn" class="overflow-item" type="button" disabled>Restart all</button>
-              <button id="switchUserBtn" class="overflow-item" type="button">Switch user</button>
+              <button id="restartBtn" class="overflow-item" type="button" disabled>{{ t('Restart all') }}</button>
+              <button id="switchUserBtn" class="overflow-item" type="button">{{ t('Switch user') }}</button>
+              <div class="overflow-item" id="langSettingRow" style="display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:default;">
+                <label for="langSelect" style="font:inherit; cursor:default;">{{ t('Language') }}</label>
+                <select id="langSelect" style="font:inherit; max-width:110px;">
+                  <option value="en">English</option>
+                  <option value="hu">Magyar</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
@@ -643,15 +647,15 @@
   </div>
 
   <!-- Sidebar drawer trigger (floating, all breakpoints) -->
-  <button id="sidebarDrawerBtn" class="sidebar-drawer-trigger" type="button" aria-label="Open color guide">
+  <button id="sidebarDrawerBtn" class="sidebar-drawer-trigger" type="button" aria-label="{{ t('Open color guide') }}">
     <span aria-hidden="true">🎨</span>
-    <span class="sidebar-drawer-trigger-label">Color guide</span>
+    <span class="sidebar-drawer-trigger-label">{{ t('Color guide') }}</span>
   </button>
   <div class="sidebar-drawer-backdrop" id="sidebarDrawerBackdrop"></div>
   <div class="sidebar-drawer" id="sidebarDrawer">
     <div class="drawer-handle"></div>
     <div class="sidebar-card">
-      <h2>Color Relationships</h2>
+      <h2>{{ t('Color Relationships') }}</h2>
       <div class="hex-diagram">
         <svg style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;">
           <line x1="150" y1="38" x2="150" y2="238" stroke="var(--border-strong)" stroke-width="2" stroke-dasharray="6,6" />
@@ -664,17 +668,17 @@
         <div class="hex-dot" style="left:50%;top:220px;transform:translateX(-50%);background:green;"></div>
         <div class="hex-dot" style="left:35px;top:155px;background:yellow;"></div>
         <div class="hex-dot" style="left:35px;top:55px;background:orange;"></div>
-        <span class="hex-label" style="top:-18px;left:50%;transform:translateX(-50%);">Red</span>
-        <span class="hex-label" style="top:35px;left:0;">Orange</span>
-        <span class="hex-label" style="top:35px;right:0;">Purple</span>
-        <span class="hex-label" style="top:185px;left:0;">Yellow</span>
-        <span class="hex-label" style="top:185px;right:0;">Blue</span>
-        <span class="hex-label" style="top:260px;left:50%;transform:translateX(-50%);">Green</span>
+        <span class="hex-label" style="top:-18px;left:50%;transform:translateX(-50%);">{{ t('Red') }}</span>
+        <span class="hex-label" style="top:35px;left:0;">{{ t('Orange') }}</span>
+        <span class="hex-label" style="top:35px;right:0;">{{ t('Purple') }}</span>
+        <span class="hex-label" style="top:185px;left:0;">{{ t('Yellow') }}</span>
+        <span class="hex-label" style="top:185px;right:0;">{{ t('Blue') }}</span>
+        <span class="hex-label" style="top:260px;left:50%;transform:translateX(-50%);">{{ t('Green') }}</span>
       </div>
       <div class="sidebar-info">
-        <p>Primary: Red, Yellow, Blue</p>
-        <p>Secondary: Orange (R+Y), Green (Y+B), Purple (R+B)</p>
-        <p><em>Complementary mixes tend toward grey.</em></p>
+        <p>{{ t('Primary: Red, Yellow, Blue') }}</p>
+        <p>{{ t('Secondary: Orange (R+Y), Green (Y+B), Purple (R+B)') }}</p>
+        <p><em>{{ t('Complementary mixes tend toward grey.') }}</em></p>
       </div>
     </div>
   </div>
@@ -698,6 +702,26 @@
     });
     document.addEventListener('click', function() {
       dropdown.classList.remove('is-open');
+    });
+  })();
+
+  /* ---- Language selector (settings, in the overflow menu) ---- */
+  (function() {
+    var row = document.getElementById('langSettingRow');
+    var sel = document.getElementById('langSelect');
+    if (!row || !sel) return;
+    sel.value = (window.LANG === 'hu') ? 'hu' : 'en';
+    /* Keep the dropdown open while interacting with the select. */
+    row.addEventListener('click', function(e) { e.stopPropagation(); });
+    sel.addEventListener('change', function() {
+      var payload = { locale: sel.value };
+      var uid = localStorage.getItem('userId');
+      if (uid) payload.user_id = uid;
+      fetch('/api/user/locale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(function() {}).then(function() { location.reload(); });
     });
   })();
 
@@ -847,11 +871,11 @@
 
     /* Spotlight guide (coach-mark walkthrough of the game board) */
     var GAME_GUIDE_STEPS = [
-      { el: '#targetColor', title: 'Match this colour', body: 'The left panel is the target shade you need to reproduce.' },
-      { el: '#currentMix', title: 'Your mix', body: 'The right panel updates live as you add pigments — get it as close to the target as you can.' },
-      { el: '#palette', title: 'Add pigments', body: 'Tap a pigment to add a drop, and use the − button to remove one. The number on each shows your recipe.' },
-      { el: '#startBtn', title: 'Start when ready', body: 'Press Start to begin — the timer runs while you mix, and a close enough match completes the shade.' },
-      { el: '#showGuideBtn', title: 'Replay anytime', body: 'Tap Guide to see this walkthrough again whenever you like.' }
+      { el: '#targetColor', title: t('Match this colour'), body: t('The left panel is the target shade you need to reproduce.') },
+      { el: '#currentMix', title: t('Your mix'), body: t('The right panel updates live as you add pigments — get it as close to the target as you can.') },
+      { el: '#palette', title: t('Add pigments'), body: t('Tap a pigment to add a drop, and use the − button to remove one. The number on each shows your recipe.') },
+      { el: '#startBtn', title: t('Start when ready'), body: t('Press Start to begin — the timer runs while you mix, and a close enough match completes the shade.') },
+      { el: '#showGuideBtn', title: t('Replay anytime'), body: t('Tap Guide to see this walkthrough again whenever you like.') }
     ];
     function launchGuide(onDone) {
       window.__guidePending = false;
@@ -1020,7 +1044,7 @@
     /* Post-register push opt-in — reuses the same subscribe logic */
     window._postRegPushOptIn = async function() {
       var btn = document.getElementById('postRegPushBtn');
-      if (btn) { btn.disabled = true; btn.textContent = '⏳ Setting up…'; }
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ ' + t('Setting up…'); }
       try {
         await window.requestPushPermission();
       } catch(e) {}
@@ -1040,7 +1064,7 @@
         var checked = document.querySelector('input[name="gender"]:checked');
         if (checked) { gender = checked.value; document.getElementById('userGender').value = gender; }
       }
-      if (!gender) { alert('Please select a gender.'); return; }
+      if (!gender) { alert(t('Please select a gender.')); return; }
 
       if (birthdate) {
         // Minimum participant age — keep in sync with MIN_PARTICIPANT_AGE on the server.
@@ -1052,7 +1076,7 @@
         if (mDiff < 0 || (mDiff === 0 && now.getDate() < bd.getDate())) age--;
         if (age < MIN_AGE) {
           var ed = document.getElementById('birthdateError');
-          if (ed) { ed.textContent = 'You must be at least ' + MIN_AGE + ' years old to participate.'; ed.style.display = 'block'; }
+          if (ed) { ed.textContent = t('You must be at least {n} years old to participate.').replace('{n}', String(MIN_AGE)); ed.style.display = 'block'; }
           return;
         }
       }
@@ -1105,7 +1129,7 @@
       })
       .catch(function() {
         var ed = document.getElementById('birthdateError');
-        if (ed) { ed.textContent = 'An error occurred. Please try again.'; ed.style.display = 'block'; }
+        if (ed) { ed.textContent = t('An error occurred. Please try again.'); ed.style.display = 'block'; }
       });
     };
 
@@ -1120,12 +1144,12 @@
           body: JSON.stringify({ email: recoverEmail })
         }).then(function(r) { return r.json(); }).then(function(data) {
           if (data.status === 'success') {
-            alert('If the email exists, we sent an ID recovery email.');
+            alert(t('If the email exists, we sent an ID recovery email.'));
           } else {
-            alert(data.message || 'Could not send recovery email.');
+            alert(data.message || t('Could not send recovery email.'));
           }
         }).catch(function() {
-          alert('Could not send recovery email.');
+          alert(t('Could not send recovery email.'));
         });
       };
     }
@@ -1192,9 +1216,9 @@
           if (Notification.permission === 'denied') return;
           window.setCta && window.setCta('push', {
             icon: '🔔',
-            labelHtml: 'Daily reminders',
-            reasonHtml: 'Get notified when the daily challenge goes live — one tap, turn off any time.',
-            actionLabel: 'Enable',
+            labelHtml: t('Daily reminders'),
+            reasonHtml: t('Get notified when the daily challenge goes live — one tap, turn off any time.'),
+            actionLabel: t('Enable'),
             onAction: function() { window.requestPushPermission && window.requestPushPermission(); },
             onDismiss: function() { window.setCta('push', null); },
             variant: 'push',
@@ -1237,10 +1261,10 @@
 
       enableBtn.onclick = async function() {
         enableBtn.disabled = true;
-        enableBtn.textContent = '⏳ Setting up…';
+        enableBtn.textContent = '⏳ ' + t('Setting up…');
         try { await window.requestPushPermission(); } catch (e) {}
         enableBtn.disabled = false;
-        enableBtn.textContent = 'Enable reminders';
+        enableBtn.textContent = t('Enable reminders');
         nag.style.display = 'none';
       };
       laterBtn.onclick = function() { nag.style.display = 'none'; };
@@ -1253,9 +1277,9 @@
     if (uid && email && optedIn && !verified) {
       window.setCta && window.setCta('emailVerify', {
         icon: '✉️',
-        labelHtml: 'Email not verified',
-        reasonHtml: 'Please verify your email to receive reminder emails.',
-        actionLabel: 'Resend email',
+        labelHtml: t('Email not verified'),
+        reasonHtml: t('Please verify your email to receive reminder emails.'),
+        actionLabel: t('Resend email'),
         onAction: function() {
           fetch('/email/verification/request', {
             method: 'POST',
@@ -1263,12 +1287,12 @@
             body: JSON.stringify({ user_id: uid })
           }).then(function(r) { return r.json(); }).then(function(data) {
             if (data.status === 'success') {
-              alert('Verification email sent.');
+              alert(t('Verification email sent.'));
             } else {
-              alert(data.message || 'Could not send verification email.');
+              alert(data.message || t('Could not send verification email.'));
             }
           }).catch(function() {
-            alert('Could not send verification email.');
+            alert(t('Could not send verification email.'));
           });
         },
         variant: 'emailVerify',
@@ -1347,9 +1371,9 @@
 {% endblock %}
 
 {% block extra_js %}
-  <script src="{{ url_for('static', filename='guide.js') }}?v=20260706-flow1"></script>
+  <script src="{{ url_for('static', filename='guide.js') }}?v=20260709-i18n1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-cta2"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-i18n1"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>

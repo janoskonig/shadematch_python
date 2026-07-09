@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}ShadeMatch Leaderboard{% endblock %}
+{% block title %}{{ t('ShadeMatch Leaderboard') }}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -112,26 +112,26 @@
 
 {% block content %}
   <main class="leaderboard-container" id="leaderboard-main">
-    <a href="/" class="back-link">← Back to Color Mixing</a>
-    <h1 class="page-title">Leaderboard</h1>
-    <p class="page-subtitle">Compare progress with other players. Players who set a nickname appear by it; everyone else stays anonymous. Set yours on the Results page.</p>
+    <a href="/" class="back-link">{{ t('← Back to Color Mixing') }}</a>
+    <h1 class="page-title">{{ t('Leaderboard') }}</h1>
+    <p class="page-subtitle">{{ t('Compare progress with other players. Players who set a nickname appear by it; everyone else stays anonymous. Set yours on the Results page.') }}</p>
 
-    <section class="user-input-section" aria-label="Account and user ID">
+    <section class="user-input-section" aria-label="{{ t('Account and user ID') }}">
       <div id="stored-user-info" style="display:none;">
-        <p id="welcome-message" class="welcome-message">Welcome back! Loading the leaderboard...</p>
-        <button onclick="clearUserAndReload()" type="button" style="margin-top:var(--space-sm);">Switch User</button>
+        <p id="welcome-message" class="welcome-message">{{ t('Welcome back! Loading the leaderboard...') }}</p>
+        <button onclick="clearUserAndReload()" type="button" style="margin-top:var(--space-sm);">{{ t('Switch User') }}</button>
       </div>
       <div id="user-input-form">
-        <p style="margin-bottom:var(--space-md); color:var(--text-secondary);">Enter your 6-character user ID to highlight your position:</p>
-        <input type="text" id="userIdInput" placeholder="e.g., ABC123" maxlength="6">
-        <button onclick="loadLeaderboard()" type="button">View Leaderboard</button>
+        <p style="margin-bottom:var(--space-md); color:var(--text-secondary);">{{ t('Enter your 6-character user ID to highlight your position:') }}</p>
+        <input type="text" id="userIdInput" placeholder="{{ t('e.g., ABC123') }}" maxlength="6">
+        <button onclick="loadLeaderboard()" type="button">{{ t('View Leaderboard') }}</button>
       </div>
     </section>
 
     <section class="leaderboard-section" aria-labelledby="leaderboardHeading">
-      <h2 id="leaderboardHeading" class="sr-only">Leaderboard rankings</h2>
+      <h2 id="leaderboardHeading" class="sr-only">{{ t('Leaderboard rankings') }}</h2>
       <div id="leaderboard-content">
-        <div class="loading">Enter your user ID above to view the leaderboard</div>
+        <div class="loading">{{ t('Enter your user ID above to view the leaderboard') }}</div>
       </div>
     </section>
   </main>
@@ -142,7 +142,7 @@
       if (storedUserId) {
         document.getElementById('stored-user-info').style.display = 'block';
         document.getElementById('user-input-form').style.display = 'none';
-        document.getElementById('welcome-message').textContent = 'Welcome back, ' + storedUserId + '!';
+        document.getElementById('welcome-message').textContent = t('Welcome back, {id}!').replace('{id}', storedUserId);
         loadLeaderboard(storedUserId);
       }
     });
@@ -159,11 +159,11 @@
     function loadLeaderboard(userId) {
       const userIdToUse = userId || document.getElementById('userIdInput').value.toUpperCase();
       if (!userIdToUse || userIdToUse.length !== 6) {
-        showLeaderboardError('Please enter a valid 6-character user ID');
+        showLeaderboardError(t('Please enter a valid 6-character user ID'));
         return;
       }
 
-      document.getElementById('leaderboard-content').innerHTML = '<div class="loading">Loading leaderboard...</div>';
+      document.getElementById('leaderboard-content').innerHTML = '<div class="loading">' + t('Loading leaderboard...') + '</div>';
       fetch('/api/leaderboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,9 +172,9 @@
         .then(r => r.json())
         .then(data => {
           if (data.status === 'success') displayLeaderboard(data.leaderboard, data.total_ranked_users);
-          else showLeaderboardError(data.message || 'Failed to load leaderboard');
+          else showLeaderboardError(data.message || t('Failed to load leaderboard'));
         })
-        .catch(() => showLeaderboardError('Failed to load leaderboard. Please try again.'));
+        .catch(() => showLeaderboardError(t('Failed to load leaderboard. Please try again.')));
     }
 
     function fmtNumber(value) {
@@ -202,7 +202,7 @@
     function displayLeaderboard(rows, totalRankedUsers) {
       const target = document.getElementById('leaderboard-content');
       if (!rows || rows.length === 0) {
-        target.innerHTML = '<div class="no-results">No leaderboard entries yet.</div>';
+        target.innerHTML = '<div class="no-results">' + t('No leaderboard entries yet.') + '</div>';
         return;
       }
 
@@ -214,14 +214,14 @@
         return `<tr class="${cls}">
           <td class="leaderboard-rank">#${row.rank}</td>
           <td class="leaderboard-user">${escapeHTML(row.display_name)}</td>
-          <td>Level ${row.level}</td>
+          <td>${t('Level {n}').replace('{n}', String(row.level))}</td>
           <td>${fmtNumber(row.xp)}</td>
           <td>${fmtNumber(row.completed_sessions)}</td>
-          <td title="Computer-verified perfect matches (\u0394E ≤ threshold)">${fmtNumber(row.perfect_count)}</td>
-          <td title="Skipped attempts marked as visually identical to the target">${fmtNumber(row.no_perceivable_diff_count)}</td>
+          <td title="${t('Computer-verified perfect matches (ΔE ≤ threshold)')}">${fmtNumber(row.perfect_count)}</td>
+          <td title="${t('Skipped attempts marked as visually identical to the target')}">${fmtNumber(row.no_perceivable_diff_count)}</td>
           <td>${fmtNumber(row.current_streak)}</td>
-          <td title="Total time spent playing (each round capped at 30 min)">${fmtDuration(row.total_time_sec)}</td>
-          <td title="Average time per completed match (rounds &le; 30 min)">${fmtSeconds(row.avg_match_time_sec)}</td>
+          <td title="${t('Total time spent playing (each round capped at 30 min)')}">${fmtDuration(row.total_time_sec)}</td>
+          <td title="${t('Average time per completed match (rounds &le; 30 min)')}">${fmtSeconds(row.avg_match_time_sec)}</td>
         </tr>`;
       }).join('');
 
@@ -233,26 +233,26 @@
             <span class="leaderboard-user">${escapeHTML(row.display_name)}</span>
           </div>
           <div class="leaderboard-card-meta">
-            <div><strong>Level:</strong> ${row.level}</div>
-            <div><strong>XP:</strong> ${fmtNumber(row.xp)}</div>
-            <div><strong>Completed:</strong> ${fmtNumber(row.completed_sessions)}</div>
-            <div><strong>Perfect:</strong> ${fmtNumber(row.perfect_count)}</div>
-            <div><strong>No Perceivable Diff:</strong> ${fmtNumber(row.no_perceivable_diff_count)}</div>
-            <div><strong>Streak:</strong> ${fmtNumber(row.current_streak)}</div>
-            <div><strong>Total Time:</strong> ${fmtDuration(row.total_time_sec)}</div>
-            <div><strong>Avg / Match:</strong> ${fmtSeconds(row.avg_match_time_sec)}</div>
+            <div><strong>${t('Level:')}</strong> ${row.level}</div>
+            <div><strong>${t('XP:')}</strong> ${fmtNumber(row.xp)}</div>
+            <div><strong>${t('Completed:')}</strong> ${fmtNumber(row.completed_sessions)}</div>
+            <div><strong>${t('Perfect:')}</strong> ${fmtNumber(row.perfect_count)}</div>
+            <div><strong>${t('No Perceivable Diff:')}</strong> ${fmtNumber(row.no_perceivable_diff_count)}</div>
+            <div><strong>${t('Streak:')}</strong> ${fmtNumber(row.current_streak)}</div>
+            <div><strong>${t('Total Time:')}</strong> ${fmtDuration(row.total_time_sec)}</div>
+            <div><strong>${t('Avg / Match:')}</strong> ${fmtSeconds(row.avg_match_time_sec)}</div>
           </div>
         </div>`;
       }).join('');
 
       const totalLabel = totalRankedUsers
-        ? '<p class="leaderboard-help">Ranked by level, XP, completed sessions, then perfect and no-perceivable-difference matches. Ranked users: ' + totalRankedUsers + '.</p>'
+        ? '<p class="leaderboard-help">' + t('Ranked by level, XP, completed sessions, then perfect and no-perceivable-difference matches. Ranked users: {n}.').replace('{n}', String(totalRankedUsers)) + '</p>'
         : '';
       target.innerHTML = totalLabel +
         '<table class="leaderboard-table"><thead><tr>' +
-        '<th>Rank</th><th>User</th><th>Level</th><th>XP</th><th>Completed</th><th>Perfect</th><th>No Perceivable Diff</th><th>Streak</th>' +
-        '<th title="Total play time (each round capped at 30 min)">Total Time</th>' +
-        '<th title="Average time per completed match">Avg / Match</th>' +
+        '<th>' + t('Rank') + '</th><th>' + t('User') + '</th><th>' + t('Level') + '</th><th>XP</th><th>' + t('Completed') + '</th><th>' + t('Perfect') + '</th><th>' + t('No Perceivable Diff') + '</th><th>' + t('Streak') + '</th>' +
+        '<th title="' + t('Total play time (each round capped at 30 min)') + '">' + t('Total Time') + '</th>' +
+        '<th title="' + t('Average time per completed match') + '">' + t('Avg / Match') + '</th>' +
         '</tr></thead><tbody>' + tableRows + '</tbody></table>' +
         '<div class="leaderboard-cards">' + cards + '</div>';
     }

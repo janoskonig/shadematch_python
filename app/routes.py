@@ -53,6 +53,7 @@ from .gamification import (
     _xp_level,
 )
 from .next_action import build_next_action
+from .i18n import t, t_for, get_locale
 # NOTE: `stat_eda` and `mixed_models_stat` pull in matplotlib + statsmodels (+ scipy),
 # which add hundreds of MB of RSS at import time. They are only needed by the rarely
 # used /stat admin dashboard, so we import them lazily inside the handlers below to
@@ -976,25 +977,25 @@ def register():
     consent_version = (data.get('consent_version') or '').strip()
 
     if not birthdate_raw:
-        return jsonify({'status': 'error', 'message': 'Date of birth is required.'}), 400
+        return jsonify({'status': 'error', 'message': t('Date of birth is required.')}), 400
     try:
         birthdate = datetime.strptime(birthdate_raw, '%Y-%m-%d').date()
     except (ValueError, TypeError):
-        return jsonify({'status': 'error', 'message': 'Invalid date of birth.'}), 400
+        return jsonify({'status': 'error', 'message': t('Invalid date of birth.')}), 400
     # Allowed gender values — keep in sync with the radio options in index.html.
     if gender not in ('female', 'male'):
-        return jsonify({'status': 'error', 'message': 'Please select a valid gender.'}), 400
+        return jsonify({'status': 'error', 'message': t('Please select a valid gender.')}), 400
 
     today = date.today()
     age = today.year - birthdate.year - ((today.month, today.day) < (birthdate.month, birthdate.day))
     if age < MIN_PARTICIPANT_AGE:
-        return jsonify({'status': 'error', 'message': f'You must be at least {MIN_PARTICIPANT_AGE} years old to participate.'}), 400
+        return jsonify({'status': 'error', 'message': t('You must be at least {age} years old to participate.', age=MIN_PARTICIPANT_AGE)}), 400
     if not email:
-        return jsonify({'status': 'error', 'message': 'A valid email is required to register.'}), 400
+        return jsonify({'status': 'error', 'message': t('A valid email is required to register.')}), 400
     if consent_version != RESEARCH_CONSENT_VERSION:
-        return jsonify({'status': 'error', 'message': 'Research consent is required to take part.'}), 400
+        return jsonify({'status': 'error', 'message': t('Research consent is required to take part.')}), 400
     if email and User.query.filter_by(email=email).first():
-        return jsonify({'status': 'error', 'message': 'This email is already in use'}), 409
+        return jsonify({'status': 'error', 'message': t('This email is already in use')}), 409
 
     # Optional public display name.
     nickname = None
@@ -1004,13 +1005,13 @@ def register():
         if nickname is None:
             return jsonify({
                 'status': 'error',
-                'message': 'Nicknames are 3-20 characters: letters, numbers, spaces, - or _.',
+                'message': t('Nicknames are 3-20 characters: letters, numbers, spaces, - or _.'),
             }), 400
         if _nickname_taken(nickname):
             return jsonify({
                 'status': 'error',
                 'code': 'NICKNAME_TAKEN',
-                'message': 'That nickname is taken — try another.',
+                'message': t('That nickname is taken — try another.'),
             }), 409
 
     user_id = generate_user_id()
@@ -1039,7 +1040,7 @@ def register():
         db.session.commit()
     except IntegrityError:
         db.session.rollback()
-        return jsonify({'status': 'error', 'message': 'Registration failed, please try again.'}), 409
+        return jsonify({'status': 'error', 'message': t('Registration failed, please try again.')}), 409
 
     # Notify the admin of the new signup. Never let a mail hiccup affect the
     # registration response.
@@ -1069,6 +1070,7 @@ def register():
                 verify_url=verify_url,
                 ttl_hours=EMAIL_VERIFY_TTL_HOURS,
                 username=user.id,
+                locale=(user.locale or get_locale()),
             )
             db.session.commit()
         except Exception as exc:
@@ -1095,7 +1097,7 @@ def login():
             if not user.email_verified_at:
                 return jsonify({
                     'status': 'error',
-                    'message': 'Please verify your email before logging in.',
+                    'message': t('Please verify your email before logging in.'),
                     'code': 'EMAIL_NOT_VERIFIED',
                     'user_id': user.id,
                     'email': user.email,
@@ -1129,9 +1131,9 @@ def login():
                 'consent_recorded': False,
             })
 
-        return jsonify({'status': 'error', 'message': 'Invalid user ID'}), 404
+        return jsonify({'status': 'error', 'message': t('Invalid user ID')}), 404
     except Exception as e:
-        return jsonify({'status': 'error', 'message': 'Database error'}), 500
+        return jsonify({'status': 'error', 'message': t('Database error')}), 500
 
 
 @main.route('/research-consent', methods=['POST'])
@@ -1202,19 +1204,19 @@ def email_verification_request():
     if data.get('email') and not email:
         return jsonify({'status': 'error', 'message': 'Invalid email format'}), 400
     if not _rate_limit_allow(f'verify:{request.remote_addr}:{user_id}', max_hits=5, window_sec=3600):
-        return jsonify({'status': 'error', 'message': 'Too many verification requests'}), 429
+        return jsonify({'status': 'error', 'message': t('Too many verification requests')}), 429
 
     user = User.query.get(user_id)
     if not user:
-        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+        return jsonify({'status': 'error', 'message': t('User not found')}), 404
     if email and user.email and user.email != email:
-        return jsonify({'status': 'error', 'message': 'Email mismatch for this user'}), 409
+        return jsonify({'status': 'error', 'message': t('Email mismatch for this user')}), 409
     if email and not user.email:
         if User.query.filter_by(email=email).first():
-            return jsonify({'status': 'error', 'message': 'This email is already in use'}), 409
+            return jsonify({'status': 'error', 'message': t('This email is already in use')}), 409
         user.email = email
     if not user.email:
-        return jsonify({'status': 'error', 'message': 'No email on record'}), 400
+        return jsonify({'status': 'error', 'message': t('No email on record')}), 400
 
     token_plain, _ = _issue_email_token(
         user_id=user.id,
@@ -1228,11 +1230,12 @@ def email_verification_request():
             verify_url=verify_url,
             ttl_hours=EMAIL_VERIFY_TTL_HOURS,
             username=user.id,
+            locale=(user.locale or get_locale()),
         )
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        return jsonify({'status': 'error', 'message': f'Failed to send verification email: {exc}'}), 500
+        return jsonify({'status': 'error', 'message': t('Failed to send verification email: {error}', error=exc)}), 500
     return jsonify({'status': 'success'})
 
 
@@ -1240,23 +1243,23 @@ def email_verification_request():
 def email_verify():
     token_plain = (request.args.get('token') or '').strip()
     if not token_plain:
-        return render_template('email_verify_result.html', success=False, message='Missing verification token.')
+        return render_template('email_verify_result.html', success=False, message=t('Missing verification token.'))
     token_hash = _sha256(token_plain)
     token_row = EmailVerificationToken.query.filter_by(token_hash=token_hash, purpose='verify_email').first()
     if not token_row:
-        return render_template('email_verify_result.html', success=False, message='Invalid verification token.')
+        return render_template('email_verify_result.html', success=False, message=t('Invalid verification token.'))
     if token_row.used_at is not None:
-        return render_template('email_verify_result.html', success=False, message='Verification token already used.')
+        return render_template('email_verify_result.html', success=False, message=t('Verification token already used.'))
     if token_row.expires_at < datetime.utcnow():
-        return render_template('email_verify_result.html', success=False, message='Verification token has expired.')
+        return render_template('email_verify_result.html', success=False, message=t('Verification token has expired.'))
 
     user = User.query.get(token_row.user_id)
     if not user:
-        return render_template('email_verify_result.html', success=False, message='User not found for token.')
+        return render_template('email_verify_result.html', success=False, message=t('User not found for token.'))
     user.email_verified_at = datetime.utcnow()
     token_row.used_at = datetime.utcnow()
     db.session.commit()
-    return render_template('email_verify_result.html', success=True, message='Email verified successfully. You can return to ShadeMatch.')
+    return render_template('email_verify_result.html', success=True, message=t('Email verified successfully. You can return to ShadeMatch.'))
 
 
 @main.route('/email/recover-id', methods=['POST'])
@@ -1264,9 +1267,9 @@ def email_recover_id():
     data = request.get_json() or {}
     email = _normalize_email(data.get('email'))
     if not email:
-        return jsonify({'status': 'error', 'message': 'Invalid email format'}), 400
+        return jsonify({'status': 'error', 'message': t('Invalid email format')}), 400
     if not _rate_limit_allow(f'recover:{request.remote_addr}:{email}', max_hits=4, window_sec=1800):
-        return jsonify({'status': 'error', 'message': 'Too many recovery requests'}), 429
+        return jsonify({'status': 'error', 'message': t('Too many recovery requests')}), 429
 
     user = User.query.filter_by(email=email).first()
     # Return success even when no user exists to avoid user enumeration.
@@ -1284,11 +1287,12 @@ def email_recover_id():
             to_email=user.email,
             recovery_url=recovery_url,
             ttl_minutes=EMAIL_RECOVERY_TTL_MINUTES,
+            locale=(user.locale or get_locale()),
         )
         db.session.commit()
     except Exception as exc:
         db.session.rollback()
-        return jsonify({'status': 'error', 'message': f'Failed to send recovery email: {exc}'}), 500
+        return jsonify({'status': 'error', 'message': t('Failed to send recovery email: {error}', error=exc)}), 500
     return jsonify({'status': 'success'})
 
 
@@ -1296,24 +1300,24 @@ def email_recover_id():
 def email_recover_id_confirm():
     token_plain = (request.args.get('token') or '').strip()
     if not token_plain:
-        return render_template('email_verify_result.html', success=False, message='Missing recovery token.')
+        return render_template('email_verify_result.html', success=False, message=t('Missing recovery token.'))
     token_hash = _sha256(token_plain)
     token_row = EmailVerificationToken.query.filter_by(token_hash=token_hash, purpose='recover_id').first()
     if not token_row:
-        return render_template('email_verify_result.html', success=False, message='Invalid recovery token.')
+        return render_template('email_verify_result.html', success=False, message=t('Invalid recovery token.'))
     if token_row.used_at is not None:
-        return render_template('email_verify_result.html', success=False, message='Recovery token already used.')
+        return render_template('email_verify_result.html', success=False, message=t('Recovery token already used.'))
     if token_row.expires_at < datetime.utcnow():
-        return render_template('email_verify_result.html', success=False, message='Recovery token has expired.')
+        return render_template('email_verify_result.html', success=False, message=t('Recovery token has expired.'))
     user = User.query.get(token_row.user_id)
     if not user:
-        return render_template('email_verify_result.html', success=False, message='User not found for token.')
+        return render_template('email_verify_result.html', success=False, message=t('User not found for token.'))
     token_row.used_at = datetime.utcnow()
     db.session.commit()
     return render_template(
         'email_verify_result.html',
         success=True,
-        message=f'Your ShadeMatch ID is: {user.id}',
+        message=t('Your ShadeMatch ID is: {user_id}', user_id=user.id),
     )
 
 
@@ -1334,7 +1338,7 @@ def email_unsubscribe():
         return render_template(
             'email_unsubscribe_result.html',
             success=False,
-            message='This unsubscribe link is invalid or has expired. Please open ShadeMatch and update your email preferences from your account.',
+            message=t('This unsubscribe link is invalid or has expired. Please open ShadeMatch and update your email preferences from your account.'),
         )
 
     user = User.query.get(user_id)
@@ -1344,7 +1348,7 @@ def email_unsubscribe():
         return render_template(
             'email_unsubscribe_result.html',
             success=False,
-            message='We could not find your account. It may have been removed already.',
+            message=t('We could not find your account. It may have been removed already.'),
         )
 
     if user.email_opt_in_reminders:
@@ -1361,14 +1365,19 @@ def email_unsubscribe():
             local = local[0] + '•' * max(1, len(local) - 2) + local[-1]
         masked_email = f'{local}@{domain}'
 
+    if masked_email:
+        unsubscribe_message = t(
+            "You'll no longer receive ShadeMatch reminder emails at {email}. Transactional messages (verification or ID recovery) may still be sent when you take an action that requires them.",
+            email=masked_email,
+        )
+    else:
+        unsubscribe_message = t(
+            "You'll no longer receive ShadeMatch reminder emails. Transactional messages (verification or ID recovery) may still be sent when you take an action that requires them."
+        )
     return render_template(
         'email_unsubscribe_result.html',
         success=True,
-        message=(
-            f"You'll no longer receive ShadeMatch reminder emails"
-            + (f" at {masked_email}" if masked_email else '')
-            + ". Transactional messages (verification or ID recovery) may still be sent when you take an action that requires them."
-        ),
+        message=unsubscribe_message,
     )
 
 
@@ -1380,16 +1389,16 @@ def user_email_settings():
         return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
     user = User.query.get(user_id)
     if not user:
-        return jsonify({'status': 'error', 'message': 'User not found'}), 404
+        return jsonify({'status': 'error', 'message': t('User not found')}), 404
 
     if 'email_opt_in_reminders' in data:
         user.email_opt_in_reminders = bool(data.get('email_opt_in_reminders'))
     if 'email' in data:
         email = _normalize_email(data.get('email'))
         if data.get('email') and not email:
-            return jsonify({'status': 'error', 'message': 'Invalid email format'}), 400
+            return jsonify({'status': 'error', 'message': t('Invalid email format')}), 400
         if email and user.email != email and User.query.filter_by(email=email).first():
-            return jsonify({'status': 'error', 'message': 'This email is already in use'}), 409
+            return jsonify({'status': 'error', 'message': t('This email is already in use')}), 409
         if user.email != email:
             user.email = email
             user.email_verified_at = None
@@ -1438,7 +1447,7 @@ def set_user_nickname():
         return jsonify({'status': 'error', 'message': 'Unknown user'}), 404
     if not _rate_limit_allow(f'nick:{user_id}', max_hits=5, window_sec=3600):
         return jsonify({'status': 'error',
-                        'message': 'Too many nickname changes — try again later.'}), 429
+                        'message': t('Too many nickname changes — try again later.')}), 429
 
     raw = (data.get('nickname') or '').strip()
     if not raw:
@@ -1450,13 +1459,13 @@ def set_user_nickname():
     if nickname is None:
         return jsonify({
             'status': 'error',
-            'message': 'Nicknames are 3-20 characters: letters, numbers, spaces, - or _.',
+            'message': t('Nicknames are 3-20 characters: letters, numbers, spaces, - or _.'),
         }), 400
     if _nickname_taken(nickname, exclude_user_id=user_id):
         return jsonify({
             'status': 'error',
             'code': 'NICKNAME_TAKEN',
-            'message': 'That nickname is taken — try another.',
+            'message': t('That nickname is taken — try another.'),
         }), 409
 
     user.nickname = nickname
@@ -1468,18 +1477,27 @@ def set_user_nickname():
         return jsonify({
             'status': 'error',
             'code': 'NICKNAME_TAKEN',
-            'message': 'That nickname is taken — try another.',
+            'message': t('That nickname is taken — try another.'),
         }), 409
     return jsonify({'status': 'success', 'nickname': nickname})
 
 
 # ── Target colors ──────────────────────────────────────────────────────────
 
+def _color_display_name(tc, locale=None):
+    """English name, plus the Hungarian gloss ('Merlot — bordó') for hu viewers."""
+    from .i18n import get_locale
+    loc = locale or get_locale()
+    if loc == 'hu' and getattr(tc, 'name_hu', None):
+        return f'{tc.name} — {tc.name_hu}'
+    return tc.name
+
+
 def _target_color_public_dict(tc):
     """Shape for /api/target-colors."""
     entry = {
         'id': tc.id,
-        'name': tc.name,
+        'name': _color_display_name(tc),
         'type': tc.color_type,
         'classification': tc.classification,
         'rgb': [tc.r, tc.g, tc.b],
@@ -1715,7 +1733,7 @@ def _resolve_authenticated_user(payload, *, keys=('user_id', 'userId')):
             jsonify({
                 'status': 'error',
                 'code': 'AUTH_REQUIRED',
-                'message': 'user_id is required to record gameplay.',
+                'message': t('user_id is required to record gameplay.'),
             }),
             401,
         )
@@ -1726,7 +1744,7 @@ def _resolve_authenticated_user(payload, *, keys=('user_id', 'userId')):
             jsonify({
                 'status': 'error',
                 'code': 'AUTH_UNKNOWN_USER',
-                'message': 'Unknown user_id. Please log in or register before playing.',
+                'message': t('Unknown user_id. Please log in or register before playing.'),
             }),
             401,
         )
@@ -2873,9 +2891,9 @@ def get_leaderboard():
             # Players who set a nickname appear by it (explicit opt-in to
             # visibility); everyone else stays anonymized as Player #rank.
             if is_current_user:
-                display_name = f'You ({row.nickname or row.user_id})'
+                display_name = t('You ({name})', name=row.nickname or row.user_id)
             else:
-                display_name = row.nickname or f'Player #{rank}'
+                display_name = row.nickname or t('Player #{rank}', rank=rank)
             entry = {
                 'rank': rank,
                 'display_name': display_name,
@@ -3035,14 +3053,14 @@ def challenge_create():
     if not user_id or not attempt_uuid:
         return jsonify({'status': 'error', 'message': 'user_id and attempt_uuid required'}), 400
     if not _rate_limit_allow(f'challenge:{user_id}', max_hits=20, window_sec=3600):
-        return jsonify({'status': 'error', 'message': 'Too many challenges — try again later'}), 429
+        return jsonify({'status': 'error', 'message': t('Too many challenges — try again later')}), 429
 
     session = MixingSession.query.filter_by(attempt_uuid=attempt_uuid, user_id=user_id).first()
     if not session:
-        return jsonify({'status': 'error', 'message': 'Round not found'}), 404
+        return jsonify({'status': 'error', 'message': t('Round not found')}), 404
     if session.match_category not in COMPLETED_MATCH_CATEGORIES:
         return jsonify({'status': 'error',
-                        'message': 'Only completed rounds can become challenges'}), 400
+                        'message': t('Only completed rounds can become challenges')}), 400
 
     # Idempotent per source round: re-tapping returns the same link.
     existing = ChallengeLink.query.filter_by(source_attempt_uuid=attempt_uuid).first()
@@ -3093,7 +3111,7 @@ def daily_challenge_today():
     target_colors = [
         {
             'id': colors_by_id[cid].id,
-            'name': colors_by_id[cid].name,
+            'name': _color_display_name(colors_by_id[cid]),
             'type': colors_by_id[cid].color_type,
             'rgb': [colors_by_id[cid].r, colors_by_id[cid].g, colors_by_id[cid].b],
         }
@@ -3146,10 +3164,10 @@ def daily_challenge_start():
 
     target_ids = _daily_target_ids(today)
     if not target_ids:
-        return jsonify({'status': 'error', 'message': 'No daily colour available'}), 404
+        return jsonify({'status': 'error', 'message': t('No daily colour available')}), 404
     tc = TargetColor.query.get(target_ids[0])
     if tc is None:
-        return jsonify({'status': 'error', 'message': 'Daily colour not found'}), 404
+        return jsonify({'status': 'error', 'message': t('Daily colour not found')}), 404
 
     try:
         slot = assign_daily_probe(user_id, tc.id, today=today)
@@ -3160,7 +3178,7 @@ def daily_challenge_start():
             'challenge_date': today.isoformat(),
             'slot_id': slot.id if slot else None,
             'target_color': {
-                'id': tc.id, 'name': tc.name, 'type': tc.color_type,
+                'id': tc.id, 'name': _color_display_name(tc), 'type': tc.color_type,
                 'rgb': [tc.r, tc.g, tc.b],
             },
         })
@@ -4496,13 +4514,14 @@ def push_send_daily():
                 'current_streak': 0,
             }
 
-    def _cta_fields(ctx):
-        """Values available to CTA copy templates."""
+    def _cta_fields(ctx, locale='en'):
+        """Values available to CTA copy templates (rem_word in the recipient's language)."""
         return {
             'streak': ctx['current_streak'],
-            'color': ctx['best_tc'].name if ctx['best_tc'] else '',
+            'color': _color_display_name(ctx['best_tc'], locale) if ctx['best_tc'] else '',
             'rem': ctx['best_rem'] or 0,
-            'rem_word': 'attempt' if ctx['best_rem'] == 1 else 'attempts',
+            'rem_word': (t_for(locale, 'attempt') if ctx['best_rem'] == 1
+                         else t_for(locale, 'attempts')),
             'completed': ctx['completed'],
             'total': ctx['total'],
         }
@@ -4518,82 +4537,96 @@ def push_send_daily():
         return generic_pool
 
     def _build_push_payload(user_id):
-        """Return personalized push payload dict for this user."""
+        """Return personalized push payload dict for this user.
+
+        Copy is rendered in the RECIPIENT's language (User.locale), not the
+        cron request's locale, so we look the user up and use t_for.
+        """
+        recipient = User.query.get(user_id) if user_id else None
+        loc = (recipient.locale if recipient and recipient.locale else 'en')
         ctx = _build_personalized_context(user_id)
         pool = _pick_cta_pool(ctx, CTA_PUSH_STREAK, CTA_PUSH_COLOR,
                               CTA_PUSH_GENERIC, CTA_PUSH_MAXED)
         msg = _pick_daily_cta(pool, user_id)
-        fields = _cta_fields(ctx)
+        fields = _cta_fields(ctx, locale=loc)
         return {
-            'title': msg['title'].format(**fields),
-            'body': msg['body'].format(**fields),
+            'title': t_for(loc, msg['title'], **fields),
+            'body': t_for(loc, msg['body'], **fields),
             'url': '/',
             'icon': '/static/icons/icon-192.png',
         }
 
     def _build_email_reminder_context(user):
-        """Build the rich Jinja context consumed by the daily reminder email."""
+        """Build the rich Jinja context consumed by the daily reminder email.
+
+        All copy is rendered in the RECIPIENT's language (User.locale) via
+        t_for — the cron request's own locale is irrelevant here.
+        """
+        loc = user.locale or 'en'
         ctx = _build_personalized_context(user.id)
         cta_url = email_utils.base_url(request.url_root) + '/'
-        fields = _cta_fields(ctx)
+        fields = _cta_fields(ctx, locale=loc)
 
         def _subject(pool):
             # Streak-danger copy wins whenever there is a streak worth guarding.
             if ctx['current_streak'] >= 3:
                 pool = CTA_EMAIL_SUBJECT_STREAK
-            return _pick_daily_cta(pool, user.id).format(**fields)
+            return t_for(loc, _pick_daily_cta(pool, user.id), **fields)
 
         stats = []
         if ctx['current_streak']:
             stats.append({
-                'label': 'Day streak',
+                'label': t_for(loc, 'Day streak'),
                 'value': f"{ctx['current_streak']}🔥" if ctx['current_streak'] >= 3 else str(ctx['current_streak']),
             })
         if ctx.get('total_bands'):
-            stats.append({'label': 'Bands unlocked', 'value': f"{ctx['bands_cleared']}/{ctx['total_bands']}"})
+            stats.append({'label': t_for(loc, 'Bands unlocked'), 'value': f"{ctx['bands_cleared']}/{ctx['total_bands']}"})
 
         if ctx['is_maxed_out']:
             return {
                 'subject': _subject(CTA_EMAIL_SUBJECT_GENERIC),
-                'eyebrow': 'You mastered the palette',
-                'headline': "Keep your streak alive today",
-                'subhead': "Every color in the catalog is mastered. A single mix today keeps your run going — go for a personal best Delta-E?",
-                'preheader': 'A quick mix today protects your streak.',
+                'eyebrow': t_for(loc, 'You mastered the palette'),
+                'headline': t_for(loc, 'Keep your streak alive today'),
+                'subhead': t_for(loc, 'Every color in the catalog is mastered. A single mix today keeps your run going — go for a personal best Delta-E?'),
+                'preheader': t_for(loc, 'A quick mix today protects your streak.'),
                 'cta_url': cta_url,
-                'cta_label': 'Open today\'s challenge →',
+                'cta_label': t_for(loc, "Open today's challenge →"),
                 'stats': stats,
-                'tip': 'Even a 30-second attempt counts toward your streak.',
+                'tip': t_for(loc, 'Even a 30-second attempt counts toward your streak.'),
             }
 
         best_tc = ctx['best_tc']
         if best_tc:
-            attempts_word = 'attempt' if ctx['best_rem'] == 1 else 'attempts'
+            attempts_word = fields['rem_word']
+            best_name = _color_display_name(best_tc, loc)
             swatch_hex = f"#{best_tc.r:02X}{best_tc.g:02X}{best_tc.b:02X}"
             return {
                 'subject': _subject(CTA_EMAIL_SUBJECT_COLOR),
-                'eyebrow': "Today's target color",
-                'headline': f"{best_tc.name} is calling, {user.id}",
-                'subhead': f"You're {ctx['best_rem']} {attempts_word} away from mastering this shade. Today is a great day to close it out.",
-                'preheader': f"{best_tc.name} needs {ctx['best_rem']} more {attempts_word} — open the daily challenge.",
+                'eyebrow': t_for(loc, "Today's target color"),
+                'headline': t_for(loc, '{color} is calling, {user_id}', color=best_name, user_id=user.id),
+                'subhead': t_for(loc, "You're {rem} {rem_word} away from mastering this shade. Today is a great day to close it out.",
+                                 rem=ctx['best_rem'], rem_word=attempts_word),
+                'preheader': t_for(loc, '{color} needs {rem} more {rem_word} — open the daily challenge.',
+                                   color=best_name, rem=ctx['best_rem'], rem_word=attempts_word),
                 'swatch_hex': swatch_hex,
-                'swatch_label': best_tc.name,
-                'swatch_caption': f"{ctx['best_rem']} {attempts_word} to master",
+                'swatch_label': best_name,
+                'swatch_caption': t_for(loc, '{rem} {rem_word} to master', rem=ctx['best_rem'], rem_word=attempts_word),
                 'cta_url': cta_url,
-                'cta_label': f"Mix {best_tc.name} now →",
+                'cta_label': t_for(loc, 'Mix {color} now →', color=best_name),
                 'stats': stats,
-                'tip': 'Match the lightness first, then nudge the hue — a single drop can change everything.',
+                'tip': t_for(loc, 'Match the lightness first, then nudge the hue — a single drop can change everything.'),
             }
 
         return {
             'subject': _subject(CTA_EMAIL_SUBJECT_GENERIC),
-            'eyebrow': "Today's palette",
-            'headline': "Your daily challenge is ready",
-            'subhead': "Mix today's colors and watch your progress climb. Even one attempt keeps the streak alive.",
-            'preheader': 'Open the daily challenge — every drop counts.',
+            'eyebrow': t_for(loc, "Today's palette"),
+            'headline': t_for(loc, 'Your daily challenge is ready'),
+            'subhead': t_for(loc, "Mix today's colors and watch your progress climb. Even one attempt keeps the streak alive."),
+            'preheader': t_for(loc, 'Open the daily challenge — every drop counts.'),
             'cta_url': cta_url,
-            'cta_label': "Open today's challenge →",
+            'cta_label': t_for(loc, "Open today's challenge →"),
             'stats': stats,
-            'tip': 'Aim for low Delta-E by tweaking one drop at a time.',
+            'tip': t_for(loc, 'Aim for low Delta-E by tweaking one drop at a time.'),
         }
 
     if push_ready:
@@ -4634,6 +4667,7 @@ def push_send_daily():
                 user_id=user.id,
                 context=email_ctx,
                 request_url_root=request.url_root,
+                locale=(user.locale or 'en'),
             )
             email_sent += 1
         except Exception as exc:
@@ -4810,9 +4844,9 @@ def save_cookie_consent():
     try:
         data = request.get_json()
         print(f"Cookie consent: {data.get('consent', {})}")
-        return jsonify({'status': 'success', 'message': 'Cookie preferences saved successfully'})
+        return jsonify({'status': 'success', 'message': t('Cookie preferences saved successfully')})
     except Exception as e:
-        return jsonify({'status': 'error', 'message': 'Failed to save cookie preferences'}), 500
+        return jsonify({'status': 'error', 'message': t('Failed to save cookie preferences')}), 500
 
 
 @main.route('/cookie-consent', methods=['GET'])
