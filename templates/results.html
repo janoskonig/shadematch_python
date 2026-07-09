@@ -494,6 +494,25 @@
       </section>
 
       <!-- Awards (collapsible) -->
+      <!-- Personal colour-vision summary: the research give-back. -->
+      <section class="collapsible-card" id="visionSummaryCard" data-open="true" style="display:none;" aria-labelledby="visionHeading">
+        <button type="button" class="collapsible-toggle" aria-expanded="true" aria-controls="visionSummaryBody"
+                onclick="toggleCollapsible('visionSummaryCard', this)">
+          <span class="collapsible-title" id="visionHeading">🔬 {{ t('What your data shows') }}</span>
+          <span class="collapsible-meta" id="visionMeta"></span>
+          <svg class="collapsible-chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="collapsible-body" id="visionSummaryBody">
+          <div id="visionSentences"></div>
+          <p style="font-size:0.75rem;color:var(--text-secondary);margin-top:var(--space-sm);">
+            {{ t('These are game statistics on your own screen — not a medical assessment.') }}
+            <a href="/research">{{ t('See what the study is learning →') }}</a>
+          </p>
+        </div>
+      </section>
+
       <section class="collapsible-card" id="awardsCard" data-open="true" style="display:none;" aria-labelledby="awardsHeading">
         <button type="button" class="collapsible-toggle" aria-expanded="true" aria-controls="awardsBody"
                 onclick="toggleCollapsible('awardsCard', this)">
@@ -562,8 +581,67 @@
         initNicknameEditor(storedUserId);
         loadUserResults(storedUserId);
         loadUserProfile(storedUserId);
+        loadVisionSummary(storedUserId);
       }
     });
+
+    // ── Personal colour-vision summary ─────────────────────────
+    const VISION_HUE_NAMES = {
+      red: t('Reds'), orange: t('Oranges'), yellow: t('Yellows'),
+      green: t('Greens'), blue: t('Blues'), purple: t('Purples'),
+    };
+
+    async function loadVisionSummary(userId) {
+      const card = document.getElementById('visionSummaryCard');
+      const box = document.getElementById('visionSentences');
+      if (!card || !box) return;
+      let d;
+      try {
+        const res = await fetch(`/api/user/vision-summary?user_id=${encodeURIComponent(userId)}`);
+        d = await res.json();
+      } catch { return; }
+      if (!d || d.status !== 'success') return;
+
+      const p = (html) => `<p style="margin:0 0 8px;font-size:0.92rem;">${html}</p>`;
+      const parts = [];
+      if (!d.eligible) {
+        const togo = Math.max(0, d.rounds_required - d.rounds_played);
+        parts.push(p(t('Your personal colour-vision summary unlocks after {n} rounds — {m} more to go.')
+          .replace('{n}', String(d.rounds_required)).replace('{m}', String(togo))));
+        document.getElementById('visionMeta').textContent = `${d.rounds_played}/${d.rounds_required}`;
+      } else {
+        parts.push(p(t('You have played {n} rounds; {p} ended in a perfect match ({pct}%).')
+          .replace('{n}', String(d.rounds_played))
+          .replace('{p}', String(d.perfects))
+          .replace('{pct}', String(d.perfect_pct))));
+        if (Number.isFinite(d.perfect_percentile)) {
+          parts.push(p(t('Your perfect-match rate is higher than {pct}% of participants with the same amount of play.')
+            .replace('{pct}', String(d.perfect_percentile))));
+        }
+        if (Number.isFinite(d.identical_median) && d.identical_n >= 3) {
+          let s = t('When you said “no difference”, the actual colour error was typically ΔE {x}.')
+            .replace('{x}', d.identical_median.toFixed(2));
+          if (Number.isFinite(d.population_identical_median)) {
+            s += ' ' + t('Across all participants that threshold is typically ΔE {y}.')
+              .replace('{y}', d.population_identical_median.toFixed(2));
+          }
+          parts.push(p(s));
+        }
+        if (d.best_hue) {
+          parts.push(p(t('Strongest hue family: {hue} ({pct}% perfect).')
+            .replace('{hue}', VISION_HUE_NAMES[d.best_hue.family] || d.best_hue.family)
+            .replace('{pct}', String(d.best_hue.perfect_pct))));
+        }
+        if (d.tricky_hue && (!d.best_hue || d.tricky_hue.perfect_pct < d.best_hue.perfect_pct)) {
+          parts.push(p(t('Trickiest: {hue} ({pct}% perfect) — worth a few extra rounds there.')
+            .replace('{hue}', VISION_HUE_NAMES[d.tricky_hue.family] || d.tricky_hue.family)
+            .replace('{pct}', String(d.tricky_hue.perfect_pct))));
+        }
+        document.getElementById('visionMeta').textContent = '';
+      }
+      box.innerHTML = parts.join('');
+      card.style.display = '';
+    }
 
     // ── Nickname editor ───────────────────────────────────────
     function initNicknameEditor(userId) {

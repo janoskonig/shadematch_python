@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, jsonify, send_from_directory, Response, current_app, redirect, url_for
 from datetime import datetime, date, timedelta, timezone
+import colorsys
 import copy
 import hashlib
 import random as _random
@@ -4853,6 +4854,223 @@ def mix_colors():
 @main.route('/color-test')
 def color_test():
     return render_template('color_test.html')
+
+
+# ── Research findings: personal vision summary + public aggregates ─────────
+
+VISION_SUMMARY_MIN_ROUNDS = 15
+# Clean-gamut era start (post-reset, post-fix): public per-colour difficulty
+# stats only use rows from here on.
+_GAMUT_ERA_START = datetime(2026, 7, 6, 8, 0, 0)
+
+_HUE_SECTOR_BOUNDS = (
+    ('red', 0, 20), ('orange', 20, 45), ('yellow', 45, 70),
+    ('green', 70, 165), ('blue', 165, 260), ('purple', 260, 330),
+    ('red', 330, 360),
+)
+
+
+def _hue_family(r, g, b):
+    """Coarse hue family of a target; None for near-neutrals."""
+    if r is None or g is None or b is None:
+        return None
+    if max(r, g, b) - min(r, g, b) < 24:
+        return None
+    h, _l, _s = colorsys.rgb_to_hls(r / 255.0, g / 255.0, b / 255.0)
+    deg = (h * 360.0) % 360.0
+    for name, lo, hi in _HUE_SECTOR_BOUNDS:
+        if lo <= deg < hi:
+            return name
+    return None
+
+
+def _median(vals):
+    vals = sorted(vals)
+    if not vals:
+        return None
+    mid = len(vals) // 2
+    return vals[mid] if len(vals) % 2 else (vals[mid - 1] + vals[mid]) / 2.0
+
+
+_research_cache = {'ts': 0.0, 'population': None, 'public': None}
+
+
+def _population_stats():
+    """Per-user reference distributions (cached 1h) for percentile framing."""
+    now = time.time()
+    if _research_cache['population'] and now - _research_cache['ts'] < 3600:
+        return _research_cache['population']
+
+    rate_rows = db.session.execute(text("""
+        SELECT user_id,
+               COUNT(*) AS n,
+               AVG(CASE WHEN match_category = 'perfect' THEN 1.0 ELSE 0.0 END) AS perfect_rate
+        FROM mixing_sessions
+        GROUP BY user_id
+        HAVING COUNT(*) >= :min_n
+    """), {'min_n': VISION_SUMMARY_MIN_ROUNDS}).fetchall()
+
+    ident_rows = db.session.execute(text("""
+        SELECT user_id, delta_e FROM mixing_sessions
+        WHERE skip_perception = 'identical' AND delta_e IS NOT NULL
+    """)).fetchall()
+    per_user_ident = {}
+    for row in ident_rows:
+        per_user_ident.setdefault(row.user_id, []).append(float(row.delta_e))
+
+    population = {
+        'perfect_rates': sorted(float(r.perfect_rate) for r in rate_rows),
+        'identical_medians': sorted(
+            m for m in (_median(v) for v in per_user_ident.values()) if m is not None
+        ),
+    }
+    _research_cache['population'] = population
+    _research_cache['ts'] = now
+    return population
+
+
+def _percentile_below(sorted_vals, x):
+    if not sorted_vals or x is None:
+        return None
+    below = sum(1 for v in sorted_vals if v < x)
+    return round(100.0 * below / len(sorted_vals))
+
+
+@main.route('/api/user/vision-summary')
+def vision_summary():
+    """Plain-number payload for the participant-facing 'what your data shows'
+    section; the client turns it into localized sentences. Not a diagnosis."""
+    user_id = (request.args.get('user_id') or '').strip().upper()
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id is required'}), 400
+
+    rows = db.session.execute(text("""
+        SELECT target_r, target_g, target_b, delta_e, match_category,
+               skip_perception, time_sec
+        FROM mixing_sessions WHERE user_id = :u
+    """), {'u': user_id}).fetchall()
+
+    n = len(rows)
+    if n < VISION_SUMMARY_MIN_ROUNDS:
+        return jsonify({
+            'status': 'success', 'eligible': False,
+            'rounds_played': n, 'rounds_required': VISION_SUMMARY_MIN_ROUNDS,
+        })
+
+    perfects = sum(1 for r in rows if r.match_category == 'perfect')
+    my_identical = [float(r.delta_e) for r in rows
+                    if r.skip_perception == 'identical' and r.delta_e is not None]
+    my_acceptable = [float(r.delta_e) for r in rows
+                     if r.skip_perception == 'acceptable' and r.delta_e is not None]
+
+    hue = {}
+    for r in rows:
+        fam = _hue_family(r.target_r, r.target_g, r.target_b)
+        if not fam:
+            continue
+        agg = hue.setdefault(fam, {'n': 0, 'perfect': 0})
+        agg['n'] += 1
+        agg['perfect'] += 1 if r.match_category == 'perfect' else 0
+    ranked = sorted(
+        ((fam, a['n'], a['perfect'] / a['n']) for fam, a in hue.items() if a['n'] >= 5),
+        key=lambda kv: kv[2],
+    )
+    def _hue_payload(item):
+        fam, cnt, rate = item
+        return {'family': fam, 'n': cnt, 'perfect_pct': round(100 * rate)}
+
+    pop = _population_stats()
+    my_rate = perfects / n
+    my_ident_median = _median(my_identical)
+
+    return jsonify({
+        'status': 'success', 'eligible': True,
+        'rounds_played': n,
+        'perfects': perfects,
+        'perfect_pct': round(100 * my_rate),
+        # Percentile framing needs a real reference group.
+        'perfect_percentile': (_percentile_below(pop['perfect_rates'], my_rate)
+                               if len(pop['perfect_rates']) >= 10 else None),
+        'identical_n': len(my_identical),
+        'identical_median': (round(my_ident_median, 2)
+                             if my_ident_median is not None else None),
+        'population_identical_median': (
+            round(_median(pop['identical_medians']), 2)
+            if len(pop['identical_medians']) >= 10 else None),
+        'acceptable_median': (round(_median(my_acceptable), 2)
+                              if my_acceptable else None),
+        'best_hue': _hue_payload(ranked[-1]) if ranked else None,
+        'tricky_hue': _hue_payload(ranked[0]) if len(ranked) >= 2 else None,
+    })
+
+
+def _public_research_stats():
+    """Aggregates for the public findings page (cached 1h)."""
+    now = time.time()
+    cached = _research_cache.get('public')
+    if cached and now - cached['ts'] < 3600:
+        return cached['data']
+
+    totals = db.session.execute(text("""
+        SELECT COUNT(*) AS rounds,
+               COUNT(DISTINCT user_id) AS users,
+               SUM(CASE WHEN match_category = 'perfect' THEN 1 ELSE 0 END) AS perfects
+        FROM mixing_sessions
+    """)).first()
+
+    judgments = db.session.execute(text("""
+        SELECT skip_perception, COUNT(*) AS n
+        FROM mixing_sessions
+        WHERE skip_perception IN ('identical', 'acceptable', 'unacceptable')
+        GROUP BY skip_perception
+    """)).fetchall()
+    j_counts = {r.skip_perception: int(r.n) for r in judgments}
+
+    j_medians = {}
+    for cat in ('identical', 'acceptable', 'unacceptable'):
+        vals = db.session.execute(text("""
+            SELECT delta_e FROM mixing_sessions
+            WHERE skip_perception = :c AND delta_e IS NOT NULL
+        """), {'c': cat}).fetchall()
+        med = _median([float(v.delta_e) for v in vals])
+        j_medians[cat] = round(med, 2) if med is not None else None
+
+    hardest = db.session.execute(text("""
+        SELECT tc.name AS name, tc.name_hu AS name_hu,
+               tc.r AS r, tc.g AS g, tc.b AS b,
+               COUNT(*) AS attempts,
+               AVG(CASE WHEN ms.match_category = 'perfect' THEN 1.0 ELSE 0.0 END) AS perfect_rate
+        FROM mixing_sessions ms
+        JOIN target_colors tc ON tc.id = ms.target_color_id
+        WHERE tc.color_type = 'gamut' AND ms.timestamp >= :era
+        GROUP BY tc.id, tc.name, tc.name_hu, tc.r, tc.g, tc.b
+        HAVING COUNT(*) >= 10
+        ORDER BY AVG(CASE WHEN ms.match_category = 'perfect' THEN 1.0 ELSE 0.0 END) ASC
+        LIMIT 5
+    """), {'era': _GAMUT_ERA_START}).fetchall()
+
+    data = {
+        'rounds': int(totals.rounds or 0),
+        'users': int(totals.users or 0),
+        'perfects': int(totals.perfects or 0),
+        'perfect_pct': (round(100.0 * (totals.perfects or 0) / totals.rounds)
+                        if totals.rounds else 0),
+        'judgment_counts': j_counts,
+        'judgment_medians': j_medians,
+        'hardest': [{
+            'name': r.name, 'name_hu': r.name_hu,
+            'rgb': [r.r, r.g, r.b],
+            'attempts': int(r.attempts),
+            'perfect_pct': round(100 * float(r.perfect_rate)),
+        } for r in hardest],
+    }
+    _research_cache['public'] = {'ts': now, 'data': data}
+    return data
+
+
+@main.route('/research')
+def research_page():
+    return render_template('research.html', stats=_public_research_stats())
 
 
 @main.route('/ishihara-test')

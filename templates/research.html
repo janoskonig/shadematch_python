@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('What we are learning — ShadeMatch') }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .research-wrap { max-width: 720px; margin: 0 auto; padding: var(--space-lg) var(--space-md) 80px; }
+  .research-wrap h1 { font-size: 1.6rem; margin: var(--space-lg) 0 var(--space-xs); }
+  .research-wrap h2 { font-size: 1.1rem; margin: var(--space-xl) 0 var(--space-sm); }
+  .research-wrap p { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.55; }
+  .research-kpis { display: flex; gap: var(--space-md); flex-wrap: wrap; margin: var(--space-lg) 0; }
+  .research-kpi { flex: 1 1 140px; background: var(--surface); border: 1px solid var(--border);
+                  border-radius: var(--radius-lg); padding: var(--space-md); text-align: center; }
+  .research-kpi b { display: block; font-size: 1.7rem; color: var(--accent-primary); }
+  .research-kpi span { font-size: 0.78rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.04em; }
+  .judgment-row { display: flex; align-items: center; gap: var(--space-sm); padding: 8px 0;
+                  border-bottom: 1px solid var(--border); font-size: 0.92rem; }
+  .judgment-row b { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .hard-row { display: flex; align-items: center; gap: var(--space-sm); padding: 8px 0;
+              border-bottom: 1px solid var(--border); font-size: 0.92rem; }
+  .hard-swatch { width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--border); flex: none; }
+  .hard-row b { margin-left: auto; font-variant-numeric: tabular-nums; }
+  .research-footer { margin-top: var(--space-xl); font-size: 0.8rem; color: var(--text-secondary); }
+  .back-link { display: inline-block; margin-top: var(--space-md); font-weight: 700; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="research-wrap">
+  <a href="/" class="back-link">← ShadeMatch</a>
+  <h1>🔬 {{ t('What we are learning') }}</h1>
+  <p>{{ t('ShadeMatch doubles as a colour-vision study at Semmelweis University. The question behind the game: how precisely do people perceive and judge colour differences on their own, everyday screens? Every round you play is one data point. This page shares the picture so far — it refreshes as the dataset grows.') }}</p>
+
+  <div class="research-kpis">
+    <div class="research-kpi"><b>{{ '{:,}'.format(stats.users).replace(',', ' ') }}</b><span>{{ t('participants') }}</span></div>
+    <div class="research-kpi"><b>{{ '{:,}'.format(stats.rounds).replace(',', ' ') }}</b><span>{{ t('rounds played') }}</span></div>
+    <div class="research-kpi"><b>{{ stats.perfect_pct }}%</b><span>{{ t('perfect matches') }}</span></div>
+  </div>
+
+  <h2>{{ t('Where “no difference” begins') }}</h2>
+  <p>{{ t('When players give up on a colour, they judge the remaining difference. Pairing that judgment with the measured colour error (ΔE) maps where perceived sameness begins — the heart of the study.') }}</p>
+  {% set jc = stats.judgment_counts %}
+  {% set jm = stats.judgment_medians %}
+  <div class="judgment-row"><span>🟢 {{ t('“No difference”') }} · {{ jc.get('identical', 0) }}×</span>
+    <b>{{ t('median ΔE {x}', x=jm.get('identical') if jm.get('identical') is not none else '—') }}</b></div>
+  <div class="judgment-row"><span>🟡 {{ t('“Small difference — acceptable”') }} · {{ jc.get('acceptable', 0) }}×</span>
+    <b>{{ t('median ΔE {x}', x=jm.get('acceptable') if jm.get('acceptable') is not none else '—') }}</b></div>
+  <div class="judgment-row"><span>🔴 {{ t('“Difference — not acceptable”') }} · {{ jc.get('unacceptable', 0) }}×</span>
+    <b>{{ t('median ΔE {x}', x=jm.get('unacceptable') if jm.get('unacceptable') is not none else '—') }}</b></div>
+
+  {% if stats.hardest %}
+  <h2>{{ t('The hardest colours so far') }}</h2>
+  <p>{{ t('Ranked by how rarely attempts end in a perfect match (colours with at least 10 attempts).') }}</p>
+  {% for c in stats.hardest %}
+  <div class="hard-row">
+    <span class="hard-swatch" style="background: rgb({{ c.rgb[0] }},{{ c.rgb[1] }},{{ c.rgb[2] }})"></span>
+    <span>{{ c.name }}{% if locale == 'hu' and c.name_hu %} — {{ c.name_hu }}{% endif %}</span>
+    <b>{{ c.perfect_pct }}% · {{ c.attempts }}×</b>
+  </div>
+  {% endfor %}
+  {% endif %}
+
+  <h2>{{ t('Our pledge to participants') }}</h2>
+  <p>{{ t('You are identified only by a random ID; your email is never linked to published results. Findings will be published openly, and this page will always show what your contributions are teaching us. You can withdraw your data at any time.') }}</p>
+  <p>{{ t('These are descriptive statistics from gameplay on uncalibrated screens — interesting signals, not medical measurements.') }}</p>
+
+  <p class="research-footer">
+    S.H.A.D.E. — Study of Human Accuracy in Digital Experiments ·
+    Semmelweis University · SE RKEB 167/2025 ·
+    <a href="/privacy-policy">{{ t('Privacy Policy') }}</a>
+  </p>
+</div>
+{% endblock %}
