@@ -1322,6 +1322,37 @@ document.addEventListener('DOMContentLoaded', async () => {
   setGameTarget(currentTargetColor);
   updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
 
+  // ── Guest demo round ─────────────────────────────────────────────────────
+  function pickGuestTarget() {
+    // Prefer an easy shade (few recipe drops) so the demo is winnable fast.
+    const withRgb = fullCatalog.filter((c) => Array.isArray(c.rgb) && c.rgb.length === 3);
+    const easy = withRgb.filter((c) => {
+      const s = c.sum_drop_count;
+      return Number.isFinite(s) && s >= 3 && s <= 7;
+    });
+    const pool = easy.length ? easy : withRgb;
+    return pool[Math.floor(Math.random() * pool.length)] || null;
+  }
+
+  async function startGuestRound() {
+    const tc = pickGuestTarget();
+    if (!tc) return;
+    window.__guestRoundDone = false;
+    dailyMode = null;
+    currentProbeSlot = null;
+    currentTargetColor = tc;
+    setGameTarget(currentTargetColor);
+    updateBox('targetColor', targetColor);
+    resetMix();
+    stopTimer();
+    resetTimerDisplay();
+    startTimer();
+    enableColorMixing();
+    setControlState('mixing');
+    showToast('🎨 Tap the pigments below to match the colour on the left', 'info', 3600);
+  }
+  window.__startGuestRound = startGuestRound;
+
   function showSkipPerceptionModal() {
     return new Promise((resolve) => {
       const modal = document.getElementById('skipPerceptionModal');
@@ -1388,6 +1419,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateMatchBar(data.delta_e);
         updateBufferedEventDelta(stepId, data.delta_e);
 
+        // Guest demo round: complete at a forgiving threshold, never persist.
+        if (isGuest()) {
+          if (!window.__guestRoundDone
+              && Number.isFinite(data.delta_e) && data.delta_e <= GUEST_GOOD_DELTA_E) {
+            window.__guestRoundDone = true;
+            stopTimer();
+            celebratePerfectMatch();
+            setControlState('completed');
+            showGuestResult(data.delta_e, { delayMs: 1500 });
+          }
+          return;
+        }
+
         if (isPerfectMatch(data.delta_e) && !currentSessionSaved) {
           stopTimer();
           celebratePerfectMatch();
@@ -1424,7 +1468,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ── Button handlers ───────────────────────────────────────────────────
   document.getElementById('startBtn').addEventListener('click', async () => {
-    if (!requireAuthenticatedUser()) return;
+    if (isGuest()) { await startGuestRound(); return; }
     dailyMode = null;
     if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
     setDailyChip(false);
@@ -1478,7 +1522,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('skipBtn').addEventListener('click', async () => {
-    if (!requireAuthenticatedUser()) return;
+    if (isGuest()) {
+      // Guest: no perception modal, no save — either move on after a
+      // completed demo, or end the demo and show the conversion card.
+      if (window.__guestRoundDone) { await startGuestRound(); return; }
+      stopTimer();
+      window.__guestRoundDone = true;
+      const de = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
+      showGuestResult(de);
+      return;
+    }
     refreshDatabaseConnection();
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     const alreadyCompletedThisColor = window.currentSessionSaved === true;
@@ -1533,7 +1586,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('restartBtn').addEventListener('click', async () => {
-    if (!requireAuthenticatedUser()) return;
+    if (isGuest()) { await startGuestRound(); return; }
     dailyMode = null;
     if (window.__dailyPlaying) { window.__dailyPlaying = false; renderDailyStatusBadge(null); }
     setDailyChip(false);
@@ -1573,7 +1626,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   document.getElementById('retryBtn').addEventListener('click', async () => {
-    if (!requireAuthenticatedUser()) return;
+    if (isGuest()) {
+      // Guest: just clear the mix and restart the clock on the same target.
+      window.__guestRoundDone = false;
+      resetMix();
+      resetTimerDisplay();
+      stopTimer();
+      startTimer();
+      enableColorMixing();
+      setControlState('mixing');
+      return;
+    }
     const currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
     if (!isNaN(currentDeltaE)) {
       const session = {
@@ -1996,6 +2059,35 @@ function urlBase64ToUint8Array(base64String) {
   const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
   const rawData = atob(base64);
   return new Uint8Array([...rawData].map(c => c.charCodeAt(0)));
+}
+
+// ── Guest mode ────────────────────────────────────────────────────────────
+// A brand-new visitor can play one fully client-side demo round before any
+// consent or registration. Nothing is persisted: telemetry never starts for
+// unauthenticated users, the save path is skipped, and only the stateless
+// /calculate endpoint is called for scoring.
+function isGuest() {
+  return !getAuthenticatedUserId();
+}
+
+// Demo rounds complete at a forgiving threshold so the first experience is a
+// success moment, not a grind toward delta-E 0.01.
+const GUEST_GOOD_DELTA_E = 2.0;
+
+function showGuestResult(deltaE, { delayMs = 0 } = {}) {
+  const modal = document.getElementById('guestResultModal');
+  if (!modal) return;
+  const t = document.getElementById('guestResultTarget');
+  const m = document.getElementById('guestResultMix');
+  if (t && Array.isArray(window.shadeMatchTargetRgb)) {
+    t.style.backgroundColor = `rgb(${window.shadeMatchTargetRgb.join(',')})`;
+  }
+  if (m) m.style.backgroundColor = `rgb(${currentMixedRgb.join(',')})`;
+  const de = document.getElementById('guestResultDeltaE');
+  if (de) de.textContent = Number.isFinite(deltaE) ? deltaE.toFixed(2) : '—';
+  const timeEl = document.getElementById('guestResultTime');
+  if (timeEl) timeEl.textContent = getTimerSec().toFixed(1) + 's';
+  setTimeout(() => { modal.style.display = 'flex'; }, delayMs);
 }
 
 // ── Sensory feedback ──────────────────────────────────────────────────────

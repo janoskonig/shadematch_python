@@ -389,6 +389,50 @@
     </div>
   </div>
 
+  <!-- ======== Guest intro (new visitors: play before registering) ======== -->
+  <div id="guestIntroModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <div style="text-align:center;margin-bottom:var(--space-md);">
+        <div style="font-size:2.5rem;margin-bottom:12px;">🎨</div>
+        <h2 class="modal-title">Mix paint. Match the colour.</h2>
+        <p class="modal-subtitle">
+          Five pigments, one target shade — how close can your eye get?
+          Try one round right now, no sign-up needed.
+        </p>
+      </div>
+      <button id="guestTryBtn" class="btn btn-primary btn-full btn-lg">Try one round</button>
+      <div class="modal-divider"></div>
+      <p class="modal-alt-text">
+        <button id="guestRegisterBtn" type="button" class="btn-link">Create an ID</button>
+        &nbsp;·&nbsp;
+        <button id="guestLoginBtn" type="button" class="btn-link">I have an ID — log in</button>
+      </p>
+    </div>
+  </div>
+
+  <!-- ======== Guest result (conversion moment after the demo round) ======== -->
+  <div id="guestResultModal" class="modal-overlay" style="display:none;">
+    <div class="modal-card">
+      <h2 class="modal-title" style="text-align:center;">Your first match</h2>
+      <div style="display:flex;justify-content:center;gap:2px;margin:var(--space-md) 0;border-radius:12px;overflow:hidden;border:1px solid var(--border);">
+        <div id="guestResultTarget" style="width:50%;height:90px;"></div>
+        <div id="guestResultMix" style="width:50%;height:90px;"></div>
+      </div>
+      <div style="display:flex;justify-content:center;gap:var(--space-lg);margin-bottom:var(--space-md);font-size:0.9rem;color:var(--text-secondary);">
+        <span>match error <strong style="color:var(--text-primary);">ΔE <span id="guestResultDeltaE">—</span></strong></span>
+        <span>time <strong style="color:var(--text-primary);" id="guestResultTime">—</strong></span>
+      </div>
+      <p class="modal-subtitle" style="text-align:center;">
+        That's your colour eye at work. Create a free ID to save your progress,
+        play the daily challenge — and contribute to Semmelweis University's
+        colour-vision research as you play.
+      </p>
+      <button id="guestSaveBtn" class="btn btn-primary btn-full btn-lg">Save my progress — join in</button>
+      <button id="guestAgainBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">Try another colour</button>
+      <p class="modal-alt-text" style="margin-top:var(--space-sm);">Demo rounds aren't stored — nothing is collected until you register.</p>
+    </div>
+  </div>
+
   <!-- ======== Push opt-in prompt (recurring: every visit until subscribed) ======== -->
   <div id="pushNagModal" class="modal-overlay" style="display:none;">
     <div class="modal-card">
@@ -873,13 +917,60 @@
         });
       });
     } else {
-      // New / unregistered user: cookie banner first, then research consent
-      // (a full-screen overlay — nothing is exposed behind it), and
-      // registration follows only after consent is given.
+      // New / unregistered visitor: cookie banner first, then the guest
+      // intro — they can play one client-side demo round before any consent
+      // or registration. Nothing is collected during the demo, so research
+      // consent moves to the moment they choose to register (it still fully
+      // gates data collection).
       modal.style.display = 'none';
       whenCookieConsentSettled(function() {
-        window.showResearchConsentModal(proceedToRegistrationFlow);
+        var intro = document.getElementById('guestIntroModal');
+        if (intro) {
+          intro.style.display = 'flex';
+        } else {
+          window.showResearchConsentModal(proceedToRegistrationFlow);
+        }
       });
+    }
+
+    /* Guest intro / result wiring */
+    window.__openRegistrationFlow = revealRegistration;
+    var guestIntro = document.getElementById('guestIntroModal');
+    var guestResult = document.getElementById('guestResultModal');
+    var guestTryBtn = document.getElementById('guestTryBtn');
+    if (guestTryBtn) {
+      guestTryBtn.onclick = function() {
+        guestIntro.style.display = 'none';
+        if (window.__startGuestRound) window.__startGuestRound();
+      };
+    }
+    var guestRegisterBtn = document.getElementById('guestRegisterBtn');
+    if (guestRegisterBtn) {
+      guestRegisterBtn.onclick = function() {
+        guestIntro.style.display = 'none';
+        revealRegistration();
+      };
+    }
+    var guestLoginBtn = document.getElementById('guestLoginBtn');
+    if (guestLoginBtn) {
+      guestLoginBtn.onclick = function() {
+        guestIntro.style.display = 'none';
+        showUserModal();
+      };
+    }
+    var guestSaveBtn = document.getElementById('guestSaveBtn');
+    if (guestSaveBtn) {
+      guestSaveBtn.onclick = function() {
+        guestResult.style.display = 'none';
+        revealRegistration();
+      };
+    }
+    var guestAgainBtn = document.getElementById('guestAgainBtn');
+    if (guestAgainBtn) {
+      guestAgainBtn.onclick = function() {
+        guestResult.style.display = 'none';
+        if (window.__startGuestRound) window.__startGuestRound();
+      };
     }
 
     document.getElementById('switchUserBtn').onclick = function() {
@@ -1030,6 +1121,7 @@
 
     /* beforeunload beacon */
     window.addEventListener('beforeunload', function() {
+      if (!localStorage.getItem('userId')) return; /* guests: nothing is persisted */
       var currentDeltaE = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
       var currentTimer = parseFloat(document.getElementById('timer').textContent);
       var dropCounts = window.shadeMatchDropCounts || { white: 0, black: 0, red: 0, yellow: 0, blue: 0 };
@@ -1234,7 +1326,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260706-flow1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-sfx1"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-guest1"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>
