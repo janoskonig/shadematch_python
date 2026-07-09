@@ -221,6 +221,42 @@
   padding: 6px 14px; font-size: 0.85rem; font-weight: 700; cursor: pointer;
 }
 .sg-next { background: var(--accent-color, #4caf50); color: #fff; border-color: transparent; }
+
+/* ── Sensory feedback (drop pulse + perfect-match celebration) ── */
+@keyframes mixBump {
+  0%   { box-shadow: inset 0 0 0 0 rgba(255,255,255,0); }
+  30%  { box-shadow: inset 0 0 0 6px rgba(255,255,255,0.35); }
+  100% { box-shadow: inset 0 0 0 0 rgba(255,255,255,0); }
+}
+#currentMix.mix-bump { animation: mixBump 0.35s ease-out; }
+
+.perfect-overlay {
+  position: fixed; inset: 0; z-index: 10003;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, rgba(0,184,148,0.18), transparent 65%);
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+.perfect-overlay.is-visible { opacity: 1; }
+.perfect-overlay-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 6px;
+  font-size: 3rem;
+  transform: scale(0.6);
+  transition: transform 0.3s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+.perfect-overlay.is-visible .perfect-overlay-inner { transform: scale(1); }
+.perfect-overlay-inner span {
+  font-size: 1.3rem; font-weight: 900; color: #fff;
+  background: linear-gradient(135deg, #00b894, #00cec9);
+  padding: 6px 18px; border-radius: 999px;
+  box-shadow: 0 4px 18px rgba(0,0,0,0.25);
+}
+@media (prefers-reduced-motion: reduce) {
+  #currentMix.mix-bump { animation: none; }
+  .perfect-overlay, .perfect-overlay-inner { transition: none; }
+  .perfect-overlay.is-visible .perfect-overlay-inner { transform: scale(1); }
+}
 </style>
 {% endblock %}
 
@@ -412,6 +448,7 @@
           <span class="user-badge-label">ID:</span>
           <span class="user-badge-id" id="userIdDisplay"></span>
         </div>
+        <button id="sfxToggleBtn" class="btn-icon" type="button" aria-label="Mute sounds"><span class="sfx-icon">&#128266;</span></button>
         <a href="/results" class="btn-icon" aria-label="View results">&#128202; <span class="help-label">Results</span></a>
         <a href="/leaderboard" class="btn-icon" aria-label="View leaderboard">&#127942; <span class="help-label">Leaderboard</span></a>
         <button id="showGuideBtn" class="btn-icon" type="button" aria-label="Show the quick guide">&#128161; <span class="help-label">Guide</span></button>
@@ -1197,7 +1234,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260706-flow1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260706-flow1"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-sfx1"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>
