@@ -126,7 +126,7 @@ with app.app_context():
     quota_before = compute_quota_progress('TEST01')
     xp_before = UserProgress.query.filter_by(user_id='TEST01').first().xp
 
-    xp, awards, streak_ev, level_up = process_progression(
+    xp, awards, streak_ev, level_up, _heat = process_progression(
         user_id='TEST01', match_category='perfect', skipped=False,
         target_color_id=probe_color, delta_e=0.0, is_probe=True,
     )

@@ -77,6 +77,16 @@ RANK_TIERS = [
 
 STREAK_MILESTONES = [3, 7, 14, 30, 60, 100]
 
+# ── In-session "heat" (consecutive completions within one sitting) ──────────
+# From the HEAT_MIN_CONSECUTIVE-th consecutive completed round inside the
+# rolling window, XP gets a bonus that grows per additional completion.
+# Server-authoritative: computed from persisted MixingSession rows, never
+# from a client-supplied value.
+HEAT_WINDOW_MINUTES = 30
+HEAT_MIN_CONSECUTIVE = 3
+HEAT_STEP_PCT = 0.10
+HEAT_MAX_BONUS_PCT = 0.50
+
 # Per-color reinforcement milestones (must be < COVERAGE_QUOTA). With COVERAGE_QUOTA=2
 # there is no room for intermediate per-colour milestones, so none are awarded.
 PER_COLOR_REINFORCEMENT_MILESTONES = []
@@ -858,6 +868,47 @@ def build_progress_response(user_id: str, user_progress, _catalog_size_ignored=N
 
 
 # ---------------------------------------------------------------------------
+# In-session heat
+# ---------------------------------------------------------------------------
+
+def compute_heat_consecutive(user_id, now=None):
+    """
+    Consecutive completed sessions counting back from the most recent one,
+    all within the rolling HEAT_WINDOW_MINUTES window.
+
+    Called from process_progression AFTER the current round's MixingSession
+    has been added to the db.session: SQLAlchemy autoflush makes the query
+    see it, so the returned count includes the round being scored.
+    """
+    if not user_id:
+        return 0
+    now = now or datetime.utcnow()
+    window_start = now - timedelta(minutes=HEAT_WINDOW_MINUTES)
+    rows = (
+        MixingSession.query
+        .filter(MixingSession.user_id == user_id)
+        .filter(MixingSession.timestamp >= window_start)
+        .order_by(MixingSession.timestamp.desc())
+        .limit(20)
+        .all()
+    )
+    streak = 0
+    for r in rows:
+        if r.match_category in COMPLETED_MATCH_CATEGORIES:
+            streak += 1
+        else:
+            break
+    return streak
+
+
+def heat_bonus_pct(consecutive: int) -> float:
+    """Bonus fraction for a given consecutive-completion count (0.0 when cold)."""
+    if consecutive < HEAT_MIN_CONSECUTIVE:
+        return 0.0
+    return min(HEAT_STEP_PCT * (consecutive - HEAT_MIN_CONSECUTIVE + 1), HEAT_MAX_BONUS_PCT)
+
+
+# ---------------------------------------------------------------------------
 # Core progression engine
 # ---------------------------------------------------------------------------
 
@@ -865,7 +916,10 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
                         is_probe=False):
     """
     Must be called inside an open db.session transaction.
-    Returns (xp_earned, new_awards, streak_event, level_up_event).
+    Returns (xp_earned, new_awards, streak_event, level_up_event, heat_info).
+
+    heat_info is None when the round is cold, else
+        {'consecutive': int, 'bonus_pct': float, 'xp_bonus': int}.
 
     level_up_event is now quota-driven: fires when quota coverage crosses a
     level boundary. XP is still accumulated but never drives level or maxed state.
@@ -906,7 +960,18 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
     old_display_level = up.level
 
     # ── XP (secondary; kept for reinforcement toasts) ────────────────────
-    xp_earned = XP_TABLE.get(match_category, 5)
+    base_xp = XP_TABLE.get(match_category, 5)
+    heat_info = None
+    if match_category in COMPLETED_MATCH_CATEGORIES:
+        consecutive = compute_heat_consecutive(user_id)
+        bonus_pct = heat_bonus_pct(consecutive)
+        if bonus_pct > 0:
+            heat_info = {
+                'consecutive': consecutive,
+                'bonus_pct': bonus_pct,
+                'xp_bonus': int(round(base_xp * bonus_pct)),
+            }
+    xp_earned = base_xp + (heat_info['xp_bonus'] if heat_info else 0)
     up.xp += xp_earned
     up.updated_at = datetime.utcnow()
 
@@ -1083,7 +1148,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
                 })
     up.level = final_level
 
-    return xp_earned, new_awards, streak_event, level_up
+    return xp_earned, new_awards, streak_event, level_up, heat_info
 
 
 # ---------------------------------------------------------------------------

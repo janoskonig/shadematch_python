@@ -2293,7 +2293,7 @@ def save_session():
             attempt_uuid, user_id, data.get('target_color_id'), skipped=skipped,
         )
 
-        xp_earned, new_awards, streak_event, level_up = process_progression(
+        xp_earned, new_awards, streak_event, level_up, heat_info = process_progression(
             user_id=user_id,
             match_category=mc,
             skipped=skipped,
@@ -2319,6 +2319,7 @@ def save_session():
             'new_awards': new_awards,
             'streak_event': streak_event,
             'level_up': level_up,
+            'heat': heat_info,
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
@@ -2388,7 +2389,7 @@ def save_skip():
             attempt_uuid, user_id, data.get('target_color_id'), skipped=True,
         )
 
-        xp_earned, new_awards, streak_event, level_up = process_progression(
+        xp_earned, new_awards, streak_event, level_up, heat_info = process_progression(
             user_id=user_id,
             match_category=mc,
             skipped=True,
@@ -2409,6 +2410,7 @@ def save_skip():
             'new_awards': new_awards,
             'streak_event': streak_event,
             'level_up': level_up,
+            'heat': heat_info,
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),

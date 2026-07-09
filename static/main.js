@@ -577,6 +577,14 @@ async function handleProgressionResponse(data) {
 
   await _delay(SEQ_GAP); if (stale()) return;
 
+  // Phase 4.5 — In-session heat (server-computed consecutive completions)
+  renderHeatState(data.heat);
+  if (data.heat && data.heat.consecutive != null) {
+    const pct = Math.round((data.heat.bonus_pct || 0) * 100);
+    showToast(`🔥 On fire! ${data.heat.consecutive} in a row — +${pct}% XP`, 'streak', 3200);
+    await _delay(SEQ_GAP); if (stale()) return;
+  }
+
   // Phase 5 — XP (secondary reinforcement — shown after quota signals)
   if (data.xp_earned && data.xp_earned > 0) {
     showToast(`+${data.xp_earned} XP`, 'xp', 2500);
@@ -603,6 +611,30 @@ async function handleProgressionResponse(data) {
   }
   if (data.daily_missions) {
     renderDailyMissions(data.daily_missions);
+  }
+}
+
+// ── In-session heat indicator (flame chip on the target swatch) ───────────
+function renderHeatState(heat) {
+  let chip = document.getElementById('heatChip');
+  const on = heat && heat.consecutive != null;
+  if (!chip) {
+    if (!on) return;
+    chip = document.createElement('div');
+    chip.id = 'heatChip';
+    chip.className = 'daily-chip'; // reuse the swatch-overlay chip styling
+    chip.style.top = 'auto';
+    chip.style.bottom = '10px';
+    const pair = document.querySelector('.color-pair');
+    if (!pair) return;
+    pair.appendChild(chip);
+  }
+  if (on) {
+    const pct = Math.round((heat.bonus_pct || 0) * 100);
+    chip.textContent = `🔥 ${heat.consecutive} in a row · +${pct}% XP`;
+    chip.style.display = '';
+  } else {
+    chip.style.display = 'none';
   }
 }
 
@@ -1224,6 +1256,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       currentTargetColor = currentProbeSlot.target_color;
     } else {
       let nextIndex = currentTargetIndex + 1;
+      // Heat escalation: after a completed round, pull the next queued colour
+      // that sits one band up (more recipe drops) into the next slot, so a
+      // streak ramps in difficulty instead of staying flat.
+      if (window.currentSessionSaved && nextIndex < targetColors.length) {
+        const justPlayed = currentTargetColor && currentTargetColor.sum_drop_count;
+        if (Number.isFinite(justPlayed)) {
+          for (let i = nextIndex; i < targetColors.length; i++) {
+            const s = targetColors[i] && targetColors[i].sum_drop_count;
+            if (Number.isFinite(s) && s > justPlayed) {
+              const [harder] = targetColors.splice(i, 1);
+              targetColors.splice(nextIndex, 0, harder);
+              break;
+            }
+          }
+        }
+      }
       if (nextIndex >= targetColors.length) {
         await refreshCatalogFromServer();
         const next = buildShuffledPlayQueue(fullCatalog);
