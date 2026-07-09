@@ -1872,7 +1872,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       setTimeout(() => circle.classList.remove('is-tapped'), 200);
       if (navigator.vibrate) navigator.vibrate(15);
       try { sfx.drop(dropCounts[color]); } catch { /* audio is best-effort */ }
-      animateDropToMix(color, circle);
 
       const mixResult = updateCurrentMix();
       const afterSnapshot = buildMixSnapshot({
@@ -1911,7 +1910,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateBadge(color, dropCounts[color]);
         if (navigator.vibrate) navigator.vibrate(10);
         try { sfx.remove(); } catch { /* audio is best-effort */ }
-        pulseMix();
         const mixResult = updateCurrentMix();
         const afterSnapshot = buildMixSnapshot({
           mixedRgbOverride: mixResult?.mixedRGB,
@@ -2393,54 +2391,6 @@ function showChallengeComparison(c, { delayMs = 0 } = {}) {
 // ── Sensory feedback ──────────────────────────────────────────────────────
 function prefersReducedMotion() {
   return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
-// A small paint blob flies from the tapped palette circle into the mix swatch.
-function animateDropToMix(color, sourceEl) {
-  if (prefersReducedMotion()) return;
-  const mixEl = document.getElementById('currentMix');
-  if (!mixEl || !sourceEl || typeof sourceEl.getBoundingClientRect !== 'function') return;
-  if (getComputedStyle(mixEl).display === 'none') return;
-  const from = sourceEl.getBoundingClientRect();
-  const to = mixEl.getBoundingClientRect();
-  if (!from.width || !to.width) return;
-
-  const blobColors = {
-    white: '#f4f4f4', black: '#111', red: '#e53935', yellow: '#fdd835', blue: '#1e88e5',
-  };
-  const blob = document.createElement('div');
-  const size = 14;
-  const x0 = from.left + from.width / 2 - size / 2;
-  const y0 = from.top + from.height / 2 - size / 2;
-  const x1 = to.left + to.width / 2 - size / 2;
-  const y1 = to.top + to.height * 0.6 - size / 2;
-  blob.style.cssText = `
-    position:fixed;left:${x0}px;top:${y0}px;width:${size}px;height:${size}px;
-    background:${blobColors[color] || '#888'};border-radius:50% 50% 50% 65%;
-    pointer-events:none;z-index:10002;
-    box-shadow:0 1px 4px rgba(0,0,0,0.25);
-  `;
-  document.body.appendChild(blob);
-  const anim = blob.animate([
-    { transform: 'translate(0,0) scale(1)', opacity: 1 },
-    { transform: `translate(${(x1 - x0) * 0.5}px, ${(y1 - y0) * 0.5 - 40}px) scale(0.9)`, opacity: 1, offset: 0.5 },
-    { transform: `translate(${x1 - x0}px, ${y1 - y0}px) scale(0.4)`, opacity: 0.2 },
-  ], { duration: 380, easing: 'cubic-bezier(0.3, 0, 0.8, 1)' });
-  anim.onfinish = () => {
-    blob.remove();
-    pulseMix();
-  };
-}
-
-// Quick ripple on the mix swatch when the recipe changes.
-function pulseMix() {
-  if (prefersReducedMotion()) return;
-  const mixEl = document.getElementById('currentMix');
-  if (!mixEl) return;
-  mixEl.classList.remove('mix-bump');
-  // Force reflow so re-adding the class restarts the animation.
-  void mixEl.offsetWidth;
-  mixEl.classList.add('mix-bump');
 }
 
 // Full celebration for a perfect match: chime + haptic + confetti + overlay.
