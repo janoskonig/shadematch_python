@@ -1,0 +1,8 @@
+[build]
+  # Nincs build lépés: statikus HTML-t szolgálunk ki ebből a mappából.
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cache-Control = "public, max-age=3600"
