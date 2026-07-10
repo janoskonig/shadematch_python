@@ -89,20 +89,23 @@ export const sfx = {
   },
 };
 
-// Wire the header mute button if the page has one.
+// Wire the mute toggles if the page has any (header button and/or the
+// mobile overflow-menu row — one render keeps them in sync).
 document.addEventListener('DOMContentLoaded', () => {
-  const btn = document.getElementById('sfxToggleBtn');
-  if (!btn) return;
+  const btns = document.querySelectorAll('#sfxToggleBtn, #sfxToggleRow');
+  if (!btns.length) return;
   const render = () => {
     const m = isMuted();
-    btn.querySelector('.sfx-icon').textContent = m ? '🔇' : '🔊';
-    btn.setAttribute('aria-label', m ? 'Unmute sounds' : 'Mute sounds');
-    btn.title = m ? 'Sounds off — tap to unmute' : 'Sounds on — tap to mute';
+    btns.forEach((btn) => {
+      btn.querySelector('.sfx-icon').textContent = m ? '🔇' : '🔊';
+      btn.setAttribute('aria-label', m ? 'Unmute sounds' : 'Mute sounds');
+      btn.title = m ? 'Sounds off — tap to unmute' : 'Sounds on — tap to mute';
+    });
   };
-  btn.addEventListener('click', () => {
+  btns.forEach((btn) => btn.addEventListener('click', () => {
     const nowMuted = sfx.toggleMuted();
     if (!nowMuted) sfx.tick(); // audible confirmation only when turning ON
     render();
-  });
+  }));
   render();
 });
