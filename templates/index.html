@@ -20,6 +20,21 @@
 {% block extra_css %}
 <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
 <style>
+/* ── Language pill (header + guest modal) ─────────────────── */
+.lang-pill {
+  display: inline-flex; border: 1px solid var(--border);
+  border-radius: 999px; overflow: hidden; background: var(--surface);
+  flex: none;
+}
+.lang-pill-opt {
+  border: 0; background: transparent; padding: 4px 10px; font: inherit;
+  font-size: 0.72rem; font-weight: 800; letter-spacing: 0.03em;
+  color: var(--text-secondary); cursor: pointer; min-height: 28px;
+}
+.lang-pill-opt.is-active {
+  background: var(--accent-primary); color: #fff; cursor: default;
+}
+
 /* ── Progress strip ────────────────────────────────────────── */
 .progress-strip {
   display: flex;
@@ -438,6 +453,12 @@
   <!-- ======== Guest intro (new visitors: play before registering) ======== -->
   <div id="guestIntroModal" class="modal-overlay" style="display:none;">
     <div class="modal-card">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:2px;">
+        <div class="lang-pill" role="group" aria-label="{{ t('Language') }}">
+          <button type="button" class="lang-pill-opt{{ ' is-active' if locale == 'hu' else '' }}" onclick="shadeMatchSetLang('hu')" aria-pressed="{{ 'true' if locale == 'hu' else 'false' }}">HU</button>
+          <button type="button" class="lang-pill-opt{{ ' is-active' if locale != 'hu' else '' }}" onclick="shadeMatchSetLang('en')" aria-pressed="{{ 'true' if locale != 'hu' else 'false' }}">EN</button>
+        </div>
+      </div>
       <div style="text-align:center;margin-bottom:var(--space-md);">
         <div style="font-size:2.5rem;margin-bottom:12px;">🎨</div>
         <h2 class="modal-title">{{ t('Mix paint. Match the colour.') }}</h2>
@@ -535,6 +556,10 @@
         <div class="user-badge" id="userInfo" style="display:none;">
           <span class="user-badge-label">{{ t('ID:') }}</span>
           <span class="user-badge-id" id="userIdDisplay"></span>
+        </div>
+        <div class="lang-pill" role="group" aria-label="{{ t('Language') }}">
+          <button type="button" class="lang-pill-opt{{ ' is-active' if locale == 'hu' else '' }}" onclick="shadeMatchSetLang('hu')" aria-pressed="{{ 'true' if locale == 'hu' else 'false' }}">HU</button>
+          <button type="button" class="lang-pill-opt{{ ' is-active' if locale != 'hu' else '' }}" onclick="shadeMatchSetLang('en')" aria-pressed="{{ 'true' if locale != 'hu' else 'false' }}">EN</button>
         </div>
         <button id="sfxToggleBtn" class="btn-icon" type="button" aria-label="{{ t('Mute sounds') }}"><span class="sfx-icon">&#128266;</span></button>
         <a href="/results" class="btn-icon" aria-label="{{ t('View results') }}">&#128202; <span class="help-label">{{ t('Results') }}</span></a>
@@ -720,7 +745,24 @@
     });
   })();
 
-  /* ---- Language selector (settings, in the overflow menu) ---- */
+  /* ---- Language switching (header pill + guest modal + overflow menu) ---- */
+  window.shadeMatchSetLang = function(locale) {
+    if (locale !== 'hu' && locale !== 'en') return;
+    if (locale === window.LANG) return;
+    var payload = { locale: locale };
+    var uid = localStorage.getItem('userId');
+    if (uid) payload.user_id = uid;
+    fetch('/api/user/locale', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).catch(function() {}).then(function() {
+      /* Rewrite (don't just reload): a stale ?lang= would override the cookie. */
+      var u = new URL(location.href);
+      u.searchParams.set('lang', locale);
+      location.href = u.toString();
+    });
+  };
   (function() {
     var row = document.getElementById('langSettingRow');
     var sel = document.getElementById('langSelect');
@@ -728,16 +770,7 @@
     sel.value = (window.LANG === 'hu') ? 'hu' : 'en';
     /* Keep the dropdown open while interacting with the select. */
     row.addEventListener('click', function(e) { e.stopPropagation(); });
-    sel.addEventListener('change', function() {
-      var payload = { locale: sel.value };
-      var uid = localStorage.getItem('userId');
-      if (uid) payload.user_id = uid;
-      fetch('/api/user/locale', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(function() {}).then(function() { location.reload(); });
-    });
+    sel.addEventListener('change', function() { window.shadeMatchSetLang(sel.value); });
   })();
 
   /* ---- Sidebar drawer (mobile) ---- */
