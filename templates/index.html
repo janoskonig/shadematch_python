@@ -212,6 +212,17 @@
 }
 .cta-slot .cta-dismiss:hover { color: var(--text-primary); }
 
+/* Phones: the CTA banner shrinks to essentials. The reason line is
+   supplementary except for missions (chips live there) and the iOS
+   install card (the instructions live there). */
+@media (max-width: 768px) {
+  .cta-slot { margin-top: 8px; padding: 8px 10px; gap: 6px; }
+  .cta-slot .na-reason { display: none; }
+  .cta-slot.cta-missions .na-reason,
+  .cta-slot.cta-pwa .na-reason { display: block; margin-top: 0; }
+  .cta-slot .cta-action { padding: 5px 10px; font-size: 0.78rem; }
+}
+
 /* ── PWA install CTA ─────────────────────────────────────────── */
 .pwa-install-cta {
   display: flex;
