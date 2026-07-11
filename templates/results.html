@@ -281,6 +281,31 @@
   }
   .show-more-btn:hover { background: var(--surface); }
 
+  /* ── Challenge history ───────────────────────────────────── */
+  .challenges-heading { font-size: 1.15rem; font-weight: 800; margin: 0 0 var(--space-sm); color: var(--text-primary); }
+  .challenges-subhead { font-size: 0.95rem; font-weight: 700; margin: var(--space-md) 0 var(--space-sm); color: var(--text-secondary); }
+  .challenge-card {
+    border: 1px solid var(--border); border-radius: var(--radius-md);
+    padding: var(--space-sm) var(--space-md); margin-bottom: var(--space-sm);
+    background: var(--bg-primary);
+  }
+  .challenge-card-head { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap; }
+  .challenge-swatch { width: 34px; height: 34px; border-radius: var(--radius-sm); border: 1px solid var(--border); flex-shrink: 0; }
+  .challenge-title { font-weight: 700; color: var(--text-primary); }
+  .challenge-meta { font-size: 0.78rem; color: var(--text-secondary); }
+  .challenge-tally { margin-left: auto; font-size: 0.82rem; font-weight: 700; color: var(--accent-primary); }
+  .challenge-acceptors { margin-top: var(--space-sm); border-top: 1px dashed var(--border); padding-top: var(--space-xs); }
+  .challenge-acceptor-row, .challenge-nested-row {
+    display: flex; justify-content: space-between; gap: var(--space-sm);
+    font-size: 0.85rem; padding: 3px 0;
+  }
+  .challenge-nested-row { padding-left: var(--space-md); opacity: 0.75; font-size: 0.8rem; }
+  .challenge-acceptor-name { font-weight: 600; color: var(--text-primary); }
+  .challenge-win { color: #1a9e5f; font-weight: 700; }
+  .challenge-loss { color: var(--text-secondary); }
+  .challenge-empty { font-size: 0.85rem; color: var(--text-secondary); padding: var(--space-xs) 0; }
+  .challenge-backfill-note { font-size: 0.72rem; color: var(--text-secondary); margin-top: 2px; }
+
   .results-table {
     width: 100%; border-collapse: collapse; margin-top: var(--space-md);
     border-radius: var(--radius-md); overflow: hidden;
@@ -569,6 +594,16 @@
         <div class="loading">{{ t('Enter your user ID above to view your results') }}</div>
       </div>
     </section>
+
+    <!-- Challenge history -->
+    <section class="results-section" id="challenges-section" aria-labelledby="challengesHeading"
+             style="margin-top: var(--space-lg); display: none;">
+      <h2 id="challengesHeading" class="challenges-heading">{{ t('Challenge history') }}</h2>
+      <h3 class="challenges-subhead">{{ t('Challenges I sent') }}</h3>
+      <div id="challenges-sent"></div>
+      <h3 class="challenges-subhead">{{ t('Challenges I played') }}</h3>
+      <div id="challenges-played"></div>
+    </section>
   </main>
 
   <script>
@@ -582,6 +617,7 @@
         loadUserResults(storedUserId);
         loadUserProfile(storedUserId);
         loadVisionSummary(storedUserId);
+        loadChallengeHistory(storedUserId);
       }
     });
 
@@ -1126,6 +1162,7 @@
       if (!userId) {
         loadUserProfile(userIdToUse);
       }
+      loadChallengeHistory(userIdToUse);
 
       fetch('/get_user_results', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -1141,6 +1178,123 @@
           }
         })
         .catch(() => showError(t('Failed to load results. Please try again.')));
+    }
+
+    // ── Challenge history ─────────────────────────────────────
+    function chEscape(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    function chNum(v, d) {
+      return (typeof v === 'number' && isFinite(v)) ? v.toFixed(d == null ? 2 : d) : '—';
+    }
+    function chStats(deltaE, drops, timeSec) {
+      const parts = ['ΔE ' + chNum(deltaE, 2)];
+      if (typeof drops === 'number') parts.push(t('{n} drops').replace('{n}', drops));
+      if (typeof timeSec === 'number') parts.push(t('{n}s').replace('{n}', chNum(timeSec, 1)));
+      return parts.join(' · ');
+    }
+    function chSwatch(target) {
+      const rgb = target ? `${target.r},${target.g},${target.b}` : '128,128,128';
+      return `<div class="challenge-swatch" style="background-color:rgb(${rgb})"></div>`;
+    }
+    function chDate(iso) {
+      return iso ? new Date(iso).toLocaleDateString() : '';
+    }
+
+    function loadChallengeHistory(userId) {
+      const section = document.getElementById('challenges-section');
+      if (section) section.style.display = 'block';
+      fetch('/api/challenge/sent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      }).then(r => r.json())
+        .then(d => { if (d.status === 'success') renderChallengesSent(d.challenges); })
+        .catch(() => {});
+      fetch('/api/challenge/played', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId }),
+      }).then(r => r.json())
+        .then(d => { if (d.status === 'success') renderChallengesPlayed(d.challenges); })
+        .catch(() => {});
+    }
+
+    function renderChallengesSent(challenges) {
+      const box = document.getElementById('challenges-sent');
+      if (!box) return;
+      if (!challenges || !challenges.length) {
+        box.innerHTML = '<div class="challenge-empty">' + t('You haven\'t sent any challenges yet.') + '</div>';
+        return;
+      }
+      box.innerHTML = challenges.map(function (c) {
+        const title = c.target_name ? chEscape(c.target_name)
+          : `RGB(${c.target.r}, ${c.target.g}, ${c.target.b})`;
+        const tally = t('{beat} of {n} beat you')
+          .replace('{beat}', c.beat_count).replace('{n}', c.accept_count);
+        const yourLine = '<div class="challenge-meta">' + t('Your result:') + ' '
+          + chStats(c.creator_delta_e, c.creator_drops, c.creator_time_sec) + '</div>';
+
+        let detailed = 0;
+        let acceptorsHTML = '';
+        if (c.acceptors && c.acceptors.length) {
+          acceptorsHTML = '<div class="challenge-acceptors">' + c.acceptors.map(function (a) {
+            detailed += 1 + ((a.other_attempts && a.other_attempts.length) || 0);
+            const verdict = a.won
+              ? '<span class="challenge-win">' + t('beat you') + '</span>'
+              : '<span class="challenge-loss">' + t('lost') + '</span>';
+            let row = '<div class="challenge-acceptor-row">'
+              + '<span class="challenge-acceptor-name">' + chEscape(a.user) + '</span>'
+              + '<span>' + chStats(a.delta_e, a.drops, a.time_sec) + ' · ' + verdict + '</span></div>';
+            (a.other_attempts || []).forEach(function (o) {
+              row += '<div class="challenge-nested-row"><span>' + t('retry') + '</span>'
+                + '<span>' + chStats(o.delta_e, o.drops, o.time_sec)
+                + (o.won ? ' · ' + t('beat you') : '') + '</span></div>';
+            });
+            return row;
+          }).join('') + '</div>';
+        }
+        // Old links carry accept counts but no per-acceptor detail (opponent
+        // identity was never stored before this feature existed).
+        const note = (c.accept_count > detailed)
+          ? '<div class="challenge-backfill-note">'
+            + t('Detailed opponent history is available for challenges played after this update.')
+            + '</div>'
+          : '';
+        return '<div class="challenge-card">'
+          + '<div class="challenge-card-head">' + chSwatch(c.target)
+          + '<div><div class="challenge-title">' + title + '</div>'
+          + '<div class="challenge-meta">' + chDate(c.created_at) + '</div></div>'
+          + '<span class="challenge-tally">' + tally + '</span></div>'
+          + yourLine + acceptorsHTML + note + '</div>';
+      }).join('');
+    }
+
+    function renderChallengesPlayed(challenges) {
+      const box = document.getElementById('challenges-played');
+      if (!box) return;
+      if (!challenges || !challenges.length) {
+        box.innerHTML = '<div class="challenge-empty">' + t('You haven\'t played any challenges yet.') + '</div>';
+        return;
+      }
+      box.innerHTML = challenges.map(function (c) {
+        const title = c.target_name ? chEscape(c.target_name)
+          : `RGB(${c.target.r}, ${c.target.g}, ${c.target.b})`;
+        const verdict = c.won
+          ? '<span class="challenge-win">' + t('You won 🏆') + '</span>'
+          : '<span class="challenge-loss">' + t('You lost') + '</span>';
+        return '<div class="challenge-card">'
+          + '<div class="challenge-card-head">' + chSwatch(c.target)
+          + '<div><div class="challenge-title">' + title + '</div>'
+          + '<div class="challenge-meta">' + t('from {name}').replace('{name}', chEscape(c.creator))
+          + ' · ' + chDate(c.when) + '</div></div>'
+          + '<span class="challenge-tally">' + verdict + '</span></div>'
+          + '<div class="challenge-acceptor-row"><span class="challenge-acceptor-name">' + t('You') + '</span>'
+          + '<span>' + chStats(c.your_delta_e, c.your_drops, c.your_time_sec) + '</span></div>'
+          + '<div class="challenge-acceptor-row"><span class="challenge-acceptor-name">' + chEscape(c.creator) + '</span>'
+          + '<span>' + chStats(c.creator_delta_e, c.creator_drops, c.creator_time_sec) + '</span></div>'
+          + '</div>';
+      }).join('');
     }
 
     var MAX_SESSIONS_SHOWN = 15;

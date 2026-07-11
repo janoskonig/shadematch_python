@@ -201,5 +201,20 @@
   "Gold": "Arany",
   "Platinum": "Platina",
   "Diamond": "Gyémánt",
-  "Master": "Mester"
+  "Master": "Mester",
+  "Challenge history": "Kihívások előzményei",
+  "Challenges I sent": "Elküldött kihívásaim",
+  "Challenges I played": "Elfogadott kihívásaim",
+  "You haven't sent any challenges yet.": "Még nem küldtél kihívást.",
+  "You haven't played any challenges yet.": "Még nem játszottál kihívást.",
+  "{beat} of {n} beat you": "{n} közül {beat} legyőzött",
+  "Your result:": "A te eredményed:",
+  "beat you": "legyőzött",
+  "lost": "kikapott",
+  "retry": "újra",
+  "Detailed opponent history is available for challenges played after this update.": "A részletes ellenfél-előzmény a frissítés után játszott kihívásokra érhető el.",
+  "You won 🏆": "Nyertél 🏆",
+  "You lost": "Kikaptál",
+  "from {name}": "tőle: {name}",
+  "You": "Te"
 }

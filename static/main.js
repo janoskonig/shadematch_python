@@ -1632,8 +1632,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             celebratePerfectMatch();
             setControlState('completed');
             if (challengeMode) {
-              // Client-side comparison — nothing is persisted for guests.
-              showChallengeComparison(buildGuestChallengeComparison(data.delta_e), { delayMs: 1500 });
+              const cmp = buildGuestChallengeComparison(data.delta_e);
+              // Record the guest acceptance so the challenge creator can see it
+              // (anonymous — guests have no account). Best-effort; the local
+              // comparison shows regardless. Registering (via the modal's
+              // rematch button) is what unlocks personal challenge history.
+              fetch('/api/challenge/accept-guest', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  challenge_code: cmp.code,
+                  attempt_uuid: generateUUID(),
+                  delta_e: cmp.your_delta_e,
+                  drops: cmp.your_drops,
+                  time_sec: cmp.your_time_sec,
+                }),
+              }).catch(() => {});
+              showChallengeComparison(cmp, { delayMs: 1500 });
               challengeMode = null;
             } else {
               showGuestResult(data.delta_e, { delayMs: 1500 });

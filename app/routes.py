@@ -15,7 +15,7 @@ from .models import (
     DailyChallengeRun, DailyChallengeWinner, PushSubscription,
     AnalyticsEvent, MixingAttempt, MixingAttemptEvent, EmailVerificationToken,
     ConsentRecord, CalibrationSession, CalibrationTrial,
-    ProbeSlot, ProbeSchedule, ChallengeLink,
+    ProbeSlot, ProbeSchedule, ChallengeLink, ChallengeAttempt,
 )
 from .probe import (
     maybe_assign_flow_probe,
@@ -3114,9 +3114,27 @@ def _resolve_challenge_result(data, user_id):
         < _challenge_score_key(link.creator_delta_e, link.creator_drops, link.creator_time_sec)
     )
     if user_id != link.creator_user_id:
-        link.accept_count += 1
-        if won:
-            link.beat_count += 1
+        # Persist the acceptance so both sides can review it later, and bump the
+        # aggregate counters — both idempotent per attempt_uuid so a re-run can't
+        # double-count (the save endpoints also early-return on a duplicate save,
+        # so this rarely fires twice). Commit happens in the calling save handler.
+        attempt_uuid = data.get('attempt_uuid')
+        already = (ChallengeAttempt.query.filter_by(attempt_uuid=attempt_uuid).first()
+                   if attempt_uuid else None)
+        if already is None:
+            link.accept_count += 1
+            if won:
+                link.beat_count += 1
+            db.session.add(ChallengeAttempt(
+                challenge_code=link.code,
+                acceptor_user_id=user_id,
+                is_guest=False,
+                attempt_uuid=attempt_uuid,
+                delta_e=my_delta,
+                drops=my_drops,
+                time_sec=my_time,
+                won=won,
+            ))
     creator = db.session.get(User, link.creator_user_id)
     return True, {
         'code': link.code,
@@ -3186,6 +3204,211 @@ def challenge_create():
         'status': 'success', 'code': link.code,
         'url': url_for('main.challenge_page', code=link.code, _external=True),
     })
+
+
+@main.route('/api/challenge/accept-guest', methods=['POST'])
+def challenge_accept_guest():
+    """Record an anonymous (guest) acceptance so the creator can see that
+    someone took the challenge and how they did. Guests have no account and
+    never hit /save_session, so this is their dedicated lightweight write path.
+    Metrics are client-reported (as with authenticated saves in this app); the
+    win is scored server-side and the endpoint is IP-rate-limited against
+    counter spam. Idempotent per attempt_uuid."""
+    data = request.get_json() or {}
+    code = (data.get('challenge_code') or '').strip()
+    if not code:
+        return jsonify({'status': 'error', 'message': 'challenge_code required'}), 400
+    if not _rate_limit_allow(f'guestaccept:{request.remote_addr}', max_hits=30, window_sec=3600):
+        return jsonify({'status': 'error', 'message': t('Too many attempts — try again later')}), 429
+
+    link = db.session.get(ChallengeLink, code)
+    if link is None:
+        return jsonify({'status': 'error', 'message': t('Unknown challenge')}), 404
+
+    try:
+        my_drops = int(data.get('drops')) if data.get('drops') is not None else None
+    except (TypeError, ValueError):
+        my_drops = None
+    my_delta = data.get('delta_e')
+    my_time = data.get('time_sec')
+    won = (
+        _challenge_score_key(my_delta, my_drops, my_time)
+        < _challenge_score_key(link.creator_delta_e, link.creator_drops, link.creator_time_sec)
+    )
+
+    attempt_uuid = data.get('attempt_uuid')
+    already = (ChallengeAttempt.query.filter_by(attempt_uuid=attempt_uuid).first()
+               if attempt_uuid else None)
+    if already is None:
+        link.accept_count += 1
+        if won:
+            link.beat_count += 1
+        db.session.add(ChallengeAttempt(
+            challenge_code=link.code,
+            acceptor_user_id=None,
+            is_guest=True,
+            attempt_uuid=attempt_uuid,
+            delta_e=my_delta,
+            drops=my_drops,
+            time_sec=my_time,
+            won=won,
+        ))
+        db.session.commit()
+
+    return jsonify({
+        'status': 'success',
+        'won': won,
+        'creator_delta_e': link.creator_delta_e,
+        'creator_drops': link.creator_drops,
+        'creator_time_sec': link.creator_time_sec,
+    })
+
+
+def _batch_color_names(color_ids):
+    """id -> localized display name for a set of target-color ids (one query)."""
+    out = {}
+    ids = [c for c in set(color_ids) if c]
+    if ids:
+        for tc in TargetColor.query.filter(TargetColor.id.in_(ids)).all():
+            out[tc.id] = _color_display_name(tc)
+    return out
+
+
+def _batch_nicknames(user_ids):
+    """id -> nickname-or-id for a set of user ids (one query)."""
+    out = {}
+    ids = [u for u in set(user_ids) if u]
+    if ids:
+        for u in User.query.filter(User.id.in_(ids)).all():
+            out[u.id] = u.nickname or u.id
+    return out
+
+
+@main.route('/api/challenge/sent', methods=['POST'])
+def challenge_sent():
+    """Challenges the user created, each with its acceptors and their outcomes.
+    Registered acceptors are grouped per person (best attempt kept, the rest in
+    `other_attempts`); guests stay as individual 'Guest' rows."""
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id required'}), 400
+    try:
+        links = (ChallengeLink.query
+                 .filter_by(creator_user_id=user_id)
+                 .order_by(ChallengeLink.created_at.desc())
+                 .all())
+        codes = [l.code for l in links]
+
+        attempts_by_code = {}
+        nicks = {}
+        if codes:
+            rows = (ChallengeAttempt.query
+                    .filter(ChallengeAttempt.challenge_code.in_(codes))
+                    .order_by(ChallengeAttempt.created_at.desc())
+                    .all())
+            nicks = _batch_nicknames(r.acceptor_user_id for r in rows)
+            for r in rows:
+                attempts_by_code.setdefault(r.challenge_code, []).append(r)
+        names = _batch_color_names(l.target_color_id for l in links)
+
+        def _row_dict(r):
+            return {
+                'user': (nicks.get(r.acceptor_user_id, r.acceptor_user_id)
+                         if r.acceptor_user_id else t('Guest')),
+                'is_guest': r.is_guest,
+                'delta_e': r.delta_e, 'drops': r.drops, 'time_sec': r.time_sec,
+                'won': r.won,
+                'when': r.created_at.isoformat() if r.created_at else None,
+            }
+
+        challenges = []
+        for link in links:
+            rows = attempts_by_code.get(link.code, [])
+            best_by_user = {}          # user_id -> best row dict
+            others_by_user = {}        # user_id -> [row dicts]
+            guests = []
+            for r in rows:
+                entry = _row_dict(r)
+                if r.acceptor_user_id:
+                    key = r.acceptor_user_id
+                    prev = best_by_user.get(key)
+                    if prev is None:
+                        best_by_user[key] = entry
+                    elif (_challenge_score_key(entry['delta_e'], entry['drops'], entry['time_sec'])
+                          < _challenge_score_key(prev['delta_e'], prev['drops'], prev['time_sec'])):
+                        others_by_user.setdefault(key, []).append(prev)
+                        best_by_user[key] = entry
+                    else:
+                        others_by_user.setdefault(key, []).append(entry)
+                else:
+                    guests.append(entry)
+            acceptors = []
+            for key, best in best_by_user.items():
+                best = dict(best)
+                best['other_attempts'] = others_by_user.get(key, [])
+                acceptors.append(best)
+            acceptors.extend(guests)
+            acceptors.sort(key=lambda e: _challenge_score_key(
+                e['delta_e'], e['drops'], e['time_sec']))
+            challenges.append({
+                'code': link.code,
+                'created_at': link.created_at.isoformat() if link.created_at else None,
+                'target': {'r': link.target_r, 'g': link.target_g, 'b': link.target_b},
+                'target_name': names.get(link.target_color_id),
+                'creator_delta_e': link.creator_delta_e,
+                'creator_drops': link.creator_drops,
+                'creator_time_sec': link.creator_time_sec,
+                'accept_count': link.accept_count,
+                'beat_count': link.beat_count,
+                'acceptors': acceptors,
+            })
+        return jsonify({'status': 'success', 'challenges': challenges})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/challenge/played', methods=['POST'])
+def challenge_played():
+    """Challenges the user accepted (registered plays), each with their result
+    against the creator's frozen snapshot."""
+    data = request.get_json() or {}
+    user_id = data.get('user_id')
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id required'}), 400
+    try:
+        rows = (ChallengeAttempt.query
+                .filter_by(acceptor_user_id=user_id)
+                .order_by(ChallengeAttempt.created_at.desc())
+                .all())
+        codes = {r.challenge_code for r in rows}
+        links = {}
+        if codes:
+            for l in ChallengeLink.query.filter(ChallengeLink.code.in_(codes)).all():
+                links[l.code] = l
+        nicks = _batch_nicknames(l.creator_user_id for l in links.values())
+        names = _batch_color_names(l.target_color_id for l in links.values())
+
+        challenges = []
+        for r in rows:
+            link = links.get(r.challenge_code)
+            if link is None:
+                continue
+            challenges.append({
+                'code': r.challenge_code,
+                'when': r.created_at.isoformat() if r.created_at else None,
+                'creator': nicks.get(link.creator_user_id, link.creator_user_id),
+                'target': {'r': link.target_r, 'g': link.target_g, 'b': link.target_b},
+                'target_name': names.get(link.target_color_id),
+                'your_delta_e': r.delta_e, 'your_drops': r.drops, 'your_time_sec': r.time_sec,
+                'creator_delta_e': link.creator_delta_e,
+                'creator_drops': link.creator_drops,
+                'creator_time_sec': link.creator_time_sec,
+                'won': r.won,
+            })
+        return jsonify({'status': 'success', 'challenges': challenges})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @main.route('/api/daily-challenge/today', methods=['GET'])
