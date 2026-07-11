@@ -2,7 +2,7 @@
 
 import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 import { captureEnv } from './env_capture.js?v=20260508-qc2';
-import { sfx } from './sfx.js?v=20260709';
+import { sfx } from './sfx.js?v=20260710';
 import { shareCard } from './share-card.js?v=20260709-share1';
 
 console.log('✅ main.js loaded');
@@ -895,10 +895,14 @@ function updateProgressIndicator(currentIndex, total, visitCount) {
   const segEl = document.getElementById('progressSegments');
   if (!textEl || !segEl) return;
 
-  const suffix = visitCount != null && visitCount > 0
-    ? ' · ' + t('{n} this visit').replace('{n}', String(visitCount))
-    : '';
-  textEl.textContent = t('Color {i} of {total}').replace('{i}', String(currentIndex + 1)).replace('{total}', String(total)) + suffix;
+  textEl.textContent = t('Color {i} of {total}').replace('{i}', String(currentIndex + 1)).replace('{total}', String(total));
+  if (visitCount != null && visitCount > 0) {
+    // Separate span so phones can hide the suffix (main.css ≤768px).
+    const s = document.createElement('span');
+    s.className = 'progress-text-visit';
+    s.textContent = ' · ' + t('{n} this visit').replace('{n}', String(visitCount));
+    textEl.appendChild(s);
+  }
   segEl.innerHTML = '';
   for (let i = 0; i < total; i++) {
     const seg = document.createElement('div');

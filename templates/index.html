@@ -18,7 +18,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260508d">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260710a">
 <style>
 /* ── Language pill (header + guest modal) ─────────────────── */
 .lang-pill {
@@ -171,9 +171,16 @@
   0%, 100% { opacity: 1; transform: scale(1); }
   50% { opacity: 0.4; transform: scale(0.75); }
 }
-@media (max-width: 480px) {
+@media (max-width: 768px) {
   .daily-status-badge .daily-status-text { display: none; }
   .daily-status-badge { padding: 6px 8px; }
+}
+
+/* ── Phone-only overflow-menu rows (header versions hide ≤768px) ── */
+.overflow-item--mobile { display: none; }
+@media (max-width: 768px) {
+  .overflow-item--mobile { display: block; }
+  .lang-pill-opt { padding: 4px 7px; }
 }
 
 /* ── Next-action CTA ─────────────────────────────────────────── */
@@ -204,6 +211,17 @@
   color: var(--text-secondary); font-size: 0.95rem; line-height: 1; padding: 2px 4px;
 }
 .cta-slot .cta-dismiss:hover { color: var(--text-primary); }
+
+/* Phones: the CTA banner shrinks to essentials. The reason line is
+   supplementary except for missions (chips live there) and the iOS
+   install card (the instructions live there). */
+@media (max-width: 768px) {
+  .cta-slot { margin-top: 8px; padding: 8px 10px; gap: 6px; }
+  .cta-slot .na-reason { display: none; }
+  .cta-slot.cta-missions .na-reason,
+  .cta-slot.cta-pwa .na-reason { display: block; margin-top: 0; }
+  .cta-slot .cta-action { padding: 5px 10px; font-size: 0.78rem; }
+}
 
 /* ── PWA install CTA ─────────────────────────────────────────── */
 .pwa-install-cta {
@@ -669,6 +687,9 @@
             <div class="overflow-dropdown" id="overflowDropdown">
               <button id="restartBtn" class="overflow-item" type="button" disabled>{{ t('Restart all') }}</button>
               <button id="switchUserBtn" class="overflow-item" type="button">{{ t('Switch user') }}</button>
+              <!-- Phone-only rows: these controls live in the header on wider screens -->
+              <button id="sfxToggleRow" class="overflow-item overflow-item--mobile" type="button"><span class="sfx-icon">&#128266;</span> {{ t('Sounds') }}</button>
+              <button id="showGuideRow" class="overflow-item overflow-item--mobile" type="button">&#128161; {{ t('Guide') }}</button>
               <div class="overflow-item" id="langSettingRow" style="display:flex; align-items:center; justify-content:space-between; gap:8px; cursor:default;">
                 <label for="langSelect" style="font:inherit; cursor:default;">{{ t('Language') }}</label>
                 <select id="langSelect" style="font:inherit; max-width:110px;">
@@ -743,6 +764,10 @@
     document.addEventListener('click', function() {
       dropdown.classList.remove('is-open');
     });
+    /* Keep the menu open when toggling sound so the 🔊/🔇 flip is visible
+       (sfx.js owns the actual toggle). */
+    var sfxRow = document.getElementById('sfxToggleRow');
+    if (sfxRow) sfxRow.addEventListener('click', function(e) { e.stopPropagation(); });
   })();
 
   /* ---- Language switching (header pill + guest modal + overflow menu) ---- */
@@ -964,9 +989,11 @@
         setTimeout(attempt, 500);
       })();
     }
-    // On-demand replay from the header button.
+    // On-demand replay from the header button / mobile overflow row.
     var guideBtn = document.getElementById('showGuideBtn');
     if (guideBtn) guideBtn.onclick = function() { launchGuide(); };
+    var guideRow = document.getElementById('showGuideRow');
+    if (guideRow) guideRow.onclick = function() { launchGuide(); };
 
     if (storedBirthdate && storedGender && !storedId) {
       localStorage.removeItem('userBirthdate');
@@ -1421,7 +1448,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260709-i18n1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260709-share1"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260710-header1"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>

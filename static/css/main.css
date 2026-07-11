@@ -21,6 +21,10 @@
   gap: var(--space-sm); margin-left: auto;
   flex-shrink: 0;
 }
+/* The progress text yields width to the fixed-size header-right cluster;
+   it must truncate, never wrap, so the header stays one row tall
+   (--app-header-h is a fixed value the floating chips are anchored to). */
+.progress-text { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* ---- App row: canvas is the layout root ---- */
 .app-row {
@@ -303,6 +307,15 @@
   .ps-xpbar-wrap { display: none; }
   .user-badge    { display: none; }
 
+  /* Thin the header to one 48px row: drop the visit suffix and the rank
+     word (keeps "24/332 🔥2"); sound + guide move to the ⋮ overflow menu
+     (hidden, not removed — sfx.js and the spotlight guide reference them). */
+  .progress-text { font-size: 0.8rem; }
+  .progress-text-visit { display: none; }
+  #sfxToggleBtn, #showGuideBtn { display: none; }
+  .ps-rank { display: none; }
+  .progress-strip { margin-right: 0; padding: 4px 8px; gap: 6px; }
+
   /* Color names move to assistive-only on phones to keep the dock thin. */
   .color-name {
     position: absolute;
@@ -359,6 +372,11 @@
 
 /* ---- Small phones (≤ 480 px portrait) ---- */
 @media (max-width: 480px) {
+  /* Keep the streak in the pill but drop the colors count — it's on the
+     Results page, and this buys the progress text room to render "Szín: X/Y"
+     without ellipsis. (The whole pill hides ≤360px already.) */
+  .ps-colors { display: none; }
+
   .floating-dock {
     width: calc(100vw - 2 * 4px);
     max-width: calc(100vw - 2 * 4px);
@@ -395,6 +413,7 @@
     min-width: 36px;
     padding: 4px 8px;
   }
+  .daily-status-badge { min-height: 36px; padding: 4px 6px; }
 
   .color-circle { width: 42px; height: 42px; }
   .minus-button { min-width: 30px; min-height: 26px; font-size: 0.9rem; }
