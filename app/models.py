@@ -237,6 +237,37 @@ class ChallengeLink(db.Model):
     beat_count = db.Column(db.Integer, nullable=False, default=0)
 
 
+class ChallengeAttempt(db.Model):
+    """One recorded acceptance of a head-to-head challenge, so both sides can
+    look it back up (the creator sees who took the challenge and how they did;
+    the acceptor sees the challenges they played and the outcome).
+
+    Written when a round tagged with a challenge_code is saved: from
+    _resolve_challenge_result for authenticated, non-creator acceptors, and from
+    /api/challenge/accept-guest for guests. Guest rows have acceptor_user_id NULL
+    and is_guest True (shown as "Guest"). One row per attempt_uuid (idempotent).
+    """
+    __tablename__ = 'challenge_attempts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    challenge_code = db.Column(
+        db.String(8), db.ForeignKey('challenge_links.code'),
+        nullable=False, index=True,
+    )
+    # NULL = anonymous guest acceptor (see is_guest); registered acceptors carry
+    # their 6-char user id.
+    acceptor_user_id = db.Column(
+        db.String(6), db.ForeignKey('users.id'), nullable=True, index=True,
+    )
+    is_guest = db.Column(db.Boolean, nullable=False, default=False)
+    attempt_uuid = db.Column(db.String(36), nullable=True, unique=True)
+    delta_e = db.Column(db.Float, nullable=True)
+    drops = db.Column(db.Integer, nullable=True)
+    time_sec = db.Column(db.Float, nullable=True)
+    won = db.Column(db.Boolean, nullable=False, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class DailyChallengeRun(db.Model):
     __tablename__ = 'daily_challenge_runs'
 
