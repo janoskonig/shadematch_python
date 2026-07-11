@@ -345,7 +345,9 @@
     const sel = document.getElementById('labTargetSelect');
     if (!sel) return Promise.resolve();
     const uid = (window.currentUserId || localStorage.getItem('userId') || '').trim().toUpperCase();
-    const url = uid ? ('/api/target-colors?user_id=' + encodeURIComponent(uid)) : '/api/target-colors';
+    // Lab-only endpoint: includes per-pigment recipes (the public game catalog
+    // omits them so challenge targets can't be copied).
+    const url = uid ? ('/api/lab/target-colors?user_id=' + encodeURIComponent(uid)) : '/api/lab/target-colors';
     return fetch(url)
       .then(function (res) { return res.json(); })
       .then(function (data) {
