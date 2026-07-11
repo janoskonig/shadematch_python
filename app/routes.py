@@ -1580,8 +1580,15 @@ def _color_display_name(tc, locale=None):
     return tc.name
 
 
-def _target_color_public_dict(tc):
-    """Shape for /api/target-colors."""
+def _target_color_public_dict(tc, include_recipe=False):
+    """Shape for /api/target-colors.
+
+    The per-pigment recipe (`drops`) is a spoiler — knowing it lets a player
+    copy the mix instead of matching by eye, which defeats a challenge round
+    whose target is this colour. It is NOT served to the game/challenge client;
+    only the total `sum_drop_count` (needed for difficulty gating, and not a
+    recipe) is public. The Lab authoring tool opts in via include_recipe.
+    """
     entry = {
         'id': tc.id,
         'name': _color_display_name(tc),
@@ -1593,9 +1600,10 @@ def _target_color_public_dict(tc):
     s = target_color_sum_drop(tc)
     if s is not None:
         entry['sum_drop_count'] = s
-    drops = _target_color_drops_for_api(tc)
-    if drops is not None:
-        entry['drops'] = drops
+    if include_recipe:
+        drops = _target_color_drops_for_api(tc)
+        if drops is not None:
+            entry['drops'] = drops
     return entry
 
 
@@ -1606,6 +1614,9 @@ def get_target_colors():
     rows = (TargetColor.query
             .filter_by(color_type='gamut')
             .order_by(TargetColor.catalog_order.asc()).all())
+    # Recipe-free on purpose: the game scores server-side (/calculate), so the
+    # client never needs per-pigment drops, and emitting them would leak the
+    # answer for challenge targets (see _target_color_public_dict).
     colors = [_target_color_public_dict(tc) for tc in rows]
 
     next_action_data = {}
@@ -1615,6 +1626,18 @@ def get_target_colors():
         next_action_data = build_next_action(user_id, quota=quota)
 
     return jsonify({'status': 'success', 'colors': colors, **next_action_data})
+
+
+@main.route('/api/lab/target-colors', methods=['GET'])
+def get_lab_target_colors():
+    """Catalog WITH per-pigment recipes, for the Lab authoring tool (unlinked,
+    internal). Kept off the public /api/target-colors so challenge/game clients
+    can't read a target's recipe."""
+    rows = (TargetColor.query
+            .filter_by(color_type='gamut')
+            .order_by(TargetColor.catalog_order.asc()).all())
+    colors = [_target_color_public_dict(tc, include_recipe=True) for tc in rows]
+    return jsonify({'status': 'success', 'colors': colors})
 
 
 def _target_color_drops_for_api(tc):
