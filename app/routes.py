@@ -317,13 +317,13 @@ def index():
 
 
 def _challenge_stats_line(link):
-    """'12 drops · 37s' from the creator snapshot, localized, skipping gaps."""
-    bits = []
-    if link.creator_drops is not None:
-        bits.append(t('{n} drops', n=link.creator_drops))
+    """'37s' from the creator snapshot, localized. The per-round drop count is
+    deliberately omitted from the shared preview — it hints at how the creator
+    solved it (see the challenge preview, which shows only the target, ΔE and
+    time)."""
     if link.creator_time_sec is not None:
-        bits.append(t('{n}s', n=int(round(link.creator_time_sec))))
-    return ' · '.join(bits)
+        return t('{n}s', n=int(round(link.creator_time_sec)))
+    return ''
 
 
 def _challenge_og_context(link, challenge):
@@ -387,32 +387,6 @@ def challenge_page(code):
     )
 
 
-def _challenge_journey(link, cap=40):
-    """The creator round's DeltaE trajectory (add/remove steps, in order) for
-    the spoiler-free journey strip. Empty when telemetry is missing."""
-    if not link.source_attempt_uuid:
-        return []
-    rows = (MixingAttemptEvent.query
-            .filter_by(attempt_uuid=link.source_attempt_uuid)
-            .order_by(MixingAttemptEvent.seq)
-            .limit(500)
-            .all())
-    vals = []
-    for ev in rows:
-        if ev.action_type not in ('add', 'remove'):
-            continue
-        state = ev.state_after_json or {}
-        de = state.get('delta_e')
-        if isinstance(de, (int, float)):
-            vals.append(float(de))
-        if len(vals) >= cap:
-            break
-    # The snapshot's final DeltaE is authoritative for the last square.
-    if link.creator_delta_e is not None:
-        vals.append(float(link.creator_delta_e))
-    return vals
-
-
 @main.route('/c/<string:code>/og.png')
 def challenge_og_image(code):
     """Link-preview card for messenger unfurls (WhatsApp/LINE/iMessage)."""
@@ -427,7 +401,6 @@ def challenge_og_image(code):
         color_name=_color_display_name(tc) if tc else '',
         delta_e=link.creator_delta_e,
         stats_line=_challenge_stats_line(link),
-        journey=_challenge_journey(link),
         footer=t('Can you beat it?') + ' · shadestudy.com',
     )
     return Response(png, mimetype='image/png',
