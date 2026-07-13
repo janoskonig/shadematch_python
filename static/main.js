@@ -2434,10 +2434,9 @@ window.shadeMatchCreateChallenge = async function (attemptUuid, { text } = {}) {
     if (window.LANG && window.LANG !== 'en') {
       url += (url.includes('?') ? '&' : '?') + 'lang=' + window.LANG;
     }
-    // The round's ΔE-journey squares — the story of the solve, recipe-free.
-    const glyphs = journeyGlyphs(window.lastMixDeltaE);
-    const msg = (text || t('⚔️ Beat my ShadeMatch result:'))
-      + (glyphs ? '\n' + glyphs : '') + '\n' + url;
+    // No ΔE-journey squares here: on a challenge they hint at how the creator
+    // solved it, so the shared message stays just the tagline + link.
+    const msg = (text || t('⚔️ Beat my ShadeMatch result:')) + '\n' + url;
     if (navigator.share) {
       try { await navigator.share({ text: msg }); return true; } catch (e) {
         if (e && e.name === 'AbortError') return false;
