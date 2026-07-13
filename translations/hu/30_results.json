@@ -216,5 +216,13 @@
   "You won 🏆": "Nyertél 🏆",
   "You lost": "Kikaptál",
   "from {name}": "tőle: {name}",
-  "You": "Te"
+  "You": "Te",
+  "Print your diploma": "Oklevél nyomtatása",
+  "You mastered every region of the colour gamut.": "A színtér minden tartományát elsajátítottad.",
+  "Diploma": "Oklevél",
+  "Colour Gamut Mastery": "A színtér mesteri elsajátítása",
+  "This certifies that": "Ez az oklevél igazolja, hogy",
+  "has mixed and matched colours across the entire gamut,": "a teljes színtéren keresztül kevert és egyeztetett színeket,",
+  "mastering all {n} regions of the ShadeMatch colour space.": "elsajátítva a ShadeMatch színtér mind a(z) {n} tartományát.",
+  "ShadeMatch · Colour Vision Study": "ShadeMatch · Színlátás-kutatás"
 }

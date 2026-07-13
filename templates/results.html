@@ -499,6 +499,18 @@
         🎊 {{ t('All Colors Mastered — Palette Complete!') }}
       </div>
 
+      <!-- Diploma call-to-action (shown only when every gamut region is mastered) -->
+      <div id="diplomaCta" style="display:none; text-align:center; margin-bottom:var(--space-md);">
+        <a id="diplomaLink" href="#" target="_blank" rel="noopener"
+           style="display:inline-block; padding:0.7em 1.4em; border-radius:999px;
+                  background:#b08d3e; color:#fff; font-weight:700; text-decoration:none;">
+          🎓 {{ t('Print your diploma') }}
+        </a>
+        <div style="font-size:var(--font-size-sm); color:var(--text-secondary); margin-top:var(--space-xs);">
+          {{ t('You mastered every region of the colour gamut.') }}
+        </div>
+      </div>
+
       <!-- Progress card -->
       <section class="progress-card" id="progressCard" aria-labelledby="progressHeading">
         <h2 id="progressHeading" class="progress-card-title">{{ t('Your Progress') }}</h2>
@@ -748,10 +760,24 @@
         renderProgressCard(data.progress, data.coverage_quota);
         renderAwards(data.awards, cq);
         renderColorStats(data.color_stats, data.coverage_quota);
+        renderDiplomaCta(data.region_mastery, userId);
         document.getElementById('profileSection').style.display = '';
         loadHueAccuracy(userId);
       } catch (e) {
         console.error('Profile load error:', e);
+      }
+    }
+
+    // ── Diploma call-to-action (gamut-region mastery) ─────────
+    function renderDiplomaCta(rm, userId) {
+      const cta = document.getElementById('diplomaCta');
+      if (!cta) return;
+      if (rm && rm.is_gamut_master && userId) {
+        document.getElementById('diplomaLink').href =
+          '/diploma.png?uid=' + encodeURIComponent(userId);
+        cta.style.display = '';
+      } else {
+        cta.style.display = 'none';
       }
     }
 

@@ -22,6 +22,7 @@ from flask import has_request_context
 from .models import UserProgress, UserAward, UserTargetColorStats, TargetColor, MixingSession, MixingAttempt
 from . import db
 from .i18n import t as _t_request
+from .regions import region_of_target
 
 
 def _t(text, **kwargs):
@@ -817,6 +818,64 @@ def compute_quota_progress(user_id: str) -> dict:
         'nearest_deficit_remaining': nearest_deficit_remaining,
         # ── Per-color details ───────────────────────────────────────────────
         'color_quota_map': color_quota_map,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Gamut-region mastery (self-serve diploma eligibility)
+# ---------------------------------------------------------------------------
+
+# A player "masters" one gamut region by completing at least this many of the
+# colours that fall inside it (see app/regions.py for the CIELAB grid cells).
+# 1 = breadth ("touched every corner of the gamut"); raise it later for a
+# depth-based diploma without changing any callers.
+REGION_MASTERY_MIN_COMPLETED = 1
+
+
+def compute_region_mastery(user_id: str) -> dict:
+    """
+    Per-region gamut coverage for the printable mastery diploma.
+
+    Every gamut target maps to one CIELAB region (region_of_target); the ~332
+    targets fall into ~54 regions. A region is *mastered* once the player has
+    completed (completed_count > 0) at least REGION_MASTERY_MIN_COMPLETED of its
+    colours. `is_gamut_master` is true when every region that has ≥1 catalog
+    target is mastered.
+
+    Returns:
+      total_regions        – distinct regions present in the gamut catalog
+      regions_mastered     – regions meeting the completion threshold
+      is_gamut_master      – regions_mastered >= total_regions (and >0)
+      region_mastery_pct   – regions_mastered / total_regions * 100 (1 dp)
+    """
+    region_of = {}
+    region_ids = set()
+    for tc in _catalog_rows():
+        rid = region_of_target(tc)
+        region_of[tc.id] = rid
+        region_ids.add(rid)
+    total_regions = len(region_ids)
+
+    completed_per_region = {}
+    if user_id:
+        for s in UserTargetColorStats.query.filter_by(user_id=user_id).all():
+            if int(s.completed_count or 0) <= 0:
+                continue
+            rid = region_of.get(s.target_color_id)
+            if rid is not None:
+                completed_per_region[rid] = completed_per_region.get(rid, 0) + 1
+
+    regions_mastered = sum(
+        1 for rid in region_ids
+        if completed_per_region.get(rid, 0) >= REGION_MASTERY_MIN_COMPLETED
+    )
+    is_gamut_master = total_regions > 0 and regions_mastered >= total_regions
+    pct = round(100.0 * regions_mastered / total_regions, 1) if total_regions else 0.0
+    return {
+        'total_regions': total_regions,
+        'regions_mastered': regions_mastered,
+        'is_gamut_master': is_gamut_master,
+        'region_mastery_pct': pct,
     }
 
 

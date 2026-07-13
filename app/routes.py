@@ -407,6 +407,59 @@ def challenge_og_image(code):
                     headers={'Cache-Control': 'public, max-age=86400'})
 
 
+@main.route('/diploma.png')
+def diploma_image():
+    """Self-serve printable diploma (A4 PNG) for players who have mastered every
+    region of the colour gamut. Opens in a new tab to print or save. Gated on
+    eligibility so the certificate can't be minted before it's earned."""
+    user_id = (request.args.get('uid') or '').strip().upper()
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'uid required'}), 400
+
+    from .gamification import compute_region_mastery, _catalog_rows
+    rm = compute_region_mastery(user_id)
+    if not rm['is_gamut_master']:
+        return jsonify({'status': 'error',
+                        'message': 'Diploma not yet earned',
+                        'region_mastery': rm}), 403
+
+    user = db.session.get(User, user_id)
+    name = (user.nickname if user and user.nickname else user_id)
+
+    # An even sample of the real colours the player mastered, for the strip.
+    completed_ids = {
+        s.target_color_id
+        for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
+        if int(s.completed_count or 0) > 0
+    }
+    swatches = [(tc.r, tc.g, tc.b) for tc in _catalog_rows()
+                if tc.id in completed_ids and tc.r is not None]
+    if len(swatches) > 24:
+        step = len(swatches) / 24.0
+        swatches = [swatches[int(i * step)] for i in range(24)]
+
+    from .diploma import render_diploma
+    png = render_diploma(
+        title=t('Diploma'),
+        subtitle=t('Colour Gamut Mastery'),
+        certifies_line=t('This certifies that'),
+        player_name=name,
+        achievement_lines=[
+            t('has mixed and matched colours across the entire gamut,'),
+            t('mastering all {n} regions of the ShadeMatch colour space.')
+                .replace('{n}', str(rm['total_regions'])),
+        ],
+        signature_label=t('ShadeMatch · Colour Vision Study'),
+        date_line=date.today().strftime('%Y-%m-%d'),
+        footer_line='shadestudy.com',
+        swatch_rgbs=swatches,
+    )
+    return Response(png, mimetype='image/png', headers={
+        'Cache-Control': 'private, max-age=3600',
+        'Content-Disposition': f'inline; filename="shadematch-diploma-{user_id}.png"',
+    })
+
+
 @main.route('/lab')
 def lab_page():
     return render_template('lab.html')
@@ -2802,6 +2855,7 @@ def get_user_profile_route():
     if not user_id:
         return jsonify({'status': 'error', 'message': 'user_id required'}), 400
     try:
+        from .gamification import compute_region_mastery
         progress, awards, color_stats = get_user_profile(user_id)
         return jsonify({
             'status': 'success',
@@ -2810,6 +2864,7 @@ def get_user_profile_route():
             'color_stats': color_stats,
             'coverage_quota': COVERAGE_QUOTA,
             'daily_missions': build_daily_missions(user_id),
+            'region_mastery': compute_region_mastery(user_id),
         })
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
