@@ -121,7 +121,7 @@
   "Avg / Match": "Átlag / találat",
   "Median elapsed time per completed match.": "Medián eltelt idő teljesített találatonként.",
   "Median / Match": "Medián / találat",
-  "Date": "Dátum",
+  "Date": "Kelt",
   "Target": "Célszín",
   "Drops": "Cseppek",
   "Outcome": "Eredmény",
@@ -224,5 +224,10 @@
   "This certifies that": "Ez az oklevél igazolja, hogy",
   "has mixed and matched colours across the entire gamut,": "a teljes színtéren keresztül kevert és egyeztetett színeket,",
   "mastering all {n} regions of the ShadeMatch colour space.": "elsajátítva a ShadeMatch színtér mind a(z) {n} tartományát.",
-  "ShadeMatch · Colour Vision Study": "ShadeMatch · Színlátás-kutatás"
+  "ShadeMatch · Colour Vision Study": "ShadeMatch · Színlátás-kutatás",
+  "mastering every region of the ShadeMatch colour space.": "elsajátítva a ShadeMatch színtér minden tartományát.",
+  "regions mastered": "színtartomány",
+  "shades mastered": "elsajátított árnyalat",
+  "perfect matches": "tökéletes találat",
+  "day streak": "napos sorozat"
 }

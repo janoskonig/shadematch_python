@@ -426,7 +426,8 @@ def diploma_image():
     user = db.session.get(User, user_id)
     name = (user.nickname if user and user.nickname else user_id)
 
-    # An even sample of the real colours the player mastered, for the strip.
+    # The real colours the player mastered, hue-sorted so the medallion reads
+    # as a colour wheel; sampled to at most 48 segments.
     completed_ids = {
         s.target_color_id
         for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
@@ -434,9 +435,16 @@ def diploma_image():
     }
     swatches = [(tc.r, tc.g, tc.b) for tc in _catalog_rows()
                 if tc.id in completed_ids and tc.r is not None]
-    if len(swatches) > 24:
-        step = len(swatches) / 24.0
-        swatches = [swatches[int(i * step)] for i in range(24)]
+    swatches.sort(key=lambda c: colorsys.rgb_to_hsv(c[0] / 255, c[1] / 255, c[2] / 255)[0])
+    if len(swatches) > 48:
+        step = len(swatches) / 48.0
+        swatches = [swatches[int(i * step)] for i in range(48)]
+
+    # Headline player stats for the diploma tiles.
+    sessions = MixingSession.query.filter_by(user_id=user_id)
+    perfect_matches = sessions.filter(MixingSession.match_category == 'perfect').count()
+    up = UserProgress.query.filter_by(user_id=user_id).first()
+    best_streak = up.longest_streak if up else 0
 
     from .diploma import render_diploma
     png = render_diploma(
@@ -446,13 +454,21 @@ def diploma_image():
         player_name=name,
         achievement_lines=[
             t('has mixed and matched colours across the entire gamut,'),
-            t('mastering all {n} regions of the ShadeMatch colour space.')
-                .replace('{n}', str(rm['total_regions'])),
+            t('mastering every region of the ShadeMatch colour space.'),
         ],
-        signature_label=t('ShadeMatch · Colour Vision Study'),
+        stats=[
+            (len(completed_ids), t('shades mastered')),
+            (perfect_matches, t('perfect matches')),
+            (best_streak, t('day streak')),
+        ],
+        author_signature='König János',
+        author_title=t('ShadeMatch · Colour Vision Study'),
         date_line=date.today().strftime('%Y-%m-%d'),
+        date_label=t('Date'),
         footer_line='shadestudy.com',
         swatch_rgbs=swatches,
+        seal_number=str(rm['total_regions']),
+        seal_caption=t('regions mastered'),
     )
     return Response(png, mimetype='image/png', headers={
         'Cache-Control': 'private, max-age=3600',
