@@ -459,6 +459,54 @@ def stat_page():
     return render_template('stat.html')
 
 
+# --- /stat interactive charts (Plotly specs as JSON) ----------------------- #
+_STAT_CHARTS_CACHE_TTL_SEC = int(os.environ.get('STAT_CHARTS_CACHE_SECONDS', '900'))
+_stat_charts_cache_lock = threading.Lock()
+_stat_charts_cache_entries = {}  # section -> (ts, payload)
+
+
+@main.route('/api/stat/charts', methods=['GET'])
+def stat_charts():
+    """Plot-ready JSON specs for a dashboard section, rendered client-side by Plotly."""
+    section = str(request.args.get('section', 'core') or 'core').strip().lower()
+    now = time.time()
+    with _stat_charts_cache_lock:
+        entry = _stat_charts_cache_entries.get(section)
+        if entry is not None and (now - entry[0]) <= _STAT_CHARTS_CACHE_TTL_SEC:
+            return jsonify({'status': 'success', 'section': section, 'charts': entry[1]})
+    try:
+        from .stat_plot_data import build_section  # lazy: pulls pandas bundle helpers
+        charts = build_section(section)
+    except ValueError:
+        return jsonify({'status': 'error', 'message': f'unknown section: {section}'}), 404
+    except Exception as e:
+        print(f'stat_charts error ({section}): {e}')
+        if not refresh_db_connection():
+            pass
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    with _stat_charts_cache_lock:
+        _stat_charts_cache_entries[section] = (time.time(), charts)
+    return jsonify({'status': 'success', 'section': section, 'charts': charts})
+
+
+# --- on-demand matplotlib PNGs (only the 6 hard/niche diagnostics) ---------- #
+_STAT_PNG_CACHE_TTL_SEC = int(os.environ.get('STAT_PNG_CACHE_SECONDS', '900'))
+_stat_png_cache_lock = threading.Lock()
+_stat_png_cache_entries = {}  # key -> (ts, png_bytes)
+
+
+def _stat_png_cache_key(pid, plot_options):
+    if not plot_options:
+        return pid
+    parts = [pid]
+    for k in sorted(plot_options.keys()):
+        v = plot_options[k]
+        if isinstance(v, (list, tuple)):
+            v = ','.join(str(x) for x in v)
+        parts.append(f'{k}={v}')
+    return '|'.join(parts)
+
+
 @main.route('/api/stat/plot/<string:plot_id>', methods=['GET'])
 def stat_plot(plot_id: str):
     """PNG figures from pandas/matplotlib (server-side EDA)."""
@@ -525,6 +573,13 @@ def stat_plot(plot_id: str):
                     for part in str(raw).split(',')
                     if part and part.strip()
                 ]
+    cache_key = _stat_png_cache_key(pid, plot_options)
+    now = time.time()
+    with _stat_png_cache_lock:
+        entry = _stat_png_cache_entries.get(cache_key)
+        if entry is not None and (now - entry[0]) <= _STAT_PNG_CACHE_TTL_SEC:
+            return Response(entry[1], mimetype='image/png',
+                            headers={'Cache-Control': 'private, max-age=900'})
     try:
         png = get_plot_png(pid, plot_options=plot_options)
     except Exception as e:
@@ -539,7 +594,10 @@ def stat_plot(plot_id: str):
         import matplotlib.pyplot as plt
         plt.close('all')
         gc.collect()
-    return Response(png, mimetype='image/png')
+    with _stat_png_cache_lock:
+        _stat_png_cache_entries[cache_key] = (time.time(), png)
+    return Response(png, mimetype='image/png',
+                    headers={'Cache-Control': 'private, max-age=900'})
 
 
 @main.route('/api/stat/attempt-timeline-data', methods=['GET'])

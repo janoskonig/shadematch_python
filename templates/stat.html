@@ -2,6 +2,10 @@
 
 {% block title %}ShadeStudy - Stats Dashboard{% endblock %}
 
+{% block extra_head %}
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+{% endblock %}
+
 {% block extra_css %}
 <style>
   .stats-wrap { max-width: 1200px; margin: 0 auto; padding: 24px 16px 64px; }
@@ -53,6 +57,28 @@
     min-height: 140px;
     background: var(--surface-elevated, #f6f7f8);
   }
+  .plotly-chart {
+    width: 100%;
+    min-height: 300px;
+  }
+  .plot-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 300px;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    text-align: center;
+    padding: 12px;
+  }
+  details.table-collapse > summary {
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 0.82rem;
+    margin: 8px 0 4px;
+    user-select: none;
+  }
+  details.table-collapse[open] > summary { margin-bottom: 8px; }
   .timeline-responsive-host {
     width: 100%;
     min-height: 360px;
@@ -244,15 +270,33 @@
     </div>
   </section>
 
+  <section class="section tab-panel is-active" data-tab="core" id="stat-distributions">
+    <h2>Distributions &amp; learning curves</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      Interactive charts — hover for values, drag to zoom, double-click to reset.
+    </p>
+    <div class="chart-grid">
+      <div class="chart-card"><p class="chart-title">Histogram: final ΔE</p><div class="plotly-chart" id="plot-fw_hist_final_de"></div></div>
+      <div class="chart-card"><p class="chart-title">Histogram: attempt duration</p><div class="plotly-chart" id="plot-fw_hist_duration"></div></div>
+      <div class="chart-card"><p class="chart-title">Daily attempt volume (UTC)</p><div class="plotly-chart" id="plot-daily_volume"></div></div>
+      <div class="chart-card"><p class="chart-title">User activity buckets</p><div class="plotly-chart" id="plot-user_bucket"></div></div>
+      <div class="chart-card"><p class="chart-title">Learning: median final ΔE by trial</p><div class="plotly-chart" id="plot-fw_trial_median_de"></div></div>
+      <div class="chart-card"><p class="chart-title">Success rate by trial</p><div class="plotly-chart" id="plot-fw_trial_success"></div></div>
+      <div class="chart-card"><p class="chart-title">Median duration by trial</p><div class="plotly-chart" id="plot-fw_trial_dur"></div></div>
+      <div class="chart-card"><p class="chart-title">Avg steps to completion by trial</p><div class="plotly-chart" id="plot-h1_steps"></div></div>
+      <div class="chart-card"><p class="chart-title">Typical trajectory shape</p><div class="plotly-chart" id="plot-fw_trajectory"></div></div>
+    </div>
+  </section>
+
   <section class="section tab-panel is-active" data-tab="core" id="stat-age">
     <h2>1) Registered users and age pyramid</h2>
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Age pyramid (male blue, female red)</p>
-        <img class="stat-plot-img stat-plot" data-plot="age_pyramid" alt="Age pyramid" loading="lazy" />
+        <div class="plotly-chart" id="plot-age_pyramid"></div>
       </div>
     </div>
-    <div class="table-wrap" style="margin-top:10px;"><table id="agePyramidTable"></table></div>
+    <details class="table-collapse"><summary>Show data table</summary><div class="table-wrap" style="margin-top:10px;"><table id="agePyramidTable"></table></div></details>
   </section>
 
   <section class="section tab-panel is-active" data-tab="core" id="stat-plays-user">
@@ -260,10 +304,10 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Scatter: plays per user (top 30)</p>
-        <img class="stat-plot-img stat-plot" data-plot="plays_per_user" alt="Plays per user (scatter)" loading="lazy" />
+        <div class="plotly-chart" id="plot-plays_per_user"></div>
       </div>
     </div>
-    <div class="table-wrap" style="margin-top:10px;"><table id="playsPerUserTable"></table></div>
+    <details class="table-collapse"><summary>Show data table</summary><div class="table-wrap" style="margin-top:10px;"><table id="playsPerUserTable"></table></div></details>
   </section>
 
   <section class="section tab-panel is-active" data-tab="core" id="stat-attempts-color">
@@ -271,10 +315,10 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Scatter: attempts by target_color_id (color-coded)</p>
-        <img class="stat-plot-img stat-plot" data-plot="attempts_per_color" alt="Attempts per color (scatter)" loading="lazy" />
+        <div class="plotly-chart" id="plot-attempts_per_color"></div>
       </div>
     </div>
-    <div class="table-wrap" style="margin-top:10px;"><table id="attemptsPerColorTable"></table></div>
+    <details class="table-collapse"><summary>Show data table</summary><div class="table-wrap" style="margin-top:10px;"><table id="attemptsPerColorTable"></table></div></details>
   </section>
 
   <section class="section tab-panel is-active" data-tab="core" id="stat-unplayed-targets">
@@ -291,10 +335,10 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Swarm: final DeltaE per color (log Y, original tick labels)</p>
-        <img class="stat-plot-img stat-plot" data-plot="deltae_per_color" alt="DeltaE per color (swarm)" loading="lazy" />
+        <div class="plotly-chart" id="plot-deltae_per_color"></div>
       </div>
     </div>
-    <div class="table-wrap" style="margin-top:10px;"><table id="deltaETable"></table></div>
+    <details class="table-collapse"><summary>Show data table</summary><div class="table-wrap" style="margin-top:10px;"><table id="deltaETable"></table></div></details>
   </section>
 
   <section class="section tab-panel is-active" data-tab="core" id="stat-elapsed-color">
@@ -302,14 +346,14 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Swarm: elapsed time per color</p>
-        <img class="stat-plot-img stat-plot" data-plot="elapsed_per_color" alt="Elapsed time per color (swarm)" loading="lazy" />
+        <div class="plotly-chart" id="plot-elapsed_per_color"></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">Scatter: DeltaE vs elapsed time (log Y, original tick labels)</p>
-        <img class="stat-plot-img stat-plot" data-plot="deltae_elapsed_scatter" alt="DeltaE vs elapsed scatter" loading="lazy" />
+        <div class="plotly-chart" id="plot-deltae_elapsed_scatter"></div>
       </div>
     </div>
-    <div class="table-wrap" style="margin-top:10px;"><table id="elapsedTable"></table></div>
+    <details class="table-collapse"><summary>Show data table</summary><div class="table-wrap" style="margin-top:10px;"><table id="elapsedTable"></table></div></details>
   </section>
 
   <section class="section tab-panel" data-tab="analysis" id="stat-multivariate">
@@ -350,14 +394,14 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Controlled DeltaE by attempt number</p>
-        <img class="stat-plot-img stat-plot" data-plot="controlled_deltae_by_attempt" alt="Controlled DeltaE" loading="lazy" />
+        <div class="plotly-chart" id="plot-controlled_deltae_by_attempt"></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">Controlled elapsed time by attempt number</p>
-        <img class="stat-plot-img stat-plot" data-plot="controlled_elapsed_by_attempt" alt="Controlled elapsed time" loading="lazy" />
+        <div class="plotly-chart" id="plot-controlled_elapsed_by_attempt"></div>
       </div>
     </div>
-    <div class="table-wrap" style="margin-top:10px;"><table id="controlledTable"></table></div>
+    <details class="table-collapse"><summary>Show data table</summary><div class="table-wrap" style="margin-top:10px;"><table id="controlledTable"></table></div></details>
   </section>
 
   <section class="section tab-panel" data-tab="analysis" id="stat-correlations">
@@ -368,37 +412,52 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Scatter: Final DeltaE vs number of steps</p>
-        <img class="stat-plot-img stat-plot" data-plot="scatter_deltae_vs_steps" data-tier="advanced" alt="Scatter final DeltaE vs steps" loading="lazy" />
+        <div class="plotly-chart" id="plot-scatter_deltae_vs_steps"></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">Scatter: Elapsed time vs number of steps</p>
-        <img class="stat-plot-img stat-plot" data-plot="scatter_duration_vs_steps" data-tier="advanced" alt="Scatter elapsed time vs steps" loading="lazy" />
+        <div class="plotly-chart" id="plot-scatter_duration_vs_steps"></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">Correlation heatmap</p>
-        <img class="stat-plot-img stat-plot" data-plot="correlation_heatmap" data-tier="advanced" alt="Correlation heatmap" loading="lazy" />
+        <div class="plotly-chart" id="plot-correlation_heatmap"></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">Correlation league (ranked by |r|)</p>
-        <img class="stat-plot-img stat-plot" data-plot="correlation_league" data-tier="advanced" alt="Correlation league" loading="lazy" />
+        <div class="plotly-chart" id="plot-correlation_league"></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">Scatter: Final DeltaE vs recipe similarity</p>
-        <img class="stat-plot-img stat-plot" data-plot="deltae_vs_similarity" data-tier="advanced" alt="Scatter final DeltaE vs recipe similarity" loading="lazy" />
+        <div class="plotly-chart" id="plot-deltae_vs_similarity"></div>
       </div>
     </div>
   </section>
 
-  <section class="section tab-panel" data-tab="analysis" id="stat-recipe-sim">
+  <section class="section tab-panel" data-tab="analysis" id="stat-step-dynamics">
+    <h2>6b2) Step-level dynamics</h2>
+    <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
+      How individual actions improve the mix, by task difficulty (ΔE before the step) and by decision time, plus the outcome mix by final ΔE.
+    </p>
+    <div class="chart-grid">
+      <div class="chart-card"><p class="chart-title">Improving rate by trial</p><div class="plotly-chart" id="plot-h1_improving"></div></div>
+      <div class="chart-card"><p class="chart-title">Improving rate by difficulty (ΔE before)</p><div class="plotly-chart" id="plot-h2_improving"></div></div>
+      <div class="chart-card"><p class="chart-title">Mean step gain by ΔE before</p><div class="plotly-chart" id="plot-h2_gain"></div></div>
+      <div class="chart-card"><p class="chart-title">Improving rate by decision time</p><div class="plotly-chart" id="plot-h4_improving"></div></div>
+      <div class="chart-card"><p class="chart-title">Mean gain by decision time</p><div class="plotly-chart" id="plot-h4_gain"></div></div>
+      <div class="chart-card"><p class="chart-title">Outcome mix by final ΔE bucket</p><div class="plotly-chart" id="plot-h5_stop_success"></div></div>
+    </div>
+  </section>
+
+  <section class="section tab-panel is-active" data-tab="core" id="stat-recipe-sim">
     <h2>6c) Recipe-ratio similarity (perfect vs deviant)</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Similarity compares normalized drop ratios, so scaled recipes are treated as equivalent. Perfect means ratio-identical; deviant means any ratio difference.
     </p>
     <div class="cards" id="recipeSimilarityCards"></div>
-    <div class="table-wrap" style="margin-top:10px;"><table id="recipeSimilaritySampleTable"></table></div>
+    <details class="table-collapse"><summary>Show data table</summary><div class="table-wrap" style="margin-top:10px;"><table id="recipeSimilaritySampleTable"></table></div></details>
   </section>
 
-  <section class="section tab-panel" data-tab="analysis" id="stat-models">
+  <section class="section tab-panel is-active" data-tab="core" id="stat-models">
     <h2>6d) Attempt models (stable spec, HC3)</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Outcomes: <code>log₁p(final&nbsp;ΔE)</code>, <code>logit(similarity)</code>, and binary <code>perfect_ratio</code> (exact recipe match).
@@ -409,19 +468,19 @@
     <div class="chart-grid" style="margin-top:12px;">
       <div class="chart-card">
         <p class="chart-title">VIF (multicollinearity)</p>
-        <img class="stat-plot-img stat-plot" data-plot="mixed_models_vif" data-tier="advanced" alt="Mixed models VIF" loading="lazy" />
+        <div class="plotly-chart" id="plot-mixed_models_vif"></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">log₁p(ΔE): coefficient forest</p>
-        <img class="stat-plot-img stat-plot" data-plot="mixed_models_coef_logde" data-tier="advanced" alt="Coefficients log final DeltaE" loading="lazy" />
+        <div class="plotly-chart" id="plot-mixed_models_coef_logde"></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">logit(similarity): coefficient forest</p>
-        <img class="stat-plot-img stat-plot" data-plot="mixed_models_coef_similarity" data-tier="advanced" alt="Coefficients similarity" loading="lazy" />
+        <div class="plotly-chart" id="plot-mixed_models_coef_similarity"></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">Perfect ratio: odds ratios</p>
-        <img class="stat-plot-img stat-plot" data-plot="mixed_models_perfect_ratio_or" data-tier="advanced" alt="Odds ratios perfect ratio" loading="lazy" />
+        <div class="plotly-chart" id="plot-mixed_models_perfect_ratio_or"></div>
       </div>
     </div>
     <div class="chart-grid" style="margin-top:10px;">
@@ -595,21 +654,21 @@
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Share of archetypes by attempt number</p>
-        <img class="stat-plot-img stat-plot" data-plot="archetype_share_by_attempt_no" data-tier="advanced" alt="Archetype share by attempt no" loading="lazy" />
+        <div class="plotly-chart" id="plot-archetype_share_by_attempt_no"></div>
       </div>
       <div class="chart-card">
         <p class="chart-title">Transition heatmap (k → k+1)</p>
-        <img class="stat-plot-img stat-plot" data-plot="archetype_transition_heatmap" data-tier="advanced" alt="Archetype transition heatmap" loading="lazy" />
+        <div class="plotly-chart" id="plot-archetype_transition_heatmap"></div>
       </div>
     </div>
     <div class="chart-grid">
       <div class="chart-card">
         <p class="chart-title">Archetype × attempt number (table)</p>
-        <div class="table-wrap"><table id="archetypeByAttemptNoTable"></table></div>
+        <details class="table-collapse"><summary>Show data table</summary><div class="table-wrap"><table id="archetypeByAttemptNoTable"></table></div></details>
       </div>
       <div class="chart-card">
         <p class="chart-title">Transition counts</p>
-        <div class="table-wrap"><table id="archetypeTransitionsTable"></table></div>
+        <details class="table-collapse"><summary>Show data table</summary><div class="table-wrap"><table id="archetypeTransitionsTable"></table></div></details>
       </div>
     </div>
     <div class="table-wrap" style="margin-top:10px;"><table id="archetypeSequenceSamplesTable"></table></div>
@@ -689,12 +748,172 @@
   }
 
   function refreshPlotsForActiveTab() {
-    var t = Date.now();
+    // PNG diagnostics (the 6 hard/niche plots): load once, no cache-bust — the
+    // server + browser cache them. Plotly charts are drawn from JSON elsewhere.
     document.querySelectorAll('.tab-panel.is-active img.stat-plot').forEach(function(img) {
+      if (img.getAttribute('data-loaded')) return;
       var pid = img.getAttribute('data-plot');
       if (!pid) return;
-      img.src = '/api/stat/plot/' + encodeURIComponent(pid) + '.png?t=' + t;
+      img.src = '/api/stat/plot/' + encodeURIComponent(pid) + '.png';
+      img.setAttribute('data-loaded', '1');
     });
+    // Plotly charts drawn while their tab was hidden have 0 width; resize now.
+    if (window.Plotly) {
+      document.querySelectorAll('.tab-panel.is-active .plotly-chart').forEach(function(el) {
+        if (el && el.data) { try { Plotly.Plots.resize(el); } catch (e) {} }
+      });
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Plotly: theming + generic spec renderer
+  // -------------------------------------------------------------------------
+  var _plotlyTheme = null;
+  function plotlyTheme() {
+    if (_plotlyTheme) return _plotlyTheme;
+    var cs = getComputedStyle(document.documentElement);
+    function v(name, fb) { var x = cs.getPropertyValue(name); return (x && x.trim()) || fb; }
+    _plotlyTheme = {
+      font: v('--font-family', 'Nunito, sans-serif'),
+      text: v('--text-primary', '#2D2D2D'),
+      textSecondary: v('--text-secondary', '#6B6B6B'),
+      surface: v('--surface', '#FFFFFF'),
+      border: v('--border', '#E8E4DF'),
+      accent: v('--accent-primary', '#4A90D9')
+    };
+    return _plotlyTheme;
+  }
+  var PLOT_CONFIG = { displaylogo: false, responsive: true, displayModeBar: false };
+
+  function baseLayout(spec) {
+    var t = plotlyTheme();
+    var meta = (spec && spec.meta) || {};
+    var layout = {
+      title: { text: (spec && spec.title) || '', font: { size: 13, color: t.text }, x: 0, xanchor: 'left' },
+      margin: { l: 56, r: 16, t: 34, b: 46 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: t.font, color: t.textSecondary, size: 11 },
+      xaxis: { title: { text: (spec && spec.x_title) || '' }, gridcolor: t.border, zerolinecolor: t.border, automargin: true },
+      yaxis: { title: { text: (spec && spec.y_title) || '' }, gridcolor: t.border, zerolinecolor: t.border, automargin: true },
+      showlegend: false,
+      hovermode: 'closest'
+    };
+    if (meta.y_range) layout.yaxis.range = meta.y_range;
+    if (meta.x_range) layout.xaxis.range = meta.x_range;
+    if (meta.log_y) layout.yaxis.type = 'log';
+    if (meta.x_is_date) layout.xaxis.type = 'date';
+    if (meta.barmode) layout.barmode = meta.barmode;
+    return layout;
+  }
+
+  function renderEmpty(el, message) {
+    el.innerHTML = '<div class="plot-empty">' + escapeHtml(message || 'No data') + '</div>';
+  }
+
+  function renderPlot(elId, spec) {
+    var el = document.getElementById(elId);
+    if (!el || !window.Plotly) return;
+    if (!spec || spec.empty || spec.kind === 'empty') {
+      renderEmpty(el, spec && spec.message);
+      return;
+    }
+    var layout = baseLayout(spec);
+    var meta = spec.meta || {};
+    var traces = [];
+    if (spec.kind === 'bar') {
+      var horiz = meta.orientation === 'h';
+      (spec.traces || []).forEach(function(tr) {
+        var marker = tr.colors ? { color: tr.colors } : { color: tr.color || plotlyTheme().accent };
+        traces.push({ type: 'bar', name: tr.name || '', marker: marker, orientation: horiz ? 'h' : 'v', x: tr.x, y: tr.y });
+      });
+      if ((spec.traces || []).length > 1) layout.showlegend = true;
+    } else if (spec.kind === 'line') {
+      (spec.traces || []).forEach(function(tr) {
+        traces.push({ type: 'scatter', mode: tr.markers ? 'lines+markers' : 'lines', name: tr.name || '',
+          x: tr.x, y: tr.y, line: { color: tr.color || plotlyTheme().accent, width: 2 },
+          marker: { size: 5, color: tr.color || plotlyTheme().accent } });
+      });
+      if ((spec.traces || []).length > 1) layout.showlegend = true;
+    } else if (spec.kind === 'scatter') {
+      (spec.traces || []).forEach(function(tr) {
+        traces.push({ type: 'scattergl', mode: 'markers', name: tr.name || '', x: tr.x, y: tr.y,
+          marker: { size: 5, color: tr.color || '#1d4ed8', opacity: tr.opacity != null ? tr.opacity : 0.5 } });
+      });
+    } else if (spec.kind === 'strip') {
+      (spec.groups || []).forEach(function(g) {
+        traces.push({ type: 'box', name: g.name, y: g.y, boxpoints: 'all', jitter: 0.5, pointpos: 0,
+          marker: { size: 3, color: spec.point_color || '#7c3aed', opacity: 0.35 },
+          line: { width: 1, color: '#94a3b8' }, fillcolor: 'rgba(0,0,0,0)', hoveron: 'points+boxes' });
+      });
+      traces.push({ type: 'scatter', mode: 'markers', name: 'median',
+        x: (spec.groups || []).map(function(g) { return g.name; }),
+        y: (spec.groups || []).map(function(g) { return g.median; }),
+        marker: { symbol: 'diamond', size: 8, color: '#111827' } });
+      layout.xaxis.type = 'category';
+      layout.xaxis.tickangle = -40;
+      if (meta.ref_line != null) {
+        layout.shapes = [{ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: meta.ref_line, y1: meta.ref_line,
+          line: { color: '#dc2626', width: 1.4 } }];
+      }
+    } else if (spec.kind === 'heatmap') {
+      traces.push({ type: 'heatmap', z: spec.z, x: spec.x, y: spec.y, zmin: meta.zmin, zmax: meta.zmax,
+        colorscale: meta.colorscale || 'RdBu', reversescale: !!meta.reversescale, colorbar: { thickness: 12 } });
+      if (meta.annotate && Array.isArray(spec.z)) {
+        layout.annotations = [];
+        for (var i = 0; i < spec.y.length; i++) {
+          for (var j = 0; j < spec.x.length; j++) {
+            var val = spec.z[i][j];
+            if (val == null) continue;
+            layout.annotations.push({ x: spec.x[j], y: spec.y[i], text: Number(val).toFixed(2),
+              showarrow: false, font: { size: 10, color: '#111' } });
+          }
+        }
+      }
+    } else {
+      renderEmpty(el, 'Unsupported chart');
+      return;
+    }
+    Plotly.react(el, traces, layout, PLOT_CONFIG);
+  }
+
+  // Coefficient / odds-ratio "forest": horizontal points with CI whiskers.
+  function renderForest(elId, rows, opts) {
+    opts = opts || {};
+    var el = document.getElementById(elId);
+    if (!el || !window.Plotly) return;
+    rows = (rows || []).filter(function(r) { return r && r.term && String(r.term) !== 'Intercept'; });
+    if (!rows.length) { renderEmpty(el, 'No coefficients'); return; }
+    var valKey = opts.valueKey || 'coef', loKey = opts.loKey || 'ci_low', hiKey = opts.hiKey || 'ci_high';
+    var terms = rows.map(function(r) { return r.term; });
+    var vals = rows.map(function(r) { return Number(r[valKey]); });
+    var hi = rows.map(function(r, i) { var h = Number(r[hiKey]); return Number.isFinite(h) ? h - vals[i] : 0; });
+    var lo = rows.map(function(r, i) { var l = Number(r[loKey]); return Number.isFinite(l) ? vals[i] - l : 0; });
+    var trace = { type: 'scatter', mode: 'markers', x: vals, y: terms,
+      error_x: { type: 'data', symmetric: false, array: hi, arrayminus: lo, color: '#64748b', thickness: 1.4, width: 4 },
+      marker: { color: '#2563eb', size: 7 } };
+    var layout = baseLayout({ title: opts.title || '', x_title: opts.xTitle || '', y_title: '' });
+    var refX = opts.refX != null ? opts.refX : 0;
+    layout.shapes = [{ type: 'line', x0: refX, x1: refX, yref: 'paper', y0: 0, y1: 1,
+      line: { color: '#94a3b8', dash: 'dash', width: 1 } }];
+    if (opts.logX) layout.xaxis.type = 'log';
+    layout.margin.l = 140;
+    Plotly.react(el, [trace], layout, PLOT_CONFIG);
+  }
+
+  // Fetch a section of JSON chart specs and render each into #plot-<id>.
+  async function fetchAndRenderCharts(section) {
+    try {
+      var resp = await fetch('/api/stat/charts?section=' + encodeURIComponent(section));
+      var data = await resp.json();
+      if (data.status !== 'success' || !data.charts) return;
+      Object.keys(data.charts).forEach(function(pid) {
+        renderPlot('plot-' + pid, data.charts[pid]);
+      });
+    } catch (err) {
+      // leave placeholders in place; console for debugging
+      if (window.console) console.warn('charts ' + section + ' failed', err);
+    }
   }
 
   var lastTimelinePayload = null;
@@ -1321,6 +1540,185 @@
     }
   }
 
+  // -------------------------------------------------------------------------
+  // Plotly charts rendered from the /api/stat/summary payload (no extra fetch)
+  // -------------------------------------------------------------------------
+  var CHART_PALETTE = ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd',
+    '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf'];
+
+  function renderAgePyramid(rows) {
+    var el = document.getElementById('plot-age_pyramid');
+    if (!el || !window.Plotly) return;
+    if (!rows || !rows.length) { renderEmpty(el, 'No demographics data'); return; }
+    var order = ['<18', '18-24', '25-34', '35-44', '45-54', '55-64', '65+'];
+    var male = {}, female = {}, other = {};
+    rows.forEach(function(r) {
+      var b = r.age_bucket, g = String(r.gender_group || ''), n = Number(r.n_users) || 0;
+      if (g === 'male') male[b] = n; else if (g === 'female') female[b] = n; else other[b] = (other[b] || 0) + n;
+    });
+    var traces = [
+      { type: 'bar', orientation: 'h', name: 'Male', y: order,
+        x: order.map(function(b) { return -(male[b] || 0); }),
+        customdata: order.map(function(b) { return male[b] || 0; }),
+        hovertemplate: '%{y}: %{customdata}<extra>Male</extra>', marker: { color: '#2563eb' } },
+      { type: 'bar', orientation: 'h', name: 'Female', y: order,
+        x: order.map(function(b) { return female[b] || 0; }),
+        hovertemplate: '%{y}: %{x}<extra>Female</extra>', marker: { color: '#dc2626' } }
+    ];
+    if (order.some(function(b) { return other[b]; })) {
+      traces.push({ type: 'bar', orientation: 'h', name: 'Other', y: order,
+        x: order.map(function(b) { return other[b] || 0; }), marker: { color: '#6b7280' } });
+    }
+    var layout = baseLayout({ title: 'Age pyramid by gender', x_title: 'Users (male ← | → female)', y_title: '' });
+    layout.barmode = 'relative';
+    layout.showlegend = true;
+    Plotly.react(el, traces, layout, PLOT_CONFIG);
+  }
+
+  function renderPlaysPerUser(rows) {
+    var top = (rows || []).slice(0, 30);
+    renderPlot('plot-plays_per_user', {
+      kind: 'scatter', title: 'Plays per user (top 30)',
+      x_title: 'User (sorted by play count)', y_title: 'Plays',
+      traces: [{ x: top.map(function(r) { return String(r.user_id); }),
+        y: top.map(function(r) { return Number(r.n_plays) || 0; }), color: '#64748b', opacity: 0.85 }]
+    });
+  }
+
+  function renderAttemptsPerColor(rows) {
+    var el = document.getElementById('plot-attempts_per_color');
+    if (!el || !window.Plotly) return;
+    var agg = (rows || []).slice(0, 20);
+    if (!agg.length) { renderEmpty(el, 'No attempts data'); return; }
+    var colors = agg.map(function(r) {
+      var rr = Number(r.target_r), gg = Number(r.target_g), bb = Number(r.target_b);
+      return (isFinite(rr) && isFinite(gg) && isFinite(bb)) ? 'rgb(' + rr + ',' + gg + ',' + bb + ')' : '#0f766e';
+    });
+    var trace = { type: 'scatter', mode: 'markers',
+      x: agg.map(function(r) { return 'id ' + (r.target_color_id != null ? r.target_color_id : '?'); }),
+      y: agg.map(function(r) { return Number(r.n_attempts) || 0; }),
+      text: agg.map(function(r) { return String(r.target_name || ''); }),
+      marker: { size: 14, color: colors, line: { color: '#e5e7eb', width: 1 } },
+      hovertemplate: '%{text}<br>%{y} attempts<extra></extra>' };
+    var layout = baseLayout({ title: 'Attempts per target color (top 20)', x_title: 'Target color', y_title: 'Attempts' });
+    layout.xaxis.type = 'category';
+    layout.xaxis.tickangle = -45;
+    Plotly.react(el, [trace], layout, PLOT_CONFIG);
+  }
+
+  function _controlledTraces(rows, valueKey) {
+    var byColor = {};
+    (rows || []).forEach(function(r) { var c = String(r.target_name || ''); (byColor[c] = byColor[c] || []).push(r); });
+    var ranked = Object.keys(byColor).map(function(c) {
+      return { c: c, n: byColor[c].reduce(function(s, r) { return s + (Number(r.n_attempts) || 0); }, 0) };
+    }).sort(function(a, b) { return b.n - a.n; }).slice(0, 8);
+    return ranked.map(function(o, i) {
+      var pts = byColor[o.c].filter(function(r) { return Number(r.attempt_no) <= 10; })
+        .sort(function(a, b) { return a.attempt_no - b.attempt_no; });
+      return { type: 'scatter', mode: 'lines+markers', name: o.c,
+        x: pts.map(function(r) { return r.attempt_no; }),
+        y: pts.map(function(r) { var v = Number(r[valueKey]); return isFinite(v) ? v : null; }),
+        line: { color: CHART_PALETTE[i % CHART_PALETTE.length], width: 2 }, marker: { size: 5 } };
+    });
+  }
+
+  function renderControlledByAttempt(rows) {
+    var deEl = document.getElementById('plot-controlled_deltae_by_attempt');
+    var elEl = document.getElementById('plot-controlled_elapsed_by_attempt');
+    if (deEl && window.Plotly) {
+      var l1 = baseLayout({ title: 'Controlled final ΔE by attempt number', x_title: 'Attempt no (user × color)', y_title: 'Mean final ΔE' });
+      l1.showlegend = true; l1.legend = { font: { size: 9 } };
+      Plotly.react(deEl, _controlledTraces(rows, 'mean_delta_e'), l1, PLOT_CONFIG);
+    }
+    if (elEl && window.Plotly) {
+      var l2 = baseLayout({ title: 'Controlled elapsed time by attempt number', x_title: 'Attempt no (user × color)', y_title: 'Mean elapsed (s)' });
+      l2.showlegend = true; l2.legend = { font: { size: 9 } };
+      Plotly.react(elEl, _controlledTraces(rows, 'mean_elapsed_sec'), l2, PLOT_CONFIG);
+    }
+  }
+
+  function renderSimilarityScatter(rs) {
+    var rows = (rs && rs.scatter_rows) || [];
+    renderPlot('plot-deltae_vs_similarity', {
+      kind: 'scatter', title: 'Final ΔE vs recipe similarity',
+      x_title: 'Recipe similarity', y_title: 'Final ΔE',
+      traces: [{ x: rows.map(function(r) { return Number(r.similarity); }),
+        y: rows.map(function(r) { return Number(r.final_delta_e); }), color: '#1d4ed8', opacity: 0.35 }]
+    });
+  }
+
+  function renderMixedModelsCharts(mm) {
+    var ids = ['plot-mixed_models_vif', 'plot-mixed_models_coef_logde',
+      'plot-mixed_models_coef_similarity', 'plot-mixed_models_perfect_ratio_or'];
+    if (!mm || mm.status === 'error' || mm.status === 'empty') {
+      ids.forEach(function(id) { var e = document.getElementById(id); if (e) renderEmpty(e, (mm && mm.message) || 'Not available'); });
+      return;
+    }
+    renderPlot('plot-mixed_models_vif', {
+      kind: 'bar', title: 'VIF (multicollinearity)', x_title: '', y_title: 'VIF',
+      traces: [{ x: (mm.vif || []).map(function(r) { return r.feature; }),
+        y: (mm.vif || []).map(function(r) { return Number(r.vif); }), color: '#0ea5e9' }]
+    });
+    renderForest('plot-mixed_models_coef_logde', (mm.continuous && mm.continuous.coefs) || [],
+      { title: 'log₁p(ΔE): coefficients', xTitle: 'Coefficient (95% CI)' });
+    renderForest('plot-mixed_models_coef_similarity', (mm.similarity && mm.similarity.coefs) || [],
+      { title: 'logit(similarity): coefficients', xTitle: 'Coefficient (95% CI)' });
+    renderForest('plot-mixed_models_perfect_ratio_or', (mm.perfect_ratio && mm.perfect_ratio.odds_ratios) || [],
+      { title: 'Perfect ratio: odds ratios', xTitle: 'Odds ratio (95% CI, log)',
+        valueKey: 'odds_ratio', loKey: 'ci_low_or', hiKey: 'ci_high_or', refX: 1, logX: true });
+  }
+
+  function renderArchetypeShareChart(arch) {
+    var el = document.getElementById('plot-archetype_share_by_attempt_no');
+    if (!el || !window.Plotly) return;
+    var rows = (arch && arch.archetype_by_attempt_no) || [];
+    if (!rows.length) { renderEmpty(el, 'No archetype data'); return; }
+    var attemptNos = Array.from(new Set(rows.map(function(r) { return r.attempt_no; }))).sort(function(a, b) { return a - b; });
+    var archs = Array.from(new Set(rows.map(function(r) { return r.archetype; })));
+    var traces = archs.map(function(a, i) {
+      var m = {};
+      rows.filter(function(r) { return r.archetype === a; }).forEach(function(r) { m[r.attempt_no] = Number(r.share_within_attempt_no); });
+      return { type: 'bar', name: a, x: attemptNos, y: attemptNos.map(function(n) { return m[n] || 0; }),
+        marker: { color: CHART_PALETTE[i % CHART_PALETTE.length] } };
+    });
+    var layout = baseLayout({ title: 'Archetype share by attempt number', x_title: 'Attempt no', y_title: 'Share' });
+    layout.barmode = 'stack'; layout.showlegend = true; layout.legend = { font: { size: 9 } };
+    Plotly.react(el, traces, layout, PLOT_CONFIG);
+  }
+
+  function renderArchetypeTransitionChart(arch) {
+    var el = document.getElementById('plot-archetype_transition_heatmap');
+    if (!el || !window.Plotly) return;
+    var rows = (arch && arch.archetype_transitions) || [];
+    if (!rows.length) { renderEmpty(el, 'No transition data'); return; }
+    var froms = Array.from(new Set(rows.map(function(r) { return r.from_archetype; })));
+    var tos = Array.from(new Set(rows.map(function(r) { return r.to_archetype; })));
+    var idx = {};
+    rows.forEach(function(r) { idx[r.from_archetype + '|' + r.to_archetype] = Number(r.n); });
+    var z = froms.map(function(f) { return tos.map(function(t) { return idx[f + '|' + t] || 0; }); });
+    var layout = baseLayout({ title: 'Archetype transitions (k → k+1)', x_title: 'To (k+1)', y_title: 'From (k)' });
+    layout.annotations = [];
+    for (var i = 0; i < froms.length; i++) {
+      for (var j = 0; j < tos.length; j++) {
+        if (!z[i][j]) continue;
+        layout.annotations.push({ x: tos[j], y: froms[i], text: String(z[i][j]), showarrow: false, font: { size: 10, color: '#111' } });
+      }
+    }
+    Plotly.react(el, [{ type: 'heatmap', z: z, x: tos, y: froms, colorscale: 'Blues', colorbar: { thickness: 12 } }], layout, PLOT_CONFIG);
+  }
+
+  // Render every summary-derived Plotly chart present in a summary payload.
+  function renderSummaryCharts(data) {
+    if (!window.Plotly) return;
+    if (data.age_pyramid) renderAgePyramid(data.age_pyramid);
+    if (data.plays_per_user) renderPlaysPerUser(data.plays_per_user);
+    if (data.attempts_per_color) renderAttemptsPerColor(data.attempts_per_color);
+    if (data.controlled_by_attempt) renderControlledByAttempt(data.controlled_by_attempt);
+    if (data.recipe_similarity) renderSimilarityScatter(data.recipe_similarity);
+    if (data.mixed_models) renderMixedModelsCharts(data.mixed_models);
+    if (data.archetypes) { renderArchetypeShareChart(data.archetypes); renderArchetypeTransitionChart(data.archetypes); }
+  }
+
   async function loadStatsBasic() {
     var resp = await fetch('/api/stat/summary?scope=basic');
     var data = await resp.json();
@@ -1328,6 +1726,8 @@
     updateTargetColorMap(data.attempts_per_color || []);
 
     renderOverview(data.overview || {});
+    renderSummaryCharts(data);
+    fetchAndRenderCharts('core');
 
     buildTable(
       document.getElementById('agePyramidTable'),
@@ -1527,6 +1927,8 @@
     var data = await resp.json();
     if (data.status !== 'success') throw new Error(data.message || 'Failed to load advanced stats');
     updateTargetColorMap(data.attempts_per_color || []);
+    renderSummaryCharts(data);
+    fetchAndRenderCharts('analysis');
 
     renderSkipPerceptionDeltaE('skipIdenticalDeltaECards', data.skipped_identical_delta_e || {});
     renderSkipPerceptionDeltaE('skipAcceptableDeltaECards', data.skipped_acceptable_delta_e || {});
@@ -1784,7 +2186,11 @@
     });
   });
 
-  loadStatsBasic().catch(function(err) {
+  loadStatsBasic().then(function() {
+    // Promote the key results (mixed models, recipe similarity, archetypes) to
+    // the default view: load them progressively after the light overview paints.
+    ensureAdvancedLoaded().catch(function() {});
+  }).catch(function(err) {
     document.getElementById('overviewCards').innerHTML =
       '<div class="card"><div class="k">Error</div><div class="v" style="font-size:0.95rem;">' + err.message + '</div></div>';
   });
