@@ -1,0 +1,1006 @@
+{% extends "base.html" %}
+
+{% block title %}ShadeStudy – Gamut-riport{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .rpt-layout { max-width: 1180px; margin: 0 auto; padding: 20px 16px 80px; display: grid; grid-template-columns: 220px 1fr; gap: 28px; align-items: start; }
+  .rpt-toc { position: sticky; top: 16px; align-self: start; font-size: 0.86rem; }
+  .rpt-toc .toc-title { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-secondary); margin: 0 0 8px; }
+  .rpt-toc ol { list-style: none; margin: 0; padding: 0; }
+  .rpt-toc li { margin: 0 0 2px; }
+  .rpt-toc a { display: block; padding: 5px 8px; border-radius: 7px; color: var(--text-secondary); text-decoration: none; border-left: 2px solid transparent; }
+  .rpt-toc a:hover { background: var(--surface); color: var(--text-primary); }
+  .rpt-toc a.active { color: var(--accent-primary); border-left-color: var(--accent-primary); background: var(--surface); font-weight: 700; }
+  .rpt-main { min-width: 0; }
+  .rpt-head h1 { margin: 0 0 6px; font-size: 1.7rem; }
+  .rpt-head .lead { margin: 0 0 4px; color: var(--text-secondary); font-size: 0.98rem; }
+  .rpt-head .meta { margin: 2px 0 0; color: var(--text-secondary); font-size: 0.82rem; }
+  section.sec { scroll-margin-top: 16px; padding-top: 18px; }
+  .sec > h2 { margin: 26px 0 4px; font-size: 1.28rem; border-bottom: 2px solid var(--border); padding-bottom: 6px; }
+  .sec > h2 .num { display: inline-block; min-width: 1.5em; color: var(--accent-primary); font-weight: 800; }
+  .sec h3 { margin: 22px 0 8px; font-size: 1.02rem; }
+  .sec h4 { margin: 0 0 2px; font-size: 0.92rem; }
+  .intro { margin: 10px 0 16px; color: var(--text-primary); font-size: 1.02rem; line-height: 1.75; max-width: 74ch; }
+  ul.rules { max-width: 74ch; margin: 6px 0 14px; padding-left: 22px; color: var(--text-primary); font-size: 1.02rem; line-height: 1.7; }
+  ul.rules li { margin: 0 0 6px; }
+  dl.gloss { display: grid; grid-template-columns: max-content 1fr; gap: 8px 20px; max-width: 82ch; margin: 12px 0 6px; align-items: baseline; }
+  dl.gloss dt { font-weight: 800; color: var(--text-primary); font-size: 1rem; }
+  dl.gloss dd { margin: 0; color: var(--text-primary); font-size: 1rem; line-height: 1.65; }
+  ol.refs { max-width: 82ch; margin: 12px 0; padding-left: 22px; color: var(--text-primary); font-size: 0.98rem; line-height: 1.6; }
+  ol.refs li { margin: 0 0 10px; }
+  @media (max-width: 620px) { dl.gloss { grid-template-columns: 1fr; gap: 2px; } dl.gloss dd { margin: 0 0 8px; } }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 10px; margin: 14px 0 8px; }
+  .card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 11px 13px; }
+  .card .k { color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .card .vrow { display: flex; align-items: baseline; gap: 8px; margin-top: 5px; flex-wrap: wrap; }
+  .card .v { font-size: 1.4rem; font-weight: 800; line-height: 1.05; }
+  .card .s { margin-top: 3px; color: var(--text-secondary); font-size: 0.76rem; }
+  .card .spark { margin-top: 7px; height: 26px; }
+  .card.warn { border-color: var(--accent-warning); background: rgba(240,173,78,0.07); }
+  .delta { font-size: 0.76rem; font-weight: 800; padding: 1px 6px; border-radius: 20px; white-space: nowrap; }
+  .delta.up { color: #157347; background: rgba(21,115,71,0.12); }
+  .delta.down { color: #b02a37; background: rgba(176,42,55,0.12); }
+  .delta.flat { color: var(--text-secondary); background: var(--surface); }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
+  .panel { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px 14px 14px; }
+  .panel .cap { margin: 2px 0 8px; color: var(--text-secondary); font-size: 0.82rem; line-height: 1.5; }
+  .chart { width: 100%; min-height: 260px; }
+  .note { margin: 14px 0 18px; color: var(--text-primary); font-size: 1.02rem; line-height: 1.75; max-width: 74ch; }
+  .note strong { font-weight: 800; }
+  .tech { margin: 6px 0 16px; max-width: 74ch; }
+  .tech h4 { font-size: 1.08rem; margin: 22px 0 6px; color: var(--text-primary); }
+  .tech p { margin: 0 0 12px; font-size: 1.02rem; line-height: 1.75; color: var(--text-primary); }
+  .tech .def { color: var(--text-primary); }
+  .tech code, .intro code, .note code { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; font-size: 0.86em; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 0.82rem; background: var(--surface); }
+  .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); display: inline-block; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  th, td { border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; white-space: nowrap; }
+  th { color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  td.num, th.num { text-align: right; }
+  .table-wrap { overflow-x: auto; }
+  .funnel { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+  .funnel .step { display: flex; align-items: center; gap: 10px; }
+  .funnel .bar { height: 34px; border-radius: 8px; background: var(--accent-primary); display: flex; align-items: center; padding: 0 10px; color: #fff; font-weight: 700; font-size: 0.9rem; min-width: 60px; }
+  .funnel .lab { font-size: 0.86rem; color: var(--text-secondary); min-width: 150px; }
+  .loading { color: var(--text-secondary); font-size: 0.95rem; padding: 40px 0; text-align: center; }
+  @media (max-width: 900px) {
+    .rpt-layout { grid-template-columns: 1fr; }
+    .rpt-toc { position: static; margin-bottom: 8px; }
+    .rpt-toc ol { display: flex; flex-wrap: wrap; gap: 4px; }
+    .rpt-toc a { border-left: none; border: 1px solid var(--border); }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rpt-layout">
+  <nav class="rpt-toc" aria-label="Tartalom">
+    <p class="toc-title">Tartalom</p>
+    <ol>
+      <li><a href="#s0" data-sec="s0">Fogalmak</a></li>
+      <li><a href="#s1" data-sec="s1">1. Áttekintés</a></li>
+      <li><a href="#s2" data-sec="s2">2. A mérési módszer</a></li>
+      <li><a href="#s3" data-sec="s3">3. Toborzás és minta</a></li>
+      <li><a href="#s4" data-sec="s4">4. Célszínek és nehézség</a></li>
+      <li><a href="#s5" data-sec="s5">5. Teljesítmény és tanulás</a></li>
+      <li><a href="#s6" data-sec="s6">6. Lépésszintű viselkedés</a></li>
+      <li><a href="#s7" data-sec="s7">7. Gamifikáció és megtartás</a></li>
+      <li><a href="#s8" data-sec="s8">8. Hivatkozások</a></li>
+    </ol>
+  </nav>
+
+  <div class="rpt-main">
+    <div class="rpt-head">
+      <h1>ShadeStudy – gamut-riport</h1>
+      <p class="lead">Feltáró áttekintés a fő játékmenetről: a <strong>gamut-színkészletről</strong> (332 cél-szín).</p>
+      <p class="meta" id="metaLine">Betöltés…</p>
+    </div>
+
+    <div id="reportBody" style="display:none;">
+
+      <!-- 0) FOGALMAK -->
+      <section class="sec" id="s0">
+        <h2><span class="num">0.</span>Fogalmak – rövid szótár</h2>
+        <p class="intro">A riportban végig használt fogalmak röviden.</p>
+        <dl class="gloss">
+          <dt>Keverés</dt><dd>Egy befejezett próbálkozás: a felhasználó egy cél-színt igyekszik kikeverni. Az elemzés alapegysége.</dd>
+          <dt>Cél-szín (target)</dt><dd>A kikeverendő szín; a 332 elemű gamut-katalógus egy eleme.</dd>
+          <dt>Pigment / csepp</dt><dd>Az öt alap-„festék” (fehér, fekete, piros, sárga, kék). A keverék ezek egész számú cseppjeiből áll össze.</dd>
+          <dt>CIE</dt><dd>Commission Internationale de l’Éclairage – a nemzetközi színügyi szabványtestület.</dd>
+          <dt>CIELAB (L*, a*, b*)</dt><dd>Háromdimenziós színtér: L* a világosság, a* a zöld–piros, b* a kék–sárga tengely. Úgy szerkesztették, hogy a benne mért euklideszi távolság közelítse az észlelt színkülönbséget.</dd>
+          <dt>ΔE₀₀ (CIEDE2000)</dt><dd>Két szín eltérésének mérőszáma a CIELAB-ban, észleleti súlyozással. Kisebb = pontosabb; ΔE₀₀ ≈ 0 tökéletes egyezés. A skála a színtérben nem egyenletes.</dd>
+          <dt>Gamut</dt><dd>Az öt pigmenttel elérhető színek halmaza – a teljes színtér egy részhalmaza.</dd>
+          <dt>Recept / cseppszám</dt><dd>Egy cél-szín megoldása: a pigmentcseppek száma. A cseppszám a strukturális nehézség mérőszáma.</dd>
+          <dt>Mentés / feladás</dt><dd>Egy keverés zárása: mentés (a felhasználó elfogadja az eredményt) vagy feladás (továbblép / félbehagyja).</dd>
+          <dt>Teljesítési arány</dt><dd>A mentett (befejezett) keverések aránya az összes keveréshez képest.</dd>
+          <dt>Nehézségi sáv (band)</dt><dd>A cél-színek cseppszám szerinti csoportjai, amelyek fokozatosan nyílnak meg a játékban.</dd>
+          <dt>Fenotípus</dt><dd>Egy keverés szabályalapú viselkedési kategóriája a kikeverés útja alapján (lásd 6.6).</dd>
+        </dl>
+      </section>
+
+      <!-- 1) ÁTTEKINTÉS -->
+      <section class="sec" id="s1">
+        <h2><span class="num">1.</span>Áttekintés – napi állapot</h2>
+        <p class="intro">
+          A legfontosabb mutatók, mindegyik mellett a <strong>24 órás változás</strong> (az elmúlt 24 óra
+          az azt megelőző 24 órához mérve) és egy kis trendgörbe. Egy „keverés” egy befejezett próbálkozás,
+          amelyben a felhasználó egy cél-színt igyekszik kikeverni; a <strong>ΔE</strong> a kikevert és a
+          cél-szín közti színkülönbség (kisebb = pontosabb).
+        </p>
+        <div class="cards" id="kpiCards"></div>
+        <p class="intro" id="kpiProse" style="margin-top:10px;"></p>
+      </section>
+
+      <!-- 2) MÓDSZER -->
+      <section class="sec" id="s2">
+        <h2><span class="num">2.</span>Mi ez? – A mérési módszer</h2>
+        <p class="intro">Rövid technikai leírás arról, mit és hogyan mérek. Ez a szakasz referencia a többi eredmény értelmezéséhez.</p>
+
+        <div class="tech">
+          <h4>2.1 Ötpigmentes digitális keverés</h4>
+          <p>A játékos öt „festék” cseppjeiből kever ki egy színt: <strong>fehér (W), fekete (K), piros (R),
+             sárga (Y) és kék (B)</strong>. Minden lépésben egy csepp hozzáadása vagy elvétele történik.</p>
+          <p class="def">A keverés <strong>nem az RGB-értékek lineáris átlaga</strong>. Az alkalmazott modell
+             (<strong>Mixbox</strong>; Sochorová–Jamriška, SIGGRAPH Asia 2021) minden sRGB-színt egy látens
+             vektorrá képez le – lényegében pigmentkoncentrációkká egy rögzített pigmentbázison, plusz egy
+             maradéktaggal, hogy a leképzés pontosan invertálható legyen. Több szín keverékét e látens
+             vektorok <strong>cseppszámmal súlyozott konvex kombinációja</strong> (nemnegatív, 1-re normált
+             súlyokkal) adja.</p>
+          <p class="def">A látens vektor → sRGB visszaképzés viszont <strong>nemlineáris</strong>: a
+             Kubelka–Munk-féle kétállandós (abszorpció <em>K</em>, szórás <em>S</em>) reflexiós modellen alapul,
+             ahol a pigmentek <em>K</em> és <em>S</em> értékei additívan összegződnek, a reflexió pedig a
+             <em>K/S</em> hányados nemlineáris függvénye. A keverés így az inputok nemlineáris függvénye –
+             ezért ad például a kék és a sárga zöldet, nem szürkét.</p>
+        </div>
+
+        <div class="tech">
+          <h4>2.2 A cél–keverék eltérés: ΔE₀₀ (CIEDE2000)</h4>
+          <p><span class="def"><strong>CIE</strong> = Commission Internationale de l'Éclairage, a nemzetközi
+             színügyi szabványtestület.</span> A színeket a <strong>CIELAB</strong> (L*, a*, b*) térben ábrázolom,
+             amelyet úgy terveztek, hogy a benne mért távolságok közelítsék az emberi szemmel érzékelt
+             színkülönbséget.</p>
+          <p>A cél és a keverék közti eltérést a <strong>ΔE₀₀ (CIEDE2000)</strong> képlettel számolom – ez a
+             CIELAB-távolság továbbfejlesztett változata, amely külön súlyozza a világosság-, telítettség- és
+             színezetkülönbséget, és korrigálja ezek kölcsönhatásait. Durva nagyságrendek: <strong>ΔE ≈ 0</strong>
+             tökéletes egyezés; <strong>ΔE ≤ 1</strong> alig érzékelhető; <strong>ΔE ≈ 2</strong> a szemmel
+             épphogy észrevehető határ.</p>
+          <p class="def">A képlet lokális súlyfüggvényei és a színezet–króma forgatási tagja miatt a ΔE₀₀
+             <strong>nem euklideszi, helyfüggő</strong> mérőszám a CIELAB-ban: ugyanakkora ΔE₀₀ a színtér más-más
+             tartományában (más világosságnál, telítettségnél, színezetnél) eltérő <em>látható</em> különbséget
+             jelenthet. A pontos képlet a hivatkozott irodalomban (Sharma és mtsai. 2005; lásd 8.), a jelenséget
+             pedig a mintán is megnézem (lásd 2.6).</p>
+        </div>
+
+        <div class="tech">
+          <h4>2.3 Lépésszintű naplózás</h4>
+          <p>Minden egyes cseppművelet naplózódik (<code>mixing_attempt_events</code>): időbélyeg, a választott
+             pigment, a keverék a lépés előtt és után, valamint a <strong>ΔE a lépés előtt és után</strong>.</p>
+          <p class="def">Ebből visszaállítható a teljes kikeverési útvonal: látszik, hogy egy lépés közelebb vitt-e
+             a célhoz vagy távolabb – ez teszi lehetővé a 6. szakasz lépésszintű elemzését.</p>
+        </div>
+
+        <div class="tech">
+          <h4>2.4 Mentés és feladás</h4>
+          <p>Egy próbálkozás többféleképp zárulhat (<code>end_reason</code>): <strong>saved_match</strong> – a
+             játékos elérte és mentette a tökéletes találatot; <strong>saved_stop</strong> – mentett, de nem
+             tökéletes eredményt; <strong>skipped</strong> – feladta / továbblépett; <strong>abandoned</strong> –
+             félbehagyta; <strong>reset</strong> – nulláról újrakezdte a keverést.</p>
+        </div>
+
+        <div class="tech">
+          <h4>2.5 Szubjektív értékelési kategóriák</h4>
+          <p>Feladáskor a játékos megítéli, mennyire látja eltérőnek a keveréket a céltól:
+             <strong>azonos</strong> (identical), <strong>elfogadható</strong> (acceptable),
+             <strong>nem elfogadható</strong> (unacceptable). Ez a szubjektív ítélet a mért ΔE mellé rendelhető,
+             és lehetővé teszi az „elfogadhatósági küszöb” vizsgálatát.</p>
+        </div>
+
+        <div class="tech">
+          <h4>2.6 A küszöbök nem egyenletesek a színtérben (empirikus)</h4>
+          <p>A 2.2-ben említett helyfüggést a mintán is megnézem. A feladott, szubjektíven értékelt keverésekhez
+             tartozik a feladáskori ΔE₀₀ és a cél-szín CIELAB-helye. Az <strong>észlelhetőségi küszöböt</strong> az
+             „azonos” és az „elfogadható” ítéletek medián ΔE-jének felezőpontjaként, az <strong>elfogadhatósági
+             küszöböt</strong> az „elfogadható” és a „nem elfogadható” medián ΔE-jének felezőpontjaként becsülöm.
+             Mindezt az <em>L*</em>, az <em>a*</em> és a <em>b*</em> tengely mentén, harmadolt (alacsony / közép /
+             magas) sávokra bontva. Ha a küszöbök egyenletesek volnának, a sávok között nem mozognának.</p>
+          <p class="def" id="thresholdNote"></p>
+        </div>
+        <div class="grid2">
+          <div class="panel"><h4>Küszöbök az L* (világosság) mentén</h4><div class="chart" id="chThreshL"></div></div>
+          <div class="panel"><h4>Küszöbök az a* (zöld→piros) mentén</h4><div class="chart" id="chThreshA"></div></div>
+          <div class="panel"><h4>Küszöbök a b* (kék→sárga) mentén</h4><div class="chart" id="chThreshB"></div></div>
+        </div>
+      </section>
+
+      <!-- 3) TOBORZÁS ÉS MINTA -->
+      <section class="sec" id="s3">
+        <h2><span class="num">3.</span>Toborzás és minta</h2>
+        <p class="intro">Kik jutnak el a játékig, mennyit kevernek, milyen körülmények között – és emiatt mennyire általánosíthatók az eredmények.</p>
+
+        <h3>3.1 Regisztrációtól a keverésig (tölcsér)</h3>
+        <div class="funnel" id="funnel"></div>
+        <p class="intro" id="funnelProse"></p>
+
+        <h3>3.2 Aktivitás és lemorzsolódás</h3>
+        <div class="grid2">
+          <div class="panel"><h4>Keverésszám játékosonként</h4>
+            <p class="cap">Hány játékos esik az egyes keverésszám-sávokba.</p>
+            <div class="chart" id="chAttPerPlayer"></div></div>
+          <div class="panel"><h4>Lemorzsolódási görbe</h4>
+            <p class="cap">Hány játékos ér el legalább k keverést (k = 1, 2, 3 …).</p>
+            <div class="chart" id="chDropoff"></div></div>
+        </div>
+
+        <h3>3.3 Kimenetek és elemezhetőség</h3>
+        <div class="grid2">
+          <div class="panel"><h4>Hogyan ért véget egy keverés?</h4>
+            <p class="cap">Érdemben csak kétféle kimenet elemezhető: a <strong>teljesített</strong> (tökéletes,
+              mentett) keverés, és a <strong>feladott</strong> keverés, amelyhez a felhasználó szubjektív
+              ítéletet adott – <strong>azonos</strong> / <strong>elfogadható</strong> / <strong>nem elfogadható</strong>.
+              A többit (nulláról újrakezdés, értékelés nélküli félbehagyás, ismeretlen ok) egy szürke
+              „egyéb (nem elemzett)” sávba vontam. A számok a keverések darabszámát és arányát mutatják.</p>
+            <div class="chart" id="chEndReason"></div></div>
+          <div class="panel"><h4>Technikailag elemezhető keverések</h4>
+            <p class="cap">Rekonstruálható lépéssorú (lépés-eseményekkel bíró) keverések aránya.</p>
+            <div class="cards" id="analyzableCards"></div></div>
+        </div>
+
+        <h3>3.4 Eszköz, böngésző, kijelző (mérési torzítás)</h3>
+        <div class="panel">
+          <h4>Eszköztípus × böngésző (mozaikplot)</h4>
+          <p class="cap">Az oszlopok szélessége az eszköztípus gyakoriságával, a mezők magassága az adott
+            eszközön belüli böngészőmegoszlással arányos. A mezőben a keverések darabszáma.</p>
+          <div class="chart" id="chDeviceBrowser" style="min-height:360px;"></div>
+        </div>
+        <div class="grid2">
+          <div class="panel"><h4>Kijelző színtartománya (color gamut)</h4>
+            <p class="cap">Szélesebb (P3) és szűkebb (sRGB) kijelzők eltérően jelenítik meg ugyanazt a színt.</p>
+            <div class="chart" id="chScreenGamut"></div></div>
+          <div class="panel"><h4>Ablak / teljes képernyő</h4><div class="chart" id="chFullscreen"></div></div>
+        </div>
+        <div class="note bias" id="deviceNote"></div>
+
+        <h3>3.5 Kik és mikor (résztvevői és időbeli torzítás)</h3>
+        <div class="grid2">
+          <div class="panel"><h4>Nem szerinti megoszlás</h4>
+            <p class="cap">A gamut-színeket ténylegesen keverő, regisztrált felhasználók.</p>
+            <div class="chart" id="chGender"></div></div>
+          <div class="panel"><h4>Ország (időzóna alapján)</h4><div class="chart" id="chCountry"></div></div>
+          <div class="panel"><h4>Napszak (helyi óra)</h4><div class="chart" id="chHour"></div></div>
+          <div class="panel"><h4>A keverések eloszlása a felhasználók között</h4>
+            <p class="cap">Kumulatív (Lorenz-) görbe; a szaggatott vonal a teljes egyenletesség.</p>
+            <div class="chart" id="chLorenz"></div></div>
+        </div>
+        <div class="note bias" id="whoNote"></div>
+      </section>
+
+      <!-- 4) CÉLSZÍNEK ÉS NEHÉZSÉG -->
+      <section class="sec" id="s4">
+        <h2><span class="num">4.</span>A célszínek és a nehézség</h2>
+        <div class="tech">
+          <h4>4.1 A gamut-katalógus felépítése</h4>
+          <p>A cél-színek nem véletlenszerűek: az <strong>öt pigmenttel elérhető színtartomány (gamut)
+             egyenletes lefedésére</strong> terveztem őket, hogy a színtér minden része arányosan
+             képviselve legyen. Ezt <strong>bőrszínekkel egészítettem ki</strong> (Xiao és mtsai. munkája
+             alapján), mert azok gyakorlati (pl. orvosi-esztétikai) szempontból kiemelten fontosak, és
+             sűrűbb mintavételt érdemelnek.</p>
+          <p class="def" id="catalogClasses"></p>
+        </div>
+        <div class="panel">
+          <h4>A célszínek a színtérben (CIELAB tér: a*, b*, L*)</h4>
+          <p class="cap">Minden pont egy cél-szín, a saját valódi színére festve, a háromdimenziós CIELAB
+            térben: <em>a*</em> (zöld→piros), <em>b*</em> (kék→sárga), <em>L*</em> (világosság). <strong>Húzással
+            forgatható.</strong> Az egyenletes térbeli kitöltés a gamut egyenletes lefedését mutatja; a nagyobb,
+            sötét szegélyű pontok a sűrűbben mintázott bőrszínek (Xiao 2017).</p>
+          <div class="chart" id="chGamutMap" style="min-height:520px;"></div>
+        </div>
+        <div class="grid2">
+          <div class="panel"><h4>A színtér lefedettsége</h4>
+            <p class="cap">A 332 színből hány kapott 0, 1–2, 3–5 … keverést.</p>
+            <div class="chart" id="chCoverage"></div></div>
+          <div class="panel"><h4>Strukturális nehézség: a recept cseppszáma</h4>
+            <p class="cap">Hány cél-szín receptje áll adott számú cseppből (2–28).</p>
+            <div class="chart" id="chDropDist"></div></div>
+        </div>
+
+        <h3>4.2 Mi a „kikeverési nehézség”?</h3>
+        <p class="intro">
+          Kétféleképp közelítem. <strong>Strukturális nehézség</strong>: a referenciarecept cseppszáma
+          (hány cseppből áll a megoldás). <strong>Megfigyelt nehézség</strong>: a játékosok tényleges
+          eredménye az adott színen (medián ΔE, feladási arány, lépésszám). A kettő nem ugyanaz – megnézem, mennyire függenek össze.
+        </p>
+        <div class="grid2">
+          <div class="panel"><h4>Cseppszám ↔ megfigyelt medián ΔE</h4>
+            <p class="cap">Egy pont = egy cél-szín (≥3 keverés), a pont színe a valódi cél-szín.</p>
+            <div class="chart" id="chDiffDe"></div></div>
+          <div class="panel"><h4>Cseppszám ↔ feladási arány</h4>
+            <p class="cap">Ugyanaz, de a feladott (skipped/abandoned) próbálkozások arányával.</p>
+            <div class="chart" id="chDiffGiveup"></div></div>
+        </div>
+        <div class="note key" id="diffNote"></div>
+        <h3>4.3 A legnehezebben kikeverhető színek (megfigyelt)</h3>
+        <div class="panel table-wrap"><table id="hardTable"></table></div>
+      </section>
+
+      <!-- 5) TELJESÍTMÉNY ÉS TANULÁS -->
+      <section class="sec" id="s5">
+        <h2><span class="num">5.</span>Teljesítmény, tanulás és a nehézségi rendszer</h2>
+        <div class="grid2">
+          <div class="panel"><h4>A végső ΔE eloszlása</h4>
+            <p class="cap">A bal szél (ΔE ≈ 0) a tökéletes találatok.</p>
+            <div class="chart" id="chDeHist"></div></div>
+          <div class="panel"><h4>Napi keverésszám</h4>
+            <p class="cap">A gamut-keverések napi darabszáma.</p>
+            <div class="chart" id="chDaily"></div></div>
+          <div class="panel"><h4>Végső ΔE az ismételt próbálkozások szerint</h4>
+            <p class="cap">Ugyanaz a felhasználó ugyanazt a színt hányadszor próbálja (n = keverésszám).</p>
+            <div class="chart" id="chLearn"></div></div>
+          <div class="panel"><h4>A vizsgálati küszöbök elérése a próbálkozás sorszáma szerint</h4>
+            <p class="cap">A keverések aránya, amely a mintán kihozott átlagos <strong>észlelhetőségi</strong>,
+              illetve <strong>elfogadhatósági</strong> küszöb alá ér (nem a fix ΔE ≤ 2 alá). A küszöbök a 2.6-ból.</p>
+            <div class="chart" id="chLearnRate"></div></div>
+        </div>
+        <div class="note" id="learnNote"></div>
+        <div class="tech">
+          <h4>A nehézségi létra és a megtartás</h4>
+          <p>A cseppszám a játék <strong>nehézségi létrája</strong> is: a színek sávokba (band) rendezve
+             fokozatosan nyílnak meg, ahogy a játékos halad. A kevesebb cseppes (egyszerűbb) színek elöl,
+             a több cseppesek hátrébb. Cél a fokozatos kihívás fenntartása – hogy a feladat se ne legyen
+             unalmasan könnyű, se ne legyen csüggesztően nehéz –, ami a 7. szakasz megtartási logikájához kapcsolódik.</p>
+        </div>
+      </section>
+
+      <!-- 6) LÉPÉSSZINTŰ VISELKEDÉS -->
+      <section class="sec" id="s6">
+        <h2><span class="num">6.</span>Lépésszintű viselkedés és stratégiák</h2>
+        <p class="intro">Mit csinálnak a játékosok cseppről cseppre. Az elemzés a rekonstruálható lépéssorú próbálkozásokra épül.</p>
+        <div class="cards" id="stepCards"></div>
+        <div class="grid2" style="margin-top:12px;">
+          <div class="panel"><h4>Pigmentválasztás</h4>
+            <p class="cap">Mely „festékekből” tesznek be a legtöbbet (hozzáadás-események).</p>
+            <div class="chart" id="chPigments"></div></div>
+          <div class="panel"><h4>Lépésszám ↔ végeredmény</h4>
+            <p class="cap">Minden pont egy keverés: a cselekvések száma (x) és a végső ΔE (y). Zöld = teljesítve,
+              piros = feladva. A fekete vonal a medián végső ΔE cselekvésszám-sávonként. (Néhány szélső érték a
+              tengelyeken kívülre esik.)</p>
+            <div class="chart" id="chStepsOutcome"></div></div>
+          <div class="panel"><h4>Rontó lépések ↔ feladás</h4>
+            <p class="cap">A ΔE-t rontó lépések aránya a teljesített és a feladott próbálkozásokban.</p>
+            <div class="chart" id="chWorsen"></div></div>
+          <div class="panel"><h4>Cselekvésszám ↔ feladás</h4>
+            <p class="cap">Átlagos cselekvésszám a teljesített és a feladott próbálkozásokban.</p>
+            <div class="chart" id="chActions"></div></div>
+        </div>
+        <div class="note key" id="worsenNote"></div>
+
+        <h3>6.6 Stratégiai fenotípusok (szabályalapú)</h3>
+        <p class="intro">
+          Minden keverést a viselkedése alapján soroltam kategóriába egyszerű, determinisztikus szabályokkal
+          (nem klaszterezéssel). Három jellemzőt használok keverésenként:
+        </p>
+        <p class="intro">
+          <strong>hossz</strong> = a cselekvések (csepp hozzáadása/elvétele) száma;
+          <strong>javító arány</strong> = a ΔE-t csökkentő lépések aránya az összes olyan lépésből, ahol a
+          ΔE-változás mérhető; <strong>eltávolítási arány</strong> = az „elvétel” cselekvések aránya az
+          összes cselekvésből.
+        </p>
+        <p class="intro">A besorolás sorrendben, az első illeszkedő szabály szerint történik:</p>
+        <ul class="rules">
+          <li><strong>rövid próba</strong> — ha a hossz &lt; 3 cselekvés.</li>
+          <li><strong>egyenletes javító</strong> — ha a javító arány ≥ 70% <em>és</em> az eltávolítási arány ≤ 15%.</li>
+          <li><strong>próbálgató</strong> — ha az eltávolítási arány ≥ 30% <em>vagy</em> a javító arány ≤ 45%.</li>
+          <li><strong>kitartó finomító</strong> — ha a hossz ≥ 12 cselekvés (és egyik fenti sem illett).</li>
+          <li><strong>vegyes</strong> — minden más eset.</li>
+        </ul>
+        <p class="intro">Feltáró jellegű felosztás; a küszöbök választása gyakorlati, nem modellből származik.</p>
+        <div class="grid2">
+          <div class="panel"><h4>A fenotípusok gyakorisága</h4><div class="chart" id="chPheno"></div></div>
+          <div class="panel"><h4>A fenotípusok kimenete</h4>
+            <p class="cap">Medián végső ΔE és feladási arány típusonként.</p>
+            <div class="table-wrap"><table id="phenoTable"></table></div></div>
+        </div>
+      </section>
+
+      <!-- 7) GAMIFIKÁCIÓ -->
+      <section class="sec" id="s7">
+        <h2><span class="num">7.</span>Gamifikáció és user-retenció</h2>
+        <p class="intro">
+          A gamifikációt és a többi ösztönzőt egyetlen célból építettem be: hogy megakadályozzam – vagy
+          legalább csökkentsem – az önkéntes részvételből fakadó erős lemorzsolódást (lásd 3.2). A feladat
+          ugyanis nehéz: összpontosítást és kitartást kíván. A résztvevőket nehéz „odaültetni” a feladathoz.
+        </p>
+        <p class="intro">
+          Eredetileg <strong>személyes részvételt</strong> szerettem volna: a kísérletet digitálisan, számítógép
+          előtt végeznék, de felügyelt körülmények között. Ezt azonban nagyon nehéz megszervezni. Az online,
+          önkéntes forma könnyebben elér embereket, cserébe viszont bárki bármikor abbahagyhatja – ezért a
+          motiváció fenntartását a rendszerbe kellett beépítenem. Az alábbi elemek mind ezt szolgálják:
+        </p>
+        <p class="intro">
+          <strong>XP és szintek:</strong> minden befejezett feladat tapasztalati pontot ad, a szintlépés látható
+          haladást mutat. <strong>Sorozat (streak):</strong> a napi visszatérést jutalmazza. <strong>Nehézségi
+          sávok:</strong> a nehezebb színek fokozatosan nyílnak meg, így a kihívás a képességgel együtt nő – se
+          túl könnyű, se csüggesztően nehéz. <strong>Gamut-oklevél:</strong> a színtér „meghódítása” megosztható
+          oklevéllel zárul, ami hosszú távú célt ad. <strong>Kihívások és emlékeztetők:</strong> a megosztható,
+          fej-fej melletti kihívás új játékosokat is behozhat, az opcionális napi emlékeztető pedig a
+          visszatérést ösztönzi.
+        </p>
+        <p class="intro">
+          Ezek együtt a rendszeres, kitartó részvételt próbálják fenntartani ott, ahol személyes felügyelet
+          nélkül a lemorzsolódás egyébként nagyon erős lenne.
+        </p>
+      </section>
+
+      <!-- 8) HIVATKOZÁSOK -->
+      <section class="sec" id="s8">
+        <h2><span class="num">8.</span>Hivatkozások</h2>
+        <ol class="refs">
+          <li><strong>Mixbox (pigmentkeverés):</strong> Sochorová, Š., &amp; Jamriška, O. (2021).
+            <em>Practical Pigment Mixing for Digital Painting.</em> ACM Transactions on Graphics, 40(6)
+            (SIGGRAPH Asia 2021), 234. doi:10.1145/3478513.3480549</li>
+          <li><strong>CIEDE2000 (képlet, implementáció):</strong> Sharma, G., Wu, W., &amp; Dalal, E. N. (2005).
+            <em>The CIEDE2000 color-difference formula: implementation notes, supplementary test data, and
+            mathematical observations.</em> Color Research &amp; Application, 30(1), 21–30.</li>
+          <li><strong>CIEDE2000 (kidolgozás):</strong> Luo, M. R., Cui, G., &amp; Rigg, B. (2001).
+            <em>The development of the CIE 2000 colour-difference formula: CIEDE2000.</em>
+            Color Research &amp; Application, 26(5), 340–350.</li>
+          <li><strong>Észlelhetőségi / elfogadhatósági küszöbök:</strong> Paravina, R. D., et&nbsp;al. (2015).
+            <em>Color difference thresholds in dentistry.</em> Journal of Esthetic and Restorative Dentistry,
+            27(S1), S1–S9.</li>
+          <li><strong>Bőrszín-tartomány (Xiao et al.):</strong> Xiao, K., Yates, J. M., Zardawi, F., et&nbsp;al. (2017).
+            <em>Characterising the variations in ethnic skin colours: a new calibrated data base for human skin.</em>
+            Skin Research and Technology, 23(1), 21–29.</li>
+          <li><strong>Kubelka–Munk-elmélet:</strong> Kubelka, P., &amp; Munk, F. (1931).
+            <em>Ein Beitrag zur Optik der Farbanstriche.</em> Zeitschrift für technische Physik, 12, 593–601.</li>
+          <li><strong>CIELAB / kolorimetria:</strong> CIE (2004). <em>Colorimetry</em> (3rd ed.), CIE 15:2004.
+            Commission Internationale de l’Éclairage, Vienna.</li>
+        </ol>
+      </section>
+
+    </div>
+    <div class="loading" id="loadingMsg">A riport adatainak betöltése…</div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var cs = getComputedStyle(document.documentElement);
+  function cssv(n, fb) { var x = cs.getPropertyValue(n); return (x && x.trim()) || fb; }
+  var T = {
+    font: cssv('--font-family', 'Nunito, sans-serif'), text: cssv('--text-primary', '#2D2D2D'),
+    sub: cssv('--text-secondary', '#6B6B6B'), border: cssv('--border', '#E8E4DF'),
+    accent: cssv('--accent-primary', '#4A90D9'), warn: cssv('--accent-warning', '#F0AD4E'),
+    ok: cssv('--accent-success', '#5CB85C'), danger: cssv('--accent-danger', '#D9534F')
+  };
+  var CFG = { displaylogo: false, responsive: true, displayModeBar: false };
+  var PIG = { red: '#d64545', yellow: '#e6b422', white: '#e8e8e8', blue: '#3b6fd6', black: '#333333' };
+  var PIG_HU = { white: 'fehér', black: 'fekete', yellow: 'sárga', red: 'piros', blue: 'kék' };
+  var DEV_HU = { mobile: 'mobil', desktop: 'asztali', tablet: 'tablet', ismeretlen: 'ismeretlen' };
+  var GAM_HU = { srgb: 'sRGB (szűk)', p3: 'P3 (széles)', rec2020: 'Rec.2020', ismeretlen: 'ismeretlen' };
+
+  function fmt(x, d) { if (x == null || isNaN(+x)) return '—'; return (+x).toFixed(d == null ? 0 : d); }
+  function pct(x, d) { if (x == null || isNaN(+x)) return '—'; return (100 * (+x)).toFixed(d == null ? 1 : d) + '%'; }
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function niceDate(t) { return t ? String(t).slice(0, 10) : '—'; }
+  function rgbCss(c) { return 'rgb(' + [c.r, c.g, c.b].map(function (v) { return Math.max(0, Math.min(255, v | 0)); }).join(',') + ')'; }
+
+  function baseLayout(o) {
+    o = o || {};
+    return {
+      margin: o.margin || { l: 46, r: 12, t: 8, b: 38 },
+      paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: T.font, color: T.sub, size: 11 },
+      xaxis: Object.assign({ gridcolor: T.border, zerolinecolor: T.border, automargin: true }, o.xaxis || {}),
+      yaxis: Object.assign({ gridcolor: T.border, zerolinecolor: T.border, automargin: true }, o.yaxis || {}),
+      showlegend: !!o.showlegend, legend: { orientation: 'h', y: 1.15, font: { size: 10 } },
+      hovermode: 'closest', barmode: o.barmode || 'group'
+    };
+  }
+  function bar(id, x, y, o) {
+    o = o || {}; var el = document.getElementById(id); if (!el) return;
+    var lay = baseLayout(o);
+    if (o.xtitle) lay.xaxis.title = { text: o.xtitle, font: { size: 10 } };
+    if (o.ytitle) lay.yaxis.title = { text: o.ytitle, font: { size: 10 } };
+    if (o.tickpct) lay.yaxis.tickformat = '.0%';
+    Plotly.react(el, [{
+      type: 'bar', x: x, y: y, orientation: o.horizontal ? 'h' : 'v',
+      marker: { color: o.colors || o.color || T.accent },
+      hovertemplate: (o.hover || '%{x}: %{y}') + '<extra></extra>'
+    }], lay, CFG);
+  }
+
+  function sparkline(series, invert) {
+    var vals = series.filter(function (v) { return v != null && !isNaN(v); });
+    if (vals.length < 2) return '';
+    var min = Math.min.apply(null, vals), max = Math.max.apply(null, vals);
+    var W = 120, H = 26, n = series.length, rng = (max - min) || 1;
+    var pts = [], i;
+    for (i = 0; i < n; i++) {
+      var v = series[i]; if (v == null || isNaN(v)) continue;
+      var x = (n === 1) ? 0 : (i / (n - 1)) * (W - 2) + 1;
+      var yv = ((v - min) / rng); var y = H - 2 - yv * (H - 4);
+      pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+    }
+    var last = vals[vals.length - 1], first = vals[0];
+    var col = (last === first) ? T.sub : (((last > first) !== !!invert) ? '#157347' : '#b02a37');
+    return '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:26px;">' +
+      '<polyline fill="none" stroke="' + col + '" stroke-width="1.6" points="' + pts.join(' ') + '"/></svg>';
+  }
+  function deltaBadge(cur, prev, invert, asPct) {
+    if (cur == null || prev == null || isNaN(cur) || isNaN(prev)) return '';
+    var diff = cur - prev;
+    if (Math.abs(diff) < 1e-9 || prev === 0 && cur === 0) return '<span class="delta flat">→ 0%</span>';
+    var rel = prev !== 0 ? (diff / Math.abs(prev)) : (diff > 0 ? 1 : -1);
+    var good = (diff > 0) !== !!invert;
+    var arrow = diff > 0 ? '▲' : '▼';
+    var txt = asPct ? (Math.abs(diff * 100).toFixed(1) + ' pp') : (Math.abs(rel * 100).toFixed(0) + '%');
+    return '<span class="delta ' + (good ? 'up' : 'down') + '">' + arrow + ' ' + txt + '</span>';
+  }
+  function kpiCard(k, v, sub, opts) {
+    opts = opts || {};
+    return '<div class="card' + (opts.cls ? ' ' + opts.cls : '') + '">' +
+      '<div class="k">' + esc(k) + '</div>' +
+      '<div class="vrow"><span class="v">' + v + '</span>' + (opts.badge || '') + '</div>' +
+      (sub ? '<div class="s">' + esc(sub) + '</div>' : '') +
+      (opts.spark ? '<div class="spark">' + opts.spark + '</div>' : '') + '</div>';
+  }
+
+  // ------------------------------------------------------------------ render
+  function renderReport(d) {
+    var o = d.overview || {}, tr = d.trend || {}, cur = tr.cur || {}, prev = tr.prev || {};
+    var sp = d.spark || [];
+    function col(key) { return sp.map(function (r) { return r[key]; }); }
+
+    document.getElementById('metaLine').textContent =
+      'Időszak: ' + niceDate(o.first_play_ts) + ' – ' + niceDate(o.last_play_ts) +
+      ' · tiszta gamut-korszak (' + niceDate(d.era_start_utc) + ' UTC-től) · csak feltáró elemzés';
+
+    var coveredPct = o.gamut_targets_total ? (o.gamut_targets_played / o.gamut_targets_total) : null;
+    document.getElementById('kpiCards').innerHTML = [
+      kpiCard('Keverésok (össz.)', fmt(o.total_plays), 'utolsó 24 óra: ' + fmt(cur.plays),
+        { badge: deltaBadge(cur.plays, prev.plays, false), spark: sparkline(col('plays'), false) }),
+      kpiCard('Aktív játékos (24 ó)', fmt(cur.users), 'előző 24 ó: ' + fmt(prev.users),
+        { badge: deltaBadge(cur.users, prev.users, false), spark: sparkline(col('users'), false) }),
+      kpiCard('Új regisztráció (24 ó)', fmt(tr.new_users_24h), 'összes regisztrált: ' + fmt(o.registered_users), {}),
+      kpiCard('Medián ΔE', fmt(o.median_delta_e, 2), '24 ó: ' + fmt(cur.median_de, 2),
+        { badge: deltaBadge(cur.median_de, prev.median_de, true), spark: sparkline(col('median_de'), true) }),
+      kpiCard('Tökéletes találat', pct(o.perfect_rate), '24 ó: ' + pct(cur.perfect_rate),
+        { badge: deltaBadge(cur.perfect_rate, prev.perfect_rate, false, true), spark: sparkline(col('perfect_rate'), false) }),
+      kpiCard('Teljesítési arány', pct(o.completion_rate), '24 ó: ' + pct(cur.completion_rate),
+        { badge: deltaBadge(cur.completion_rate, prev.completion_rate, false, true), spark: sparkline(col('completion_rate'), false) }),
+      kpiCard('Medián idő', fmt(o.median_duration_sec, 0) + ' mp', '24 ó: ' + fmt(cur.median_time, 0) + ' mp',
+        { badge: deltaBadge(cur.median_time, prev.median_time, true), spark: sparkline(col('median_time'), true) }),
+      kpiCard('Lefedett színek', fmt(o.gamut_targets_played) + ' / ' + fmt(o.gamut_targets_total), pct(coveredPct) + ' a készletből', {})
+    ].join('');
+    document.getElementById('kpiProse').innerHTML =
+      'Összesen <strong>' + fmt(o.total_plays) + '</strong> gamut-keverés <strong>' + fmt(o.distinct_users) +
+      '</strong> játékostól. A tipikus (medián) színeltérés <strong>ΔE ' + fmt(o.median_delta_e, 2) +
+      '</strong>, a keverések <strong>' + pct(o.perfect_rate) + '</strong>-a tökéletes találat, ' +
+      '<strong>' + pct(o.acceptable_rate) + '</strong>-a ΔE ≤ 2.';
+
+    // 3.1 funnel — regisztrált → kevert (a legfontosabb konverzió)
+    var f = d.funnel || {};
+    var fsteps = [['Regisztrált', f.registered], ['Kevert (legalább egyet)', f.gamut_players]];
+    var fmax = f.registered || 1;
+    document.getElementById('funnel').innerHTML = fsteps.map(function (s) {
+      var w = Math.max(6, 100 * (s[1] || 0) / fmax);
+      return '<div class="step"><span class="lab">' + esc(s[0]) + '</span>' +
+        '<div class="bar" style="width:' + w + '%;">' + fmt(s[1]) + '</div></div>';
+    }).join('');
+    var convP = f.registered ? pct((f.gamut_players || 0) / f.registered) : '—';
+    document.getElementById('funnelProse').innerHTML =
+      'A <strong>' + fmt(f.registered) + '</strong> regisztráltból <strong>' + fmt(f.gamut_players) +
+      '</strong> végzett legalább egy keverést (' + convP + '). A többiek regisztráltak, de nem kezdtek bele.';
+
+    // 3.2
+    var apo = d.attempts_per_player || [];
+    bar('chAttPerPlayer', apo.map(function (r) { return r.bucket; }), apo.map(function (r) { return r.n_players; }),
+      { color: T.accent, xtitle: 'keverés / játékos', ytitle: 'játékos', hover: '%{x}: %{y} játékos' });
+    var dof = d.dropoff || [];
+    (function () {
+      var lay = baseLayout({ xaxis: { title: { text: 'legalább k keverés', font: { size: 10 } }, dtick: 2 },
+        yaxis: { title: { text: 'játékosok száma', font: { size: 10 } }, rangemode: 'tozero' } });
+      Plotly.react(document.getElementById('chDropoff'), [{
+        type: 'scatter', mode: 'lines+markers', x: dof.map(function (r) { return r.k; }), y: dof.map(function (r) { return r.players; }),
+        line: { color: T.accent, width: 2 }, marker: { size: 5, color: T.accent },
+        fill: 'tozeroy', fillcolor: 'rgba(74,144,217,0.10)',
+        hovertemplate: '≥%{x} keverés: %{y} játékos<extra></extra>'
+      }], lay, CFG);
+    })();
+
+    // 3.3 outcomes: only the analysable ones (perfect + rated give-ups); the
+    // rest pooled as "egyéb (nem elemzett)".
+    (function () {
+      var OUT_ORDER = ['Teljesítve (tökéletes)', 'Feladva – azonos', 'Feladva – elfogadható',
+        'Feladva – nem elfogadható', 'Egyéb (nem elemzett)'];
+      var OUT_COL = {
+        'Teljesítve (tökéletes)': T.ok, 'Feladva – azonos': '#60a5fa',
+        'Feladva – elfogadható': T.warn, 'Feladva – nem elfogadható': T.danger,
+        'Egyéb (nem elemzett)': '#9ca3af'
+      };
+      var g = {}, tot = 0;
+      (d.outcomes || []).forEach(function (r) { g[r.outcome] = (+r.n); tot += (+r.n); });
+      var labels = OUT_ORDER.filter(function (k) { return g[k]; });
+      var lay = baseLayout({ margin: { l: 150, r: 52, t: 8, b: 34 },
+        xaxis: { title: { text: 'keverés', font: { size: 10 } } },
+        yaxis: { autorange: 'reversed' } });
+      Plotly.react(document.getElementById('chEndReason'), [{
+        type: 'bar', orientation: 'h',
+        y: labels, x: labels.map(function (k) { return g[k]; }),
+        marker: { color: labels.map(function (k) { return OUT_COL[k]; }) },
+        text: labels.map(function (k) { return fmt(g[k]) + ' · ' + pct(g[k] / (tot || 1), 0); }),
+        textposition: 'outside', cliponaxis: false,
+        hovertemplate: '%{y}: %{x} keverés<extra></extra>'
+      }], lay, CFG);
+    })();
+    var an = d.analyzable || {};
+    document.getElementById('analyzableCards').innerHTML = [
+      kpiCard('Összes keverés', fmt(an.total), '', {}),
+      kpiCard('Van lépésszáma', fmt(an.with_steps), an.total ? pct(an.with_steps / an.total) : '', {}),
+      kpiCard('Rekonstruálható lépéssor', fmt(an.with_reconstructable), an.total ? pct(an.with_reconstructable / an.total) : '', { cls: 'warn' })
+    ].join('');
+
+    // 3.4 device × browser mosaic (marimekko), + gamut/fullscreen
+    var dv = d.bias_device || [];
+    (function () {
+      var rows = d.device_browser || [];
+      if (!rows.length) { document.getElementById('chDeviceBrowser').innerHTML = '<p class="cap">Nincs adat</p>'; return; }
+      var DEVN = { mobile: 'mobil', desktop: 'asztali', tablet: 'tablet', ismeretlen: 'ismeretlen' };
+      var BR_COL = { Chrome: '#4A90D9', Safari: '#5CB85C', 'Samsung Internet': '#8b5cf6',
+        Firefox: '#F0AD4E', Edge: '#0ea5e9', 'egyéb': '#9ca3af' };
+      var devTot = {}, brTot = {}, cell = {}, grand = 0;
+      rows.forEach(function (r) {
+        var n = +r.n; devTot[r.device] = (devTot[r.device] || 0) + n;
+        brTot[r.browser] = (brTot[r.browser] || 0) + n; cell[r.device + '|' + r.browser] = n; grand += n;
+      });
+      var devices = Object.keys(devTot).sort(function (a, b) { return devTot[b] - devTot[a]; });
+      var browsers = Object.keys(brTot).sort(function (a, b) { return brTot[b] - brTot[a]; });
+      var shapes = [], anns = [], x0 = 0, GAP = 0.008;
+      devices.forEach(function (dev) {
+        var w = devTot[dev] / grand, x1 = x0 + w, y0 = 0;
+        browsers.forEach(function (br2) {
+          var n = cell[dev + '|' + br2] || 0; if (!n) return;
+          var y1 = y0 + n / devTot[dev];
+          shapes.push({ type: 'rect', xref: 'x', yref: 'y', x0: x0, x1: Math.max(x0, x1 - GAP),
+            y0: y0, y1: Math.max(y0, y1 - 0.004), fillcolor: BR_COL[br2] || '#9ca3af', line: { width: 0 } });
+          if ((y1 - y0) > 0.11 && w > 0.06)
+            anns.push({ x: (x0 + x1) / 2, y: (y0 + y1) / 2, text: String(n), showarrow: false, font: { size: 10, color: '#fff' } });
+          y0 = y1;
+        });
+        if (w > 0.05)
+          anns.push({ x: (x0 + x1 - GAP) / 2, y: -0.02, yanchor: 'top', showarrow: false,
+            text: (DEVN[dev] || dev) + ' · ' + pct(devTot[dev] / grand, 0), font: { size: 10, color: T.sub } });
+        x0 = x1;
+      });
+      var traces = browsers.map(function (br2) {
+        return { type: 'scatter', mode: 'markers', x: [null], y: [null], name: br2, marker: { size: 10, color: BR_COL[br2] || '#9ca3af' } };
+      });
+      var lay = baseLayout({ showlegend: true, margin: { l: 8, r: 8, t: 8, b: 42 },
+        xaxis: { visible: false, range: [0, 1], fixedrange: true },
+        yaxis: { visible: false, range: [-0.09, 1], fixedrange: true } });
+      lay.shapes = shapes; lay.annotations = anns; lay.legend = { orientation: 'h', y: 1.1, font: { size: 10 } };
+      Plotly.react(document.getElementById('chDeviceBrowser'), traces, lay, CFG);
+    })();
+    var sg = d.bias_gamut || [];
+    bar('chScreenGamut', sg.map(function (r) { return GAM_HU[r.label] || r.label; }), sg.map(function (r) { return r.n_attempts; }),
+      { color: T.warn, ytitle: 'keverés', hover: '%{x}: %{y}' });
+    var fsc = d.bias_fullscreen || [];
+    bar('chFullscreen', fsc.map(function (r) { return r.label; }), fsc.map(function (r) { return r.n_attempts; }),
+      { color: T.accent, ytitle: 'keverés', hover: '%{x}: %{y}' });
+    (function () {
+      var st = sg.reduce(function (a, r) { return a + (+r.n_attempts); }, 0) || 1;
+      var srgb = (sg.find(function (r) { return r.label === 'srgb'; }) || {}).n_attempts || 0;
+      var p3 = (sg.find(function (r) { return r.label === 'p3'; }) || {}).n_attempts || 0;
+      var dt = dv.reduce(function (a, r) { return a + (+r.n_attempts); }, 0) || 1;
+      var mob = (dv.find(function (r) { return r.label === 'mobile'; }) || {}).n_attempts || 0;
+      document.getElementById('deviceNote').innerHTML =
+        '<strong>Mérési torzítás a kijelzőn.</strong> A keverések ' + pct(mob / dt) + '-a mobilon történt, és a ' +
+        'kijelzők ' + pct(srgb / st) + '-a szűk (sRGB), ' + pct(p3 / st) + '-a széles (P3) színtartományú. ' +
+        'Ugyanaz a cél-szín eltérően jelenik meg a különböző kijelzőkön, ezért a ΔE-értékek eszközök között nem tökéletesen összemérhetők.';
+    })();
+
+    // 3.5 gender / country / hour / lorenz
+    var dem = d.demographics || {};
+    var nf = +dem.n_female || 0, nm = +dem.n_male || 0, noth = (+dem.n_players || 0) - nf - nm;
+    var gl = ['nő', 'férfi'], gv = [nf, nm]; if (noth > 0) { gl.push('egyéb / n.a.'); gv.push(noth); }
+    bar('chGender', gl, gv, { color: T.warn, ytitle: 'játékos', hover: '%{x}: %{y} játékos' });
+    var ct = (d.bias_country || []).slice(0, 8);
+    bar('chCountry', ct.map(function (r) { return r.n_attempts; }), ct.map(function (r) { return r.label; }),
+      { horizontal: true, color: T.accent, xtitle: 'keverés', hover: '%{y}: %{x}', margin: { l: 110, r: 12, t: 8, b: 36 } });
+    var hr = (d.bias_hour || []).filter(function (r) { return r.label !== 'ismeretlen'; })
+      .slice().sort(function (a, b) { return (+a.label) - (+b.label); });
+    bar('chHour', hr.map(function (r) { return +r.label; }), hr.map(function (r) { return r.n_attempts; }),
+      { color: T.accent, xtitle: 'helyi óra', ytitle: 'keverés', hover: '%{x}:00 – %{y}' });
+    (function () {
+      var counts = (d.per_user_counts || []).slice().sort(function (a, b) { return b - a; });
+      var tot = counts.reduce(function (a, b) { return a + b; }, 0), xs = [0], ys = [0], cum = 0, i;
+      for (i = 0; i < counts.length; i++) { cum += counts[i]; xs.push((i + 1) / counts.length); ys.push(tot ? cum / tot : 0); }
+      var lay = baseLayout({ xaxis: { title: { text: 'felhasználók hányada (legaktívabbtól)', font: { size: 10 } }, range: [0, 1], tickformat: '.0%' },
+        yaxis: { title: { text: 'keverések kumulatív hányada', font: { size: 10 } }, range: [0, 1], tickformat: '.0%' } });
+      Plotly.react(document.getElementById('chLorenz'), [
+        { type: 'scatter', mode: 'lines', x: [0, 1], y: [0, 1], line: { color: T.sub, width: 1, dash: 'dash' }, hoverinfo: 'skip' },
+        { type: 'scatter', mode: 'lines', x: xs, y: ys, fill: 'tozeroy', fillcolor: 'rgba(74,144,217,0.12)', line: { color: T.accent, width: 2 },
+          hovertemplate: 'a legaktívabb %{x:.0%} adja a keverések %{y:.0%}-át<extra></extra>' }
+      ], lay, CFG);
+    })();
+    var uc = d.user_concentration || {};
+    document.getElementById('whoNote').innerHTML =
+      '<strong>Erős résztvevői torzítás.</strong> A játékosok között a nők aránya ' + pct(nf / Math.max(1, nf + nm + noth)) +
+      ' (' + nf + ' nő / ' + nm + ' férfi), a medián életkor ' + fmt(dem.median_age, 0) + ' év, és a keverések túlnyomó része ' +
+      'egyetlen országból, mobilról származik. A legaktívabb 10% adja a keverések <strong>' + pct(uc.top10pct_share) +
+      '</strong>-át. A minta nem reprezentatív a teljes népességre.';
+
+    // 4. catalog + difficulty
+    var cc = d.catalog_classes || [];
+    var ccMap = {}; cc.forEach(function (r) { ccMap[r.classification] = r.n; });
+    document.getElementById('catalogClasses').innerHTML =
+      'A készlet <strong>' + fmt(o.gamut_targets_total) + '</strong> színből áll: <strong>' +
+      fmt(ccMap['even_gamut_v2'] || 0) + '</strong> egyenletes gamut-lefedő szín és <strong>' +
+      fmt(ccMap['even_gamut_v2_skin'] || 0) + '</strong> bőrszín-sűrítés.';
+
+    // 4.1 gamut map: targets in 3-D CIELAB (a*, b*, L*), coloured by their RGB
+    (function () {
+      var cpAll = d.catalog_points || [];
+      var bg = cpAll.filter(function (p2) { return !p2.skin; });
+      var sk = cpAll.filter(function (p2) { return p2.skin; });
+      function trace(pts, size, name) {
+        return {
+          type: 'scatter3d', mode: 'markers', name: name,
+          x: pts.map(function (p2) { return p2.a; }),
+          y: pts.map(function (p2) { return p2.bb; }),
+          z: pts.map(function (p2) { return p2.L; }),
+          text: pts.map(function (p2) { return p2.name; }),
+          marker: { size: size, color: pts.map(function (p2) { return 'rgb(' + p2.r + ',' + p2.g + ',' + p2.blue + ')'; }),
+                    line: { width: 0.5, color: 'rgba(0,0,0,0.35)' } },
+          hovertemplate: '%{text}<br>L* %{z:.0f}, a* %{x:.0f}, b* %{y:.0f}<extra></extra>'
+        };
+      }
+      var lay = {
+        margin: { l: 0, r: 0, t: 0, b: 0 },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        font: { family: T.font, color: T.sub, size: 11 },
+        showlegend: true, legend: { orientation: 'h', y: 1.02, font: { size: 10 } },
+        scene: {
+          xaxis: { title: 'a* (zöld→piros)', gridcolor: T.border, zerolinecolor: '#bbb', backgroundcolor: 'rgba(0,0,0,0)' },
+          yaxis: { title: 'b* (kék→sárga)', gridcolor: T.border, zerolinecolor: '#bbb', backgroundcolor: 'rgba(0,0,0,0)' },
+          zaxis: { title: 'L* (világosság)', gridcolor: T.border, zerolinecolor: '#bbb', backgroundcolor: 'rgba(0,0,0,0)', range: [0, 100] },
+          camera: { eye: { x: 1.5, y: 1.5, z: 0.9 } },
+          aspectmode: 'cube'
+        }
+      };
+      Plotly.react(document.getElementById('chGamutMap'),
+        [trace(bg, 3, 'gamut'), trace(sk, 5, 'bőrszín (Xiao)')], lay, CFG);
+    })();
+
+    var order = ['0', '1–2', '3–5', '6–10', '11–20', '21+'], cmap = {};
+    (d.coverage_buckets || []).forEach(function (r) { cmap[r.bucket] = +r.n_targets; });
+    bar('chCoverage', order, order.map(function (k) { return cmap[k] || 0; }),
+      { colors: order.map(function (k) { return k === '0' ? T.danger : T.accent; }), xtitle: 'keverés / cél-szín', ytitle: 'cél-színek', hover: '%{x}: %{y} szín' });
+    var dd = d.drop_dist || [];
+    bar('chDropDist', dd.map(function (r) { return r.drops; }), dd.map(function (r) { return r.n_colors; }),
+      { color: T.accent, xtitle: 'recept cseppszáma', ytitle: 'célszínek száma', hover: '%{x} csepp: %{y} szín' });
+
+    var pc = (d.per_color || []).filter(function (r) { return (r.n_plays || 0) >= 3 && r.sum_drops != null; });
+    function scatterDiff(id, ykey, ytitle, tickpct) {
+      var lay = baseLayout({ xaxis: { title: { text: 'recept cseppszáma', font: { size: 10 } }, rangemode: 'tozero' },
+        yaxis: { title: { text: ytitle, font: { size: 10 } }, rangemode: 'tozero' } });
+      if (tickpct) lay.yaxis.tickformat = '.0%';
+      Plotly.react(document.getElementById(id), [{
+        type: 'scatter', mode: 'markers',
+        x: pc.map(function (r) { return r.sum_drops; }), y: pc.map(function (r) { return r[ykey]; }),
+        text: pc.map(function (r) { return r.name_hu || r.name; }),
+        marker: { size: 9, color: pc.map(function (r) { return rgbCss(r); }), line: { width: 1, color: 'rgba(0,0,0,0.25)' } },
+        hovertemplate: '%{text}<br>cseppszám %{x}, ' + ytitle + ' %{y:' + (tickpct ? '.0%' : '.2f') + '}<extra></extra>'
+      }], lay, CFG);
+    }
+    scatterDiff('chDiffDe', 'med_de', 'medián ΔE', false);
+    scatterDiff('chDiffGiveup', 'giveup_rate', 'feladási arány', true);
+    var corr = d.difficulty_corr || {};
+    document.getElementById('diffNote').innerHTML =
+      '<strong>A strukturális és a megfigyelt nehézség nem ugyanaz.</strong> A recept cseppszáma és a megfigyelt ' +
+      'medián ΔE közti korreláció gyenge (r = ' + fmt(corr.drops_vs_de, 2) + '): a hosszabb recept önmagában nem ' +
+      'jár rosszabb végeredménnyel. A cseppszám és a <em>feladási</em> arány viszont közepesen összefügg (r = ' +
+      fmt(corr.drops_vs_giveup, 2) + '): a bonyolultabb recepteket gyakrabban adják fel. Vannak rövid receptű, ' +
+      'mégis nehezen eltalálható színek is.';
+
+    var hard = (d.per_color || []).filter(function (r) { return (r.n_plays || 0) >= 5; }).slice(0, 12);
+    var hh = '<thead><tr><th>Szín</th><th class="num">Cseppszám</th><th class="num">Pigmentek</th>' +
+      '<th class="num">Medián ΔE</th><th class="num">Feladás</th><th class="num">Keverés</th></tr></thead><tbody>';
+    hard.forEach(function (r) {
+      hh += '<tr><td><span class="swatch" style="background:' + rgbCss(r) + '"></span> ' + esc(r.name_hu || r.name) + '</td>' +
+        '<td class="num">' + fmt(r.sum_drops) + '</td><td class="num">' + fmt(r.n_pigments) + '</td>' +
+        '<td class="num">' + fmt(r.med_de, 2) + '</td><td class="num">' + pct(r.giveup_rate, 0) + '</td>' +
+        '<td class="num">' + fmt(r.n_plays) + '</td></tr>';
+    });
+    document.getElementById('hardTable').innerHTML = hh + '</tbody>';
+
+    // 5. performance
+    var hx = [], hy = [];
+    (d.de_hist || []).forEach(function (r) { var b = +r.bucket; hx.push(b >= 1 && b <= 20 ? ((b - 1) * 0.5 + 0.25) : 10.25); hy.push(+r.n); });
+    bar('chDeHist', hx, hy, { color: T.accent, xtitle: 'végső ΔE', ytitle: 'keverés', hover: 'ΔE≈%{x}: %{y}' });
+    var dvl = d.daily_volume || [];
+    bar('chDaily', dvl.map(function (r) { return r.day; }), dvl.map(function (r) { return +r.n; }), { color: T.accent, ytitle: 'keverés', hover: '%{x}: %{y}' });
+    var lr = d.learning || [];
+    (function () {
+      var lay = baseLayout({ xaxis: { dtick: 1, title: { text: 'próbálkozás sorszáma', font: { size: 10 } } },
+        yaxis: { title: { text: 'medián végső ΔE', font: { size: 10 } }, rangemode: 'tozero' } });
+      Plotly.react(document.getElementById('chLearn'), [{
+        type: 'scatter', mode: 'lines+markers+text', x: lr.map(function (r) { return r.attempt_no; }), y: lr.map(function (r) { return r.median_de; }),
+        text: lr.map(function (r) { return 'n=' + r.n; }), textposition: 'top center', textfont: { size: 9, color: T.sub },
+        line: { color: T.accent, width: 2 }, marker: { size: 7, color: T.accent },
+        hovertemplate: '%{x}. próbálkozás: medián ΔE %{y:.2f}<extra></extra>'
+      }], lay, CFG);
+    })();
+    (function () {
+      var ov = (d.thresholds || {}).overall || {};
+      var perc = ov.perceptibility, acc = ov.acceptability;
+      var lay = baseLayout({ showlegend: true, xaxis: { dtick: 1, title: { text: 'próbálkozás sorszáma', font: { size: 10 } } },
+        yaxis: { title: { text: 'keverések aránya', font: { size: 10 } }, range: [0, 1], tickformat: '.0%' } });
+      Plotly.react(document.getElementById('chLearnRate'), [
+        { type: 'scatter', mode: 'lines+markers', name: 'elfogadhatóság (ΔE ≤ ' + fmt(acc, 1) + ')',
+          x: lr.map(function (r) { return r.attempt_no; }), y: lr.map(function (r) { return r.acc_rate; }),
+          line: { color: T.ok, width: 2 }, marker: { size: 7, color: T.ok },
+          hovertemplate: '%{x}. próbálkozás: %{y:.0%} (elfogadhatóság)<extra></extra>' },
+        { type: 'scatter', mode: 'lines+markers', name: 'észlelhetőség (ΔE ≤ ' + fmt(perc, 1) + ')',
+          x: lr.map(function (r) { return r.attempt_no; }), y: lr.map(function (r) { return r.perc_rate; }),
+          line: { color: T.accent, width: 2 }, marker: { size: 7, color: T.accent },
+          hovertemplate: '%{x}. próbálkozás: %{y:.0%} (észlelhetőség)<extra></extra>' }
+      ], lay, CFG);
+    })();
+    document.getElementById('learnNote').innerHTML =
+      '<strong>Óvatosan az „ismételt próbálkozás” görbével.</strong> A medián ΔE nem csökken a sorszámmal – de ez ' +
+      'nem azt jelenti, hogy a gyakorlás ront. Aki újra próbálkozik ugyanazzal a színnel, jellemzően az, akinek ' +
+      'elsőre nem sikerült; a nehezebb esetek felül vannak reprezentálva a későbbi próbálkozásokban ' +
+      '(kiválasztódási hatás). Leíró megfigyelés, nem oksági következtetés.';
+
+    // 2.6 perceptibility / acceptability thresholds by L*, a*, b*
+    (function () {
+      var th = d.thresholds || {};
+      var BANDS = ['alacsony', 'közép', 'magas'];
+      function drawTh(id, arr) {
+        var rows = BANDS.map(function (bn) {
+          return (arr || []).find(function (r) { return r.band === bn; }) || { band: bn };
+        });
+        var lay = baseLayout({ showlegend: true, margin: { l: 44, r: 12, t: 8, b: 34 },
+          xaxis: { type: 'category' },
+          yaxis: { title: { text: 'ΔE₀₀', font: { size: 10 } }, rangemode: 'tozero' } });
+        Plotly.react(document.getElementById(id), [
+          { type: 'scatter', mode: 'lines+markers', name: 'elfogadhatóság', x: BANDS,
+            y: rows.map(function (r) { return r.acceptability; }),
+            line: { color: T.danger, width: 2 }, marker: { size: 7, color: T.danger },
+            hovertemplate: 'elfogadhatóság (%{x}): ΔE %{y:.2f}<extra></extra>' },
+          { type: 'scatter', mode: 'lines+markers', name: 'észlelhetőség', x: BANDS,
+            y: rows.map(function (r) { return r.perceptibility; }),
+            line: { color: T.accent, width: 2 }, marker: { size: 7, color: T.accent },
+            hovertemplate: 'észlelhetőség (%{x}): ΔE %{y:.2f}<extra></extra>' }
+        ], lay, CFG);
+      }
+      drawTh('chThreshL', th.L); drawTh('chThreshA', th.a); drawTh('chThreshB', th.b);
+      function rng(arr, key) {
+        var vs = (arr || []).map(function (r) { return r[key]; }).filter(function (v) { return v != null; });
+        return vs.length ? (Math.min.apply(null, vs).toFixed(1) + '–' + Math.max.apply(null, vs).toFixed(1)) : '—';
+      }
+      var allA = [].concat(th.L || [], th.a || [], th.b || []);
+      document.getElementById('thresholdNote').innerHTML =
+        (th.n_total || 0) + ' értékelt, feladott keverésen. Az észlelhetőségi küszöb a sávok között ΔE ' +
+        rng(allA, 'perceptibility') + ', az elfogadhatósági küszöb ΔE ' + rng(allA, 'acceptability') +
+        ' között mozog – vagyis a küszöbök a színtér tartománya szerint eltérnek, nem állandók. ' +
+        '(A becslés medián-alapú, kis sávonkénti elemszámmal; feltáró jellegű.)';
+    })();
+
+    document.getElementById('loadingMsg').style.display = 'none';
+    document.getElementById('reportBody').style.display = 'block';
+    resizeAll();
+  }
+
+  function renderSteps(d) {
+    var ss = d.step_summary || {};
+    document.getElementById('stepCards').innerHTML = [
+      kpiCard('ΔE-t csökkentő lépések', pct(ss.improving_rate), 'a mért lépések közül', {}),
+      kpiCard('ΔE-t rontó lépések', pct(ss.worsening_rate), 'a mért lépések közül', { cls: 'warn' }),
+      kpiCard('Eltávolítás (undo) aránya', pct(ss.remove_rate), 'a cselekvések közül', {}),
+      kpiCard('Elemzett próbálkozás', fmt(ss.n_attempts), fmt(ss.total_actions) + ' cselekvés', {})
+    ].join('');
+
+    var pg = d.pigments || [];
+    bar('chPigments', pg.map(function (r) { return PIG_HU[r.color] || r.color; }), pg.map(function (r) { return +r.n; }),
+      { colors: pg.map(function (r) { return PIG[r.color] || T.accent; }), ytitle: 'csepp', hover: '%{x}: %{y} csepp' });
+
+    // steps ↔ outcome: all attempts as a scatter (completed vs gave up), with a
+    // median-ΔE-by-bucket line overlaid. Axes clipped to the bulk (outliers hidden).
+    (function () {
+      var pts = d.scatter_steps || [];
+      var comp = pts.filter(function (p2) { return !p2.g; });
+      var gav = pts.filter(function (p2) { return p2.g; });
+      function sc(arr, color, name) {
+        return { type: 'scattergl', mode: 'markers', name: name,
+          x: arr.map(function (p2) { return p2.s; }), y: arr.map(function (p2) { return p2.de; }),
+          marker: { size: 5, color: color, opacity: 0.45 },
+          hovertemplate: name + '<br>%{x} cselekvés, ΔE %{y:.2f}<extra></extra>' };
+      }
+      var so = d.steps_vs_outcome || [];
+      var BC = { '1–2': 1.5, '3–5': 4, '6–10': 8, '11–20': 15, '21–40': 30, '41+': 50 };
+      var med = so.filter(function (r) { return r.median_de != null; });
+      var lay = baseLayout({ showlegend: true, margin: { l: 46, r: 12, t: 8, b: 40 },
+        xaxis: { title: { text: 'cselekvésszám', font: { size: 10 } }, range: [0, 70] },
+        yaxis: { title: { text: 'végső ΔE', font: { size: 10 } }, range: [0, 16] } });
+      Plotly.react(document.getElementById('chStepsOutcome'), [
+        sc(comp, T.ok, 'teljesítve'), sc(gav, T.danger, 'feladva'),
+        { type: 'scatter', mode: 'lines+markers', name: 'medián',
+          x: med.map(function (r) { return BC[r.bucket]; }), y: med.map(function (r) { return r.median_de; }),
+          line: { color: '#111827', width: 2 }, marker: { size: 6, color: '#111827' },
+          hovertemplate: 'medián ΔE %{y:.2f}<extra></extra>' }
+      ], lay, CFG);
+    })();
+
+    var gw = d.giveup_worsen || {};
+    var gl2 = ['teljesített', 'feladta'];
+    bar('chWorsen', gl2, gl2.map(function (k) { return (gw[k] || {}).mean_worsen_rate; }),
+      { colors: [T.ok, T.danger], ytitle: 'rontó lépések aránya', tickpct: true, hover: '%{x}: %{y:.0%}' });
+    bar('chActions', gl2, gl2.map(function (k) { return (gw[k] || {}).mean_actions; }),
+      { colors: [T.ok, T.danger], ytitle: 'átlagos cselekvésszám', hover: '%{x}: %{y:.1f}' });
+    var comp = gw['teljesített'] || {}, gav = gw['feladta'] || {};
+    document.getElementById('worsenNote').innerHTML =
+      '<strong>A feladás együtt jár a hosszú, ingadozó úttal.</strong> A feladott próbálkozásokban a rontó lépések ' +
+      'aránya magasabb (' + pct(gav.mean_worsen_rate) + ' vs. ' + pct(comp.mean_worsen_rate) + '), és jóval több ' +
+      'cselekvés történik (' + fmt(gav.mean_actions, 0) + ' vs. ' + fmt(comp.mean_actions, 0) + '). A sok lépés tehát ' +
+      'inkább a küzdelem jele, nem a gondosságé: a kevés lépésből megoldott feladatok jellemzően tökéletesek.';
+
+    var ph = d.phenotypes || [];
+    bar('chPheno', ph.map(function (r) { return r.label; }), ph.map(function (r) { return r.n; }),
+      { color: T.accent, ytitle: 'próbálkozás', hover: '%{x}: %{y}', margin: { l: 46, r: 12, t: 8, b: 64 } });
+    var pt = '<thead><tr><th>Fenotípus</th><th class="num">Db</th><th class="num">Medián ΔE</th><th class="num">Feladás</th></tr></thead><tbody>';
+    ph.forEach(function (r) {
+      pt += '<tr><td>' + esc(r.label) + '</td><td class="num">' + fmt(r.n) + '</td>' +
+        '<td class="num">' + fmt(r.median_de, 2) + '</td><td class="num">' + pct(r.giveup_rate, 0) + '</td></tr>';
+    });
+    document.getElementById('phenoTable').innerHTML = pt + '</tbody>';
+    resizeAll();
+  }
+
+  function resizeAll() {
+    if (!window.Plotly) return;
+    document.querySelectorAll('.chart').forEach(function (el) { if (el && el.data) { try { Plotly.Plots.resize(el); } catch (e) {} } });
+  }
+
+  // TOC scroll-spy
+  function initToc() {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.rpt-toc a'));
+    var secs = links.map(function (a) { return document.getElementById(a.getAttribute('data-sec')); });
+    function onScroll() {
+      var y = window.scrollY + 90, idx = 0, i;
+      for (i = 0; i < secs.length; i++) { if (secs[i] && secs[i].offsetTop <= y) idx = i; }
+      links.forEach(function (a, j) { a.classList.toggle('active', j === idx); });
+    }
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+
+  Promise.all([
+    fetch('/api/stat/gamut-report').then(function (r) { return r.json(); }),
+    fetch('/api/stat/gamut-steps').then(function (r) { return r.json(); })
+  ]).then(function (res) {
+    var rep = res[0], steps = res[1];
+    if (!rep || rep.status !== 'success') {
+      document.getElementById('loadingMsg').textContent = 'Nem sikerült betölteni a riportot: ' + ((rep && rep.message) || 'ismeretlen hiba');
+      return;
+    }
+    renderReport(rep);
+    if (steps && steps.status === 'success') renderSteps(steps);
+    initToc();
+    window.addEventListener('resize', resizeAll);
+  }).catch(function (err) {
+    document.getElementById('loadingMsg').textContent = 'Hálózati hiba a riport betöltésekor.';
+    if (window.console) console.error(err);
+  });
+})();
+</script>
+{% endblock %}

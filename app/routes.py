@@ -504,7 +504,7 @@ def _guard_stat_requires_postgres():
     queries fail with a cryptic "unrecognized token" error. Return a clear,
     actionable message for the /stat page and its APIs instead."""
     path = request.path
-    if path != '/stat' and not path.startswith('/api/stat/'):
+    if path not in ('/stat', '/stat/riport') and not path.startswith('/api/stat/'):
         return None
     try:
         dialect = db.engine.dialect.name  # resolved from the URL, no connection
@@ -4578,6 +4578,64 @@ def stat_quality_summary():
         return jsonify(payload)
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# --------------------------------------------------------------------------- #
+# /stat/riport — supervisor-facing, gamut-only exploratory report (Hungarian)
+# --------------------------------------------------------------------------- #
+# The main gameplay is the gamut target set (`target_colors.color_type='gamut'`,
+# 332 colours). The clean gamut era starts 2026-07-06 08:00 UTC (PR #24); a
+# handful of earlier gamut rows are excluded so the report matches the analysis
+# convention used elsewhere. Heavy lifting lives in app/stat_riport_data.py.
+from .stat_riport_data import (
+    GAMUT_ERA_START_UTC,
+    build_report as _build_gamut_report,
+    build_steps as _build_gamut_steps,
+)
+
+_STAT_RIPORT_CACHE_TTL_SEC = int(os.environ.get('STAT_RIPORT_CACHE_SECONDS', '900'))
+_stat_riport_cache = {}  # key -> (ts, payload)
+
+
+def _cached_riport(key, builder):
+    now = time.time()
+    entry = _stat_riport_cache.get(key)
+    if entry and (now - entry[0]) < _STAT_RIPORT_CACHE_TTL_SEC:
+        return entry[1]
+    payload = builder()
+    _stat_riport_cache[key] = (now, payload)
+    return payload
+
+
+@main.route('/stat/riport')
+def stat_riport_page():
+    return render_template('stat_riport.html')
+
+
+@main.route('/api/stat/gamut-report', methods=['GET'])
+def stat_gamut_report():
+    """Bundle 1 for /stat/riport: overview + 24h trend, recruitment/sample,
+    catalog + difficulty, performance + learning. Gamut-only, exploratory."""
+    try:
+        return jsonify(_cached_riport('report', _build_gamut_report))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/stat/gamut-steps', methods=['GET'])
+def stat_gamut_steps():
+    """Bundle 2 for /stat/riport: step-level behaviour + rule-based strategy
+    phenotypes. Heavier (aggregates the event log); cached separately."""
+    try:
+        return jsonify(_cached_riport('steps', _build_gamut_steps))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 
 
 @main.route('/api/stat/calibration-summary', methods=['GET'])
