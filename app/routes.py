@@ -454,6 +454,41 @@ def leaderboard_page():
     return render_template('leaderboard.html')
 
 
+@main.before_request
+def _guard_stat_requires_postgres():
+    """The /stat analytics stack is PostgreSQL-only (``::`` casts,
+    ``percentile_cont``, ``EXTRACT(YEAR FROM age(...))``, etc.). On any other
+    backend (e.g. the SQLite fallback used when DATABASE_URL is unset) those
+    queries fail with a cryptic "unrecognized token" error. Return a clear,
+    actionable message for the /stat page and its APIs instead."""
+    path = request.path
+    if path != '/stat' and not path.startswith('/api/stat/'):
+        return None
+    try:
+        dialect = db.engine.dialect.name  # resolved from the URL, no connection
+    except Exception:
+        dialect = None
+    if dialect == 'postgresql':
+        return None
+    current = dialect or 'an unconfigured database'
+    msg = (
+        f'The /stat dashboard requires a PostgreSQL database, but the app is '
+        f'currently using {current}. Set DATABASE_URL to your PostgreSQL '
+        f'instance (or ensure shadestudy.env is loaded) and restart.'
+    )
+    if path.startswith('/api/'):
+        return jsonify({'status': 'error', 'error': 'requires_postgresql', 'message': msg}), 503
+    return (
+        '<div style="max-width:640px;margin:64px auto;padding:24px;font-family:sans-serif;'
+        'line-height:1.5;color:#2d2d2d;">'
+        '<h1 style="font-size:1.3rem;">Stats dashboard unavailable</h1>'
+        f'<p>{msg}</p>'
+        '</div>',
+        503,
+        {'Content-Type': 'text/html; charset=utf-8'},
+    )
+
+
 @main.route('/stat')
 def stat_page():
     return render_template('stat.html')
