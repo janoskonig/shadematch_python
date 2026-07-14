@@ -99,8 +99,8 @@
   <div class="rpt-main">
     <div class="rpt-head">
       <h1>ShadeStudy – gamut-riport</h1>
-      <p class="lead">Feltáró áttekintés a fő játékmenetről: a <strong>gamut-színkészletről</strong> (332 cél-szín;
-        2026-07-14-től a kiosztás <strong>10 körös, klaszter-blokkolt meccsekben</strong> történik — lásd 2.6).</p>
+      <p class="lead">Feltáró áttekintés a fő játékmenetről. A cél-színek kiosztása
+        <strong>10 körös meccsekben, randomizált blokkos elrendezésben</strong> történik (2.6).</p>
       <p class="meta" id="metaLine">Betöltés…</p>
     </div>
 
@@ -121,8 +121,8 @@
           <dt>Recept / cseppszám</dt><dd>Egy cél-szín megoldása: a pigmentcseppek száma. A cseppszám a strukturális nehézség mérőszáma.</dd>
           <dt>Mentés / feladás</dt><dd>Egy keverés zárása: mentés (a felhasználó elfogadja az eredményt) vagy feladás (továbblép / félbehagyja).</dd>
           <dt>Teljesítési arány</dt><dd>A mentett (befejezett) keverések aránya az összes keveréshez képest.</dd>
-          <dt>Meccs</dt><dd>2026-07-14-től a játék egysége: 10 kör, pontosan egy cél-szín a tíz fagyasztott színklaszter mindegyikéből, kevert sorrendben. Egy befejezett meccs egy teljes, blokkolt, tízklaszteres ismételt mérés.</dd>
-          <dt>Nehézségi sáv (band)</dt><dd>Történeti: a cél-színek cseppszám szerinti csoportjai, amelyek 2026-07-14-ig fokozatosan nyíltak meg a játékban. A meccs-alapú kiosztás ezt megszüntette.</dd>
+          <dt>Meccs</dt><dd>A játék egysége: 10 kör, pontosan egy cél-szín a tíz fagyasztott színklaszter mindegyikéből, véletlen sorrendben. Egy befejezett meccs egy teljes véletlen blokk (lásd 2.6).</dd>
+          <dt>Színklaszter</dt><dd>A 242 egyenletes fedésű cél-szín tíz rögzített családja (k-közép a CIELAB-ban). A kiosztás és a tanulás-elemzés ugyanezt a felosztást használja.</dd>
           <dt>Fenotípus</dt><dd>Egy keverés szabályalapú viselkedési kategóriája a kikeverés útja alapján (lásd 6.6).</dd>
         </dl>
       </section>
@@ -209,24 +209,28 @@
         </div>
 
         <div class="tech">
-          <h4>2.6 A célszínek kiosztása: meccs-alapú, blokkolt randomizáció (2026-07-14-től)</h4>
-          <p><strong>2026-07-14 előtt</strong> a célszínek elérhetősége a játékos korábbi sikerességétől
-             függött: a színek cseppszám-sávokban (band) fokozatosan nyíltak meg, és egy kétszer megjátszott
-             szín többé nem jelent meg. Ez a kiosztás szelekciós torzítást vitt a mintába — a nehezebb
-             színekhez csak az ügyesebb/kitartóbb játékosok jutottak el.</p>
-          <p><strong>2026-07-14-től a kiosztás egysége a meccs.</strong> Egy meccs 10 kör: pontosan egy
-             cél-szín a tíz <strong>fagyasztott</strong> színklaszter mindegyikéből, kevert sorrendben.
-             A klasztereket k-közép eljárás adja (CIELAB, k=10, rögzített kiindulás) a 242 egyenletes fedésű
-             színen; a besorolás a vizsgálati periódusra fagyasztott és verziózott (mc-v1), minden meccs
-             tárolja, melyik verzió alatt sorsolódott. A <strong>bőr-célszínek nem kerülnek kiosztásra</strong>
-             (a spektrális keveréses verzióban térnek vissza). A klaszteren belüli szín véletlen, de
-             résztvevőn belül ismétlés nélküli ciklusból jön; az új meccs összetétele kizárólag a kiosztási
-             előzménytől függ, a teljesítménytől soha. Minden kiosztott kör tárolódik; a 3 napig nem
-             folytatott meccs <em>megszakadt</em> (abandoned) státuszt kap. Egy befejezett meccs így egy
-             teljes, blokkolt, tízklaszteres ismételt mérés; a <strong>primer estimand a tíz klaszter
-             egyenlő súlyú átlaga</strong>. A napi kihívás és a fej-fej melletti párbajok nem randomizált
-             csatornák — az elsődleges elemzésből kizárandók. Részletes számok: 5. szakasz, „Meccs-alapú
-             kiosztás”.</p>
+          <h4>2.6 A célszínek kiosztása: randomizált blokkos elrendezés</h4>
+          <p><strong>A kiosztás egysége a meccs, és egy meccs egy teljes véletlen blokk.</strong>
+             A blokkosítás alapja a tíz <strong>színklaszter</strong>: a 242 egyenletes fedésű cél-színt
+             k-közép eljárás (CIELAB, k=10, rögzített kiindulás) osztja tíz családra. A besorolás a
+             vizsgálati periódusra <strong>fagyasztott és verziózott</strong> (mc-v1); minden meccs
+             tárolja, melyik verzió alatt sorsolódott.</p>
+          <p>Egy meccs 10 kör: <strong>mind a tíz klaszterből pontosan egy cél-szín</strong>. A
+             randomizáció kétszintű: (1) a klaszterek <strong>sorrendje</strong> meccsenkét véletlen,
+             (2) a klaszteren belüli <strong>szín</strong> véletlen, résztvevőn belül ismétlés nélküli
+             ciklusból (egy szín addig nem tér vissza, amíg a klasztere ki nem merül). A meccs összetétele
+             kizárólag a kiosztási előzménytől függ, a teljesítménytől soha — a színekhez való hozzáférés
+             tehát nem függ attól, ki milyen ügyes. Bőr-célszín nem kerül kiosztásra (a spektrális
+             keveréses verzióban tér vissza).</p>
+          <p>Ebből a szerkezetből adódik a riport elemzési kerete: <strong>minden befejezett meccs egy
+             teljes, tízklaszteres ismételt mérés</strong>, ahol a klaszterhatás a blokkon belül
+             hasonlítható össze; aki egy ülésben n meccset játszik végig, az n-szeresen replikált
+             blokkos elrendezést ad. A <strong>primer estimand a tíz klaszter egyenlő súlyú átlaga</strong>:
+             (1/10)·Σ<sub>c</sub> E(Y | klaszter = c). Minden kiosztott kör tárolódik akkor is, ha nem
+             indult el; a 3 napig nem folytatott meccs <em>megszakadt</em> (abandoned) státuszt kap, így
+             egyetlen kör sem marad statisztikailag eldöntetlen. A napi kihívás és a fej-fej melletti
+             párbajok nem randomizált csatornák — az elsődleges elemzésből ki vannak zárva. Részletes
+             számok: 5. szakasz, „Meccs-kiosztás számokban”.</p>
         </div>
 
       </section>
@@ -317,8 +321,7 @@
             <p class="cap">A gamut-színeket ténylegesen keverő, regisztrált felhasználók.</p>
             <div class="chart" id="chGender"></div></div>
           <div class="panel"><h4>Ország (időzóna alapján)</h4>
-            <p class="cap">Csak a meccs-korszak keverései. A vizsgálat korábbi fázisaiban további
-              országokból is érkeztek keverések; azok kívül esnek e riport hatókörén.</p>
+            <p class="cap">A riport hatókörébe eső keverések, időzóna alapján.</p>
             <div class="chart" id="chCountry"></div></div>
           <div class="panel"><h4>Napszak (helyi óra)</h4><div class="chart" id="chHour"></div></div>
           <div class="panel"><h4>A keverések eloszlása a felhasználók között</h4>
@@ -338,11 +341,10 @@
              képviselve legyen. Ezt <strong>bőrszínekkel egészítettem ki</strong> (Xiao és mtsai. munkája
              alapján), mert azok gyakorlati (pl. orvosi-esztétikai) szempontból kiemelten fontosak, és
              sűrűbb mintavételt érdemelnek.</p>
-          <p class="def"><strong>Fontos, 2026-07-14-től:</strong> a 90 bőr-célszín a katalógusban marad,
-             de <strong>kiosztásra már nem kerül</strong> — a sűrített bőrklaszter torzítaná a
-             klaszter-kiegyensúlyozott kiosztást (2.6). A bőrszínek a spektrális keveréses verzióban
-             térnek vissza. Mivel a riport csak a meccs-korszakot fedi, a lenti lefedettségi ábrákon a
-             bőr-célszínek 0 keveréssel szerepelnek.</p>
+          <p class="def">A 90 bőr-célszín a katalógus része, de <strong>kiosztásra nem kerül</strong> —
+             a sűrített bőrklaszter torzítaná a klaszter-kiegyensúlyozott kiosztást (2.6); a bőrszínek a
+             spektrális keveréses verzióban térnek vissza. A lefedettségi ábrákon ezért 0 keveréssel
+             szerepelnek.</p>
           <p class="def" id="catalogClasses"></p>
         </div>
         <div class="panel">
@@ -417,34 +419,21 @@
             <div class="chart" id="chDaily"></div></div>
         </div>
 
-        <h3>Tanulás a színtér-régiók mentén</h3>
+        <h3>Tanulás a színklaszterek mentén</h3>
         <p class="intro">
-          Egy konkrét színt egy játékos legfeljebb egyszer-kétszer kever ki, ezért az egy színen belüli
-          ismétlésből nem mérhető tanulás. Ehelyett a színteret régiókra osztom – ugyanazzal a logikával,
-          amellyel a cél-színek a gamutot egyenletesen lefedik. Rögzített tengelyvágások helyett (amelyek a
-          görbült gamut-testből üres vagy egy-két színes szilánkokat metszenének ki) a cél-színeket
-          CIELAB-koordinátáik alapján sorolom régiókba, a katalógus kettős felbontását követve. A
-          <strong>bőr-célszíneket (90 szín) a Xiao és mtsai. (2017) eredeti klasztereihez rendelem</strong>:
-          minden bőr-célszín ahhoz az etnikumhoz kerül (<strong>kaukázusi, kínai, kurd, thai</strong>),
-          amelynek legközelebbi publikált átlagértéke (4 etnikum × 4 testtáj = 16 CIELAB-átlag) a legkisebb
-          távolságra esik tőle. A gamut többi részét (242 szín) <strong>k-közép klaszterezéssel</strong>
-          osztom hat régióra (rögzített kiindulással, determinisztikusan). Összesen <strong>tíz régió</strong>,
-          amely pontosan a ténylegesen elérhető színtartományt fedi le. Egy régión belül a színek
-          szomszédosak, de <em>más receptűek</em>, ezért a régión belüli ismétlődő keverés általánosítható
-          tanulást mér, nem receptmemorizálást. Minden régiót a tagszínei centroidja színez.
-        </p>
-        <p class="intro">
-          <strong>Megjegyzés:</strong> ez az <em>elemzési</em> felosztás lefedi a teljes katalógust, a
-          bőr-régiókat is — de mivel a riport csak a meccs-korszakot mutatja, és bőr-célszín kiosztásra
-          már nem kerül, a négy bőr-régió üresen marad (adat nem gyűlik bennük). A <em>kiosztási</em>
-          klaszterezés ettől független: fagyasztott, verziózott, és csak a 242 nem-bőr színre terjed ki
-          (lásd 2.6 és lentebb, „Meccs-alapú kiosztás").
+          Egy konkrét színt egy játékos ritkán kever ki kétszer, ezért az egy színen belüli ismétlésből
+          nem mérhető tanulás. Ehelyett a tanulást a <strong>tíz színklaszter</strong> mentén mérem —
+          pontosan azokon a családokon, amelyekből a meccsek sorsolnak (2.6), így minden régió egyben
+          a kiosztás egy blokkja is. Egy klaszteren belül a színek szomszédosak, de <em>más receptűek</em>,
+          ezért a klaszteren belüli ismétlődő keverés általánosítható tanulást mér, nem
+          receptmemorizálást. Minden klasztert a tagszínei centroidja színez; a bőr-célszínek nem részei
+          a felosztásnak (nem kerülnek kiosztásra), a térképen szürkén jelennek meg.
         </p>
         <div class="panel">
-          <h4>A tíz régió (a pontok a régiójuk centroid-színét viselik)</h4>
-          <p class="cap">Ugyanaz a 3D CIELAB-térkép, mint a 4.1-ben, de itt minden cél-szín a <strong>régiója</strong>
-            átlagszínére festve – így a régiók összefüggő tömbökként látszanak. Húzással forgatható; rámutatva
-            a régió neve és a szín neve.</p>
+          <h4>A tíz színklaszter (a pontok a klaszterük centroid-színét viselik)</h4>
+          <p class="cap">Ugyanaz a 3D CIELAB-térkép, mint a 4.1-ben, de itt minden cél-szín a <strong>klasztere</strong>
+            átlagszínére festve – így a családok összefüggő tömbökként látszanak. A szürke pontok a kiosztásban
+            nem szereplő bőr-célszínek. Húzással forgatható; rámutatva a klaszter és a szín neve.</p>
           <div class="chart" id="chRegionMap" style="min-height:480px;"></div>
           <div class="table-wrap" style="margin-top:10px;"><table id="regionTable"></table></div>
         </div>
@@ -467,21 +456,12 @@
         </div>
         <div class="note" id="learnNote"></div>
 
-        <h3 id="s5m">Meccs-alapú kiosztás (2026-07-14-től)</h3>
+        <h3 id="s5m">Meccs-kiosztás számokban</h3>
         <p class="intro">
-          A játékmenet egysége a <strong>meccs</strong>: 10 kör, pontosan egy cél-szín a tíz
-          <strong>fagyasztott</strong> színklaszter mindegyikéből. A klasztereket k-közép eljárás adja
-          (CIELAB, k=10, rögzített kiindulás) a <strong>242 egyenletes fedésű színen</strong> – a bőr-célszínek
-          nem szerepelnek a kiosztásban (a spektrális keveréses verzióban térnek vissza). A besorolás a
-          vizsgálati periódus alatt <strong>fagyasztott és verziózott</strong> (aktuális verzió lentebb).
-          A klaszterek sorrendje meccsenkét véletlen; a klaszteren belüli cél-szín véletlen, de
-          résztvevőn belül <strong>ismétlés nélküli ciklusból</strong> származik (egy szín addig nem
-          ismétlődik, amíg a klasztere ki nem merül). Az új meccs összetétele csak a kiosztási előzménytől
-          függ, a teljesítménytől soha. A 3 napig nem folytatott aktív meccs <strong>megszakadt</strong>
-          (abandoned) státuszt kap, a le nem játszott körei is ezzel a kimenettel záródnak – minden kiosztott
-          kör tárolódik és előbb-utóbb determinált kimenetet kap. A <strong>primer estimand a tíz klaszter
-          egyenlő súlyú átlaga</strong>; a napi kihívás és a párbaj-körök nem randomizált csatornák, az
-          elsődleges elemzésből külön kezelendők.
+          A kiosztás randomizált blokkos elrendezését a 2.6 írja le; itt a megvalósulása látszik:
+          klaszterenként hány kör sorsolódott ki, és mi lett a sorsuk (teljesítve / kihagyva / megszakadt /
+          függőben). A kiegyensúlyozottság beépített: minden meccs minden klaszterből pontosan egy kört ad,
+          ezért a „kiosztott kör” oszlop klaszterek között legfeljebb a folyamatban lévő meccsek miatt térhet el.
         </p>
         <div class="cards" id="matchKpis"></div>
         <div class="note" id="matchEmpty" style="display:none;"></div>
@@ -597,11 +577,10 @@
           <strong>XP és szintek:</strong> minden befejezett feladat tapasztalati pontot ad, a szintlépés látható
           haladást mutat. <strong>Sorozat (streak):</strong> a napi visszatérést jutalmazza.
           <strong>Napi küldetés — egy teljes meccs:</strong> a napi cél a kiosztás egységéhez igazodik
-          (egy befejezett meccs = egy teljes, blokkolt mérés). <strong>Egyhuzam-bónusz:</strong> az egy
+          (egy befejezett meccs = egy teljes blokk). <strong>Egyhuzam-bónusz:</strong> az egy
           ülésben játszott n-edik meccs n-szeres befejezési bónuszt ér (plafonnal) — a statisztikailag
-          legértékesebb mintázatot, az egymás utáni teljes meccseket jutalmazza; a jutalom a meccsek
-          <em>összetételére</em> soha nem hat vissza. <em>(2026-07-14 előtt a kihívást a cseppszám-sávok
-          fokozatos megnyílása adagolta; ezt a meccs-alapú kiosztás váltotta.)</em>
+          legértékesebb mintázatot, az egymás utáni teljes meccseket (n-szeres replikációt) jutalmazza;
+          a jutalom a meccsek <em>összetételére</em> soha nem hat vissza.
           <strong>Gamut-oklevél:</strong> a színtér „meghódítása” megosztható
           oklevéllel zárul, ami hosszú távú célt ad. <strong>Kihívások és emlékeztetők:</strong> a megosztható,
           fej-fej melletti kihívás új játékosokat is behozhat, az opcionális napi emlékeztető pedig a
@@ -737,9 +716,8 @@
     function col(key) { return sp.map(function (r) { return r[key]; }); }
 
     document.getElementById('metaLine').textContent =
-      'Időszak: ' + niceDate(o.first_play_ts) + ' – ' + niceDate(o.last_play_ts) +
-      ' · CSAK a meccs-korszak (' + niceDate(d.era_start_utc) + ' UTC-től, lásd 2.6)' +
-      ' · csak feltáró elemzés';
+      'Időszak: ' + niceDate(d.era_start_utc) + ' (UTC) óta — ' + niceDate(o.last_play_ts) +
+      ' · randomizált blokkos kiosztás (2.6) · csak feltáró elemzés';
 
     var coveredPct = o.gamut_targets_total ? (o.gamut_targets_played / o.gamut_targets_total) : null;
     document.getElementById('kpiCards').innerHTML = [
@@ -1132,7 +1110,7 @@
         z: cpAll.map(function (p2) { return p2.L; }),
         text: cpAll.map(function (p2) {
           var rg = regById[p2.reg];
-          return (rg ? rg.name : '?') + ' — ' + p2.name;
+          return (rg ? rg.name : 'bőrszín — nincs kiosztásban') + ' — ' + p2.name;
         }),
         marker: {
           size: 4.5,
@@ -1303,7 +1281,7 @@
       panels.style.display = 'none';
       empty.style.display = '';
       empty.innerHTML = m
-        ? 'Még nincs meccs-adat — a meccs-alapú kiosztás 2026-07-14-én indult.'
+        ? 'Még nincs meccs-adat.'
         : 'A meccs-táblák még nem léteznek ezen az adatbázison (a migráció még nem futott le).';
       return;
     }

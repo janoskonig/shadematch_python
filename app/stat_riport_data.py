@@ -479,16 +479,23 @@ def build_report(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
     # each gets a Hungarian label and the sRGB colour of its centroid for the
     # map / curve plots.
     from .gamut_lab import _lab_to_srgb
+    from .regions import _srgb_to_lab
 
-    # The 10-macro-cluster partition (6 k-means background + 4 Xiao skin
-    # clusters) lives in app/clusters.py — shared with match drawing, so the
-    # report's learning regions and the in-game matches use the same families.
+    # The learning regions ARE the frozen serving clusters (app/clusters.py
+    # match_cluster_*): one partition drives both the match draw and the
+    # learning analysis, so every region is a design block. Skin targets are
+    # not part of the partition (they are not served).
     from .clusters import (
-        MACRO_ORDER, cluster_assignments, cluster_display_names, cluster_labs,
+        MATCH_CLUSTER_ORDER as MACRO_ORDER,
+        match_cluster_assignments, match_cluster_names,
     )
-    region_by_target: Dict[int, str] = cluster_assignments()
-    region_labs: Dict[str, List[tuple]] = cluster_labs()
-    _macro_names: Dict[str, str] = cluster_display_names()
+    region_by_target: Dict[int, str] = match_cluster_assignments()
+    _macro_names: Dict[str, str] = match_cluster_names()
+    region_labs: Dict[str, List[tuple]] = {c: [] for c in MACRO_ORDER}
+    for trow in _rows("SELECT id, r, g, b FROM target_colors WHERE color_type='gamut'"):
+        reg = region_by_target.get(trow['id'])
+        if reg is not None:
+            region_labs[reg].append(_srgb_to_lab(trow['r'], trow['g'], trow['b']))
 
     def _macro_name(code):
         return _macro_names.get(code, code)
