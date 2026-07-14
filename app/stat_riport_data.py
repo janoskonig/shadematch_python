@@ -465,115 +465,117 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
 
     # ---- 5) Region-based learning ---------------------------------------- #
     # A single colour is mixed at most ~twice, but neighbouring colours (which
-    # share a CIELAB region yet have different recipes) are mixed more often. So
-    # "learning" is measured as generalisation within a region: final ΔE by the
-    # user's Nth exposure to *any* colour in that region. Regions get a Hungarian
-    # verbal label + the sRGB colour of their centroid for the map/curve plots.
-    from .regions import region_of_lab, _srgb_to_lab
+    # share a region yet have different recipes) are mixed more often. So
+    # "learning" is measured as generalisation within a region. For the report
+    # the space is split into FIVE broad colour families that together cover the
+    # WHOLE gamut: the densified skin zone + four hue bands. Every target
+    # belongs to exactly one family; each family gets a Hungarian label and the
+    # sRGB colour of its centroid for the map / curve plots.
+    from .regions import _srgb_to_lab
     from .gamut_lab import _lab_to_srgb
+
+    MACRO_ORDER = ['warm', 'green', 'blue', 'purple', 'skin']
+    MACRO_NAME = {
+        'warm': 'melegek (piros–narancs–sárga)',
+        'green': 'zöldek',
+        'blue': 'kékek–türkizek',
+        'purple': 'lilák–bíborok',
+        'skin': 'bőrszínek',
+    }
+
+    def _macro_of(L, a, b, skin):
+        if skin:
+            return 'skin'
+        h = math.degrees(math.atan2(b, a)) % 360
+        if h < 105 or h >= 345:
+            return 'warm'
+        if h < 190:
+            return 'green'
+        if h < 290:
+            return 'blue'
+        return 'purple'
+
     region_by_target: Dict[int, str] = {}
     region_labs: Dict[str, List[tuple]] = defaultdict(list)
-    region_skin: Dict[str, bool] = {}
     for t in _rows("SELECT id, r, g, b, classification FROM target_colors WHERE color_type='gamut'"):
         L, a, b = _srgb_to_lab(t['r'], t['g'], t['b'])
-        skin = t['classification'] == 'even_gamut_v2_skin'
-        reg = region_of_lab(L, a, b, skin)
+        reg = _macro_of(L, a, b, t['classification'] == 'even_gamut_v2_skin')
         region_by_target[t['id']] = reg
         region_labs[reg].append((L, a, b))
-        region_skin[reg] = skin
     # tag the catalog map points with their region id
-    id_to_reg = region_by_target
     for cp in catalog_points:
-        cp['reg'] = id_to_reg.get(cp.get('tid'))
+        cp['reg'] = region_by_target.get(cp.get('tid'))
 
     reg_att = _rows(
         f"""SELECT user_id, target_color_id, final_delta_e
             FROM ({_GA_ANALYSIS}) s
             WHERE final_delta_e IS NOT NULL
             ORDER BY user_id, attempt_started_server_ts""", **p)
-    _seq: Dict[Any, int] = defaultdict(int)
-    _rl: Dict[int, List[float]] = defaultdict(list)
-    _rlr: Dict[tuple, List[float]] = defaultdict(list)   # (region, exposure) -> ΔE list
+    # The exposure axis is STANDARDISED to relative progress: within each
+    # (user, region) sequence the k-th of n mixes sits at (k−1)/(n−1) ∈ [0,1],
+    # binned into quarters. This makes short and long sequences comparable
+    # (a 3-mix and an 8-mix run both span 0→100%). Sequences with a single mix
+    # carry no within-region repetition and are excluded from the curves.
+    BIN_POS = [12.5, 37.5, 62.5, 87.5]     # bin midpoints in percent
+    totals: Dict[Any, int] = defaultdict(int)
     region_mixes: Dict[str, int] = defaultdict(int)
     for r in reg_att:
         reg = region_by_target.get(r['target_color_id'])
         if reg is None:
             continue
         region_mixes[reg] += 1
-        _seq[(r['user_id'], reg)] += 1
-        idx = _seq[(r['user_id'], reg)]
+        totals[(r['user_id'], reg)] += 1
+    _seq: Dict[Any, int] = defaultdict(int)
+    _rl: Dict[int, List[float]] = defaultdict(list)      # bin -> ΔE (pooled)
+    _rlr: Dict[tuple, List[float]] = defaultdict(list)   # (region, bin) -> ΔE
+    for r in reg_att:
+        reg = region_by_target.get(r['target_color_id'])
+        if reg is None:
+            continue
+        key = (r['user_id'], reg)
+        _seq[key] += 1
+        tot = totals[key]
+        if tot < 2:
+            continue
+        pos = (_seq[key] - 1) / (tot - 1)
+        b = min(3, int(pos * 4))
         de = float(r['final_delta_e'])
-        if idx <= 8:
-            _rl[idx].append(de)
-        if idx <= 6:
-            _rlr[(reg, idx)].append(de)
+        _rl[b].append(de)
+        _rlr[(reg, b)].append(de)
     # Median ΔE is ~0 (most analysed mixes are perfect saves), so the learning
     # signal lives in the mean (pulled by the give-up tail) and the success rate.
-    region_learning = [{'exposure': i, 'n': len(_rl[i]),
-                        'mean_de': (sum(_rl[i]) / len(_rl[i])),
-                        'median_de': _median(_rl[i]),
-                        'perfect_rate': sum(1 for v in _rl[i] if v <= 0.01) / len(_rl[i])}
-                       for i in sorted(_rl) if _rl[i]]
+    region_learning = [{'pos': BIN_POS[b], 'n': len(_rl[b]),
+                        'mean_de': (sum(_rl[b]) / len(_rl[b])),
+                        'perfect_rate': sum(1 for v in _rl[b] if v <= 0.01) / len(_rl[b])}
+                       for b in sorted(_rl) if _rl[b]]
 
-    # Region catalogue: centroid Lab → sRGB swatch + Hungarian verbal label.
-    def _region_name(L, a, b, skin):
-        light = 'sötét' if L < 35 else ('közepes' if L <= 65 else 'világos')
-        if skin:
-            return 'bőrszín (%s)' % light
-        C = math.hypot(a, b)
-        if C < 15:
-            hue = 'szürkés-semleges'
-        else:
-            h = math.degrees(math.atan2(b, a)) % 360
-            if h < 25 or h >= 345:
-                hue = 'piros'
-            elif h < 70:
-                hue = 'narancs–barna'
-            elif h < 105:
-                hue = 'sárga'
-            elif h < 135:
-                hue = 'sárgászöld'
-            elif h < 190:
-                hue = 'zöld'
-            elif h < 230:
-                hue = 'kékeszöld'
-            elif h < 290:
-                hue = 'kék'
-            else:
-                hue = 'lila–bíbor'
-        return '%s %s' % (light, hue)
-
+    # Region catalogue: the five families, centroid Lab → sRGB swatch.
     regions_payload: List[Dict[str, Any]] = []
-    for reg, labs in region_labs.items():
+    for reg in MACRO_ORDER:
+        labs = region_labs.get(reg, [])
+        if not labs:
+            continue
         Lc = sum(x[0] for x in labs) / len(labs)
         ac = sum(x[1] for x in labs) / len(labs)
         bc = sum(x[2] for x in labs) / len(labs)
         rr, gg, bb = _lab_to_srgb(Lc, ac, bc)
         regions_payload.append({
-            'id': reg, 'skin': region_skin[reg],
-            'name': _region_name(Lc, ac, bc, region_skin[reg]),
+            'id': reg, 'skin': reg == 'skin',
+            'name': MACRO_NAME[reg],
             'r': rr, 'g': gg, 'blue': bb,
             'L': round(Lc, 1), 'a': round(ac, 1), 'b': round(bc, 1),
             'n_targets': len(labs), 'n_mixes': int(region_mixes.get(reg, 0)),
         })
     regions_payload.sort(key=lambda x: -x['n_mixes'])
-    # uniquify duplicate verbal labels (grid cells can share a descriptor)
-    _seen_names: Dict[str, int] = {}
-    for x in regions_payload:
-        k = x['name']
-        _seen_names[k] = _seen_names.get(k, 0) + 1
-        if _seen_names[k] > 1:
-            x['name'] = '%s %s.' % (k, _seen_names[k])
 
-    # Per-region learning curves for the most-played regions.
-    featured = [x for x in regions_payload if x['n_mixes'] >= 25][:10]
+    # Learning curves for ALL five families (whole-space coverage).
     region_curves: List[Dict[str, Any]] = []
-    for x in featured:
+    for x in regions_payload:
         pts = []
-        for idx in range(1, 7):
-            des = _rlr.get((x['id'], idx), [])
+        for b in range(4):
+            des = _rlr.get((x['id'], b), [])
             if len(des) >= 3:
-                pts.append({'exposure': idx, 'n': len(des),
+                pts.append({'pos': BIN_POS[b], 'n': len(des),
                             'mean_de': sum(des) / len(des),
                             'perfect_rate': sum(1 for v in des if v <= 0.01) / len(des)})
         if len(pts) >= 2:
@@ -937,8 +939,15 @@ def build_steps(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
             for i in range(len(crows))
         ]
         cluster_evr = [float(evr_c[0]), float(evr_c[1]) if len(evr_c) > 1 else 0.0]
+        # loadings of this display projection, so the page can explain what the
+        # two viewing axes are made of (this PCA is separate from the colour-
+        # difficulty PCA in section 4.3 — different units of analysis).
+        cluster_proj_loadings = [[float(v) for v in Vtc[i]]
+                                 for i in range(min(2, Vtc.shape[0]))]
+        cluster_features = [lbl for lbl, _ in CLUST_FEATURES]
     else:
         cluster_scatter, cluster_evr = [], []
+        cluster_proj_loadings, cluster_features = [], []
 
     return {
         'status': 'success',
@@ -953,4 +962,6 @@ def build_steps(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
         'cluster_k': cluster_k,
         'cluster_scatter': cluster_scatter,
         'cluster_evr': cluster_evr,
+        'cluster_proj_loadings': cluster_proj_loadings,
+        'cluster_features': cluster_features,
     }

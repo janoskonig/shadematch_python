@@ -4658,8 +4658,33 @@ def stat_gamut_steps():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+def _riport_visits_auth():
+    """HTTP Basic Auth for the /stat/riport-visits admin view (page + API).
+    Credentials come from RIPORT_VISITS_USER (default 'admin') and
+    RIPORT_VISITS_PASS (required — with no password set, access is refused).
+    Returns a response to short-circuit with, or None when authorised."""
+    import hmac
+    user = os.environ.get('RIPORT_VISITS_USER', 'admin')
+    pw = os.environ.get('RIPORT_VISITS_PASS')
+    if not pw:
+        return Response(
+            'A /stat/riport-visits vedelemhez allitsd be a RIPORT_VISITS_PASS '
+            'kornyezeti valtozot (Render dashboard / shadestudy.env).', 503,
+            {'Content-Type': 'text/plain; charset=utf-8'})
+    a = request.authorization
+    if (not a or a.type != 'basic'
+            or not hmac.compare_digest(a.username or '', user)
+            or not hmac.compare_digest(a.password or '', pw)):
+        return Response('Bejelentkezes szukseges.', 401,
+                        {'WWW-Authenticate': 'Basic realm="riport-visits"'})
+    return None
+
+
 @main.route('/stat/riport-visits')
 def stat_riport_visits_page():
+    denied = _riport_visits_auth()
+    if denied is not None:
+        return denied
     return render_template('stat_riport_visits.html')
 
 
@@ -4669,7 +4694,10 @@ def stat_riport_visits():
     riport_close analytics events. One row per client_session_id; the events
     carry CUMULATIVE visible_sec / max_scroll_pct / sections_seen, so a visit's
     totals are the max over its events. Server-side opens (no JS) are counted
-    separately. Uncached — the volume is tiny."""
+    separately. Uncached — the volume is tiny. Basic-auth protected."""
+    denied = _riport_visits_auth()
+    if denied is not None:
+        return denied
     try:
         rows = db.session.execute(db.text(
             """

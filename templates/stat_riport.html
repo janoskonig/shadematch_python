@@ -175,10 +175,11 @@
           <p class="def">Fontos megkülönböztetés: maga a ΔE₀₀ objektív mérőszám – a súlyfüggvényeit épp úgy
              tervezték, hogy a nyers CIELAB-távolságnál egyenletesebben kövesse az emberi észlelést. Ami a
              színtér tartományai szerint változik, az a <strong>küszöbök</strong> szintje: hogy mekkora ΔE₀₀-t
-             vesz észre, illetve fogad el valaki, az szubjektív, és függ a színtartománytól – sötét színeknél
-             például magasabb észlelési és elfogadhatósági küszöböket mértek, mint világosaknál (Paravina és
-             mtsai. 2009; lásd 8.). A pontos képlet a hivatkozott irodalomban (Sharma és mtsai. 2005), a
-             küszöbök színtér-függését pedig a saját mintán is megnézem (lásd 3.4).</p>
+             vesz észre, illetve fogad el valaki, az szubjektív, és függ a színtartománytól – Paravina és
+             mtsai. (2009) bőrszín-replikációkon például sötét mintáknál szisztematikusan magasabb küszöböket
+             mértek, mint világosaknál (CIEDE2000-ben: észlelhetőség 0,7 vs. 1,2; elfogadhatóság 2,1 vs. 3,1;
+             lásd 8.). A pontos képlet a hivatkozott irodalomban (Sharma és mtsai. 2005), a küszöbök
+             színtér-függését pedig a saját mintán is megnézem (lásd 3.4).</p>
         </div>
 
         <div class="tech">
@@ -248,9 +249,17 @@
           felezőpontjaként, az <strong>elfogadhatósági küszöböt</strong> az „elfogadható” és a „nem elfogadható”
           medián ΔE-jének felezőpontjaként. Mindezt az <em>L*</em>, az <em>a*</em> és a <em>b*</em> tengely mentén,
           harmadolt (alacsony / közép / magas) sávokra bontva – ha a küszöbök egyenletesek volnának, a sávok
-          között nem mozognának. (Összhangban az irodalommal: Paravina és mtsai. 2009 sötét bőrszín-mintákon
-          magasabb észlelési és elfogadhatósági küszöböket mértek, mint világosakon – a küszöb tehát a
-          megítélt színtartománytól függ, nem a mérőszám hibája.)
+          között nem mozognának.
+        </p>
+        <p class="intro">
+          Viszonyítási pont az irodalomból: Paravina és mtsai. (2009) bőrszín-replikációkon, kontrollált
+          megfigyelési körülmények között, 45 értékelővel mérték ugyanezt a két küszöböt. Világos mintákon a
+          CIELAB/CIEDE2000 észlelhetőségi küszöb <strong>1,1 / 0,7</strong>, az elfogadhatósági
+          <strong>3,0 / 2,1</strong> volt; sötét mintákon <strong>1,6 / 1,2</strong>, illetve
+          <strong>4,4 / 3,1</strong>. Mind a küszöb típusa, mind a minta világossága szignifikáns hatású volt
+          (p &lt; 0,001), és a kettő interakciója is: a minta világossága az <em>elfogadhatósági</em> küszöböt
+          erősebben befolyásolta, mint az észlelhetőségit. A küszöb tehát a megítélt színtartománytól függ –
+          nem a mérőszám hibája. Az alábbi, saját mintán becsült értékek nagyságrendileg ebbe a sávba esnek.
         </p>
         <p class="intro" id="thresholdNote"></p>
         <div class="grid2">
@@ -384,33 +393,36 @@
         <h3>Tanulás a színtér-régiók mentén</h3>
         <p class="intro">
           Egy konkrét színt egy játékos legfeljebb egyszer-kétszer kever ki, ezért az egy színen belüli
-          ismétlésből nem mérhető tanulás. Ehelyett a színteret <strong>régiókra</strong> osztom: rögzített
-          CIELAB-rácscellákra (a bőrszín-zónában finomabb, 18 egységnyi, máshol 36 egységnyi cellamérettel) –
-          így 54 régió adódik. Egy régió több szomszédos, de <em>más receptű</em> színt tartalmaz, ezért a
-          régión belüli ismétlődő keverés általánosítható tanulást mér, nem receptmemorizálást. Minden régiót
-          a tagszínei átlagával (centroidjával) színezek és szavakkal is jellemzek.
+          ismétlésből nem mérhető tanulás. Ehelyett a színteret <strong>öt nagy régióra</strong> osztom,
+          amelyek együtt a teljes gamutot lefedik: a sűrűbben mintázott <strong>bőrszín-zóna</strong>, a többi
+          szín pedig a színezetszöge szerint négy családba (<strong>melegek</strong> – piros–narancs–sárga,
+          <strong>zöldek</strong>, <strong>kékek–türkizek</strong>, <strong>lilák–bíborok</strong>). Minden
+          cél-szín pontosan egy régióba tartozik. Egy régió sok szomszédos, de <em>más receptű</em> színt
+          tartalmaz, ezért a régión belüli ismétlődő keverés általánosítható tanulást mér, nem
+          receptmemorizálást. Minden régiót a tagszínei átlagával (centroidjával) színezek.
         </p>
         <div class="panel">
-          <h4>A színtér-régiók (a pontok a régiójuk centroid-színét viselik)</h4>
+          <h4>Az öt régió (a pontok a régiójuk centroid-színét viselik)</h4>
           <p class="cap">Ugyanaz a 3D CIELAB-térkép, mint a 4.1-ben, de itt minden cél-szín a <strong>régiója</strong>
-            átlagszínére festve – így a cellák összefüggő tömbökként látszanak. Húzással forgatható; rámutatva a
+            átlagszínére festve – így az öt régió összefüggő tömbökként látszik. Húzással forgatható; rámutatva a
             régió neve és a szín neve.</p>
           <div class="chart" id="chRegionMap" style="min-height:480px;"></div>
-          <details class="table-collapse"><summary style="cursor:pointer;color:var(--text-secondary);font-size:0.85rem;margin-top:8px;">A régiók táblázata (54 régió, keverésszám szerint)</summary>
-            <div class="table-wrap" style="max-height:340px;overflow-y:auto;margin-top:8px;"><table id="regionTable"></table></div>
-          </details>
+          <div class="table-wrap" style="margin-top:10px;"><table id="regionTable"></table></div>
         </div>
         <div class="grid2">
           <div class="panel"><h4>Régiónkénti tanulási görbék: átlagos végső ΔE</h4>
-            <p class="cap">Egy vonal = egy régió, a régió centroid-színével (a vastag fekete vonal az összes
-              régió együtt). X: hányadik keverés a régióban (kitettség sorszáma), y: átlagos végső ΔE.
-              A szaggatott vízszintes vonalak a 3.4-ben becsült <strong>észlelhetőségi</strong> és
-              <strong>elfogadhatósági</strong> küszöbök. Csak a legalább 25 keveréssel bíró régiók (10 db);
-              rámutatva a régió neve és az elemszám.</p>
+            <p class="cap">Az x-tengely <strong>standardizált</strong>: minden játékos–régió sorozatban a
+              k-adik keverés a (k−1)/(n−1) relatív pozícióra kerül (0% = az első, 100% = az utolsó keverés a
+              régióban), negyedekbe sorolva – így a rövid és a hosszú sorozatok összevethetők, függetlenül
+              attól, hogy melyik régióban hány keverés történt. Az egyetlen keverésből álló sorozatok kimaradnak.
+              Egy vonal = egy régió, a régió centroid-színével (a vastag fekete az összes régió együtt); a
+              szaggatott vízszintes vonalak a 3.4-ben becsült küszöbök. Mind az öt régió szerepel – a teljes
+              színtér lefedve. Rámutatva az elemszám is látszik; a kékek–türkizek görbéje kevés keverésen
+              alapul, ezért ingadozó.</p>
             <div class="chart" id="chLearn" style="min-height:340px;"></div></div>
           <div class="panel"><h4>Tökéletes találat régiónként</h4>
-            <p class="cap">Ugyanazok a régiók és színek; a tökéletes (ΔE ≈ 0) találatok aránya a kitettség
-              sorszáma szerint.</p>
+            <p class="cap">Ugyanazok a régiók, színek és standardizált tengely; a tökéletes (ΔE ≈ 0) találatok
+              aránya a sorozaton belüli haladás szerint.</p>
             <div class="chart" id="chLearnRate" style="min-height:340px;"></div></div>
         </div>
         <div class="note" id="learnNote"></div>
@@ -484,9 +496,12 @@
         </p>
         <div class="grid2">
           <div class="panel"><h4>A klaszterek a jellemzőtér síkján</h4>
-            <p class="cap">Az öt standardizált jellemző főkomponens-vetülete (PC1–PC2): minden pont egy keverés,
-              a színe a klasztere. Ha a színek jól elkülönülő foltokat alkotnak, a csoportok valósak, nem
-              önkényes vágások.</p>
+            <p class="cap">Fontos: ez egy <strong>újabb, a 4.3-tól független PCA</strong> – ott színenkénti
+              nehézség-jellemzőket tömörítettem, itt a fenti öt <em>keverésenkénti viselkedés-jellemzőt</em>.
+              A klaszterezés a teljes ötdimenziós jellemzőtérben történt; a PCA-sík itt csak a
+              <em>megjelenítést</em> szolgálja (a legtöbb információt megőrző két nézőpont). Minden pont egy
+              keverés, a színe a klasztere: ha a színek elkülönülő foltokat alkotnak, a csoportok valósak.</p>
+            <p class="cap" id="clusterProjNote"></p>
             <div class="chart" id="chClusterScatter" style="min-height:360px;"></div></div>
           <div class="panel"><h4>Klaszter-profilok (centroidok)</h4>
             <div class="table-wrap"><table id="clusterTable"></table></div></div>
@@ -1078,7 +1093,8 @@
       regCurves.forEach(function (rc2) { rc2.points.forEach(function (pp) { allVals.push(pp.mean_de); }); });
       var ymax = Math.max.apply(null, allVals) * 1.2 + 0.2;
       var lay = baseLayout({ showlegend: true, margin: { l: 46, r: 12, t: 8, b: 40 },
-        xaxis: { dtick: 1, title: { text: 'kitettség sorszáma a régióban', font: { size: 10 } } },
+        xaxis: { title: { text: 'haladás a régióbeli sorozaton belül', font: { size: 10 } }, range: [0, 100],
+                 tickvals: [12.5, 37.5, 62.5, 87.5], ticktext: ['0–25%', '25–50%', '50–75%', '75–100%'] },
         yaxis: { title: { text: 'átlagos végső ΔE', font: { size: 10 } }, range: [0, ymax] } });
       lay.legend = { orientation: 'v', x: 1.02, y: 1, font: { size: 9 } };
       lay.shapes = []; lay.annotations = [];
@@ -1096,48 +1112,51 @@
       }
       var traces = regCurves.map(function (rc2) {
         return { type: 'scatter', mode: 'lines+markers', name: rc2.name,
-          x: rc2.points.map(function (pp) { return pp.exposure; }),
+          x: rc2.points.map(function (pp) { return pp.pos; }),
           y: rc2.points.map(function (pp) { return pp.mean_de; }),
           customdata: rc2.points.map(function (pp) { return pp.n; }),
           line: { color: regRgb(rc2), width: 1.6 },
           marker: { size: 5, color: regRgb(rc2), line: { width: 0.5, color: 'rgba(0,0,0,0.4)' } },
-          hovertemplate: rc2.name + '<br>%{x}. kitettség: átlag ΔE %{y:.2f} (n=%{customdata})<extra></extra>' };
+          hovertemplate: rc2.name + '<br>%{x}%-nál: átlag ΔE %{y:.2f} (n=%{customdata})<extra></extra>' };
       });
       traces.push({ type: 'scatter', mode: 'lines+markers', name: 'összes régió',
-        x: rl.map(function (r) { return r.exposure; }), y: rl.map(function (r) { return r.mean_de; }),
+        x: rl.map(function (r) { return r.pos; }), y: rl.map(function (r) { return r.mean_de; }),
         customdata: rl.map(function (r) { return r.n; }),
         line: { color: '#111827', width: 3 }, marker: { size: 6, color: '#111827' },
-        hovertemplate: 'összes régió<br>%{x}. kitettség: átlag ΔE %{y:.2f} (n=%{customdata})<extra></extra>' });
+        hovertemplate: 'összes régió<br>%{x}%-nál: átlag ΔE %{y:.2f} (n=%{customdata})<extra></extra>' });
       Plotly.react(document.getElementById('chLearn'), traces, lay, CFG);
     })();
 
     // Per-region perfect-rate curves + overall.
     (function () {
       var lay = baseLayout({ showlegend: true, margin: { l: 46, r: 12, t: 8, b: 40 },
-        xaxis: { dtick: 1, title: { text: 'kitettség sorszáma a régióban', font: { size: 10 } } },
+        xaxis: { title: { text: 'haladás a régióbeli sorozaton belül', font: { size: 10 } }, range: [0, 100],
+                 tickvals: [12.5, 37.5, 62.5, 87.5], ticktext: ['0–25%', '25–50%', '50–75%', '75–100%'] },
         yaxis: { title: { text: 'tökéletes találat aránya', font: { size: 10 } }, range: [0, 1.02], tickformat: '.0%' } });
       lay.legend = { orientation: 'v', x: 1.02, y: 1, font: { size: 9 } };
       var traces = regCurves.map(function (rc2) {
         return { type: 'scatter', mode: 'lines+markers', name: rc2.name,
-          x: rc2.points.map(function (pp) { return pp.exposure; }),
+          x: rc2.points.map(function (pp) { return pp.pos; }),
           y: rc2.points.map(function (pp) { return pp.perfect_rate; }),
           customdata: rc2.points.map(function (pp) { return pp.n; }),
           line: { color: regRgb(rc2), width: 1.6 },
           marker: { size: 5, color: regRgb(rc2), line: { width: 0.5, color: 'rgba(0,0,0,0.4)' } },
-          hovertemplate: rc2.name + '<br>%{x}. kitettség: %{y:.0%} tökéletes (n=%{customdata})<extra></extra>' };
+          hovertemplate: rc2.name + '<br>%{x}%-nál: %{y:.0%} tökéletes (n=%{customdata})<extra></extra>' };
       });
       traces.push({ type: 'scatter', mode: 'lines+markers', name: 'összes régió',
-        x: rl.map(function (r) { return r.exposure; }), y: rl.map(function (r) { return r.perfect_rate; }),
+        x: rl.map(function (r) { return r.pos; }), y: rl.map(function (r) { return r.perfect_rate; }),
         customdata: rl.map(function (r) { return r.n; }),
         line: { color: '#111827', width: 3 }, marker: { size: 6, color: '#111827' },
-        hovertemplate: 'összes régió<br>%{x}. kitettség: %{y:.0%} tökéletes (n=%{customdata})<extra></extra>' });
+        hovertemplate: 'összes régió<br>%{x}%-nál: %{y:.0%} tökéletes (n=%{customdata})<extra></extra>' });
       Plotly.react(document.getElementById('chLearnRate'), traces, lay, CFG);
     })();
     document.getElementById('learnNote').innerHTML =
-      '<strong>Óvatosan a tanulási görbével.</strong> Az átlagos ΔE végig az észlelhetőségi küszöb környékén, ' +
-      'jóval az elfogadhatósági küszöb alatt fut – de a görbe nem tiszta tanulási hatás. Aki sokadszor kever egy ' +
-      'régióban, az önszelektált (kitartóbb vagy gyengébb) játékos, és a magasabb kitettségeknél az elemszám már ' +
-      'kicsi. Leíró megfigyelés, nem oksági következtetés.';
+      '<strong>Óvatosan a tanulási görbével.</strong> Az összesített görbe lényegében vízszintes – a régiók ' +
+      'szintjén nem látszik egyértelmű tanulási hatás; az átlagos ΔE végig az észlelhetőségi küszöb környékén, ' +
+      'jóval az elfogadhatósági küszöb alatt fut. A görbék közti <em>szintkülönbség</em> viszont informatív: a ' +
+      'régiók eltérő nehézségét mutatja. Csak a legalább két keveréses játékos–régió sorozatok szerepelnek ' +
+      '(önszelekció), és a kis elemszámú pontok (kékek–türkizek) ingadozók. Leíró megfigyelés, nem oksági ' +
+      'következtetés.';
 
     // 2.6 perceptibility / acceptability thresholds by L*, a*, b*
     (function () {
@@ -1273,6 +1292,28 @@
             yaxis: { title: { text: 'PC2 (' + pct(evr[1] || 0, 0) + ')', font: { size: 10 } } } });
           lay.legend = { orientation: 'h', y: -0.22, font: { size: 9 } };
           Plotly.react(el, traces, lay, CFG);
+          // data-driven axis reading from this projection's loadings
+          var pl = d.cluster_proj_loadings || [];
+          var pf = d.cluster_features || [];
+          function axisDesc(lo) {
+            var pos = [], neg = [];
+            (lo || []).forEach(function (v, i) {
+              if (v >= 0.3) pos.push(pf[i]);
+              else if (v <= -0.3) neg.push(pf[i]);
+            });
+            if (!pos.length && !neg.length) return null;
+            var parts = [];
+            if (pos.length) parts.push('magas ' + pos.join(' + '));
+            if (neg.length) parts.push('alacsony ' + neg.join(' + '));
+            return parts.join(' ↔ ');
+          }
+          var d1 = axisDesc(pl[0]), d2 = axisDesc(pl[1]);
+          var noteEl = document.getElementById('clusterProjNote');
+          if (noteEl && (d1 || d2)) {
+            noteEl.innerHTML = 'A tengelyek összetétele a súlyokból: <strong>PC1</strong> (' +
+              pct(evr[0] || 0, 0) + '): ' + esc(d1 || '—') + '. <strong>PC2</strong> (' +
+              pct(evr[1] || 0, 0) + '): ' + esc(d2 || '—') + '.';
+          }
         }
       }
       var tbl = document.getElementById('clusterTable');
