@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { background:#F8F6F3; }
+  #stage {
+    position:relative; width:1080px; height:1080px; overflow:hidden;
+    background:#F8F6F3; color:#22252B;
+    font-family:'Nunito',-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  }
+  .wash { position:absolute; inset:0; background:
+     radial-gradient(520px 520px at 106% -6%, rgba(247,201,72,0.42), rgba(247,201,72,0) 70%),
+     radial-gradient(480px 480px at -6% 58%, rgba(127,185,138,0.32), rgba(127,185,138,0) 70%),
+     radial-gradient(460px 460px at 108% 108%, rgba(74,144,217,0.26), rgba(74,144,217,0) 70%),
+     radial-gradient(340px 340px at -4% -4%, rgba(232,93,117,0.20), rgba(232,93,117,0) 70%); }
+
+  /* brand */
+  #brand { position:absolute; top:54px; left:0; right:0; display:flex; align-items:center;
+           justify-content:center; gap:16px; }
+  #brand .mark { display:flex; align-items:flex-end; }
+  #brand .mark svg { width:46px; margin-right:-16px; }
+  #brand .word { font-weight:900; font-size:52px; letter-spacing:-1.2px; }
+
+  /* target */
+  #targetWrap { position:absolute; top:150px; left:50%; transform:translateX(-50%);
+                display:flex; flex-direction:column; align-items:center; gap:10px; }
+  #target { width:150px; height:150px; border-radius:34px;
+            border:3px solid rgba(0,0,0,0.08); box-shadow:0 18px 34px rgba(34,37,43,0.18); }
+  #target .retic { position:absolute; inset:-14px; }
+  .reticL { position:absolute; width:26px; height:26px; border:4px solid rgba(47,111,181,0.8); }
+  .rtl { top:0; left:0; border-right:0; border-bottom:0; border-radius:8px 0 0 0; }
+  .rtr { top:0; right:0; border-left:0; border-bottom:0; border-radius:0 8px 0 0; }
+  .rbl { bottom:0; left:0; border-right:0; border-top:0; border-radius:0 0 0 8px; }
+  .rbr { bottom:0; right:0; border-left:0; border-top:0; border-radius:0 0 8px 0; }
+
+  /* contenders */
+  .side { position:absolute; top:430px; width:420px; display:flex; flex-direction:column;
+          align-items:center; }
+  #left  { left:60px; }
+  #right { right:60px; }
+  .pigs { display:flex; gap:22px; height:60px; align-items:center; }
+  .pig { width:34px; height:34px; border-radius:50%; box-shadow:0 4px 10px rgba(0,0,0,0.12);
+         border:2px solid rgba(255,255,255,0.7); }
+  .ringWrap { position:relative; width:300px; height:300px; margin-top:26px; }
+  .ring { position:absolute; inset:0; border-radius:50%;
+          display:flex; align-items:center; justify-content:center; }
+  .swatch { width:214px; height:214px; border-radius:50%;
+            border:3px solid rgba(255,255,255,0.9); }
+  .crown { position:absolute; top:-70px; left:50%; transform:translateX(-50%); font-size:70px;
+           opacity:0; }
+  .check { position:absolute; right:6px; bottom:6px; width:70px; height:70px; opacity:0; }
+  .falling { position:absolute; left:50%; top:0; pointer-events:none; }
+  .falling svg { width:30px; }
+
+  /* swords */
+  #swords { position:absolute; top:560px; left:50%; transform:translate(-50%,0) scale(1);
+            font-size:96px; z-index:5; }
+
+  /* url */
+  #url { position:absolute; bottom:60px; left:0; right:0; text-align:center;
+         font-size:50px; font-weight:900; letter-spacing:-1px;
+         background:linear-gradient(135deg,#4A90D9,#2F6FB5);
+         -webkit-background-clip:text; background-clip:text; color:transparent; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="wash"></div>
+
+  <div id="brand">
+    <div class="mark">
+      <svg viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#E85D75" stroke="rgba(0,0,0,0.1)" stroke-width="0.8"/></svg>
+      <svg viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#F7C948" stroke="rgba(0,0,0,0.1)" stroke-width="0.8"/></svg>
+      <svg viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#4A90D9" stroke="rgba(0,0,0,0.1)" stroke-width="0.8"/></svg>
+    </div>
+    <div class="word">ShadeMatch</div>
+  </div>
+
+  <div id="targetWrap">
+    <div style="position:relative;">
+      <div id="target"></div>
+      <div class="retic">
+        <div class="reticL rtl"></div><div class="reticL rtr"></div>
+        <div class="reticL rbl"></div><div class="reticL rbr"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="left" class="side">
+    <div class="pigs" id="pigsL"></div>
+    <div class="ringWrap">
+      <div class="falling" id="fallL"></div>
+      <div class="ring" id="ringL"><div class="swatch" id="swL"></div></div>
+      <div class="crown" id="crownL">👑</div>
+      <svg class="check" id="checkL" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#1a9e5f"/><path d="M13 23 l6 6 l12-14" fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+  </div>
+
+  <div id="right" class="side">
+    <div class="pigs" id="pigsR"></div>
+    <div class="ringWrap">
+      <div class="falling" id="fallR"></div>
+      <div class="ring" id="ringR"><div class="swatch" id="swR"></div></div>
+      <div class="crown" id="crownR">👑</div>
+      <svg class="check" id="checkR" viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#1a9e5f"/><path d="M13 23 l6 6 l12-14" fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+  </div>
+
+  <div id="swords">⚔️</div>
+
+  <div id="url">shadestudy.com</div>
+</div>
+
+<script>
+const TARGET = [78,156,134];           // secret colour (teal-sage)
+const A_FINAL = [82,150,132];          // left mixes very close  -> winner
+const B_FINAL = [120,150,110];         // right a bit off        -> loser
+const A_RING = 0.97, B_RING = 0.72;    // closeness meters
+const START = [248,246,243];           // empty well (near white)
+
+const PIG = {white:'#FDFDFB',black:'#3A3A3A',red:'#E85D75',yellow:'#F7C948',blue:'#2D6CDF'};
+const dropSVG = c => `<svg viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="${c}" stroke="rgba(0,0,0,0.1)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg>`;
+
+// build pigment dots
+const pigsL = ['yellow','blue','white'], pigsR = ['red','blue','white'];
+document.getElementById('pigsL').innerHTML = pigsL.map(p=>`<div class="pig" style="background:${PIG[p]}"></div>`).join('');
+document.getElementById('pigsR').innerHTML = pigsR.map(p=>`<div class="pig" style="background:${PIG[p]}"></div>`).join('');
+
+// build falling drops (5 per side), each tied to a pigment column
+function buildDrops(id, pigs){
+  const box = document.getElementById(id);
+  const order = [0,1,2,0,1];       // which pigment column each drop comes from
+  box.innerHTML = order.map((c,i)=>
+    `<div class="fdrop" data-col="${c}" data-i="${i}" style="position:absolute;left:0;top:0;opacity:0;">${dropSVG(PIG[pigs[c]])}</div>`
+  ).join('');
+  return box.querySelectorAll('.fdrop');
+}
+const dropsL = buildDrops('fallL', pigsL);
+const dropsR = buildDrops('fallR', pigsR);
+
+const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+const seg = (p,a,b)=>clamp((p-a)/(b-a),0,1);
+const easeOut = t=>1-Math.pow(1-t,3);
+const easeIO = t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const easeBack = t=>{const c=1.70158,c3=c+1;return 1+c3*Math.pow(t-1,3)+c*Math.pow(t-1,2);};
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rgb=(a,b,t)=>`rgb(${Math.round(lerp(a[0],b[0],t))},${Math.round(lerp(a[1],b[1],t))},${Math.round(lerp(a[2],b[2],t))})`;
+
+// pigment column x-offsets relative to ring centre (px)
+const COLX = [-22,0,22].map(x=>x*3.2);   // spread roughly over the 3 dots
+
+function mixSide(pref, drops, mixA, mixB, finalCol, ringFinal, p){
+  const swEl = document.getElementById('sw'+pref);
+  const ringEl = document.getElementById('ring'+pref);
+  // fill progress across the mix window
+  const fill = easeIO(seg(p, mixA, mixB));
+  swEl.style.background = rgb(START, finalCol, fill);
+  const f = ringFinal * fill;
+  const accent = '#2F6FB5';
+  ringEl.style.background = `conic-gradient(${accent} ${(f*360).toFixed(1)}deg, rgba(34,37,43,0.10) 0)`;
+  // falling drops
+  const n = drops.length;
+  drops.forEach((d,i)=>{
+    const col = +d.dataset.col;
+    const t0 = mixA + (mixB-mixA-0.06) * (i/n);
+    const q = seg(p, t0, t0+0.10);
+    if(q<=0 || q>=1){ d.style.opacity=0; return; }
+    const y = lerp(-150, 150, easeOut(q));       // from pigment row down into well
+    const x = COLX[col];
+    const op = q<0.8 ? 1 : (1-(q-0.8)/0.2);      // absorbed near the end
+    d.style.opacity = op;
+    d.style.transform = `translate(${x-15}px, ${y}px) scale(${lerp(1.1,0.7,q)})`;
+  });
+}
+
+window.SM = { render(p){
+  // brand drop-in
+  const bi = easeOut(seg(p,0.00,0.09));
+  const brand = document.getElementById('brand');
+  brand.style.opacity = bi;
+  brand.style.transform = `translateY(${lerp(-40,0,bi)}px)`;
+
+  // target
+  const ti = easeBack(seg(p,0.06,0.18));
+  const tw = document.getElementById('targetWrap');
+  tw.style.opacity = clamp(ti,0,1);
+  tw.style.transform = `translateX(-50%) scale(${lerp(0.6,1,clamp(ti,0,1))})`;
+  document.getElementById('target').style.background = rgb(TARGET,TARGET,1);
+
+  // sides enter
+  const le = easeOut(seg(p,0.14,0.26)), re = easeOut(seg(p,0.20,0.32));
+  const L = document.getElementById('left'), R = document.getElementById('right');
+  L.style.opacity=le; L.style.transform=`translateX(${lerp(-60,0,le)}px)`;
+  R.style.opacity=re; R.style.transform=`translateX(${lerp(60,0,re)}px)`;
+
+  // mixing
+  mixSide('L', dropsL, 0.18, 0.50, A_FINAL, A_RING, p);
+  mixSide('R', dropsR, 0.24, 0.56, B_FINAL, B_RING, p);
+
+  // swords: subtle throughout, punch-in at the clash
+  const sw = document.getElementById('swords');
+  const swIn = easeOut(seg(p,0.16,0.26));
+  const clash = seg(p,0.52,0.60);
+  const pulse = 1 + 0.18*Math.sin(clash*Math.PI);
+  sw.style.opacity = lerp(0, 0.92, swIn);
+  sw.style.transform = `translate(-50%,0) scale(${(lerp(0.8,1,swIn))*pulse})`;
+
+  // verdict: winner (left) glows + crown + check, loser (right) dims
+  const v = easeOut(seg(p,0.62,0.80));
+  const swL = document.getElementById('swL'), swR = document.getElementById('swR');
+  swL.style.boxShadow = `0 0 ${lerp(0,60,v)}px ${lerp(0,10,v)}px rgba(26,158,95,${0.55*v})`;
+  swL.style.transform = `scale(${lerp(1,1.06,v)})`;
+  const rr = document.getElementById('right');
+  rr.style.filter = `grayscale(${0.55*v}) opacity(${lerp(1,0.55,v)})`;
+  const cIn = easeBack(seg(p,0.66,0.80));
+  const cr = document.getElementById('crownL');
+  cr.style.opacity = clamp(cIn,0,1);
+  cr.style.transform = `translateX(-50%) translateY(${lerp(20,0,clamp(cIn,0,1))}px) rotate(${lerp(-12,0,clamp(cIn,0,1))}deg)`;
+  const ck = document.getElementById('checkL');
+  ck.style.opacity = clamp(cIn,0,1);
+  ck.style.transform = `scale(${clamp(cIn,0,1)})`;
+
+  // url
+  const ui = easeOut(seg(p,0.82,0.92));
+  const url = document.getElementById('url');
+  url.style.opacity = ui;
+  url.style.transform = `translateY(${lerp(24,0,ui)}px)`;
+}};
+window.SM.render(0);
+</script>
+</body>
+</html>

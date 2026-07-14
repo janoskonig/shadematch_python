@@ -1,0 +1,14 @@
+{
+  "Your ShadeMatch colors are waiting": "A ShadeMatch színeid várnak",
+  "We kept your palette warm": "Melegen tartottuk a palettádat",
+  "Your colors miss you, {user_id}": "Hiányzol a színeknek, {user_id}",
+  "You mastered {mastered} colors and reached a {longest}-day streak before stepping away {away} days ago. One quick mix picks up right where you left off.": "{mastered} színt tökéletesítettél, és {longest} napos sorozatot értél el, mielőtt {away} napja szüneteltél. Egy gyors keverés ott folytatja, ahol abbahagytad.",
+  "You were on a {longest}-day streak before stepping away {away} days ago. One quick mix picks up right where you left off.": "{longest} napos sorozatnál jártál, mielőtt {away} napja szüneteltél. Egy gyors keverés ott folytatja, ahol abbahagytad.",
+  "It's been {away} days since your last mix. Pick a shade and jump back in — it only takes a minute.": "{away} napja kevertél utoljára. Válassz egy árnyalatot, és ugorj vissza — csak egy percet vesz igénybe.",
+  "Pick up right where you left off — one quick mix.": "Folytasd pontosan ott, ahol abbahagytad — egy gyors keverés.",
+  "Jump back in →": "Ugorj vissza →",
+  "No streak pressure — even a single 30-second mix counts.": "Semmi sorozat-nyomás — egyetlen 30 másodperces keverés is számít.",
+  "Colors mastered": "Tökéletesített színek",
+  "Longest streak": "Leghosszabb sorozat",
+  "Days away": "Távol töltött napok"
+}

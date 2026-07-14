@@ -1,0 +1,68 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet"><style>* { margin:0; padding:0; box-sizing:border-box; }html { font-family:'Nunito', -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+    html { font-size:13.120px; }
+    .page { width:1080px; height:1080px; position:relative; background:#F8F6F3;
+      overflow:hidden; color:#22252B; }
+    .wash { position:absolute; inset:0; background:
+       radial-gradient(28rem 28rem at 106% -6%, rgba(247,201,72,0.42), rgba(247,201,72,0) 70%),
+       radial-gradient(26rem 26rem at -6% 58%, rgba(127,185,138,0.32), rgba(127,185,138,0) 70%),
+       radial-gradient(25rem 25rem at 108% 108%, rgba(74,144,217,0.26), rgba(74,144,217,0) 70%),
+       radial-gradient(18rem 18rem at -4% -4%, rgba(232,93,117,0.20), rgba(232,93,117,0) 70%); }
+    .rain { position:absolute; inset:0; }
+    .rain .dropsvg { position:absolute; }
+    .rain .r1 { width:2.6rem; top:31%; left:6%; transform:rotate(14deg); opacity:.7;}
+    .rain .r2 { width:3.2rem; top:40%; right:7%; transform:rotate(-10deg); opacity:.65;}
+    .rain .r3 { width:2rem; top:49%; left:9%; transform:rotate(-16deg); opacity:.55;}
+    .content { position:relative; height:100%; padding:3.6rem 4rem 3.6rem;
+      display:flex; flex-direction:column; }
+    .brandrow { display:flex; align-items:center; gap:0.9rem; }
+    .dropmark { display:flex; align-items:flex-end; }
+    .dropmark .dropsvg { width:2.6rem; margin-right:-0.9rem; }
+    .wordmark { font-weight:900; font-size:3.2rem; letter-spacing:-0.07rem; margin-left:1rem; }
+    .numbadge { margin-left:auto; display:flex; align-items:center; gap:0.7rem;
+      background:#2F6FB5; color:#fff; font-weight:900; font-size:2.1rem; padding:0.55rem 1.5rem;
+      border-radius:3rem; box-shadow:0 0.5rem 1.2rem rgba(47,111,181,0.30); }
+    .numbadge .mini { display:flex; }
+    .numbadge .mini i { width:0.9rem; height:0.9rem; border-radius:50%; margin-left:-0.28rem;
+      border:1.5px solid rgba(255,255,255,0.85); }
+
+    .hero { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+      gap:1.4rem; }
+    .ingredients { display:flex; align-items:center; gap:1.4rem;
+      background:#FFFFFF; border:2px solid #ECE7DF; border-radius:2.4rem; padding:1.6rem 2.6rem;
+      box-shadow:0 0.8rem 1.8rem rgba(34,37,43,0.06); }
+    .ing { display:flex; flex-direction:column; align-items:center; gap:0.4rem; }
+    .ing .dropsvg { width:4.2rem; }
+    .ing b { font-size:2.1rem; color:#6B655B; }
+    .op { font-size:2.6rem; font-weight:900; color:#C3BCAF; }
+    .arrow { width:3.4rem; height:3.4rem; opacity:0.9; }
+    .targetwrap { position:relative; }
+    .target { width:21rem; height:21rem; border-radius:3.6rem; background:#D9765A;
+      border:3px solid rgba(0,0,0,0.08); box-shadow:0 1.8rem 3.2rem rgba(34,37,43,0.18); }
+    .qbadge { position:absolute; right:-1.5rem; top:-1.5rem; width:6rem; height:6rem;
+      border-radius:50%; background:#FFFFFF; color:#2F6FB5; font-weight:900; font-size:3.6rem;
+      display:flex; align-items:center; justify-content:center;
+      border:3px solid #2F6FB5; box-shadow:0 0.7rem 1.6rem rgba(34,37,43,0.18); }
+
+    .url { text-align:center; font-size:3.1rem; font-weight:900; letter-spacing:-0.05rem;
+      background:linear-gradient(135deg,#4A90D9,#2F6FB5); -webkit-background-clip:text;
+      background-clip:text; color:transparent; }
+    </style></head><body>
+    <div class="page"><div class="wash"></div>
+      <div class="rain"><svg class="dropsvg r1" viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#F7C948" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><svg class="dropsvg r2" viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#4A90D9" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><svg class="dropsvg r3" viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#E85D75" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg></div>
+      <div class="content">
+        <div class="brandrow">
+          <div class="dropmark"><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#E85D75" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#F7C948" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#4A90D9" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg></div>
+          <div class="wordmark">ShadeMatch</div>
+          <div class="numbadge"><span class="mini"><i style="background:#E85D75"></i><i style="background:#F7C948"></i><i style="background:#4A90D9"></i></span>#2</div>
+        </div>
+        <div class="hero">
+          <div class="ingredients"><span class="ing"><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#F7C948" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><b>?×</b></span><span class="op">+</span><span class="ing"><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#E85D75" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><b>?×</b></span><span class="op">+</span><span class="ing"><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#FDFDFB" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><b>?×</b></span></div>
+          <svg class="arrow" viewBox="0 0 24 24"><path d="M12 3 v13 M6.5 11.5 l5.5 5.5 5.5-5.5" fill="none" stroke="#2F6FB5" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <div class="targetwrap">
+            <div class="target"></div>
+            <div class="qbadge">?</div>
+          </div>
+        </div>
+        <div class="url">shadestudy.com</div>
+      </div>
+    </div></body></html>

@@ -37,3 +37,14 @@ artifacts/flyers/*.pdf
 # Generated Instagram ad images/videos (regenerate: artifacts/insta/make_insta*.py + render_*.js)
 artifacts/insta/*.png
 artifacts/insta/*.mp4
+
+# Generated Facebook campaign media (regenerate: artifacts/facebook/make_*.py + render_*.js)
+artifacts/facebook/*.png
+artifacts/facebook/*.mp4
+artifacts/facebook/*.wav
+
+# Generated Instagram audio (images/videos already ignored above)
+artifacts/insta/*.wav
+
+# macOS cruft
+.DS_Store

@@ -1,0 +1,77 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet"><style>* { margin:0; padding:0; box-sizing:border-box; }html { font-family:'Nunito', -apple-system, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; }
+    html { font-size:15.040px; }
+    .page { width:1080px; height:1350px; position:relative; background:#F8F6F3;
+      overflow:hidden; color:#22252B; }
+    .wash { position:absolute; inset:0; background:
+       radial-gradient(28rem 28rem at 106% -6%, rgba(247,201,72,0.42), rgba(247,201,72,0) 70%),
+       radial-gradient(26rem 26rem at -6% 58%, rgba(127,185,138,0.34), rgba(127,185,138,0) 70%),
+       radial-gradient(25rem 25rem at 108% 108%, rgba(74,144,217,0.26), rgba(74,144,217,0) 70%),
+       radial-gradient(18rem 18rem at -4% -4%, rgba(232,93,117,0.20), rgba(232,93,117,0) 70%); }
+    .rain { position:absolute; inset:0; }
+    .rain .dropsvg { position:absolute; }
+    .rain .r1 { width:2.6rem; top:33%; left:6%; transform:rotate(14deg); opacity:.75;}
+    .rain .r2 { width:3.2rem; top:41%; right:7%; transform:rotate(-10deg); opacity:.7;}
+    .rain .r3 { width:2rem; top:50%; left:9%; transform:rotate(-16deg); opacity:.6;}
+    .content { position:relative; height:100%; padding:3.6rem 4rem 3.4rem;
+      display:flex; flex-direction:column; }
+    .brandrow { display:flex; align-items:center; gap:0.9rem; }
+    .dropmark { display:flex; align-items:flex-end; }
+    .dropmark .dropsvg { width:2.6rem; margin-right:-0.9rem; }
+    .wordmark { font-weight:900; font-size:3.2rem; letter-spacing:-0.07rem; margin-left:1rem; }
+    .badge { margin-left:auto; background:#FFFFFF; border:2px solid #E3DED6; color:#2F6FB5;
+      font-weight:800; font-size:1.4rem; padding:0.5rem 1.4rem; border-radius:3rem;
+      letter-spacing:0.14rem; text-transform:uppercase; }
+
+    .hero { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+    .targetwrap { position:relative; }
+    .target { width:20rem; height:20rem; border-radius:3.4rem; background:#6BA292;
+      border:3px solid rgba(0,0,0,0.08); box-shadow:0 1.6rem 3rem rgba(34,37,43,0.16); }
+    .qbadge { position:absolute; right:-1.4rem; top:-1.4rem; width:5.2rem; height:5.2rem;
+      border-radius:50%; background:#2F6FB5; color:#fff; font-weight:900; font-size:3.2rem;
+      display:flex; align-items:center; justify-content:center;
+      box-shadow:0 0.6rem 1.4rem rgba(47,111,181,0.35); }
+    .fromlabel { margin-top:2rem; font-size:1.7rem; font-weight:800; letter-spacing:0.14rem;
+      text-transform:uppercase; color:#9A9284; }
+    .ingredients { display:flex; align-items:center; gap:1.4rem; margin-top:1.2rem;
+      background:#FFFFFF; border:2px solid #ECE7DF; border-radius:2.4rem; padding:1.5rem 2.4rem; }
+    .ing { display:flex; flex-direction:column; align-items:center; gap:0.4rem; }
+    .ing .dropsvg { width:4rem; }
+    .ing b { font-size:2rem; color:#6B655B; }
+    .op { font-size:2.6rem; font-weight:900; color:#C3BCAF; }
+
+    h1 { font-size:6rem; line-height:1.02; font-weight:900; letter-spacing:-0.2rem;
+      text-align:center; margin-top:1.5rem; }
+    h1 em { font-style:normal; color:#2F6FB5; }
+    .cta { margin-top:2.4rem; text-align:center; }
+    .comment { font-size:2.15rem; font-weight:800; color:#3A3A3A; }
+    .url { margin-top:1rem; font-size:2.5rem; font-weight:900; letter-spacing:-0.04rem;
+      background:linear-gradient(135deg,#4A90D9,#2F6FB5); -webkit-background-clip:text;
+      background-clip:text; color:transparent; }
+    </style></head><body>
+    <div class="page"><div class="wash"></div>
+      <div class="rain"><svg class="dropsvg r1" viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#F7C948" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><svg class="dropsvg r2" viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#4A90D9" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><svg class="dropsvg r3" viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#E85D75" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg></div>
+      <div class="content">
+        <div class="brandrow">
+          <div class="dropmark"><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#E85D75" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#F7C948" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#4A90D9" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg></div>
+          <div class="wordmark">ShadeMatch</div>
+          <div class="badge">color challenge</div>
+        </div>
+        <div class="hero">
+          <div class="targetwrap">
+            <div class="target"></div>
+            <div class="qbadge">?</div>
+          </div>
+          <div class="fromlabel">mix it from</div>
+          <div class="ingredients">
+            <span class="ing"><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#F7C948" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><b>?×</b></span><span class="op">+</span>
+            <span class="ing"><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#2D6CDF" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><b>?×</b></span><span class="op">+</span>
+            <span class="ing"><svg class="dropsvg " viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#FDFDFB" stroke="rgba(0,0,0,0.10)" stroke-width="0.8"/><ellipse cx="8.6" cy="18.5" rx="2.4" ry="3.4" fill="rgba(255,255,255,0.35)"/></svg><b>?×</b></span>
+          </div>
+        </div>
+        <h1>Can you mix <em>this color?</em></h1>
+        <div class="cta">
+          <div class="comment">👇 Guess the recipe in the comments</div>
+          <div class="url">Play free · shadestudy.com</div>
+        </div>
+      </div>
+    </div></body></html>

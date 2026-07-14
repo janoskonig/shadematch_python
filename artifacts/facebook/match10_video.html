@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  html,body { background:#F8F6F3; }
+  #stage {
+    position:relative; width:100vw; height:100vh; overflow:hidden;
+    background:#F8F6F3; color:#22252B;
+    font-family:'Nunito',-apple-system,'Segoe UI','Helvetica Neue',Arial,sans-serif;
+  }
+  .wash { position:absolute; inset:0; background:
+     radial-gradient(520px 520px at 106% -6%, rgba(247,201,72,0.42), rgba(247,201,72,0) 70%),
+     radial-gradient(480px 480px at -6% 58%, rgba(127,185,138,0.32), rgba(127,185,138,0) 70%),
+     radial-gradient(460px 460px at 108% 108%, rgba(74,144,217,0.26), rgba(74,144,217,0) 70%),
+     radial-gradient(340px 340px at -4% -4%, rgba(232,93,117,0.20), rgba(232,93,117,0) 70%); }
+
+  /* brand */
+  #brand { position:absolute; left:0; right:0; display:flex; align-items:center;
+           justify-content:center; gap:16px; }
+  #brand .mark { display:flex; align-items:flex-end; }
+  #brand .mark svg { width:46px; margin-right:-16px; }
+  #brand .word { font-weight:900; font-size:52px; letter-spacing:-1.2px; }
+
+  /* the 10-slot match ring */
+  #matchGroup { position:absolute; width:760px; height:760px; }
+  #arc { position:absolute; inset:0; border-radius:50%;
+         -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 17px), #000 calc(100% - 16px));
+                 mask: radial-gradient(farthest-side, transparent calc(100% - 17px), #000 calc(100% - 16px)); }
+  .slot { position:absolute; width:92px; height:92px; }
+  .slotEmpty { position:absolute; inset:0; border-radius:50%;
+               border:4px dashed rgba(34,37,43,0.22); }
+  .slotFill { position:absolute; inset:0; border-radius:50%;
+              border:3px solid rgba(255,255,255,0.9);
+              box-shadow:0 8px 18px rgba(34,37,43,0.18); }
+  .slotChk { position:absolute; right:-4px; bottom:-4px; width:34px; height:34px; }
+  #trophyGlow { position:absolute; left:50%; top:50%; width:340px; height:340px;
+                transform:translate(-50%,-50%); border-radius:50%;
+                background:radial-gradient(circle, rgba(247,201,72,0.55), rgba(247,201,72,0) 70%); }
+  #trophyBig { position:absolute; left:50%; top:50%; font-size:170px;
+               transform:translate(-50%,-54%); }
+
+  /* medal chain (finale) */
+  #medalRow { position:absolute; inset:0; }
+  .medal { position:absolute; }
+  .medalRing { position:absolute; inset:0; border-radius:50%;
+               box-shadow:0 16px 34px rgba(34,37,43,0.20); }
+  .medalCore { position:absolute; inset:11%; border-radius:50%; background:#FDFCFA;
+               display:flex; align-items:center; justify-content:center;
+               border:2px solid rgba(0,0,0,0.05); }
+  .medalCore span { transform:translateY(-3%); }
+  .stars { position:absolute; left:50%; bottom:101%; transform:translateX(-50%);
+           display:flex; gap:2px; white-space:nowrap; }
+  .rays { position:absolute; left:50%; top:50%; width:210%; height:210%;
+          border-radius:50%;
+          background:repeating-conic-gradient(rgba(247,201,72,0.55) 0deg 7deg, rgba(247,201,72,0) 7deg 30deg);
+          -webkit-mask:radial-gradient(circle, transparent 38%, #000 44%, rgba(0,0,0,0) 72%);
+                  mask:radial-gradient(circle, transparent 38%, #000 44%, rgba(0,0,0,0) 72%); }
+  .plus { position:absolute; width:56px; height:56px; }
+  .plus::before, .plus::after { content:''; position:absolute; background:#22252B;
+          border-radius:8px; left:50%; top:50%; }
+  .plus::before { width:56px; height:14px; transform:translate(-50%,-50%); }
+  .plus::after  { width:14px; height:56px; transform:translate(-50%,-50%); }
+
+  .conf { position:absolute; left:0; top:0; border-radius:3px; }
+
+  /* url */
+  #url { position:absolute; left:0; right:0; text-align:center;
+         font-size:50px; font-weight:900; letter-spacing:-1px;
+         background:linear-gradient(135deg,#4A90D9,#2F6FB5);
+         -webkit-background-clip:text; background-clip:text; color:transparent; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="wash"></div>
+
+  <div id="brand">
+    <div class="mark">
+      <svg viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#E85D75" stroke="rgba(0,0,0,0.1)" stroke-width="0.8"/></svg>
+      <svg viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#F7C948" stroke="rgba(0,0,0,0.1)" stroke-width="0.8"/></svg>
+      <svg viewBox="0 0 24 30"><path d="M12 1 C12 1 3 13 3 19.5 a9 9 0 0 0 18 0 C21 13 12 1 12 1 Z" fill="#4A90D9" stroke="rgba(0,0,0,0.1)" stroke-width="0.8"/></svg>
+    </div>
+    <div class="word">ShadeMatch</div>
+  </div>
+
+  <div id="matchGroup">
+    <div id="arc"></div>
+    <div id="trophyGlow"></div>
+    <div id="trophyBig">🏆</div>
+    <div id="slots"></div>
+  </div>
+
+  <div id="medalRow"></div>
+  <div id="confetti"></div>
+
+  <div id="url">shadestudy.com</div>
+</div>
+
+<script>
+const W = window.innerWidth, H = window.innerHeight;
+const PORTRAIT = H > W + 60;
+const CY = PORTRAIT ? H*0.49 : H*0.505;
+document.getElementById('brand').style.top = (PORTRAIT ? 96 : 48) + 'px';
+document.getElementById('url').style.bottom = (PORTRAIT ? 96 : 52) + 'px';
+
+const PALETTE = ['#E85D75','#F0842C','#F7C948','#7FB98A','#1FB6A6',
+                 '#4A90D9','#5C6BC0','#9B59B6','#D96BB1','#A98467'];
+const GOLD = '#F2B705';
+
+const clamp = (x,a,b)=>Math.max(a,Math.min(b,x));
+const seg = (p,a,b)=>clamp((p-a)/(b-a),0,1);
+const easeOut = t=>1-Math.pow(1-t,3);
+const easeIO = t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;
+const easeBack = t=>{const c=1.70158,c3=c+1;return 1+c3*Math.pow(t-1,3)+c*Math.pow(t-1,2);};
+const lerp=(a,b,t)=>a+(b-a)*t;
+const rnd = i => { const x = Math.sin(i*127.1+311.7)*43758.5453; return x - Math.floor(x); };
+
+/* ---- build the 10-slot ring ------------------------------------------- */
+const group = document.getElementById('matchGroup');
+group.style.left = (W/2 - 380) + 'px';
+group.style.top  = (CY - 380) + 'px';
+const GR = 285, SLOT = 92;                      // ring radius, slot size
+const slotBox = document.getElementById('slots');
+const chkSVG = '<svg viewBox="0 0 44 44"><circle cx="22" cy="22" r="21" fill="#1a9e5f"/><path d="M13 23 l6 6 l12-14" fill="none" stroke="#fff" stroke-width="4.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+slotBox.innerHTML = PALETTE.map((c,i)=>{
+  const a = -Math.PI/2 + i*(2*Math.PI/10);
+  const x = 380 + Math.cos(a)*GR - SLOT/2, y = 380 + Math.sin(a)*GR - SLOT/2;
+  return `<div class="slot" style="left:${x}px;top:${y}px;">
+    <div class="slotEmpty"></div>
+    <div class="slotFill" style="background:${c};"></div>
+    <div class="slotChk">${chkSVG}</div>
+  </div>`;
+}).join('');
+const slots = slotBox.querySelectorAll('.slot');
+
+/* ---- medals (finale) ---------------------------------------------------- */
+const MEDALS = [
+  { x:0.185, size:172, stars:1 },
+  { x:0.475, size:236, stars:2 },
+  { x:0.80,  size:318, stars:3, crown:true },
+];
+const conic = 'conic-gradient(' + PALETTE.map((c,i)=>`${c} ${i*36}deg ${(i+1)*36}deg`).join(',') + ')';
+const medalRow = document.getElementById('medalRow');
+medalRow.innerHTML = MEDALS.map((m,i)=>{
+  const s = m.size;
+  const starTxt = m.crown ? '⭐⭐⭐' : '⭐'.repeat(m.stars);
+  const crown = m.crown ? `<div class="stars" style="bottom:112%;font-size:${s*0.34}px;">👑</div>` : '';
+  return `<div class="medal" id="medal${i}" style="left:${W*m.x - s/2}px;top:${CY - s/2}px;width:${s}px;height:${s}px;">
+    ${m.crown ? `<div class="rays" id="rays" style="transform:translate(-50%,-50%);"></div>` : ''}
+    <div class="medalRing" style="background:${conic};"></div>
+    <div class="medalCore"><span style="font-size:${s*0.5}px;">🏆</span></div>
+    <div class="stars" style="font-size:${s*0.19}px;">${starTxt}</div>
+    ${crown}
+  </div>`;
+}).join('');
+const plusHTML = [0,1].map(i=>{
+  const xm = (MEDALS[i].x + MEDALS[i+1].x)/2 * W - 28 + (i===0 ? -6 : 6);
+  return `<div class="plus" id="plus${i}" style="left:${xm}px;top:${CY-28}px;"></div>`;
+}).join('');
+medalRow.insertAdjacentHTML('beforeend', plusHTML);
+
+/* ---- confetti ----------------------------------------------------------- */
+const confBox = document.getElementById('confetti');
+const BURST_N = 36, RAIN_N = 44;
+let html = '';
+for (let i=0;i<BURST_N;i++) html += `<div class="conf burst" data-i="${i}" style="width:${10+12*rnd(i+90)}px;height:${7+9*rnd(i+13)}px;background:${PALETTE[i%10]};opacity:0;"></div>`;
+for (let i=0;i<RAIN_N;i++)  html += `<div class="conf rain"  data-i="${i}" style="width:${9+11*rnd(i+55)}px;height:${7+8*rnd(i+77)}px;background:${PALETTE[(i*3+1)%10]};opacity:0;"></div>`;
+confBox.innerHTML = html;
+const bursts = confBox.querySelectorAll('.burst');
+const rains  = confBox.querySelectorAll('.rain');
+
+/* ---- timeline ----------------------------------------------------------- */
+// p in [0,1] over 12 s
+const FILL_T0 = 0.13, FILL_DT = 0.036, FILL_DUR = 0.032;   // slot i pops at FILL_T0+i*FILL_DT
+const DONE_A = 0.50, DONE_B = 0.60;                        // completion celebration
+const MORPH_A = 0.63, MORPH_B = 0.71;                      // ring shrinks away
+const MEDAL_T = [0.66, 0.715, 0.77], MEDAL_DUR = 0.06;
+
+window.SM = { render(p){
+  // brand
+  const bi = easeOut(seg(p,0.00,0.08));
+  const brand = document.getElementById('brand');
+  brand.style.opacity = bi;
+  brand.style.transform = `translateY(${lerp(-40,0,bi)}px)`;
+
+  // ring group enter + completion pulse + morph out
+  const gi = easeBack(seg(p,0.05,0.13));
+  const pulse = 1 + 0.05*Math.sin(seg(p,DONE_A,DONE_B)*Math.PI);
+  const mo = easeIO(seg(p,MORPH_A,MORPH_B));
+  group.style.opacity = clamp(gi,0,1) * (1-mo);
+  group.style.transform = `scale(${clamp(gi,0,1) * pulse * lerp(1,0.45,mo)}) translateY(${lerp(0,-40,mo)}px)`;
+
+  // slot fills
+  let filled = 0;
+  slots.forEach((s,i)=>{
+    const t0 = FILL_T0 + i*FILL_DT;
+    const q = seg(p, t0, t0+FILL_DUR);
+    filled += q;
+    const e = easeBack(q);
+    const f = s.querySelector('.slotFill'), c = s.querySelector('.slotChk'),
+          d = s.querySelector('.slotEmpty');
+    f.style.transform = `scale(${clamp(e,0,1.2)})`;
+    f.style.opacity = q>0 ? 1 : 0;
+    d.style.opacity = 1 - q;
+    const cq = easeBack(seg(p, t0+FILL_DUR*0.6, t0+FILL_DUR*1.6));
+    c.style.transform = `scale(${clamp(cq,0,1)})`;
+    c.style.opacity = clamp(cq,0,1);
+  });
+
+  // progress arc + centre trophy grow with each fill
+  const f10 = filled/10;
+  const done = seg(p,DONE_A,DONE_B);
+  const arcCol = done>0 ? GOLD : '#2F6FB5';
+  document.getElementById('arc').style.background =
+    `conic-gradient(${arcCol} ${(f10*360).toFixed(1)}deg, rgba(34,37,43,0.10) 0)`;
+  const tb = document.getElementById('trophyBig');
+  const tPop = easeBack(done);
+  const tScale = lerp(0.45, 0.8, easeIO(f10)) + 0.35*clamp(tPop,0,1);
+  tb.style.transform = `translate(-50%,-54%) scale(${tScale})`;
+  tb.style.opacity = lerp(0.28, 1, clamp(f10*1.4 + done, 0, 1));
+  document.getElementById('trophyGlow').style.opacity = 0.25 + 0.75*done;
+
+  // burst confetti at completion
+  const bq = seg(p, 0.51, 0.70);
+  bursts.forEach(el=>{
+    const i = +el.dataset.i;
+    if (bq<=0 || bq>=1){ el.style.opacity=0; return; }
+    const a = i/BURST_N*2*Math.PI + rnd(i)*0.5;
+    const sp = 0.55 + 0.75*rnd(i+50);
+    const r = easeOut(bq)*430*sp;
+    const x = W/2 + Math.cos(a)*r, y = CY + Math.sin(a)*r + 260*bq*bq;
+    el.style.opacity = bq<0.7 ? 1 : (1-(bq-0.7)/0.3);
+    el.style.transform = `translate(${x}px,${y}px) rotate(${(rnd(i+3)*720-360)*bq}deg)`;
+  });
+
+  // medals pop in, escalating
+  MEDALS.forEach((m,i)=>{
+    const el = document.getElementById('medal'+i);
+    const q = easeBack(seg(p, MEDAL_T[i], MEDAL_T[i]+MEDAL_DUR));
+    const float = Math.sin(p*46 + i*2.1)*4 * seg(p,MEDAL_T[i]+MEDAL_DUR,1);
+    el.style.opacity = clamp(q,0,1);
+    el.style.transform = `scale(${clamp(q,0,1.15)}) translateY(${float}px)`;
+  });
+  [0,1].forEach(i=>{
+    const el = document.getElementById('plus'+i);
+    const q = easeBack(seg(p, MEDAL_T[i+1]-0.015, MEDAL_T[i+1]+0.045));
+    el.style.opacity = clamp(q,0,1)*0.85;
+    el.style.transform = `scale(${clamp(q,0,1.1)})`;
+  });
+  const rays = document.getElementById('rays');
+  if (rays){
+    const rq = seg(p, MEDAL_T[2], MEDAL_T[2]+0.10);
+    rays.style.opacity = easeOut(rq);
+    rays.style.transform = `translate(-50%,-50%) rotate(${p*140}deg)`;
+  }
+
+  // finale confetti rain
+  const rq2 = seg(p, 0.78, 1.0);
+  rains.forEach(el=>{
+    const i = +el.dataset.i;
+    if (rq2<=0){ el.style.opacity=0; return; }
+    const delay = rnd(i+21)*0.35;
+    const q = clamp((rq2-delay)/(1-delay), 0, 1);
+    if (q<=0){ el.style.opacity=0; return; }
+    const x0 = (i+0.5)/RAIN_N*W + (rnd(i+7)-0.5)*60;
+    const sp = 0.75 + 0.6*rnd(i+31);
+    const y = -60 + q*sp*(H+140);
+    const x = x0 + Math.sin(q*9 + i)*26;
+    el.style.opacity = (y < H-30) ? 0.95 : clamp((H-y)/40+0.6,0,0.95);
+    el.style.transform = `translate(${x}px,${y}px) rotate(${(rnd(i+9)*720-360)*q}deg)`;
+  });
+
+  // url
+  const ui = easeOut(seg(p,0.84,0.92));
+  const url = document.getElementById('url');
+  url.style.opacity = ui;
+  url.style.transform = `translateY(${lerp(24,0,ui)}px)`;
+}};
+window.SM.render(0);
+</script>
+</body>
+</html>
