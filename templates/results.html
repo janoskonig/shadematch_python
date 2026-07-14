@@ -240,7 +240,7 @@
     width: 18px; height: 18px; border-radius: 3px;
     border: 1px solid var(--border); flex-shrink: 0;
   }
-  .csr-label { width: 100px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
+  .csr-label { width: 140px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 0; }
   .csr-bar-wrap {
     flex: 1; background: var(--border); border-radius: 3px; height: 7px; overflow: hidden;
   }
@@ -753,13 +753,15 @@
         const data = await res.json();
         if (data.status !== 'success') return;
 
-        const cq = data.coverage_quota != null ? data.coverage_quota : 10;
+        // Legacy per-color awards were granted at the old 2-attempt quota
+        // (the quota mechanism is gone; the constant only labels old badges).
+        const LEGACY_QUOTA = 2;
         const covHead = document.getElementById('coverageHeading');
         if (covHead) covHead.textContent = t('Color Coverage');
 
-        renderProgressCard(data.progress, data.coverage_quota);
-        renderAwards(data.awards, cq);
-        renderColorStats(data.color_stats, data.coverage_quota);
+        renderProgressCard(data.progress);
+        renderAwards(data.awards, LEGACY_QUOTA);
+        renderColorStats(data.color_stats);
         renderDiplomaCta(data.region_mastery, userId);
         document.getElementById('profileSection').style.display = '';
         loadHueAccuracy(userId);
@@ -947,7 +949,7 @@
       card.style.display = '';
     }
 
-    function renderProgressCard(p, quota) {
+    function renderProgressCard(p) {
       const primary = document.getElementById('progressStatsPrimary');
       const secondary = document.getElementById('progressStatsSecondary');
       const rankColor = p.rank_color || '#ccc';
@@ -976,6 +978,7 @@
       `;
 
       secondary.innerHTML = `
+        <span class="ps-mini" title="${t('Matches completed')}">🎨 <span class="ps-mini-val">${p.matches_completed != null ? p.matches_completed : 0}</span> ${t('matches')}</span>
         <span class="ps-mini" title="${t('Current streak')}">🔥 <span class="ps-mini-val">${p.current_streak}</span> ${t('streak')}</span>
         <span class="ps-mini" title="${t('Longest streak')}">🏆 <span class="ps-mini-val">${p.longest_streak}</span> ${t('best')}</span>
         <span class="ps-mini" title="${t('Streak freezes available')}">🧊 <span class="ps-mini-val">${p.streak_freeze_available}</span> ${t('freezes')}</span>
@@ -987,17 +990,17 @@
         masteredBanner.style.display = p.is_maxed_out ? '' : 'none';
       }
 
-      // Primary bar: quota coverage
+      // Primary bar: catalog coverage (colors completed at least once)
       const quotaBarPct = p.level_progress_pct != null ? p.level_progress_pct : covPct;
       document.getElementById('quotaBarFill').style.width = quotaBarPct + '%';
       if (p.is_maxed_out) {
         document.getElementById('quotaBarLabel').innerHTML =
           '<span>' + t('All colors mastered') + '</span><span>100%</span>';
       } else {
-        const remAttempts = p.remaining_attempts_total != null ? p.remaining_attempts_total.toLocaleString() : '—';
+        const matchesDone = p.matches_completed != null ? p.matches_completed : 0;
         document.getElementById('quotaBarLabel').innerHTML =
-          `<span>${t('{done}/{total} colors at quota').replace('{done}', String(completedColors)).replace('{total}', String(totalColors))}</span>` +
-          `<span>${t('{n} attempts remaining').replace('{n}', remAttempts)}</span>`;
+          `<span>${t('{done}/{total} colors completed').replace('{done}', String(completedColors)).replace('{total}', String(totalColors))}</span>` +
+          `<span>${(matchesDone === 1 ? t('{n} match played') : t('{n} matches played')).replace('{n}', String(matchesDone))}</span>`;
       }
 
       // Secondary bar: XP (reinforcement)
@@ -1124,41 +1127,37 @@
 
     var MAX_QUOTA_COLORS_SHOWN = 5;
 
-    function renderColorStats(colorStats, quota) {
+    function escHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function renderColorStats(colorStats) {
       const list = document.getElementById('colorStatsList');
       const card = document.getElementById('colorStatsCard');
       const meta = document.getElementById('coverageMeta');
       if (!colorStats || colorStats.length === 0) return;
 
-      const q = quota != null && quota > 0 ? quota : 10;
-      const completed = colorStats.filter(s => s.attempt_count >= q).length;
-      if (meta) meta.textContent = t('{done}/{total} at quota · {q} per color')
-        .replace('{done}', String(completed)).replace('{total}', String(colorStats.length))
-        .replace('{q}', String(q));
+      const completed = colorStats.filter(s => (s.completed_count || 0) > 0).length;
+      if (meta) meta.textContent = t('{done}/{total} colors completed')
+        .replace('{done}', String(completed)).replace('{total}', String(colorStats.length));
 
-      // Sort: at-quota colors last, then by remaining ascending (nearest to done first)
-      const sorted = [...colorStats].sort((a, b) => {
-        const aRem = Math.max(0, q - a.attempt_count);
-        const bRem = Math.max(0, q - b.attempt_count);
-        if (aRem === 0 && bRem === 0) return 0;
-        if (aRem === 0) return 1;
-        if (bRem === 0) return -1;
-        return aRem - bRem;
-      });
+      // Sort: most played first; ties by best ΔE (quota is gone — this list is
+      // a descriptive play-count ledger, colours can repeat across matches).
+      const sorted = [...colorStats].sort((a, b) =>
+        (b.attempt_count - a.attempt_count)
+        || ((a.best_delta_e != null ? a.best_delta_e : 1e9)
+            - (b.best_delta_e != null ? b.best_delta_e : 1e9)));
+      const maxPlays = Math.max(1, ...sorted.map(s => s.attempt_count || 0));
 
-      // Most promising few visible (nearest to quota first, at-quota sort
-      // last); the rest stay expandable.
       list.innerHTML = sorted.map((s, i) => {
-        const pct = Math.min(100, Math.round(s.attempt_count / q * 100));
-        const remaining = Math.max(0, q - s.attempt_count);
-        const atQuota = s.attempt_count >= q;
-        const barColor = atQuota ? '#00b894' : '#667eea';
-        const countLabel = atQuota
-          ? `${s.attempt_count}/${q} ✅`
-          : `${s.attempt_count}/${q}`;
+        const plays = s.attempt_count || 0;
+        const pct = Math.min(100, Math.round(plays / maxPlays * 100));
+        const done = (s.completed_count || 0) > 0;
+        const barColor = done ? '#00b894' : '#667eea';
+        const countLabel = done ? `${plays}× ✅` : `${plays}×`;
         const extra = i >= MAX_QUOTA_COLORS_SHOWN ? ' extra-item is-hidden' : '';
         return `<div class="color-stat-bar-row${extra}">
-          <span class="csr-label">${t('Color #{id}').replace('{id}', String(s.target_color_id))}</span>
+          <span class="csr-label" title="${escHtml(s.name || '')}">${escHtml(s.name || t('Color #{id}').replace('{id}', String(s.target_color_id)))}</span>
           <div class="csr-bar-wrap"><div class="csr-bar-fill" style="width:${pct}%;background:${barColor}"></div></div>
           <span class="csr-count">${countLabel}</span>
         </div>`;

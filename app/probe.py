@@ -5,10 +5,10 @@ Design (see notes/ShadeMatch_tanulasi_AB_terv.qmd):
   - Every ~8-10th round a probe slot opens (never in the user's first 5 rounds).
   - Round-level randomization decides the arm:
       'repeat'      — a colour the user played ≥ MIN_REPEAT_GAP_ROUNDS rounds ago
-      'matched_new' — an unplayed colour, difficulty-matched, inside the user's
-                      unlocked sum-drop band (never a locked colour)
+      'matched_new' — an unplayed colour, difficulty-matched
       'repeat_short' / 'repeat_long' — fallback contrast (recency of repetition)
-        when the unlocked band has no unplayed colour left.
+        when there is no unplayed colour left. (The sum-drop band ladder was
+        removed with match-based gameplay; the whole catalog is eligible.)
   - Assignment-time snapshots (exposure history, cumulative rounds, level/cap)
     are stored on the slot so the randomization stays auditable.
   - Probe rounds are quota-neutral (gamification.process_progression is_probe=True):
@@ -25,11 +25,7 @@ from datetime import datetime, date, timedelta
 
 from . import db
 from .models import ProbeSlot, MixingSession, TargetColor, UserProgress
-from .gamification import (
-    MIN_SUM_DROP_BAND,
-    target_color_sum_drop,
-    _effective_sum_cap,
-)
+from .gamification import target_color_sum_drop
 from .regions import region_of_target
 
 POLICY_VERSION = 'probe-v1'
@@ -74,15 +70,14 @@ def _exposure_snapshot(rounds, target_color_id):
     return count, last_at, rounds_since
 
 
-def _recipe_colors_in_band(cap: int):
-    """Gamut colours with a full recipe inside [MIN_SUM_DROP_BAND, effective cap]."""
-    eff = _effective_sum_cap(cap)
-    out = []
-    for tc in TargetColor.query.filter_by(color_type='gamut').all():
-        s = target_color_sum_drop(tc)
-        if s is not None and MIN_SUM_DROP_BAND <= s <= eff:
-            out.append(tc)
-    return out
+def _recipe_colors_in_band(cap: int = None):
+    """Gamut colours with a full recipe. The *cap* argument is vestigial: the
+    sum-drop band ladder was removed with match-based gameplay, so the whole
+    recipe-complete catalog is eligible."""
+    return [
+        tc for tc in TargetColor.query.filter_by(color_type='gamut').all()
+        if target_color_sum_drop(tc) is not None
+    ]
 
 
 def get_pending_slot(user_id: str):
@@ -138,11 +133,10 @@ def maybe_assign_flow_probe(user_id: str):
         return None
 
     up = UserProgress.query.filter_by(user_id=user_id).first()
-    cap = int(up.max_sum_drop_unlocked) if up else MIN_SUM_DROP_BAND
     level = int(up.level) if up else 1
 
     played_ids = {r.target_color_id for r in rounds if r.target_color_id is not None}
-    band_colors = _recipe_colors_in_band(cap)
+    band_colors = _recipe_colors_in_band()
     band_ids = {tc.id for tc in band_colors}
     reg_of = {tc.id: region_of_target(tc) for tc in band_colors}
 
@@ -176,7 +170,7 @@ def maybe_assign_flow_probe(user_id: str):
         s for cid in played_ids if cid in band_ids
         if (s := target_color_sum_drop(TargetColor.query.get(cid))) is not None
     )
-    ref = played_sums[len(played_sums) // 2] if played_sums else MIN_SUM_DROP_BAND
+    ref = played_sums[len(played_sums) // 2] if played_sums else 2
     best_gap = min(abs(target_color_sum_drop(tc) - ref) for tc in pool)
     closest = [tc for tc in pool if abs(target_color_sum_drop(tc) - ref) == best_gap]
     target_id = rng.choice(sorted(tc.id for tc in closest))
@@ -196,7 +190,7 @@ def maybe_assign_flow_probe(user_id: str):
         rounds_since_last_exposure=exp_since,
         cumulative_prior_rounds=n,
         level_at_assignment=level,
-        cap_at_assignment=cap,
+        cap_at_assignment=None,  # band ladder removed; column kept for old rows
         status='assigned',
     )
     db.session.add(slot)
@@ -251,7 +245,7 @@ def assign_daily_probe(user_id: str, target_color_id: int, today=None):
         rounds_since_last_exposure=exp_since,
         cumulative_prior_rounds=len(rounds),
         level_at_assignment=int(up.level) if up else 1,
-        cap_at_assignment=int(up.max_sum_drop_unlocked) if up else MIN_SUM_DROP_BAND,
+        cap_at_assignment=None,  # band ladder removed; column kept for old rows
         status='assigned',
     )
     db.session.add(slot)

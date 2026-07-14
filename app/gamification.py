@@ -1,25 +1,22 @@
 """
 Gamification engine: XP, levels, ranks, streaks, freeze, awards, coverage stats.
 
-Tier-driven leveling (Option C — 30 levels):
-  - Each completed recipe color (≥COVERAGE_QUOTA attempts) raises the user's
-    effective sum-drop cap to the next distinct band in the catalog and triggers
-    a level-up, until the catalog max is reached.
-  - Levels 1..(1+cap_advance_steps): cap-advance phase, one level per completed
-    color. cap_advance_steps = number of distinct sum_drop bands above
-    DEFAULT_CAP in the live catalog.
-  - Levels (cap-phase max + 1)..29: endgame phase. Remaining recipe colors are
-    distributed across the remaining levels.
-  - Level 30: full mastery (every recipe color at quota AND cap fully open).
-  - Hidden-after-quota: any color the user has played COVERAGE_QUOTA× is
-    excluded from the picker on the client (frontend already filters on
-    `under_quota`); cap is recomputed deterministically each save.
+Gameplay is match-based (app/matches.py): a match = 10 rounds, one target from
+each of the 10 macro-clusters (app/clusters.py). There is no content gate — the
+old sum-drop band ladder and the played-twice coverage quota were removed;
+every gamut colour can be drawn in any match.
 
-XP and streaks remain as secondary reinforcement and never drive the level.
+Levels/ranks are XP-driven; XP and streaks are reinforcement only. Coverage is
+purely descriptive: how many distinct colours the player has completed at
+least once (compute_coverage_progress).
 """
+import re
 from datetime import date, datetime, timedelta, time
 from flask import has_request_context
-from .models import UserProgress, UserAward, UserTargetColorStats, TargetColor, MixingSession, MixingAttempt
+from .models import (
+    UserProgress, UserAward, UserTargetColorStats, TargetColor, MixingSession,
+    MixingAttempt, Match,
+)
 from . import db
 from .i18n import t as _t_request
 from .regions import region_of_target
@@ -34,31 +31,13 @@ def _t(text, **kwargs):
         return _t_request(text, **kwargs)
     return text.format(**kwargs) if kwargs else text
 
-# Attempts on a color before it counts as "completed" (and is hidden from the
-# picker). Lowered to 2: the gamut set has hundreds of colours evenly covering the
-# space, so repeating the same shade many times adds nothing — play it once or twice
-# and move on. (Band unlock is independent: one solved colour opens the next band.)
-COVERAGE_QUOTA = 2
 STREAK_FREEZE_CAP = 3
 
-# Sum-drop tier: quota and games only count colors with a full recipe and
-# MIN_SUM_DROP_BAND <= sum(drops) <= user's effective cap.
-MIN_SUM_DROP_BAND = 2
-MAX_SUM_DROP_CATALOG_CAP = 28
-
 # Main gameplay is the even-gamut / skin target set (color_type='gamut'); the older
-# basic/skin/lab catalog is retired from serving, coverage and levels. Progression is a
-# sum-drop BAND ladder as a content gate: bands 2..STARTING_BAND are open from the start
-# (the low bands are sparse, so a low start = too few colours), and solving a colour at
-# band k >= STARTING_BAND unlocks band k+1.
+# basic/skin/lab catalog is retired from serving, coverage and levels.
 GAMUT_TYPE = 'gamut'
-STARTING_BAND = 12          # bands 2..12 open immediately (~30 gamut colours of variety)
-# Starting sum-drop cap for new users = the open band window.
-DEFAULT_CAP = STARTING_BAND
 
-# Total leveling slots. 30 = (1 starting + up to 18 cap-advance levels) + endgame
-# stages + 1 mastery cap. The cap-phase length adapts to the live catalog so
-# behaviour scales gracefully if the recipe set grows.
+# Total leveling slots (levels/ranks are XP-driven, see _xp_level).
 LEVEL_COUNT = 30
 
 XP_TABLE = {
@@ -100,122 +79,8 @@ HEAT_MIN_CONSECUTIVE = 3
 HEAT_STEP_PCT = 0.10
 HEAT_MAX_BONUS_PCT = 0.50
 
-# Per-color reinforcement milestones (must be < COVERAGE_QUOTA). With COVERAGE_QUOTA=2
-# there is no room for intermediate per-colour milestones, so none are awarded.
-PER_COLOR_REINFORCEMENT_MILESTONES = []
-
-# Global quota coverage % milestones (quota_major)
+# Global coverage % milestones (share of catalog colours completed at least once).
 QUOTA_GLOBAL_MILESTONE_PCTS = [25, 50, 75]
-
-
-# ---------------------------------------------------------------------------
-# Quota-level helpers (pure functions)
-# ---------------------------------------------------------------------------
-
-def compute_level_from_quota(colors_at_quota_total: int,
-                             total_recipe_colors: int,
-                             cap_advance_steps: int,
-                             is_maxed_out: bool) -> int:
-    """
-    Map (catalog progress, catalog shape) → level in 1..LEVEL_COUNT.
-
-    Cap-advance phase (one level per completed color):
-        L1 .. L(1 + cap_advance_steps)
-    Endgame phase (remaining colors distributed across remaining levels):
-        L(1 + cap_advance_steps + 1) .. L(LEVEL_COUNT - 1)
-    Mastery:
-        L(LEVEL_COUNT)
-    """
-    if is_maxed_out:
-        return LEVEL_COUNT
-    if total_recipe_colors <= 0:
-        return 1
-    if colors_at_quota_total >= total_recipe_colors:
-        # All recipe colors at quota but cap not yet flagged maxed → still L29
-        # (the calling code will set is_maxed_out=True once cap is fully open).
-        return min(LEVEL_COUNT - 1, LEVEL_COUNT - 1)
-
-    cap_steps = max(0, int(cap_advance_steps))
-    cap_phase_max_level = 1 + cap_steps  # e.g. 19 for an 18-step catalog
-
-    # Catalog has more cap-advance steps than we have level slots — clamp.
-    if cap_phase_max_level >= LEVEL_COUNT:
-        return min(LEVEL_COUNT - 1, 1 + colors_at_quota_total)
-
-    if colors_at_quota_total < cap_steps:
-        return 1 + colors_at_quota_total
-
-    # Endgame phase
-    extra = colors_at_quota_total - cap_steps                       # 0..(remaining-1)
-    remaining_colors = total_recipe_colors - cap_steps              # endgame total
-    endgame_phase_levels = LEVEL_COUNT - cap_phase_max_level         # excludes mastery? no, includes L30 slot
-    # We reserve L(LEVEL_COUNT) for mastery, so the in-band endgame levels are
-    # L(cap_phase_max_level) .. L(LEVEL_COUNT - 1), i.e. endgame_phase_levels.
-    if endgame_phase_levels <= 0 or remaining_colors <= 0:
-        return cap_phase_max_level
-    step_size = max(1, remaining_colors // endgame_phase_levels)
-    endgame_step = min(endgame_phase_levels - 1, extra // step_size)
-    return cap_phase_max_level + endgame_step
-
-
-def compute_level_from_bands(bands_cleared: int, total_bands: int,
-                             is_maxed_out: bool) -> int:
-    """Band-ladder level: one level per sum-drop band cleared. L1 = no band cleared
-    (playing band 2); clearing a band = +1 level; all bands cleared = mastery (L30)."""
-    if is_maxed_out:
-        return LEVEL_COUNT
-    if total_bands <= 0:
-        return 1
-    return max(1, min(LEVEL_COUNT - 1, 1 + int(bands_cleared)))
-
-
-def _level_threshold(level: int,
-                     cap_advance_steps: int,
-                     total_recipe_colors: int) -> float:
-    """Min colors_at_quota_total (continuous) required to be at this level."""
-    if level <= 1 or total_recipe_colors <= 0:
-        return 0.0
-    if level >= LEVEL_COUNT:
-        return float(total_recipe_colors)
-
-    cap_steps = max(0, int(cap_advance_steps))
-    cap_phase_max_level = 1 + cap_steps
-
-    if cap_phase_max_level >= LEVEL_COUNT:
-        return float(min(level - 1, total_recipe_colors))
-
-    if level <= cap_phase_max_level:
-        return float(level - 1)
-
-    remaining_colors = total_recipe_colors - cap_steps
-    endgame_phase_levels = LEVEL_COUNT - cap_phase_max_level
-    if endgame_phase_levels <= 0 or remaining_colors <= 0:
-        return float(cap_steps)
-    step_size = max(1, remaining_colors // endgame_phase_levels)
-    return float(cap_steps + (level - cap_phase_max_level) * step_size)
-
-
-def compute_level_progress_pct_from_quota(level: int,
-                                          fractional_count: float,
-                                          cap_advance_steps: int,
-                                          total_recipe_colors: int,
-                                          is_maxed_out: bool) -> float:
-    """
-    Smooth progress bar within the current level (0.0 – 100.0).
-    `fractional_count` = sum(min(attempts/COVERAGE_QUOTA, 1.0)) over recipe colors.
-    """
-    if is_maxed_out:
-        return 100.0
-    if level >= LEVEL_COUNT:
-        return 100.0
-    current_t = _level_threshold(level, cap_advance_steps, total_recipe_colors)
-    next_t = _level_threshold(level + 1, cap_advance_steps, total_recipe_colors)
-    span = next_t - current_t
-    if span <= 0:
-        return 100.0
-    progress = float(fractional_count) - current_t
-    pct = (progress / span) * 100.0
-    return round(min(100.0, max(0.0, pct)), 2)
 
 
 DAILY_MISSIONS = [
@@ -511,313 +376,42 @@ def _catalog_rows():
             .all())
 
 
-def _catalog_sum_drops_sorted(target_colors_iter=None) -> list:
-    """Sorted distinct in-band sum_drop values for catalog rows that have a full recipe."""
-    if target_colors_iter is None:
-        target_colors_iter = _catalog_rows()
-    distinct = set()
-    for tc in target_colors_iter:
-        s = target_color_sum_drop(tc)
-        if s is None:
-            continue
-        if MIN_SUM_DROP_BAND <= s <= MAX_SUM_DROP_CATALOG_CAP:
-            distinct.add(int(s))
-    return sorted(distinct)
-
-
-def _catalog_recipe_max_sum() -> int:
-    sums = _catalog_sum_drops_sorted()
-    return sums[-1] if sums else 0
-
-
-def _start_idx_in_sum_drops(sum_drops_sorted) -> int:
-    """Index of the largest sum_drop ≤ DEFAULT_CAP, or 0 if none qualify."""
-    if not sum_drops_sorted:
-        return 0
-    start_idx = 0
-    found = False
-    for i, s in enumerate(sum_drops_sorted):
-        if s <= DEFAULT_CAP:
-            start_idx = i
-            found = True
-        else:
-            break
-    return start_idx if found else 0
-
-
-def _cap_advance_steps_for(sum_drops_sorted) -> int:
-    """Number of distinct cap-advance bands above the starting band (≥ 0)."""
-    if not sum_drops_sorted:
-        return 0
-    return max(0, len(sum_drops_sorted) - 1 - _start_idx_in_sum_drops(sum_drops_sorted))
-
-
-def _derived_max_sum_drop_unlocked(colors_at_quota_total: int, sum_drops_sorted) -> int:
-    """
-    Cap derived from the user's monotonic completion count.
-    Each color the user brings to quota raises the effective cap to the next
-    distinct sum_drop band, clamped to MAX_SUM_DROP_CATALOG_CAP and catalog max.
-    """
-    if not sum_drops_sorted:
-        return DEFAULT_CAP
-    start_idx = _start_idx_in_sum_drops(sum_drops_sorted)
-    new_idx = min(
-        start_idx + max(0, int(colors_at_quota_total)),
-        len(sum_drops_sorted) - 1,
-    )
-    cap_value = sum_drops_sorted[new_idx]
-    catalog_max = sum_drops_sorted[-1]
-    ceiling = min(MAX_SUM_DROP_CATALOG_CAP, catalog_max)
-    return max(DEFAULT_CAP, min(ceiling, int(cap_value)))
-
-
-def _band_ladder_cap(solved_bands) -> int:
-    """Band-ladder cap: bands 2..STARTING_BAND are open from the start; from there, walk up
-    while each successive band has ≥1 solved colour. Solving one colour at band k (>= the
-    starting band) opens band k+1."""
-    cap = STARTING_BAND
-    while cap in solved_bands and cap < MAX_SUM_DROP_CATALOG_CAP:
-        cap += 1
-    return cap
-
-
-def _solved_bands_for_user(user_id: str, catalog_rows=None) -> set:
-    """Sum-drop bands in which the user has solved (completed) ≥1 gamut colour."""
-    if not user_id:
-        return set()
-    rows = catalog_rows if catalog_rows is not None else _catalog_rows()
-    band_of = {tc.id: target_color_sum_drop(tc) for tc in rows}
-    solved = set()
-    for s in UserTargetColorStats.query.filter_by(user_id=user_id).all():
-        if int(s.completed_count or 0) > 0:
-            b = band_of.get(s.target_color_id)
-            if b is not None:
-                solved.add(b)
-    return solved
-
-
-def _effective_sum_cap_from_catalog_max(max_sum_drop_unlocked: int, catalog_max: int) -> int:
-    """User cap clamped to catalog content and global ceiling (catalog_max from a preloaded row set)."""
-    top = catalog_max if catalog_max > 0 else MAX_SUM_DROP_CATALOG_CAP
-    return min(int(max_sum_drop_unlocked), MAX_SUM_DROP_CATALOG_CAP, max(top, MIN_SUM_DROP_BAND))
-
-
-def _effective_sum_cap(max_sum_drop_unlocked: int) -> int:
-    """User cap clamped to catalog content and global ceiling."""
-    return _effective_sum_cap_from_catalog_max(max_sum_drop_unlocked, _catalog_recipe_max_sum())
-
-
-def _eligible_target_colors(max_sum_drop_unlocked: int) -> list:
-    """Colors with complete recipe and sum in [MIN_SUM_DROP_BAND, effective_cap]."""
-    cap = _effective_sum_cap(max_sum_drop_unlocked)
-    out = []
-    for tc in _catalog_rows():
-        s = target_color_sum_drop(tc)
-        if s is None:
-            continue
-        if MIN_SUM_DROP_BAND <= s <= cap:
-            out.append(tc)
-    return out
-
-
-def recompute_max_sum_drop_unlocked(user_id: str) -> int:
-    """
-    Recompute and persist `user_progress.max_sum_drop_unlocked` from the user's
-    monotonic completion count. Returns the new cap.
-
-    Replaces the legacy `advance_max_sum_drop_unlocked` cap-walk loop. The new
-    rule: each recipe color at quota = +1 distinct sum_drop band unlocked.
-    """
-    up = UserProgress.query.filter_by(user_id=user_id).first()
-    if not up:
-        return MIN_SUM_DROP_BAND
-    new_cap = _band_ladder_cap(_solved_bands_for_user(user_id))
-    if new_cap != int(up.max_sum_drop_unlocked or MIN_SUM_DROP_BAND):
-        up.max_sum_drop_unlocked = new_cap
-    return new_cap
-
-
-# Backward-compat alias for callers (e.g. external scripts) that still import the
-# legacy name. Behaviour is now the deterministic recompute above.
-advance_max_sum_drop_unlocked = recompute_max_sum_drop_unlocked
-
-
 # ---------------------------------------------------------------------------
-# Canonical quota helpers
+# Coverage (descriptive only — no gating)
 # ---------------------------------------------------------------------------
 
-def get_tracked_color_ids_for_user(user_id) -> list:
+def compute_coverage_progress(user_id: str) -> dict:
     """
-    Deterministic global policy: all main-gameplay (gamut) colors are tracked.
-    Returns ordered list of TargetColor IDs (catalog_order ascending).
-    """
-    return [tc.id for tc in _catalog_rows()]
-
-
-def compute_quota_progress(user_id: str) -> dict:
-    """
-    Canonical quota progress contract. All downstream consumers must read this.
-
-    Catalog-total semantics:
-      - `completed_colors` / `total_tracked_colors` count *all* recipe colors
-        across the catalog (not just the user's current band). After a user
-        opens new bands, the denominator does not change — the long-term
-        "X / 63 colors complete" narrative is preserved.
-      - `coverage_ratio` / `catalog_coverage_pct` reflect catalog-total progress.
-      - `tier_completed_colors` / `tier_total_colors` give tier-specific tallies
-        for callers that need the current band view.
-
-    Cap is *derived* from the user's monotonic completion count — each completed
-    recipe color advances the cap to the next distinct sum_drop band.
+    Descriptive catalog coverage: how many distinct recipe-complete gamut
+    colours the player has completed (saved, completed_count > 0) at least
+    once. Nothing here gates gameplay — matches draw from the whole catalog.
 
     Returns:
-      tracked_color_ids        – eligible color IDs (current band, catalog order)
-      eligible_color_ids       – same as tracked_color_ids (explicit alias)
-      completed_attempt_units  – sum(min(attempts, COVERAGE_QUOTA)) over recipe colors
-      required_attempt_units   – total_recipe_colors * COVERAGE_QUOTA
-      completed_colors         – recipe colors with attempts >= COVERAGE_QUOTA
-      total_tracked_colors     – count of recipe colors in catalog
-      total_recipe_colors      – alias of total_tracked_colors (explicit)
-      colors_at_quota_total    – completed_colors (explicit alias for level math)
-      fractional_count         – sum(min(attempts/COVERAGE_QUOTA, 1.0)) over recipe colors
-      cap_advance_steps        – distinct cap-bands above starting band
-      max_sum_drop_unlocked    – derived cap (default DEFAULT_CAP)
-      effective_sum_cap        – cap clamped to catalog/global ceiling
-      remaining_attempts_total – required - completed (catalog-total)
-      coverage_ratio           – colors_at_quota_total / total_recipe_colors
-      catalog_coverage_pct     – coverage_ratio * 100, rounded to 1 dp
-      is_maxed_out             – all recipe colors at quota AND cap fully opened
-      nearest_deficit_color_id – among eligible only
-      nearest_deficit_remaining
-      tier_completed_colors    – eligible count with attempts >= COVERAGE_QUOTA
-      tier_total_colors        – count of eligible recipe colors
-      color_quota_map          – all catalog IDs; ineligible rows expose remaining 0
+      completed_colors     – distinct recipe colours completed >= 1x
+      total_tracked_colors – recipe-complete gamut colours in the catalog
+      coverage_ratio       – completed / total (0.0 when catalog empty)
+      catalog_coverage_pct – coverage_ratio * 100, rounded to 1 dp
+      is_maxed_out         – every recipe colour completed at least once
     """
-    all_tracked = _catalog_rows()
-    sum_drops_sorted = _catalog_sum_drops_sorted(all_tracked)
-    catalog_max = sum_drops_sorted[-1] if sum_drops_sorted else 0
-    cap_advance_steps = _cap_advance_steps_for(sum_drops_sorted)
-    catalog_bands = set(sum_drops_sorted)
-    total_bands = len(catalog_bands)
+    recipe_ids = {
+        tc.id for tc in _catalog_rows()
+        if target_color_sum_drop(tc) is not None
+    }
+    total = len(recipe_ids)
 
-    recipe_colors = []
-    for tc in all_tracked:
-        s = target_color_sum_drop(tc)
-        if s is None:
-            continue
-        if MIN_SUM_DROP_BAND <= s <= MAX_SUM_DROP_CATALOG_CAP:
-            recipe_colors.append(tc)
-    total_recipe_colors = len(recipe_colors)
-
-    stats_map = {}
-    solved_map = {}
+    completed = 0
     if user_id:
         for s in UserTargetColorStats.query.filter_by(user_id=user_id).all():
-            stats_map[s.target_color_id] = int(s.attempt_count or 0)
-            solved_map[s.target_color_id] = int(s.completed_count or 0)
+            if int(s.completed_count or 0) > 0 and s.target_color_id in recipe_ids:
+                completed += 1
 
-    # ── Catalog-total progress tallies ─────────────────────────────────────
-    colors_at_quota_total = 0
-    fractional_count = 0.0
-    completed_attempt_units = 0
-    solved_bands = set()
-    for tc in recipe_colors:
-        ac = stats_map.get(tc.id, 0)
-        completed_attempt_units += min(ac, COVERAGE_QUOTA)
-        if ac >= COVERAGE_QUOTA:
-            colors_at_quota_total += 1
-        if COVERAGE_QUOTA > 0:
-            fractional_count += min(ac / float(COVERAGE_QUOTA), 1.0)
-        if solved_map.get(tc.id, 0) > 0:
-            solved_bands.add(target_color_sum_drop(tc))
-
-    # ── Band-ladder cap: one solved colour per band opens the next band ─────
-    bands_cleared = len(solved_bands & catalog_bands)
-    derived_cap = _band_ladder_cap(solved_bands)
-    effective = _effective_sum_cap_from_catalog_max(derived_cap, catalog_max)
-
-    # ── Eligible (current band) view ──────────────────────────────────────
-    eligible = [
-        tc for tc in recipe_colors
-        if MIN_SUM_DROP_BAND <= target_color_sum_drop(tc) <= effective
-    ]
-    eligible_ids = {tc.id for tc in eligible}
-    tier_total_colors = len(eligible)
-    tier_completed_colors = sum(
-        1 for tc in eligible if stats_map.get(tc.id, 0) >= COVERAGE_QUOTA
-    )
-
-    # ── Per-color map: hide-after-quota signals (`remaining == 0`) ─────────
-    color_quota_map = {}
-    for tc in all_tracked:
-        ac = stats_map.get(tc.id, 0)
-        if tc.id in eligible_ids:
-            quota_contribution = min(ac, COVERAGE_QUOTA)
-            remaining = max(0, COVERAGE_QUOTA - ac)
-        else:
-            quota_contribution = 0
-            remaining = 0
-        color_quota_map[tc.id] = {
-            'attempt_count': ac,
-            'quota_contribution': quota_contribution,
-            'remaining': remaining,
-        }
-
-    # ── Nearest deficit (within band, smallest remaining wins) ─────────────
-    nearest_deficit_color_id = None
-    nearest_deficit_remaining = None
-    for tc in eligible:
-        ac = stats_map.get(tc.id, 0)
-        rem = max(0, COVERAGE_QUOTA - ac)
-        if rem > 0 and (
-            nearest_deficit_color_id is None or rem < nearest_deficit_remaining
-        ):
-            nearest_deficit_color_id = tc.id
-            nearest_deficit_remaining = rem
-
-    # ── Completion (mastery) flag: every sum-drop band cleared ─────────────
-    is_maxed_out = bool(total_bands > 0 and bands_cleared >= total_bands)
-
-    # ── Band-ladder coverage (bands cleared / total bands) ─────────────────
-    if total_bands > 0:
-        coverage_ratio = bands_cleared / total_bands
-    else:
-        coverage_ratio = 0.0
-    catalog_coverage_pct = round(coverage_ratio * 100, 1)
-
-    required_attempt_units = total_recipe_colors * COVERAGE_QUOTA
-    remaining_attempts_total = max(0, required_attempt_units - completed_attempt_units)
-
+    ratio = (completed / total) if total else 0.0
     return {
-        # ── Eligible band view (kept for legacy callers) ───────────────────
-        'tracked_color_ids': [tc.id for tc in eligible],
-        'eligible_color_ids': [tc.id for tc in eligible],
-        # ── Catalog-total counts ────────────────────────────────────────────
-        'completed_attempt_units': completed_attempt_units,
-        'required_attempt_units': required_attempt_units,
-        'completed_colors': colors_at_quota_total,
-        'total_tracked_colors': total_recipe_colors,
-        'total_recipe_colors': total_recipe_colors,
-        'colors_at_quota_total': colors_at_quota_total,
-        'fractional_count': fractional_count,
-        'cap_advance_steps': cap_advance_steps,
-        'bands_cleared': bands_cleared,
-        'total_bands': total_bands,
-        'remaining_attempts_total': remaining_attempts_total,
-        'coverage_ratio': coverage_ratio,
-        'catalog_coverage_pct': catalog_coverage_pct,
-        # ── Tier-specific counts (current band) ─────────────────────────────
-        'tier_completed_colors': tier_completed_colors,
-        'tier_total_colors': tier_total_colors,
-        # ── Cap state ───────────────────────────────────────────────────────
-        'max_sum_drop_unlocked': derived_cap,
-        'effective_sum_cap': effective,
-        # ── Mastery + deficits ──────────────────────────────────────────────
-        'is_maxed_out': is_maxed_out,
-        'nearest_deficit_color_id': nearest_deficit_color_id,
-        'nearest_deficit_remaining': nearest_deficit_remaining,
-        # ── Per-color details ───────────────────────────────────────────────
-        'color_quota_map': color_quota_map,
+        'completed_colors': completed,
+        'total_tracked_colors': total,
+        'coverage_ratio': ratio,
+        'catalog_coverage_pct': round(ratio * 100, 1),
+        'is_maxed_out': bool(total > 0 and completed >= total),
     }
 
 
@@ -883,17 +477,22 @@ def compute_region_mastery(user_id: str) -> dict:
 # Progress response builder
 # ---------------------------------------------------------------------------
 
+def _matches_completed(user_id: str) -> int:
+    if not user_id:
+        return 0
+    return Match.query.filter_by(user_id=user_id, status='completed').count()
+
+
 def build_progress_response(user_id: str, user_progress, _catalog_size_ignored=None) -> dict:
     """
     Build the canonical progress JSON object.
     Shape is identical across save_session, save_skip, and get_user_progress.
-    Level and completion state are derived from quota only.
-    XP and streak are retained as secondary reinforcement fields.
+    Levels/ranks are XP-driven; coverage fields are descriptive only.
     """
     up = user_progress
     xp = up.xp if up else 0
 
-    quota = compute_quota_progress(user_id)
+    quota = compute_coverage_progress(user_id)
     # Level/rank are XP-driven (continuous, quality-weighted, history-preserving).
     # XP only grows, so this is monotonic; floor by the cached level as a safety net.
     computed_lv = _xp_level(xp)
@@ -908,7 +507,7 @@ def build_progress_response(user_id: str, user_progress, _catalog_size_ignored=N
     xp_in_level, xp_to_next = _xp_level_progress(xp)
 
     return {
-        # ── Quota-first fields ──────────────────────────────────────
+        # ── Level / coverage (descriptive) ──────────────────────────
         'level': level,
         'level_name': _t('Level {level}', level=level),
         'level_progress_pct': level_progress_pct,
@@ -916,15 +515,10 @@ def build_progress_response(user_id: str, user_progress, _catalog_size_ignored=N
         'rank_color': rank_color,
         'completed_colors': quota['completed_colors'],
         'total_tracked_colors': quota['total_tracked_colors'],
-        'tier_completed_colors': quota['tier_completed_colors'],
-        'tier_total_colors': quota['tier_total_colors'],
-        'remaining_attempts_total': quota['remaining_attempts_total'],
         'coverage_ratio': round(quota['coverage_ratio'], 6),
         'catalog_coverage_pct': quota['catalog_coverage_pct'],
         'is_maxed_out': quota['is_maxed_out'],
-        'nearest_deficit_color_id': quota['nearest_deficit_color_id'],
-        'nearest_deficit_remaining': quota['nearest_deficit_remaining'],
-        'max_sum_drop_unlocked': quota['max_sum_drop_unlocked'],
+        'matches_completed': _matches_completed(user_id),
         # ── Streak / freeze ─────────────────────────────────────────
         'current_streak': up.current_streak if up else 0,
         'longest_streak': up.longest_streak if up else 0,
@@ -992,20 +586,14 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
     heat_info is None when the round is cold, else
         {'consecutive': int, 'bonus_pct': float, 'xp_bonus': int}.
 
-    is_challenge: head-to-head challenge rounds are quota-neutral like probes
-    (XP, streak and missions accrue; UserTargetColorStats and band unlocks do
-    not move) — otherwise challenge links on hand-picked colours could be used
-    to farm progression, and links on locked-band colours would corrupt the
-    deterministic cap recompute.
-
-    level_up_event is now quota-driven: fires when quota coverage crosses a
-    level boundary. XP is still accumulated but never drives level or maxed state.
+    is_challenge: head-to-head challenge rounds are stats-neutral like probes
+    (XP, streak and missions accrue; UserTargetColorStats does not move) —
+    challenge links on hand-picked colours must not distort coverage stats.
 
     is_probe: experimental probe rounds (learning-effect study) are
-    quota-neutral — XP, streak and daily missions accrue normally, but the
-    round must not touch UserTargetColorStats nor advance quota/level;
-    otherwise the probe arms would push level pacing apart and probes on
-    locked-band colours would corrupt the deterministic level recompute.
+    stats-neutral — XP, streak and daily missions accrue normally, but the
+    round must not touch UserTargetColorStats (exposure snapshots for the
+    study read MixingSession instead).
 
     streak_event values:
         None | 'started' | 'same_day' | 'incremented' | 'freeze_consumed' | 'reset'
@@ -1019,9 +607,9 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
     level_up = None
     streak_event = None
 
-    # ── Snapshot old quota state before any writes ───────────────────────
-    old_quota = compute_quota_progress(user_id)
-    old_is_maxed = old_quota['is_maxed_out']
+    # ── Snapshot old coverage state before any writes ─────────────────────
+    old_coverage = compute_coverage_progress(user_id)
+    old_is_maxed = old_coverage['is_maxed_out']
 
     # ── Get or create UserProgress ───────────────────────────────────────
     up = UserProgress.query.filter_by(user_id=user_id).first()
@@ -1030,7 +618,6 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
         up = UserProgress(
             user_id=user_id, xp=0, level=old_level,
             current_streak=0, longest_streak=0, streak_freeze_available=0,
-            max_sum_drop_unlocked=DEFAULT_CAP,
         )
         db.session.add(up)
 
@@ -1104,14 +691,12 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
                 'icon': '🎯',
             })
 
-    # ── Color stats + quota awards ────────────────────────────────────────
-    color_crossed_quota = False
-
-    # Only attempts that landed in a completed bucket (perfect match, or a skip
-    # rated as "identical" / "acceptable small difference") accrue toward a
-    # color's quota. Skips marked "unacceptable big difference" and legacy
-    # 'stopped' rows are persisted for analytics but do NOT advance progression.
-    counts_toward_quota = match_category in COMPLETED_MATCH_CATEGORIES
+    # ── Color stats (descriptive bookkeeping: results page, awards) ───────
+    # Attempts landing in a completed bucket (perfect match, or a skip rated
+    # "identical" / "acceptable small difference") count as attempts; skips
+    # marked "unacceptable big difference" and legacy 'stopped' rows are
+    # persisted for analytics but do not move the stats.
+    counts_as_attempt = match_category in COMPLETED_MATCH_CATEGORIES
 
     if target_color_id is not None and not is_probe and not is_challenge:
         stats = UserTargetColorStats.query.filter_by(
@@ -1124,8 +709,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             )
             db.session.add(stats)
 
-        old_count = stats.attempt_count
-        if counts_toward_quota:
+        if counts_as_attempt:
             stats.attempt_count += 1
         if not skipped:
             stats.completed_count += 1
@@ -1133,55 +717,19 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
             stats.best_delta_e = delta_e
         stats.last_attempt_at = datetime.utcnow()
 
-        color_crossed_quota = (old_count < COVERAGE_QUOTA <= stats.attempt_count)
-
-        # Per-color reinforcement milestones (incremental chunks before quota completion)
-        for threshold, label in PER_COLOR_REINFORCEMENT_MILESTONES:
-            if old_count < threshold <= stats.attempt_count:
-                _, is_new = _grant_award(
-                    user_id, f'coverage_{threshold}_{target_color_id}',
-                    metadata={'target_color_id': target_color_id, 'threshold': threshold},
-                )
-                if is_new:
-                    new_awards.append({
-                        'key': f'coverage_{threshold}_{target_color_id}',
-                        'name': f'{label} — Color #{target_color_id}',
-                        'type': 'coverage',
-                        'award_class': 'reinforcement',
-                        'icon': '🎨',
-                        'threshold': threshold,
-                    })
-
-        # Per-color quota completion (quota_major)
-        if color_crossed_quota:
-            _, is_new = _grant_award(
-                user_id, f'coverage_{COVERAGE_QUOTA}_{target_color_id}',
-                metadata={'target_color_id': target_color_id, 'threshold': COVERAGE_QUOTA},
-            )
-            if is_new:
-                new_awards.append({
-                    'key': f'coverage_{COVERAGE_QUOTA}_{target_color_id}',
-                    'name': _t('Color #{id} — {n} Attempts!', id=target_color_id, n=COVERAGE_QUOTA),
-                    'type': 'coverage',
-                    'award_class': 'quota_major',
-                    'icon': '✅',
-                    'threshold': COVERAGE_QUOTA,
-                })
-
     db.session.flush()
-    recompute_max_sum_drop_unlocked(user_id)
-    new_quota = compute_quota_progress(user_id)
+    new_coverage = compute_coverage_progress(user_id)
 
-    old_ratio = old_quota['coverage_ratio']
-    new_ratio = new_quota['coverage_ratio']
-    new_is_maxed = new_quota['is_maxed_out']
+    old_ratio = old_coverage['coverage_ratio']
+    new_ratio = new_coverage['coverage_ratio']
+    new_is_maxed = new_coverage['is_maxed_out']
 
     # up.xp was already incremented above, so this is the post-round XP level.
     computed_new = _xp_level(up.xp)
     # XP only grows, so this is monotonic; floor by the cached level as a safety net.
     final_level = max(up.level, computed_new)
 
-    # ── Global quota milestone awards (quota_major) ───────────────────────
+    # ── Global coverage milestone awards (award keys unchanged) ───────────
     for milestone_pct in QUOTA_GLOBAL_MILESTONE_PCTS:
         milestone_ratio = milestone_pct / 100.0
         if old_ratio < milestone_ratio <= new_ratio:
@@ -1210,7 +758,7 @@ def process_progression(user_id, match_category, skipped, target_color_id, delta
                 'icon': '🎊',
             })
 
-    # ── Quota-based level-up (monotonic display level) ────────────────────
+    # ── XP-based level-up (monotonic display level) ───────────────────────
     if final_level > old_display_level:
         level_up = {'from': old_display_level, 'to': final_level}
         for lvl in range(old_display_level + 1, final_level + 1):
@@ -1259,42 +807,52 @@ def grant_daily_champion(user_id, challenge_date_str):
 
 
 # ---------------------------------------------------------------------------
-# Quota-aware catalog helper
-# ---------------------------------------------------------------------------
-
-def get_quota_ordered_catalog(user_id, full_catalog, quota=None):
-    """
-    Annotate each catalog entry with:
-      - attempt_count  : per-user plays (from UserTargetColorStats)
-      - under_quota    : attempt_count < COVERAGE_QUOTA
-      - unlocked       : full recipe and MIN_SUM_DROP_BAND <= sum <= effective user cap
-    """
-    if not user_id:
-        return full_catalog
-
-    if quota is None:
-        quota = compute_quota_progress(user_id)
-    effective = int(quota['effective_sum_cap'])
-    cq = quota['color_quota_map']
-
-    result = []
-    for c in full_catalog:
-        c_copy = dict(c)
-        meta = cq.get(c['id'], {})
-        c_copy['attempt_count'] = int(meta.get('attempt_count', 0))
-        c_copy['under_quota'] = c_copy['attempt_count'] < COVERAGE_QUOTA
-        s = c.get('sum_drop_count')
-        c_copy['unlocked'] = (
-            s is not None
-            and MIN_SUM_DROP_BAND <= int(s) <= effective
-        )
-        result.append(c_copy)
-    return result
-
-
-# ---------------------------------------------------------------------------
 # Full profile for results page
 # ---------------------------------------------------------------------------
+
+# Legacy pre-gamut target names that are machine strings, not color names.
+_UGLY_NAME_RE = re.compile(r'^(#[0-9A-Fa-f]{6}$|Lab RGB\()')
+
+_NTC = None            # ([(name, (L,a,b)), ...], {name_en: name_hu})
+_NEAREST_CACHE = {}    # (r,g,b) -> NTC name
+
+
+def _ntc_lookup():
+    """Lazy-loaded 'Name That Color' dictionary (Lab) + Hungarian glosses."""
+    global _NTC
+    if _NTC is None:
+        import csv
+        from pathlib import Path
+        from .regions import _srgb_to_lab
+        repo = Path(__file__).resolve().parents[1]
+        entries = []
+        with open(repo / 'data' / 'colornames_ntc.csv', newline='', encoding='utf-8') as f:
+            for row in csv.DictReader(f):
+                h = row['hex'].lstrip('#')
+                rgb = (int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16))
+                entries.append((row['name'], _srgb_to_lab(*rgb)))
+        glosses = {}
+        gloss_csv = repo / 'translations' / 'color_names_hu.csv'
+        if gloss_csv.exists():
+            with open(gloss_csv, newline='', encoding='utf-8') as f:
+                for row in csv.DictReader(f):
+                    glosses[row['name_en']] = row['name_hu']
+        _NTC = (entries, glosses)
+    return _NTC
+
+
+def _nearest_color_name(r, g, b):
+    """Nearest NTC color name by Lab distance (display only, collisions OK)."""
+    key = (r, g, b)
+    if key not in _NEAREST_CACHE:
+        from .regions import _srgb_to_lab
+        L, a, bb = _srgb_to_lab(r, g, b)
+        entries = _ntc_lookup()[0]
+        _NEAREST_CACHE[key] = min(
+            entries, key=lambda e: (e[1][0] - L) ** 2 + (e[1][1] - a) ** 2 + (e[1][2] - bb) ** 2
+        )[0]
+    return _NEAREST_CACHE[key]
+
 
 def get_user_profile(user_id, _catalog_size_ignored=None):
     """Returns (progress_dict, awards_list, color_stats_list)."""
@@ -1323,9 +881,26 @@ def get_user_profile(user_id, _catalog_size_ignored=None):
         .filter_by(user_id=user_id)
         .all()
     )
+    # Friendly color names for the coverage bars ('Merlot — bordó' for hu).
+    # Legacy pre-gamut targets are named '#RRGGBB' / 'Lab RGB(r,g,b)' in the DB;
+    # those get a nearest-NTC display name instead.
+    from .i18n import get_locale
+    hu = has_request_context() and get_locale() == 'hu'
+    stat_ids = [s.target_color_id for s in color_stats]
+    color_names = {}
+    if stat_ids:
+        rows = (db.session.query(TargetColor.id, TargetColor.name, TargetColor.name_hu,
+                                 TargetColor.r, TargetColor.g, TargetColor.b)
+                .filter(TargetColor.id.in_(stat_ids)).all())
+        for tc_id, name, name_hu, r, g, b in rows:
+            if _UGLY_NAME_RE.match(name):
+                name = _nearest_color_name(r, g, b)
+                name_hu = _ntc_lookup()[1].get(name)
+            color_names[tc_id] = f'{name} — {name_hu}' if hu and name_hu else name
     color_stats_list = [
         {
             'target_color_id': s.target_color_id,
+            'name': color_names.get(s.target_color_id),
             'attempt_count': s.attempt_count,
             'completed_count': s.completed_count,
             'best_delta_e': s.best_delta_e,

@@ -38,21 +38,17 @@ from sqlalchemy.exc import IntegrityError
 from .gamification import (
     process_progression,
     build_progress_response,
-    get_quota_ordered_catalog,
-    compute_quota_progress,
+    compute_coverage_progress,
     grant_daily_champion,
     grant_daily_mission_awards,
     grant_daily_performance_awards,
     build_daily_missions,
     get_user_profile,
-    compute_quota_progress,
-    COVERAGE_QUOTA,
     STREAK_FREEZE_CAP,
-    MIN_SUM_DROP_BAND,
     target_color_sum_drop,
-    _effective_sum_cap,
     _xp_level,
 )
+from . import matches as match_service
 from .next_action import build_next_action
 from .i18n import t, t_for, get_locale
 # NOTE: `stat_eda` and `mixed_models_stat` pull in matplotlib + statsmodels (+ scipy),
@@ -1752,13 +1748,14 @@ def get_target_colors():
     # Recipe-free on purpose: the game scores server-side (/calculate), so the
     # client never needs per-pigment drops, and emitting them would leak the
     # answer for challenge targets (see _target_color_public_dict).
+    # No unlocked/under_quota annotations anymore: the band ladder and coverage
+    # quota were removed with match-based gameplay (stale cached clients treat
+    # the missing fields as "playable", so they degrade gracefully).
     colors = [_target_color_public_dict(tc) for tc in rows]
 
     next_action_data = {}
     if user_id:
-        quota = compute_quota_progress(user_id)
-        colors = get_quota_ordered_catalog(user_id, colors, quota=quota)
-        next_action_data = build_next_action(user_id, quota=quota)
+        next_action_data = build_next_action(user_id)
 
     return jsonify({'status': 'success', 'colors': colors, **next_action_data})
 
@@ -1773,6 +1770,64 @@ def get_lab_target_colors():
             .order_by(TargetColor.catalog_order.asc()).all())
     colors = [_target_color_public_dict(tc, include_recipe=True) for tc in rows]
     return jsonify({'status': 'success', 'colors': colors})
+
+
+# ── Matches (10 rounds, one colour per macro-cluster) ─────────────────────
+
+@main.route('/api/match/current', methods=['POST'])
+def api_match_current():
+    """The user's active match (creating one if needed): all 10 rounds with
+    their targets (recipe-free), plus the usual next_action/daily_status."""
+    data = request.get_json() or {}
+    _, user_id, err = _resolve_authenticated_user(data)
+    if err:
+        return err
+    try:
+        match = match_service.get_or_create_active_match(user_id)
+        db.session.commit()
+        return jsonify({
+            'status': 'success',
+            'match': match_service.match_payload(match, _target_color_public_dict),
+            **build_next_action(user_id),
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/match/skip-round', methods=['POST'])
+def api_match_skip_round():
+    """Advance past a round skipped without mixing (no MixingSession row)."""
+    data = request.get_json() or {}
+    _, user_id, err = _resolve_authenticated_user(data)
+    if err:
+        return err
+    try:
+        state = match_service.skip_round_unmixed(
+            user_id, data.get('match_id'), data.get('round_index'),
+        )
+        if state is None:
+            return jsonify({'status': 'error',
+                            'message': 'No such active match round'}), 404
+        db.session.commit()
+        return jsonify({'status': 'success', 'match': state})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/match/summary', methods=['POST'])
+def api_match_summary():
+    """Round-by-round summary of one of the user's matches (reload-safe)."""
+    data = request.get_json() or {}
+    _, user_id, err = _resolve_authenticated_user(data)
+    if err:
+        return err
+    from .models import Match
+    match = Match.query.get(data.get('match_id') or 0)
+    if match is None or match.user_id != user_id:
+        return jsonify({'status': 'error', 'message': 'No such match'}), 404
+    return jsonify({'status': 'success', 'summary': match_service.match_summary(match)})
 
 
 def _target_color_drops_for_api(tc):
@@ -2704,6 +2759,12 @@ def save_session():
             match_category=mc,
         )
         db.session.add(session)
+        db.session.flush()  # session.id for the match-round link
+
+        match_state = match_service.record_round_result(
+            user_id, data.get('match_id'), data.get('match_round_index'),
+            attempt_uuid, session, skipped=skipped,
+        )
 
         is_probe = resolve_probe_for_attempt(
             attempt_uuid, user_id, data.get('target_color_id'), skipped=skipped,
@@ -2739,6 +2800,7 @@ def save_session():
             'level_up': level_up,
             'heat': heat_info,
             'challenge': challenge_result,
+            'match': match_state,
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
@@ -2803,6 +2865,12 @@ def save_skip():
             match_category=mc,
         )
         db.session.add(session)
+        db.session.flush()  # session.id for the match-round link
+
+        match_state = match_service.record_round_result(
+            user_id, data.get('match_id'), data.get('match_round_index'),
+            attempt_uuid, session, skipped=True,
+        )
 
         is_probe = resolve_probe_for_attempt(
             attempt_uuid, user_id, data.get('target_color_id'), skipped=True,
@@ -2833,6 +2901,7 @@ def save_skip():
             'level_up': level_up,
             'heat': heat_info,
             'challenge': challenge_result,
+            'match': match_state,
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
             **build_next_action(user_id),
@@ -2878,7 +2947,6 @@ def get_user_profile_route():
             'progress': progress,
             'awards': awards,
             'color_stats': color_stats,
-            'coverage_quota': COVERAGE_QUOTA,
             'daily_missions': build_daily_missions(user_id),
             'region_mastery': compute_region_mastery(user_id),
         })
@@ -5084,52 +5152,51 @@ def push_send_daily():
         """Compute per-user reminder context, shared by push + email channels.
 
         Returns a dict with: ``is_maxed_out``, ``best_tc``, ``best_rem``,
-        ``completed``, ``total``, ``current_streak``. On any error it falls
-        back to a generic context so we still send *something* friendly.
+        ``completed``, ``total``, ``matches_completed``, ``current_streak``.
+        On any error it falls back to a generic context so we still send
+        *something* friendly.
         """
         try:
-            quota = compute_quota_progress(user_id)
+            coverage = compute_coverage_progress(user_id)
             up = UserProgress.query.filter_by(user_id=user_id).first()
             current_streak = int(up.current_streak) if up else 0
+            matches_completed = match_service.matches_completed_count(user_id)
 
-            if quota['is_maxed_out']:
+            if coverage['is_maxed_out']:
                 return {
                     'is_maxed_out': True,
                     'best_tc': None,
                     'best_rem': None,
-                    'completed': quota['completed_colors'],
-                    'total': quota['total_tracked_colors'],
-                    'bands_cleared': quota['bands_cleared'],
-                    'total_bands': quota['total_bands'],
+                    'completed': coverage['completed_colors'],
+                    'total': coverage['total_tracked_colors'],
+                    'matches_completed': matches_completed,
                     'current_streak': current_streak,
                 }
 
-            color_map = quota['color_quota_map']
-            cap = int(up.max_sum_drop_unlocked) if up else MIN_SUM_DROP_BAND
-            eff = _effective_sum_cap(cap)
-            tc_rows = [
-                tc for tc in TargetColor.query
-                .filter_by(color_type='gamut')
-                .order_by(TargetColor.catalog_order.asc()).all()
-                if (s := target_color_sum_drop(tc)) is not None
-                and MIN_SUM_DROP_BAND <= s <= eff
-            ]
+            # Suggest the first (catalog order) recipe colour the user has not
+            # completed yet — one save finishes it ("1 attempt to master").
+            completed_ids = {
+                s.target_color_id
+                for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
+                if int(s.completed_count or 0) > 0
+            }
             best_tc = None
-            best_rem = None
-            for tc in tc_rows:
-                rem = color_map.get(tc.id, {}).get('remaining', COVERAGE_QUOTA)
-                if rem > 0 and (best_rem is None or rem < best_rem):
+            for tc in (TargetColor.query
+                       .filter_by(color_type='gamut')
+                       .order_by(TargetColor.catalog_order.asc()).all()):
+                if target_color_sum_drop(tc) is None:
+                    continue
+                if tc.id not in completed_ids:
                     best_tc = tc
-                    best_rem = rem
+                    break
 
             return {
                 'is_maxed_out': False,
                 'best_tc': best_tc,
-                'best_rem': best_rem,
-                'completed': quota['completed_colors'],
-                'total': quota['total_tracked_colors'],
-                'bands_cleared': quota['bands_cleared'],
-                'total_bands': quota['total_bands'],
+                'best_rem': 1 if best_tc is not None else None,
+                'completed': coverage['completed_colors'],
+                'total': coverage['total_tracked_colors'],
+                'matches_completed': matches_completed,
                 'current_streak': current_streak,
             }
         except Exception:
@@ -5139,8 +5206,7 @@ def push_send_daily():
                 'best_rem': None,
                 'completed': 0,
                 'total': 0,
-                'bands_cleared': 0,
-                'total_bands': 0,
+                'matches_completed': 0,
                 'current_streak': 0,
             }
 
@@ -5209,8 +5275,8 @@ def push_send_daily():
                 'label': t_for(loc, 'Day streak'),
                 'value': f"{ctx['current_streak']}🔥" if ctx['current_streak'] >= 3 else str(ctx['current_streak']),
             })
-        if ctx.get('total_bands'):
-            stats.append({'label': t_for(loc, 'Bands unlocked'), 'value': f"{ctx['bands_cleared']}/{ctx['total_bands']}"})
+        if ctx.get('matches_completed'):
+            stats.append({'label': t_for(loc, 'Matches played'), 'value': str(ctx['matches_completed'])})
 
         if ctx['is_maxed_out']:
             return {

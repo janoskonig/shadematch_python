@@ -536,7 +536,7 @@ function renderProgressStrip(p) {
     ? `${p.level_name} — ${t('All Colors Mastered!')}`
     : `${p.level_name} — ${t('{done}/{total} colors complete ({pct}%)').replace('{done}', String(completedColors)).replace('{total}', String(totalColors)).replace('{pct}', String(coveragePct))}`;
 
-  const colorsAtQuotaTitle = t('{done} of {total} colors at quota')
+  const colorsAtQuotaTitle = t('{done} of {total} colors completed')
     .replace('{done}', String(completedColors)).replace('{total}', String(totalColors));
 
   strip.innerHTML = `
@@ -564,6 +564,10 @@ function _delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 async function handleProgressionResponse(data) {
   if (!data || data.status !== 'success' || data.duplicate) return;
+
+  // Match accounting first (synchronous): the save may have advanced the
+  // match or completed it (summary shown on the next round transition).
+  if (data.match && window.__applyMatchUpdate) window.__applyMatchUpdate(data.match);
 
   // Claim a sequence slot; abort if a newer response arrives mid-sequence.
   const mySeq = ++_seqId;
@@ -895,7 +899,7 @@ function updateProgressIndicator(currentIndex, total, visitCount) {
   const segEl = document.getElementById('progressSegments');
   if (!textEl || !segEl) return;
 
-  textEl.textContent = t('Color {i} of {total}').replace('{i}', String(currentIndex + 1)).replace('{total}', String(total));
+  textEl.textContent = t('Round {i} of {total}').replace('{i}', String(currentIndex + 1)).replace('{total}', String(total));
   if (visitCount != null && visitCount > 0) {
     // Separate span so phones can hide the suffix (main.css ≤768px).
     const s = document.createElement('span');
@@ -1039,6 +1043,8 @@ async function saveSessionToServer(session) {
       user_id: window.currentUserId,
       target_color_id: session.target_color_id ?? null,
       challenge_code: session.challenge_code ?? null,
+      match_id: session.match_id ?? null,
+      match_round_index: session.match_round_index ?? null,
       target_r: session.target[0], target_g: session.target[1], target_b: session.target[2],
       drop_white: session.drops.white, drop_black: session.drops.black,
       drop_red: session.drops.red, drop_yellow: session.drops.yellow, drop_blue: session.drops.blue,
@@ -1052,6 +1058,8 @@ async function saveSessionToServer(session) {
       attempt_uuid: session.attempt_uuid || generateUUID(),
       user_id: session.user_id,
       target_color_id: session.target_color_id ?? null,
+      match_id: session.match_id ?? null,
+      match_round_index: session.match_round_index ?? null,
       target_r: session.target_r, target_g: session.target_g, target_b: session.target_b,
       drop_white: session.drop_white, drop_black: session.drop_black,
       drop_red: session.drop_red, drop_yellow: session.drop_yellow, drop_blue: session.drop_blue,
@@ -1097,34 +1105,125 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
 
   let fullCatalog = [];
-  const targetColors = [];
   let sessionShadesCompleted = 0;
 
-  function onlyBlockedByPracticeQuota(catalog) {
-    if (!catalog || !catalog.length) return false;
-    const unlocked = catalog.filter((c) => c.unlocked !== false);
-    if (!unlocked.length) return false;
-    return unlocked.every((c) => c.under_quota === false);
+  // ── Match state (10 rounds, one colour per macro-cluster) ────────────────
+  // The server draws and persists the match (/api/match/current); the client
+  // just plays the current round. Round accounting is server-authoritative:
+  // the save endpoints advance the match, and their response carries the new
+  // state (consumed via window.__applyMatchUpdate).
+  let matchState = null;            // {match_id, status, round_count, current_round, rounds}
+  let matchRoundActive = false;     // the served target is a match round
+  let servedMatchRoundIndex = null; // round_index the player is currently on
+  let pendingMatchSummary = null;   // summary delivered by the completing save
+
+  async function refreshMatchFromServer() {
+    const uid = getAuthenticatedUserId();
+    if (!uid) return null;
+    try {
+      const res = await fetch('/api/match/current', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (d.status === 'success' && d.match && Array.isArray(d.match.rounds)) {
+        matchState = d.match;
+        if (d.next_action) renderNextAction(d.next_action);
+        if (d.daily_status) renderDailyStatusBadge(d.daily_status);
+        return matchState;
+      }
+    } catch { /* keep existing match state */ }
+    return null;
   }
 
-  function buildShuffledPlayQueue(catalog) {
-    if (!catalog || !catalog.length) return [];
-    const unlockedOk = (c) => c.unlocked !== false;
-    const underQuotaOk = (c) => c.under_quota !== false;
-    let pool = catalog.filter((c) => unlockedOk(c) && underQuotaOk(c));
-    if (!pool.length) {
-      const hasUnlocked = catalog.some(unlockedOk);
-      if (hasUnlocked) {
-        return [];
-      }
-      pool = catalog.slice();
+  function currentMatchRound() {
+    if (!matchState || matchState.status !== 'active') return null;
+    return matchState.rounds.find((r) => r.round_index === matchState.current_round) || null;
+  }
+
+  function applyMatchUpdate(m) {
+    // m: {match_id, round_index, current_round, match_completed, summary}
+    if (!m || !matchState || m.match_id !== matchState.match_id) return;
+    matchState.current_round = m.current_round;
+    const done = matchState.rounds.find((r) => r.round_index === m.round_index);
+    if (done && done.state === 'current') done.state = 'played';
+    if (m.match_completed) {
+      matchState.status = 'completed';
+      if (m.summary) pendingMatchSummary = m.summary;
     }
-    const arr = pool.map((x) => x);
-    for (let i = arr.length - 1; i > 0; i -= 1) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  window.__applyMatchUpdate = applyMatchUpdate;
+
+  function serveMatchRoundTarget() {
+    const r = currentMatchRound();
+    if (!r || !r.target || !Array.isArray(r.target.rgb)) return false;
+    matchRoundActive = true;
+    servedMatchRoundIndex = r.round_index;
+    currentTargetColor = r.target;
+    return true;
+  }
+
+  function matchSaveFields() {
+    // Only round-terminal saves of an actual match round advance the match;
+    // daily/challenge rounds and mid-round resets send nulls (server ignores).
+    if (matchRoundActive && matchState && matchState.status === 'active'
+        && matchState.current_round === servedMatchRoundIndex) {
+      return { match_id: matchState.match_id, match_round_index: servedMatchRoundIndex };
     }
-    return arr;
+    return { match_id: null, match_round_index: null };
+  }
+
+  async function fetchMatchSummary(matchId) {
+    const uid = getAuthenticatedUserId();
+    if (!uid || !matchId) return null;
+    try {
+      const res = await fetch('/api/match/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid, match_id: matchId }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (d.status === 'success') return d.summary;
+    } catch { /* fall through */ }
+    return null;
+  }
+
+  function showMatchSummaryModal(summary) {
+    return new Promise((resolve) => {
+      const old = document.getElementById('matchSummaryModal');
+      if (old) old.remove();
+      const overlay = document.createElement('div');
+      overlay.id = 'matchSummaryModal';
+      overlay.className = 'skip-modal-overlay';
+      overlay.style.display = 'flex';
+      const rowsHtml = (summary && Array.isArray(summary.rounds) ? summary.rounds : [])
+        .map((r) => {
+          const rgb = Array.isArray(r.target_rgb) ? r.target_rgb : [255, 255, 255];
+          const de = Number.isFinite(r.delta_e) ? ('ΔE ' + r.delta_e.toFixed(2)) : t('skipped');
+          const name = r.cluster_name || r.cluster_code || '';
+          return `<div style="display:flex;align-items:center;gap:8px;margin:3px 0;">
+            <span style="width:22px;height:22px;border-radius:5px;flex:none;border:1px solid rgba(0,0,0,.15);background:rgb(${rgb.join(',')})"></span>
+            <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.85rem;">${escapeHtml(name)}</span>
+            <span style="flex:none;font-size:.85rem;font-variant-numeric:tabular-nums;">${de}</span>
+          </div>`;
+        }).join('');
+      const meanDe = summary && Number.isFinite(summary.mean_delta_e)
+        ? `<div style="margin-top:8px;font-size:.9rem;">${t('Average ΔE: {n}').replace('{n}', summary.mean_delta_e.toFixed(2))}</div>`
+        : '';
+      overlay.innerHTML = `
+        <div class="skip-modal-panel" style="max-width:420px;max-height:85vh;overflow:auto;">
+          <h2 class="skip-modal-title">🏁 ${t('Match complete!')}</h2>
+          <div>${rowsHtml}</div>
+          ${meanDe}
+          <div class="skip-choices" style="margin-top:12px;">
+            <button type="button" id="matchSummaryNewBtn" class="skip-choice skip-choice--accept">${t('New match')}</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const btn = overlay.querySelector('#matchSummaryNewBtn');
+      btn.addEventListener('click', () => { overlay.remove(); resolve(); });
+    });
   }
 
   async function refreshCatalogFromServer() {
@@ -1141,14 +1240,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     return false;
   }
 
-  function maybeRhythmFeedback(sessionN, reshuffled) {
-    if (reshuffled || sessionN <= 0) return;
+  function maybeRhythmFeedback(sessionN) {
+    if (sessionN <= 0) return;
     if (sessionN % 12 === 0) {
       showToast(t('Strong stretch — open Results anytime for awards and coverage.'), 'info', 4200);
-      return;
-    }
-    if (sessionN % 7 === 0) {
-      showToast(t('Coverage builds shade by shade. The strip above tracks your tier.'), 'info', 3600);
       return;
     }
     if (sessionN % 4 === 0) {
@@ -1161,28 +1256,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  let currentProbeSlot = null;
-
-  async function fetchProbeSlot() {
-    // Learning-effect study: ask the server whether a probe round is due.
-    // Best-effort — any failure falls back to normal play.
-    const uid = getAuthenticatedUserId();
-    if (!uid) return null;
-    try {
-      const res = await fetch('/api/probe/next', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: uid }),
-      });
-      const d = await res.json().catch(() => ({}));
-      if (d.status === 'success' && d.probe && d.probe.target_color
-          && Array.isArray(d.probe.target_color.rgb)) {
-        return d.probe;
-      }
-    } catch (e) { /* probes must never block gameplay */ }
-    return null;
-  }
-
+  // Flow probes are no longer served in-game (a quota-neutral extra round
+  // does not fit the 10-round match model); the daily challenge remains the
+  // probe carrier, so bindProbeAttempt stays.
   async function bindProbeAttempt(slotId, attemptUuid) {
     const uid = getAuthenticatedUserId();
     if (!uid || !slotId || !attemptUuid) return;
@@ -1230,7 +1306,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     challengeMode = ch;
     window.__guestRoundDone = false;
     dailyMode = null;
-    currentProbeSlot = null;
+    matchRoundActive = false;
     currentTargetColor = {
       id: ch.target_color_id, rgb: ch.target_rgb, name: t('Challenge colour'),
     };
@@ -1303,7 +1379,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         await flushTelemetry({ finalize: true, endReason: 'abandoned' });
       }
       dailyMode = { slot_id: d.slot_id };
-      currentProbeSlot = null;
+      matchRoundActive = false;
       currentTargetColor = d.target_color;
       setGameTarget(currentTargetColor);
       updateBox('targetColor', targetColor);
@@ -1362,7 +1438,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   async function goToNextShade() {
     sessionShadesCompleted += 1;
-    let reshuffled = false;
     // Any transition ends the previous round's daily state (a submitted run
     // already cleared it; an unfinished one stays reachable via the badge).
     dailyMode = null;
@@ -1374,59 +1449,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     setDailyChip(false);
 
     // Serving priority: colour of the day (once per session, until
-    // submitted) → due probe → shuffled queue. Probe and daily rounds do
-    // not consume the queue.
+    // submitted) → the match's current round. Daily rounds do not consume
+    // a match round.
     const daily = await maybeServeDaily();
     if (daily) {
       dailyMode = { slot_id: daily.slot_id };
-      currentProbeSlot = null;
+      matchRoundActive = false;
       currentTargetColor = daily.target_color;
     } else {
-      currentProbeSlot = await fetchProbeSlot();
-    }
-
-    if (dailyMode) {
-      // target already set above
-    } else if (currentProbeSlot) {
-      currentTargetColor = currentProbeSlot.target_color;
-    } else {
-      let nextIndex = currentTargetIndex + 1;
-      // Heat escalation: after a completed round, pull the next queued colour
-      // that sits one band up (more recipe drops) into the next slot, so a
-      // streak ramps in difficulty instead of staying flat.
-      if (window.currentSessionSaved && nextIndex < targetColors.length) {
-        const justPlayed = currentTargetColor && currentTargetColor.sum_drop_count;
-        if (Number.isFinite(justPlayed)) {
-          for (let i = nextIndex; i < targetColors.length; i++) {
-            const s = targetColors[i] && targetColors[i].sum_drop_count;
-            if (Number.isFinite(s) && s > justPlayed) {
-              const [harder] = targetColors.splice(i, 1);
-              targetColors.splice(nextIndex, 0, harder);
-              break;
-            }
-          }
-        }
+      // Match just completed? Show the summary, then a fresh match begins.
+      if (matchState && matchState.status === 'completed') {
+        const summary = pendingMatchSummary
+          || await fetchMatchSummary(matchState.match_id);
+        pendingMatchSummary = null;
+        stopTimer();
+        disableColorMixing();
+        await showMatchSummaryModal(summary);
+        matchState = null; // the server will draw the next match below
+        loadAndRenderProgress().catch(() => {});
       }
-      if (nextIndex >= targetColors.length) {
-        await refreshCatalogFromServer();
-        const next = buildShuffledPlayQueue(fullCatalog);
-        if (!next.length) {
-          sessionShadesCompleted -= 1;
-          alert(
-            onlyBlockedByPracticeQuota(fullCatalog)
-              ? t('You have reached the practice attempt quota on every shade in your tier. Unlock higher sum-drop caps or add new shades to keep playing.')
-              : t('No target colors available. Check the catalog or your tier unlocks.'),
-          );
-          return;
-        }
-        targetColors.length = 0;
-        targetColors.push(...next);
-        nextIndex = 0;
-        reshuffled = true;
-        showToast(t('New shuffle — fresh order, same practice.'), 'info', 3200);
+      if (!currentMatchRound()) {
+        await refreshMatchFromServer();
       }
-      currentTargetIndex = nextIndex;
-      currentTargetColor = targetColors[currentTargetIndex];
+      if (!serveMatchRoundTarget()) {
+        sessionShadesCompleted -= 1;
+        alert(t('Could not load your match. Check your connection and try again.'));
+        return;
+      }
     }
     setGameTarget(currentTargetColor);
     updateBox('targetColor', targetColor);
@@ -1436,7 +1485,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTimer();
     enableColorMixing();
     setControlState('mixing');
-    updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
+    updateMatchProgressUI();
     beginAttemptForCurrentTarget();
     if (dailyMode && dailyMode.slot_id && telemetryAttempt) {
       await bindProbeAttempt(dailyMode.slot_id, telemetryAttempt.attempt_uuid);
@@ -1444,14 +1493,20 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderDailyStatusBadge(null);
       setDailyChip(true);
       showToast(t("📅 Today's challenge — mix the colour of the day!"), 'info', 2800);
-    } else if (currentProbeSlot && telemetryAttempt) {
-      bindProbeAttempt(currentProbeSlot.slot_id, telemetryAttempt.attempt_uuid);
     }
 
-    maybeRhythmFeedback(sessionShadesCompleted, reshuffled);
+    maybeRhythmFeedback(sessionShadesCompleted);
 
     if (sessionShadesCompleted % 6 === 0) {
       loadAndRenderProgress().catch(() => {});
+    }
+  }
+
+  function updateMatchProgressUI() {
+    if (matchState && matchState.status === 'active') {
+      updateProgressIndicator(matchState.current_round, matchState.round_count, sessionShadesCompleted);
+    } else {
+      updateProgressIndicator(0, 10, sessionShadesCompleted);
     }
   }
 
@@ -1480,29 +1535,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  const initialQueue = buildShuffledPlayQueue(fullCatalog);
-  if (!initialQueue.length) {
-    alert(
-      onlyBlockedByPracticeQuota(fullCatalog)
-        ? t('You have reached the practice attempt quota on every shade in your tier. Open Results for coverage, or unlock higher sum-drop caps to access more shades.')
-        : t('No playable colors (logged-in users need unlocked shades with drop recipes). See scripts/BACKFILL_TARGET_COLOR_DROPS.md or use Lab.'),
-    );
-    return;
-  }
-  targetColors.push(...initialQueue);
-
   // app_ready: catalog loaded, user context available, ready to play
   trackEvent('app_ready');
-  let currentTargetIndex = 0;
-  currentTargetColor = targetColors[0];
-  targetColor = currentTargetColor.rgb;
 
   function setGameTarget(color) {
     targetColor = color.rgb;
     window.shadeMatchTargetRgb = color.rgb;
   }
-  setGameTarget(currentTargetColor);
-  updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
+
+  // Logged-in players resume (or get) their persisted 10-round match; the
+  // first round shows immediately as the pending target. Guests keep the
+  // plain catalog (pickGuestTarget serves the demo round).
+  if (getAuthenticatedUserId()) {
+    await refreshMatchFromServer();
+  }
+  if (serveMatchRoundTarget()) {
+    setGameTarget(currentTargetColor);
+  } else {
+    currentTargetColor = fullCatalog[Math.floor(Math.random() * fullCatalog.length)];
+    setGameTarget(currentTargetColor);
+  }
+  updateMatchProgressUI();
 
   // ── Guest demo round ─────────────────────────────────────────────────────
   function pickGuestTarget() {
@@ -1542,7 +1595,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!tc) return;
     window.__guestRoundDone = false;
     dailyMode = null;
-    currentProbeSlot = null;
+    matchRoundActive = false;
     currentTargetColor = tc;
     setGameTarget(currentTargetColor);
     updateBox('targetColor', targetColor);
@@ -1666,6 +1719,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             target: targetColor,
             target_color_id: currentTargetColor.id,
             challenge_code: challengeMode ? challengeMode.code : null,
+            ...matchSaveFields(),
             drops: { ...dropCounts },
             mixed_rgb: [...currentMixedRgb],
             deltaE: data.delta_e,
@@ -1725,29 +1779,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     refreshDatabaseConnection();
-    await refreshCatalogFromServer();
     sessionShadesCompleted = 0;
-    const newQueue = buildShuffledPlayQueue(fullCatalog);
-    if (!newQueue.length) {
-      alert(
-        onlyBlockedByPracticeQuota(fullCatalog)
-          ? t('Every shade in your tier is already at the practice attempt quota. Unlock more shades or raise your sum-drop cap to continue.')
-          : t('No playable colors for your tier. See Lab / backfill docs.'),
-      );
-      return;
-    }
-    targetColors.length = 0;
-    targetColors.push(...newQueue);
-
-    currentTargetIndex = 0;
     // The first round of the session is the colour of the day (when today's
-    // run is still open); the queued colour stays next in line.
+    // run is still open); the match's current round stays next in line.
     const dailyFirst = await maybeServeDaily();
     if (dailyFirst) {
       dailyMode = { slot_id: dailyFirst.slot_id };
+      matchRoundActive = false;
       currentTargetColor = dailyFirst.target_color;
     } else {
-      currentTargetColor = targetColors[currentTargetIndex];
+      await refreshMatchFromServer();
+      if (!serveMatchRoundTarget()) {
+        alert(t('Could not load your match. Check your connection and try again.'));
+        return;
+      }
     }
     setGameTarget(currentTargetColor);
     updateBox('targetColor', targetColor);
@@ -1755,7 +1800,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTimer();
     enableColorMixing();
     setControlState('mixing');
-    updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
+    updateMatchProgressUI();
     beginAttemptForCurrentTarget();
     if (dailyMode && dailyMode.slot_id && telemetryAttempt) {
       await bindProbeAttempt(dailyMode.slot_id, telemetryAttempt.attempt_uuid);
@@ -1798,6 +1843,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         user_id: window.currentUserId,
         target_color_id: currentTargetColor.id,
         challenge_code: challengeMode ? challengeMode.code : null,
+        ...matchSaveFields(),
         target_r: targetColor[0], target_g: targetColor[1], target_b: targetColor[2],
         drop_white: dropCounts.white || 0, drop_black: dropCounts.black || 0,
         drop_red: dropCounts.red || 0, drop_yellow: dropCounts.yellow || 0, drop_blue: dropCounts.blue || 0,
@@ -1856,6 +1902,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         return;
       }
+    } else if (matchRoundActive && matchState && matchState.status === 'active'
+               && matchState.current_round === servedMatchRoundIndex) {
+      // Nothing was mixed (or this colour was already resolved by an earlier
+      // save): tell the server to advance past the round so the client and
+      // the persisted match never drift apart.
+      const uid = getAuthenticatedUserId();
+      try {
+        const res = await fetch('/api/match/skip-round', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: uid,
+            match_id: matchState.match_id,
+            round_index: servedMatchRoundIndex,
+          }),
+        });
+        const d = await res.json().catch(() => ({}));
+        if (d.status === 'success' && d.match) {
+          applyMatchUpdate(d.match);
+        }
+      } catch { /* the next /api/match/current resyncs */ }
     }
 
     await goToNextShade();
@@ -1874,22 +1940,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     refreshDatabaseConnection();
-    await refreshCatalogFromServer();
     sessionShadesCompleted = 0;
-    const newQueue = buildShuffledPlayQueue(fullCatalog);
-    if (!newQueue.length) {
-      alert(
-        onlyBlockedByPracticeQuota(fullCatalog)
-          ? t('Every shade in your tier is already at the practice attempt quota. Unlock more shades or raise your sum-drop cap to continue.')
-          : t('No playable colors. Check catalog / tier unlocks.'),
-      );
+    // Restart resumes the SAME persisted match (its current round), it does
+    // not redraw — abandoning progress would defeat the 10-round structure.
+    await refreshMatchFromServer();
+    if (!serveMatchRoundTarget()) {
+      alert(t('Could not load your match. Check your connection and try again.'));
       return;
     }
-    targetColors.length = 0;
-    targetColors.push(...newQueue);
-
-    currentTargetIndex = 0;
-    currentTargetColor = targetColors[currentTargetIndex];
     setGameTarget(currentTargetColor);
     updateBox('targetColor', targetColor);
     resetMix();
@@ -1897,7 +1955,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     startTimer();
     enableColorMixing();
     setControlState('mixing');
-    updateProgressIndicator(currentTargetIndex, targetColors.length, sessionShadesCompleted);
+    updateMatchProgressUI();
     document.getElementById('overflowDropdown').classList.remove('is-open');
     beginAttemptForCurrentTarget();
   });

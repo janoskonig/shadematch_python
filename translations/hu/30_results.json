@@ -229,5 +229,10 @@
   "regions mastered": "színtartomány",
   "shades mastered": "elsajátított árnyalat",
   "perfect matches": "tökéletes találat",
-  "day streak": "napos sorozat"
+  "day streak": "napos sorozat",
+  "{done}/{total} colors completed": "{done}/{total} szín teljesítve",
+  "{n} match played": "{n} meccs lejátszva",
+  "{n} matches played": "{n} meccs lejátszva",
+  "Matches completed": "Teljesített meccsek",
+  "matches": "meccs"
 }

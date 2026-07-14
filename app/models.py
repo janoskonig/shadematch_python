@@ -193,6 +193,51 @@ class UserTargetColorStats(db.Model):
     )
 
 
+class Match(db.Model):
+    """A 10-round gameplay match: one randomly drawn target from each of the
+    10 macro-clusters (see app/clusters.py), cluster order shuffled per match.
+    Server-authoritative: the save endpoints advance current_round; an
+    interrupted match resumes on reload / another device."""
+    __tablename__ = 'matches'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(6), db.ForeignKey('users.id'), nullable=False)
+    status = db.Column(db.String(12), nullable=False, default='active')  # active|completed|abandoned
+    current_round = db.Column(db.Integer, nullable=False, default=0)     # next unplayed round_index, 0..round_count
+    round_count = db.Column(db.Integer, nullable=False, default=10)
+    # Which clustering drew this match (audit; see clusters.catalog_fingerprint).
+    clusters_fingerprint = db.Column(db.String(64), nullable=True)
+    started_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    completed_at = db.Column(db.DateTime, nullable=True)
+
+    __table_args__ = (
+        db.Index('idx_matches_user_status', 'user_id', 'status'),
+    )
+
+
+class MatchRound(db.Model):
+    """One drawn round of a Match. cluster_code and target are snapshotted at
+    match creation, so later re-clusterings never affect an in-flight match."""
+    __tablename__ = 'match_rounds'
+
+    id = db.Column(db.Integer, primary_key=True)
+    match_id = db.Column(
+        db.Integer, db.ForeignKey('matches.id', ondelete='CASCADE'), nullable=False,
+    )
+    round_index = db.Column(db.Integer, nullable=False)                  # 0..round_count-1
+    cluster_code = db.Column(db.String(8), nullable=False)               # 'k0'..'k5','sk0'..'sk3'
+    target_color_id = db.Column(db.Integer, db.ForeignKey('target_colors.id'), nullable=False)
+    outcome = db.Column(db.String(12), nullable=True)                    # NULL|completed|skipped
+    played_at = db.Column(db.DateTime, nullable=True)
+    attempt_uuid = db.Column(db.String(36), nullable=True)
+    mixing_session_id = db.Column(db.Integer, db.ForeignKey('mixing_sessions.id'), nullable=True)
+
+    __table_args__ = (
+        db.UniqueConstraint('match_id', 'round_index', name='uq_match_round'),
+        db.Index('idx_match_rounds_match', 'match_id'),
+    )
+
+
 class UserAward(db.Model):
     __tablename__ = 'user_awards'
 

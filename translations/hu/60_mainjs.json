@@ -93,5 +93,12 @@
   "you vs {name} — accuracy decides, then drops, then time": "te vs {name} — a pontosság dönt, aztán a cseppek, végül az idő",
   "Finish a colour first, then challenge back.": "Előbb fejezz be egy színt, aztán hívd ki visszavágóra!",
   "⚔️ I took your ShadeMatch challenge — now beat mine:": "⚔️ Teljesítettem a ShadeMatch-kihívásodat — most döntsd meg az enyémet:",
-  "Perfect match!": "Tökéletes találat!"
+  "Perfect match!": "Tökéletes találat!",
+  "Round {i} of {total}": "Kör: {i}/{total}",
+  "Match complete!": "Meccs vége!",
+  "New match": "Új meccs",
+  "Average ΔE: {n}": "Átlagos ΔE: {n}",
+  "skipped": "kihagyva",
+  "Could not load your match. Check your connection and try again.": "Nem sikerült betölteni a meccset. Ellenőrizd a kapcsolatot, és próbáld újra!",
+  "{done} of {total} colors completed": "{done}/{total} szín teljesítve"
 }

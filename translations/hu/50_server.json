@@ -216,5 +216,10 @@
   "To stop these reminders in one click:": "Az emlékeztetők leállítása egy kattintással:",
   "Too many attempts — try again later": "Túl sok próbálkozás — próbáld később",
   "Unknown challenge": "Ismeretlen kihívás",
-  "Guest": "Vendég"
+  "Guest": "Vendég",
+  "Continue your match": "Folytasd a meccsed",
+  "Round {i} of {n}": "Kör: {i}/{n}",
+  "Start a match": "Indíts egy meccset",
+  "10 rounds, one from every color family": "10 kör — minden színcsaládból egy szín",
+  "Matches played": "Lejátszott meccsek"
 }
