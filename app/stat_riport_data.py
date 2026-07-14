@@ -519,11 +519,13 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     BIN_POS = [12.5, 37.5, 62.5, 87.5]     # bin midpoints in percent
     totals: Dict[Any, int] = defaultdict(int)
     region_mixes: Dict[str, int] = defaultdict(int)
+    region_played: Dict[str, set] = defaultdict(set)   # region -> played target ids
     for r in reg_att:
         reg = region_by_target.get(r['target_color_id'])
         if reg is None:
             continue
         region_mixes[reg] += 1
+        region_played[reg].add(r['target_color_id'])
         totals[(r['user_id'], reg)] += 1
     _seq: Dict[Any, int] = defaultdict(int)
     _rl: Dict[int, List[float]] = defaultdict(list)      # bin -> ΔE (pooled)
@@ -565,6 +567,7 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
             'r': rr, 'g': gg, 'blue': bb,
             'L': round(Lc, 1), 'a': round(ac, 1), 'b': round(bc, 1),
             'n_targets': len(labs), 'n_mixes': int(region_mixes.get(reg, 0)),
+            'n_played': len(region_played.get(reg, ())),
         })
     regions_payload.sort(key=lambda x: -x['n_mixes'])
 

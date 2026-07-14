@@ -419,6 +419,7 @@
               szaggatott vízszintes vonalak a 3.4-ben becsült küszöbök. Mind az öt régió szerepel – a teljes
               színtér lefedve. Rámutatva az elemszám is látszik; a kékek–türkizek görbéje kevés keverésen
               alapul, ezért ingadozó.</p>
+            <p class="cap" id="regionGapNote" style="font-weight:600;"></p>
             <div class="chart" id="chLearn" style="min-height:340px;"></div></div>
           <div class="panel"><h4>Tökéletes találat régiónként</h4>
             <p class="cap">Ugyanazok a régiók, színek és standardizált tengely; a tökéletes (ΔE ≈ 0) találatok
@@ -495,13 +496,16 @@
           (centroidját) mutatja – innen olvasható le, „miféle” viselkedés került egy csoportba.
         </p>
         <div class="grid2">
-          <div class="panel"><h4>A klaszterek a jellemzőtér síkján</h4>
+          <div class="panel"><h4>PC1- és PC2-súlyok: miből állnak a tengelyek?</h4>
             <p class="cap">Fontos: ez egy <strong>újabb, a 4.3-tól független PCA</strong> – ott színenkénti
               nehézség-jellemzőket tömörítettem, itt a fenti öt <em>keverésenkénti viselkedés-jellemzőt</em>.
               A klaszterezés a teljes ötdimenziós jellemzőtérben történt; a PCA-sík itt csak a
-              <em>megjelenítést</em> szolgálja (a legtöbb információt megőrző két nézőpont). Minden pont egy
-              keverés, a színe a klasztere: ha a színek elkülönülő foltokat alkotnak, a csoportok valósak.</p>
+              <em>megjelenítést</em> szolgálja (a legtöbb információt megőrző két nézőpont).</p>
             <p class="cap" id="clusterProjNote"></p>
+            <div class="chart" id="chClusterLoadings" style="min-height:300px;"></div></div>
+          <div class="panel"><h4>A klaszterek a jellemzőtér síkján</h4>
+            <p class="cap">Minden pont egy keverés, a színe a klasztere: ha a színek elkülönülő foltokat
+              alkotnak, a csoportok valósak, nem önkényes vágások.</p>
             <div class="chart" id="chClusterScatter" style="min-height:360px;"></div></div>
           <div class="panel"><h4>Klaszter-profilok (centroidok)</h4>
             <div class="table-wrap"><table id="clusterTable"></table></div></div>
@@ -1071,18 +1075,39 @@
       }], lay, CFG);
     })();
 
-    // Region table: all 54 regions, sorted by mix count, swatch + verbal label.
+    // Region table: the five families, swatch + coverage (played vs unplayed).
     (function () {
       var el = document.getElementById('regionTable');
       if (!el) return;
-      var h = '<thead><tr><th>Régió</th><th class="num">Cél-színek</th><th class="num">Keverések</th>' +
+      var h = '<thead><tr><th>Régió</th><th class="num">Cél-színek</th><th class="num">Kikevert</th>' +
+        '<th class="num">Kitöltetlen</th><th class="num">Keverések</th>' +
         '<th class="num">Centroid (L*, a*, b*)</th></tr></thead><tbody>';
       regionsAll.forEach(function (x) {
+        var unplayed = x.n_targets - (x.n_played || 0);
         h += '<tr><td><span class="swatch" style="background:' + regRgb(x) + '"></span> ' + esc(x.name) + '</td>' +
-          '<td class="num">' + fmt(x.n_targets) + '</td><td class="num">' + fmt(x.n_mixes) + '</td>' +
+          '<td class="num">' + fmt(x.n_targets) + '</td><td class="num">' + fmt(x.n_played) + '</td>' +
+          '<td class="num"><strong>' + fmt(unplayed) + '</strong> (' + pct(unplayed / (x.n_targets || 1), 0) + ')</td>' +
+          '<td class="num">' + fmt(x.n_mixes) + '</td>' +
           '<td class="num">' + fmt(x.L, 0) + ', ' + fmt(x.a, 0) + ', ' + fmt(x.b, 0) + '</td></tr>';
       });
       el.innerHTML = h + '</tbody>';
+    })();
+
+    // Coverage-gap warning under the learning curves: how many colours still
+    // have no analysed mix at all — more data needed.
+    (function () {
+      var el = document.getElementById('regionGapNote');
+      if (!el || !regionsAll.length) return;
+      var totT = 0, totU = 0, parts = [];
+      regionsAll.forEach(function (x) {
+        var u = x.n_targets - (x.n_played || 0);
+        totT += x.n_targets; totU += u;
+        parts.push(esc(x.name) + ': ' + u + '/' + x.n_targets);
+      });
+      el.innerHTML = '⚠️ <strong>Hiányos lefedettség:</strong> a ' + totT + ' cél-színből még <strong>' +
+        totU + '</strong> (' + pct(totU / (totT || 1), 0) + ') kitöltetlen – egyetlen elemezhető keverése ' +
+        'sincs (' + parts.join(' · ') + '). A régiónkénti görbék a már kikevert színeken alapulnak; a teljes ' +
+        'képhez további adatgyűjtés szükséges.';
     })();
 
     // Per-region ΔE trajectories + overall + threshold lines.
@@ -1313,6 +1338,22 @@
             noteEl.innerHTML = 'A tengelyek összetétele a súlyokból: <strong>PC1</strong> (' +
               pct(evr[0] || 0, 0) + '): ' + esc(d1 || '—') + '. <strong>PC2</strong> (' +
               pct(evr[1] || 0, 0) + '): ' + esc(d2 || '—') + '.';
+          }
+          // grouped loadings bars for the projection axes (mirrors the 4.3 panel)
+          var loEl = document.getElementById('chClusterLoadings');
+          if (loEl && pl.length) {
+            var lay2 = baseLayout({ showlegend: true, barmode: 'group',
+              margin: { l: 130, r: 12, t: 8, b: 36 },
+              xaxis: { title: { text: 'súly (loading)', font: { size: 10 } }, zeroline: true, zerolinecolor: '#bbb' } });
+            lay2.legend = { orientation: 'h', y: 1.12, font: { size: 10 } };
+            Plotly.react(loEl, [
+              { type: 'bar', orientation: 'h', name: 'PC1 (' + pct(evr[0] || 0, 0) + ')',
+                y: pf, x: pl[0], marker: { color: T.accent },
+                hovertemplate: 'PC1 · %{y}: %{x:.2f}<extra></extra>' },
+              { type: 'bar', orientation: 'h', name: 'PC2 (' + pct(evr[1] || 0, 0) + ')',
+                y: pf, x: pl[1] || [], marker: { color: T.warn },
+                hovertemplate: 'PC2 · %{y}: %{x:.2f}<extra></extra>' }
+            ], lay2, CFG);
           }
         }
       }
