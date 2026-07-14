@@ -112,7 +112,7 @@
         <p class="intro">A riportban végig használt fogalmak röviden.</p>
         <dl class="gloss">
           <dt>Keverés</dt><dd>Egy befejezett próbálkozás: a felhasználó egy cél-színt igyekszik kikeverni. Az elemzés alapegysége.</dd>
-          <dt>Cél-szín (target)</dt><dd>A kikeverendő szín; a 332 elemű gamut-katalógus egy eleme.</dd>
+          <dt>Cél-szín (target)</dt><dd>A kikeverendő szín; a 242 elemű cél-katalógus egy eleme.</dd>
           <dt>Pigment / csepp</dt><dd>Az öt alap-„festék” (fehér, fekete, piros, sárga, kék). A keverék ezek egész számú cseppjeiből áll össze.</dd>
           <dt>CIE</dt><dd>Commission Internationale de l’Éclairage – a nemzetközi színügyi szabványtestület.</dd>
           <dt>CIELAB (L*, a*, b*)</dt><dd>Háromdimenziós színtér: L* a világosság, a* a zöld–piros, b* a kék–sárga tengely. Úgy szerkesztették, hogy a benne mért euklideszi távolság közelítse az észlelt színkülönbséget.</dd>
@@ -178,7 +178,7 @@
              tervezték, hogy a nyers CIELAB-távolságnál egyenletesebben kövesse az emberi észlelést. Ami a
              színtér tartományai szerint változik, az a <strong>küszöbök</strong> szintje: hogy mekkora ΔE₀₀-t
              vesz észre, illetve fogad el valaki, az szubjektív, és függ a színtartománytól – Paravina és
-             mtsai. (2009) bőrszín-replikációkon például sötét mintáknál szisztematikusan magasabb küszöböket
+             mtsai. (2009) például sötét mintáknál szisztematikusan magasabb küszöböket
              mértek, mint világosaknál (CIEDE2000-ben: észlelhetőség 0,7 vs. 1,2; elfogadhatóság 2,1 vs. 3,1;
              lásd 8.). A pontos képlet a hivatkozott irodalomban (Sharma és mtsai. 2005), a küszöbök
              színtér-függését pedig a saját mintán is megnézem (lásd 3.4).</p>
@@ -279,7 +279,7 @@
           között nem mozognának.
         </p>
         <p class="intro">
-          Viszonyítási pont az irodalomból: Paravina és mtsai. (2009) bőrszín-replikációkon, kontrollált
+          Viszonyítási pont az irodalomból: Paravina és mtsai. (2009) kontrollált
           megfigyelési körülmények között, 45 értékelővel mérték ugyanezt a két küszöböt. Világos mintákon a
           CIELAB/CIEDE2000 észlelhetőségi küszöb <strong>1,1 / 0,7</strong>, az elfogadhatósági
           <strong>3,0 / 2,1</strong> volt; sötét mintákon <strong>1,6 / 1,2</strong>, illetve
@@ -338,26 +338,19 @@
           <h4>4.1 A gamut-katalógus felépítése</h4>
           <p>A cél-színek nem véletlenszerűek: az <strong>öt pigmenttel elérhető színtartomány (gamut)
              egyenletes lefedésére</strong> terveztem őket, hogy a színtér minden része arányosan
-             képviselve legyen. Ezt <strong>bőrszínekkel egészítettem ki</strong> (Xiao és mtsai. munkája
-             alapján), mert azok gyakorlati (pl. orvosi-esztétikai) szempontból kiemelten fontosak, és
-             sűrűbb mintavételt érdemelnek.</p>
-          <p class="def">A 90 bőr-célszín a katalógus része, de <strong>kiosztásra nem kerül</strong> —
-             a sűrített bőrklaszter torzítaná a klaszter-kiegyensúlyozott kiosztást (2.6); a bőrszínek a
-             spektrális keveréses verzióban térnek vissza. A lefedettségi ábrákon ezért 0 keveréssel
-             szerepelnek.</p>
+             képviselve legyen.</p>
           <p class="def" id="catalogClasses"></p>
         </div>
         <div class="panel">
           <h4>A célszínek a színtérben (CIELAB tér: a*, b*, L*)</h4>
           <p class="cap">Minden pont egy cél-szín, a saját valódi színére festve, a háromdimenziós CIELAB
             térben: <em>a*</em> (zöld→piros), <em>b*</em> (kék→sárga), <em>L*</em> (világosság). <strong>Húzással
-            forgatható.</strong> Az egyenletes térbeli kitöltés a gamut egyenletes lefedését mutatja; a nagyobb,
-            sötét szegélyű pontok a sűrűbben mintázott bőrszínek (Xiao 2017).</p>
+            forgatható.</strong> Az egyenletes térbeli kitöltés a gamut egyenletes lefedését mutatja.</p>
           <div class="chart" id="chGamutMap" style="min-height:520px;"></div>
         </div>
         <div class="grid2">
           <div class="panel"><h4>A színtér lefedettsége</h4>
-            <p class="cap">A 332 színből hány kapott 0, 1–2, 3–5 … keverést.</p>
+            <p class="cap">A 242 színből hány kapott 0, 1–2, 3–5 … keverést.</p>
             <div class="chart" id="chCoverage"></div></div>
           <div class="panel"><h4>Strukturális nehézség: a recept cseppszáma</h4>
             <p class="cap">Hány cél-szín receptje áll adott számú cseppből (2–28).</p>
@@ -426,14 +419,13 @@
           pontosan azokon a családokon, amelyekből a meccsek sorsolnak (2.6), így minden régió egyben
           a kiosztás egy blokkja is. Egy klaszteren belül a színek szomszédosak, de <em>más receptűek</em>,
           ezért a klaszteren belüli ismétlődő keverés általánosítható tanulást mér, nem
-          receptmemorizálást. Minden klasztert a tagszínei centroidja színez; a bőr-célszínek nem részei
-          a felosztásnak (nem kerülnek kiosztásra), a térképen szürkén jelennek meg.
+          receptmemorizálást. Minden klasztert a tagszínei centroidja színez.
         </p>
         <div class="panel">
           <h4>A tíz színklaszter (a pontok a klaszterük centroid-színét viselik)</h4>
           <p class="cap">Ugyanaz a 3D CIELAB-térkép, mint a 4.1-ben, de itt minden cél-szín a <strong>klasztere</strong>
-            átlagszínére festve – így a családok összefüggő tömbökként látszanak. A szürke pontok a kiosztásban
-            nem szereplő bőr-célszínek. Húzással forgatható; rámutatva a klaszter és a szín neve.</p>
+            átlagszínére festve – így a családok összefüggő tömbökként látszanak. Húzással forgatható;
+            rámutatva a klaszter és a szín neve.</p>
           <div class="chart" id="chRegionMap" style="min-height:480px;"></div>
           <div class="table-wrap" style="margin-top:10px;"><table id="regionTable"></table></div>
         </div>
@@ -609,9 +601,6 @@
             Del Mar Perez, M., &amp; Kiat-Amnuay, S. (2009). <em>Color difference thresholds of maxillofacial
             skin replications.</em> Journal of Prosthodontics, 18(7), 618–625.
             doi:10.1111/j.1532-849X.2009.00465.x</li>
-          <li><strong>Bőrszín-tartomány (Xiao et al.):</strong> Xiao, K., Yates, J. M., Zardawi, F., et&nbsp;al. (2017).
-            <em>Characterising the variations in ethnic skin colours: a new calibrated data base for human skin.</em>
-            Skin Research and Technology, 23(1), 21–29.</li>
           <li><strong>Kubelka–Munk-elmélet:</strong> Kubelka, P., &amp; Munk, F. (1931).
             <em>Ein Beitrag zur Optik der Farbanstriche.</em> Zeitschrift für technische Physik, 12, 593–601.</li>
           <li><strong>CIELAB / kolorimetria:</strong> CIE (2004). <em>Colorimetry</em> (3rd ed.), CIE 15:2004.
@@ -917,15 +906,11 @@
     var cc = d.catalog_classes || [];
     var ccMap = {}; cc.forEach(function (r) { ccMap[r.classification] = r.n; });
     document.getElementById('catalogClasses').innerHTML =
-      'A készlet <strong>' + fmt(o.gamut_targets_total) + '</strong> színből áll: <strong>' +
-      fmt(ccMap['even_gamut_v2'] || 0) + '</strong> egyenletes gamut-lefedő szín és <strong>' +
-      fmt(ccMap['even_gamut_v2_skin'] || 0) + '</strong> bőrszín-sűrítés.';
+      'A készlet <strong>' + fmt(o.gamut_targets_total) + '</strong> cél-színből áll, a gamut egyenletes lefedésével.';
 
     // 4.1 gamut map: targets in 3-D CIELAB (a*, b*, L*), coloured by their RGB
     (function () {
       var cpAll = d.catalog_points || [];
-      var bg = cpAll.filter(function (p2) { return !p2.skin; });
-      var sk = cpAll.filter(function (p2) { return p2.skin; });
       function trace(pts, size, name) {
         return {
           type: 'scatter3d', mode: 'markers', name: name,
@@ -952,7 +937,7 @@
         }
       };
       Plotly.react(document.getElementById('chGamutMap'),
-        [trace(bg, 3, 'gamut'), trace(sk, 5, 'bőrszín (Xiao)')], lay, CFG);
+        [trace(cpAll, 3.5, 'cél-szín')], lay, CFG);
     })();
 
     var order = ['0', '1–2', '3–5', '6–10', '11–20', '21+'], cmap = {};
@@ -1110,7 +1095,7 @@
         z: cpAll.map(function (p2) { return p2.L; }),
         text: cpAll.map(function (p2) {
           var rg = regById[p2.reg];
-          return (rg ? rg.name : 'bőrszín — nincs kiosztásban') + ' — ' + p2.name;
+          return (rg ? rg.name : '') + (rg ? ' — ' : '') + p2.name;
         }),
         marker: {
           size: 4.5,

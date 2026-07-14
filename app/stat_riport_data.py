@@ -1,9 +1,9 @@
 """Data builders for /stat/riport — the supervisor-facing, gamut-only,
 exploratory report (Hungarian UI).
 
-Everything here is restricted to the gamut target set
-(``target_colors.color_type='gamut'``, 332 colours) and — since the owner's
-2026-07-14 decision — to the MATCH ERA only (``MATCH_ERA_START_UTC``): the
+Everything here is restricted to the SERVED catalog (the 242 gamut targets
+that matches draw from; the skin-zone subset is out of the report's scope
+entirely) and — since the owner's 2026-07-14 decision — to the MATCH ERA only (``MATCH_ERA_START_UTC``): the
 period in which targets are served as 10-round, cluster-blocked matches.
 Attempts from the earlier band-ladder/quota design (including the clean gamut
 era from 2026-07-06) are excluded, so every number in the report describes the
@@ -36,10 +36,14 @@ MATCH_ERA_START_UTC = '2026-07-14 13:30:00'
 # Gamut-attempt filter, inlined per statement (CTE scope is per-statement).
 # Full set: every gamut attempt (used for engagement/volume counts + the 3.3
 # outcome breakdown, where the excluded outcomes are shown).
+# Served catalog: the colours matches draw from (the skin-zone subset is out
+# of the report's scope entirely — it is not served and not shown).
+_SERVED_COND = ("tc.color_type = 'gamut' "
+                "AND COALESCE(tc.classification,'') != 'even_gamut_v2_skin'")
 _GA = (
     "SELECT ma.* FROM mixing_attempts ma "
-    "JOIN target_colors tc ON tc.id = ma.target_color_id "
-    "WHERE tc.color_type = 'gamut' AND ma.user_id IS NOT NULL "
+    f"JOIN target_colors tc ON tc.id = ma.target_color_id "
+    f"WHERE {_SERVED_COND} AND ma.user_id IS NOT NULL "
     "AND ma.attempt_started_server_ts >= :era"
 )
 # Analysis set: only mixes that carry a meaningful final outcome — completed
@@ -126,7 +130,7 @@ def build_report(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
         f"""
         WITH ga AS ({_GA}), gaa AS ({_GA_ANALYSIS})
         SELECT
-          (SELECT COUNT(*)::bigint FROM target_colors WHERE color_type='gamut') AS gamut_targets_total,
+          (SELECT COUNT(*)::bigint FROM target_colors tc WHERE {_SERVED_COND}) AS gamut_targets_total,
           (SELECT COUNT(DISTINCT target_color_id)::bigint FROM ga) AS gamut_targets_played,
           (SELECT COUNT(*)::bigint FROM ga) AS total_plays,
           (SELECT COUNT(*)::bigint FROM gaa) AS analyzed_plays,
@@ -340,35 +344,27 @@ def build_report(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
 
     # ---- 4) Catalog + difficulty ----------------------------------------- #
     catalog_classes = _rows(
-        "SELECT classification, COUNT(*)::bigint AS n FROM target_colors "
-        "WHERE color_type='gamut' GROUP BY 1 ORDER BY n DESC")
-    # Catalog map: every gamut target in the a*–b* plane, coloured by its own
-    # sRGB, with the Xiao skin zone flagged + hull (reproduces the artifact at
-    # scripts/plot_gamut_targets_ab.py, live from the DB).
+        f"SELECT classification, COUNT(*)::bigint AS n FROM target_colors tc "
+        f"WHERE {_SERVED_COND} GROUP BY 1 ORDER BY n DESC")
+    # Catalog map: every SERVED target in CIELAB, coloured by its own sRGB.
     cat = _rows(
-        "SELECT id, name, name_hu, classification, r, g, b FROM target_colors "
-        "WHERE color_type='gamut' ORDER BY catalog_order")
+        f"SELECT id, name, name_hu, classification, r, g, b FROM target_colors tc "
+        f"WHERE {_SERVED_COND} ORDER BY catalog_order")
     catalog_points = []
     for row, (L, a, b) in zip(cat, _rgb_to_lab(cat)):
         catalog_points.append({
             'tid': row['id'],
             'a': round(a, 2), 'bb': round(b, 2), 'L': round(L, 1),
             'r': row['r'], 'g': row['g'], 'blue': row['b'],
-            'skin': row['classification'] == 'even_gamut_v2_skin',
             'name': row['name_hu'] or row['name'],
         })
-    try:
-        from .gamut_lab import skin_gamut
-        skin_hull = skin_gamut().get('hull', [])
-    except Exception:
-        skin_hull = []
 
     # Structural difficulty = total drops in the reference recipe. gamut rows
     # leave sum_drop_count null but carry the five per-pigment drop_* columns.
     drop_dist = _rows(
-        "SELECT (drop_white+drop_black+drop_red+drop_yellow+drop_blue) AS drops, "
-        "COUNT(*)::bigint AS n_colors FROM target_colors "
-        "WHERE color_type='gamut' AND drop_white IS NOT NULL GROUP BY 1 ORDER BY 1")
+        f"SELECT (drop_white+drop_black+drop_red+drop_yellow+drop_blue) AS drops, "
+        f"COUNT(*)::bigint AS n_colors FROM target_colors tc "
+        f"WHERE {_SERVED_COND} AND drop_white IS NOT NULL GROUP BY 1 ORDER BY 1")
     # coverage buckets
     coverage = _rows(
         f"""
@@ -376,7 +372,7 @@ def build_report(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
           SELECT tc.id, COUNT(ma.attempt_uuid) FILTER (
             WHERE ma.user_id IS NOT NULL AND ma.attempt_started_server_ts >= :era) AS n
           FROM target_colors tc LEFT JOIN mixing_attempts ma ON ma.target_color_id = tc.id
-          WHERE tc.color_type='gamut' GROUP BY tc.id)
+          WHERE {_SERVED_COND} GROUP BY tc.id)
         SELECT CASE WHEN n=0 THEN '0' WHEN n<=2 THEN '1–2' WHEN n<=5 THEN '3–5'
                     WHEN n<=10 THEN '6–10' WHEN n<=20 THEN '11–20' ELSE '21+' END AS bucket,
                COUNT(*)::bigint AS n_targets
@@ -388,7 +384,7 @@ def build_report(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
           SELECT tc.id, COUNT(ma.attempt_uuid) FILTER (
             WHERE ma.user_id IS NOT NULL AND ma.attempt_started_server_ts >= :era) AS n
           FROM target_colors tc LEFT JOIN mixing_attempts ma ON ma.target_color_id = tc.id
-          WHERE tc.color_type='gamut' GROUP BY tc.id)
+          WHERE {_SERVED_COND} GROUP BY tc.id)
         SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY n) FILTER (WHERE n>0)::double precision AS median_played,
                MAX(n)::bigint AS max_n
         FROM per_target
@@ -692,7 +688,6 @@ def build_report(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
         # catalog + difficulty
         'catalog_classes': catalog_classes,
         'catalog_points': catalog_points,
-        'skin_hull': skin_hull,
         'drop_dist': [{'drops': int(r['drops']), 'n_colors': int(r['n_colors'])} for r in drop_dist],
         'coverage_buckets': coverage,
         'coverage_stats': cover_stats,
