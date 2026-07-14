@@ -467,39 +467,35 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     # A single colour is mixed at most ~twice, but neighbouring colours (which
     # share a region yet have different recipes) are mixed more often. So
     # "learning" is measured as generalisation within a region. For the report
-    # the space is split into FIVE broad colour families that together cover the
-    # WHOLE gamut: the densified skin zone + four hue bands. Every target
-    # belongs to exactly one family; each family gets a Hungarian label and the
-    # sRGB colour of its centroid for the map / curve plots.
+    # the space is split into EIGHT octants covering the whole gamut (see the
+    # partition comment below). Every target belongs to exactly one octant;
+    # each gets a Hungarian label and the sRGB colour of its centroid for the
+    # map / curve plots.
     from .regions import _srgb_to_lab
     from .gamut_lab import _lab_to_srgb
 
-    MACRO_ORDER = ['warm', 'green', 'blue', 'purple', 'skin']
-    MACRO_NAME = {
-        'warm': 'melegek (piros–narancs–sárga)',
-        'green': 'zöldek',
-        'blue': 'kékek–türkizek',
-        'purple': 'lilák–bíborok',
-        'skin': 'bőrszínek',
-    }
+    # Octant partition with minimal arbitrariness: cut each CIELAB axis in two.
+    # a* and b* split at their natural zero (the neutral axis); L* has no sign,
+    # so it splits at 50, the midpoint of its 0–100 scale. 2×2×2 = 8 octants.
+    MACRO_ORDER = ['dgb', 'dgy', 'drb', 'dry', 'lgb', 'lgy', 'lrb', 'lry']
 
-    def _macro_of(L, a, b, skin):
-        if skin:
-            return 'skin'
-        h = math.degrees(math.atan2(b, a)) % 360
-        if h < 105 or h >= 345:
-            return 'warm'
-        if h < 190:
-            return 'green'
-        if h < 290:
-            return 'blue'
-        return 'purple'
+    def _macro_of(L, a, b):
+        return (('d' if L < 50 else 'l')
+                + ('g' if a < 0 else 'r')
+                + ('b' if b < 0 else 'y'))
+
+    def _macro_name(code):
+        return ' · '.join([
+            'sötét' if code[0] == 'd' else 'világos',
+            'zöldes' if code[1] == 'g' else 'pirosas',
+            'kékes' if code[2] == 'b' else 'sárgás',
+        ])
 
     region_by_target: Dict[int, str] = {}
     region_labs: Dict[str, List[tuple]] = defaultdict(list)
-    for t in _rows("SELECT id, r, g, b, classification FROM target_colors WHERE color_type='gamut'"):
+    for t in _rows("SELECT id, r, g, b FROM target_colors WHERE color_type='gamut'"):
         L, a, b = _srgb_to_lab(t['r'], t['g'], t['b'])
-        reg = _macro_of(L, a, b, t['classification'] == 'even_gamut_v2_skin')
+        reg = _macro_of(L, a, b)
         region_by_target[t['id']] = reg
         region_labs[reg].append((L, a, b))
     # tag the catalog map points with their region id
@@ -562,8 +558,8 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
         bc = sum(x[2] for x in labs) / len(labs)
         rr, gg, bb = _lab_to_srgb(Lc, ac, bc)
         regions_payload.append({
-            'id': reg, 'skin': reg == 'skin',
-            'name': MACRO_NAME[reg],
+            'id': reg,
+            'name': _macro_name(reg),
             'r': rr, 'g': gg, 'blue': bb,
             'L': round(Lc, 1), 'a': round(ac, 1), 'b': round(bc, 1),
             'n_targets': len(labs), 'n_mixes': int(region_mixes.get(reg, 0)),

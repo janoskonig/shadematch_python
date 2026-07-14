@@ -393,19 +393,20 @@
         <h3>Tanulás a színtér-régiók mentén</h3>
         <p class="intro">
           Egy konkrét színt egy játékos legfeljebb egyszer-kétszer kever ki, ezért az egy színen belüli
-          ismétlésből nem mérhető tanulás. Ehelyett a színteret <strong>öt nagy régióra</strong> osztom,
-          amelyek együtt a teljes gamutot lefedik: a sűrűbben mintázott <strong>bőrszín-zóna</strong>, a többi
-          szín pedig a színezetszöge szerint négy családba (<strong>melegek</strong> – piros–narancs–sárga,
-          <strong>zöldek</strong>, <strong>kékek–türkizek</strong>, <strong>lilák–bíborok</strong>). Minden
-          cél-szín pontosan egy régióba tartozik. Egy régió sok szomszédos, de <em>más receptű</em> színt
-          tartalmaz, ezért a régión belüli ismétlődő keverés általánosítható tanulást mér, nem
-          receptmemorizálást. Minden régiót a tagszínei átlagával (centroidjával) színezek.
+          ismétlésből nem mérhető tanulás. Ehelyett a színteret <strong>nyolc oktánsra</strong> osztom,
+          minimális önkénnyel: a CIELAB mindhárom tengelyét kettévágom. Az <em>a*</em> és a <em>b*</em> a
+          természetes nullpontjánál válik ketté (<strong>zöldes/pirosas</strong>, illetve
+          <strong>kékes/sárgás</strong>); az <em>L*</em>-nak nincs előjele, ezért a 0–100 skála felezőpontjánál,
+          50-nél vágom (<strong>sötét/világos</strong>). 2×2×2 = 8 oktáns; minden cél-szín pontosan egybe esik,
+          a teljes színtér lefedve. Egy oktánson belül a színek szomszédosak, de <em>más receptűek</em>, ezért
+          az oktánson belüli ismétlődő keverés általánosítható tanulást mér, nem receptmemorizálást. Minden
+          oktánst a tagszínei átlagával (centroidjával) színezek.
         </p>
         <div class="panel">
-          <h4>Az öt régió (a pontok a régiójuk centroid-színét viselik)</h4>
-          <p class="cap">Ugyanaz a 3D CIELAB-térkép, mint a 4.1-ben, de itt minden cél-szín a <strong>régiója</strong>
-            átlagszínére festve – így az öt régió összefüggő tömbökként látszik. Húzással forgatható; rámutatva a
-            régió neve és a szín neve.</p>
+          <h4>A nyolc oktáns (a pontok az oktánsuk centroid-színét viselik)</h4>
+          <p class="cap">Ugyanaz a 3D CIELAB-térkép, mint a 4.1-ben, de itt minden cél-szín az <strong>oktánsa</strong>
+            átlagszínére festve – így a nyolc oktáns összefüggő tömbökként látszik. Húzással forgatható; rámutatva
+            az oktáns neve és a szín neve.</p>
           <div class="chart" id="chRegionMap" style="min-height:480px;"></div>
           <div class="table-wrap" style="margin-top:10px;"><table id="regionTable"></table></div>
         </div>
@@ -416,13 +417,13 @@
               régióban), negyedekbe sorolva – így a rövid és a hosszú sorozatok összevethetők, függetlenül
               attól, hogy melyik régióban hány keverés történt. Az egyetlen keverésből álló sorozatok kimaradnak.
               Egy vonal = egy régió, a régió centroid-színével (a vastag fekete az összes régió együtt); a
-              szaggatott vízszintes vonalak a 3.4-ben becsült küszöbök. Mind az öt régió szerepel – a teljes
-              színtér lefedve. Rámutatva az elemszám is látszik; a kékek–türkizek görbéje kevés keverésen
-              alapul, ezért ingadozó.</p>
+              szaggatott vízszintes vonalak a 3.4-ben becsült küszöbök. Mind a nyolc oktáns szerepel – a teljes
+              színtér lefedve. Rámutatva az elemszám is látszik; a ritkán játszott zöldes–kékes oktánsok görbéi
+              kevés keverésen alapulnak, ezért ingadozók.</p>
             <p class="cap" id="regionGapNote" style="font-weight:600;"></p>
             <div class="chart" id="chLearn" style="min-height:340px;"></div></div>
           <div class="panel"><h4>Tökéletes találat régiónként</h4>
-            <p class="cap">Ugyanazok a régiók, színek és standardizált tengely; a tökéletes (ΔE ≈ 0) találatok
+            <p class="cap">Ugyanazok az oktánsok, színek és standardizált tengely; a tökéletes (ΔE ≈ 0) találatok
               aránya a sorozaton belüli haladás szerint.</p>
             <div class="chart" id="chLearnRate" style="min-height:340px;"></div></div>
         </div>
@@ -1180,7 +1181,7 @@
       'szintjén nem látszik egyértelmű tanulási hatás; az átlagos ΔE végig az észlelhetőségi küszöb környékén, ' +
       'jóval az elfogadhatósági küszöb alatt fut. A görbék közti <em>szintkülönbség</em> viszont informatív: a ' +
       'régiók eltérő nehézségét mutatja. Csak a legalább két keveréses játékos–régió sorozatok szerepelnek ' +
-      '(önszelekció), és a kis elemszámú pontok (kékek–türkizek) ingadozók. Leíró megfigyelés, nem oksági ' +
+      '(önszelekció), és a kis elemszámú pontok (a zöldes–kékes oktánsok) ingadozók. Leíró megfigyelés, nem oksági ' +
       'következtetés.';
 
     // 2.6 perceptibility / acceptability thresholds by L*, a*, b*
