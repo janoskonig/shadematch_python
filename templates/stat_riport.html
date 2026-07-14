@@ -317,9 +317,8 @@
             <p class="cap">A gamut-színeket ténylegesen keverő, regisztrált felhasználók.</p>
             <div class="chart" id="chGender"></div></div>
           <div class="panel"><h4>Ország (időzóna alapján)</h4>
-            <p class="cap">Csak a gamut-korszak keverései. A vizsgálat korábbi (gamut előtti) fázisában további
-              országokból is érkeztek keverések (pl. Luxemburg, Belgium, Svájc, Norvégia); azok kívül esnek e
-              riport hatókörén.</p>
+            <p class="cap">Csak a meccs-korszak keverései. A vizsgálat korábbi fázisaiban további
+              országokból is érkeztek keverések; azok kívül esnek e riport hatókörén.</p>
             <div class="chart" id="chCountry"></div></div>
           <div class="panel"><h4>Napszak (helyi óra)</h4><div class="chart" id="chHour"></div></div>
           <div class="panel"><h4>A keverések eloszlása a felhasználók között</h4>
@@ -339,11 +338,11 @@
              képviselve legyen. Ezt <strong>bőrszínekkel egészítettem ki</strong> (Xiao és mtsai. munkája
              alapján), mert azok gyakorlati (pl. orvosi-esztétikai) szempontból kiemelten fontosak, és
              sűrűbb mintavételt érdemelnek.</p>
-          <p class="def"><strong>Fontos, 2026-07-14-től:</strong> a 90 bőr-célszín a katalógusban marad
-             (a korábbi adatok elemzéséhez), de <strong>kiosztásra már nem kerül</strong> — a sűrített
-             bőrklaszter torzítaná a klaszter-kiegyensúlyozott kiosztást (2.6). A bőrszínek a spektrális
-             keveréses verzióban térnek vissza. A lenti lefedettségi ábrákon a bőrszínek keverésszáma
-             ezért a jövőben nem nő.</p>
+          <p class="def"><strong>Fontos, 2026-07-14-től:</strong> a 90 bőr-célszín a katalógusban marad,
+             de <strong>kiosztásra már nem kerül</strong> — a sűrített bőrklaszter torzítaná a
+             klaszter-kiegyensúlyozott kiosztást (2.6). A bőrszínek a spektrális keveréses verzióban
+             térnek vissza. Mivel a riport csak a meccs-korszakot fedi, a lenti lefedettségi ábrákon a
+             bőr-célszínek 0 keveréssel szerepelnek.</p>
           <p class="def" id="catalogClasses"></p>
         </div>
         <div class="panel">
@@ -435,8 +434,9 @@
           tanulást mér, nem receptmemorizálást. Minden régiót a tagszínei centroidja színez.
         </p>
         <p class="intro">
-          <strong>Megjegyzés:</strong> ez az <em>elemzési</em> felosztás, amely a teljes eddigi adatot
-          (a bőr-célszíneken játszott keveréseket is) lefedi. A 2026-07-14-től élő <em>kiosztási</em>
+          <strong>Megjegyzés:</strong> ez az <em>elemzési</em> felosztás lefedi a teljes katalógust, a
+          bőr-régiókat is — de mivel a riport csak a meccs-korszakot mutatja, és bőr-célszín kiosztásra
+          már nem kerül, a négy bőr-régió üresen marad (adat nem gyűlik bennük). A <em>kiosztási</em>
           klaszterezés ettől független: fagyasztott, verziózott, és csak a 242 nem-bőr színre terjed ki
           (lásd 2.6 és lentebb, „Meccs-alapú kiosztás").
         </p>
@@ -738,8 +738,8 @@
 
     document.getElementById('metaLine').textContent =
       'Időszak: ' + niceDate(o.first_play_ts) + ' – ' + niceDate(o.last_play_ts) +
-      ' · tiszta gamut-korszak (' + niceDate(d.era_start_utc) + ' UTC-től)' +
-      ' · meccs-korszak 2026-07-14-től · csak feltáró elemzés';
+      ' · CSAK a meccs-korszak (' + niceDate(d.era_start_utc) + ' UTC-től, lásd 2.6)' +
+      ' · csak feltáró elemzés';
 
     var coveredPct = o.gamut_targets_total ? (o.gamut_targets_played / o.gamut_targets_total) : null;
     document.getElementById('kpiCards').innerHTML = [

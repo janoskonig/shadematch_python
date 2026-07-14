@@ -4696,11 +4696,12 @@ def stat_quality_summary():
 # /stat/riport — supervisor-facing, gamut-only exploratory report (Hungarian)
 # --------------------------------------------------------------------------- #
 # The main gameplay is the gamut target set (`target_colors.color_type='gamut'`,
-# 332 colours). The clean gamut era starts 2026-07-06 08:00 UTC (PR #24); a
-# handful of earlier gamut rows are excluded so the report matches the analysis
-# convention used elsewhere. Heavy lifting lives in app/stat_riport_data.py.
+# 332 colours). The report covers the MATCH ERA only (from 2026-07-14 13:30
+# UTC, when the 10-round cluster-blocked serving went live) — earlier
+# band-ladder/quota attempts are out of scope by owner decision. Heavy lifting
+# lives in app/stat_riport_data.py.
 from .stat_riport_data import (
-    GAMUT_ERA_START_UTC,
+    MATCH_ERA_START_UTC,
     build_report as _build_gamut_report,
     build_steps as _build_gamut_steps,
 )

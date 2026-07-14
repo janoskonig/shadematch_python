@@ -2,9 +2,12 @@
 exploratory report (Hungarian UI).
 
 Everything here is restricted to the gamut target set
-(``target_colors.color_type='gamut'``, 332 colours) and the clean gamut era
-(``GAMUT_ERA_START_UTC``; a handful of earlier rows are dropped). Exploratory
-and descriptive only — no fitted models.
+(``target_colors.color_type='gamut'``, 332 colours) and — since the owner's
+2026-07-14 decision — to the MATCH ERA only (``MATCH_ERA_START_UTC``): the
+period in which targets are served as 10-round, cluster-blocked matches.
+Attempts from the earlier band-ladder/quota design (including the clean gamut
+era from 2026-07-06) are excluded, so every number in the report describes the
+protocol-conform design. Exploratory and descriptive only — no fitted models.
 
 Two bundles keep the page responsive:
   * ``build_report()``  – overview + 24h trend, recruitment/sample, catalog +
@@ -23,8 +26,12 @@ from sqlalchemy import text
 
 from . import db
 
-# Clean gamut era start (see PR #24). Shared with routes' guard/constant.
+# Clean gamut era start (see PR #24) — kept for provenance/other tools.
 GAMUT_ERA_START_UTC = '2026-07-06 08:00:00'
+# Match era start: the moment the match-based blocked randomization went live
+# (deploy 2026-07-14 ~13:29 UTC; the pre-deploy pilot match at 12:40 falls
+# outside). The report covers THIS era only.
+MATCH_ERA_START_UTC = '2026-07-14 13:30:00'
 
 # Gamut-attempt filter, inlined per statement (CTE scope is per-statement).
 # Full set: every gamut attempt (used for engagement/volume counts + the 3.3
@@ -108,7 +115,7 @@ def _pearson(xs: List[float], ys: List[float]):
 # ========================================================================== #
 # BUNDLE 1: overview + trend, recruitment, catalog + difficulty, performance
 # ========================================================================== #
-def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
+def build_report(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
     p = {'era': era}
 
     # ---- 1) Overview headline numbers ------------------------------------ #
@@ -706,23 +713,30 @@ def _build_matches_section():
     from .gamut_lab import _lab_to_srgb
     import json as _json
 
+    # Protocol-era only: every tally below is restricted to matches drawn
+    # under the CURRENT frozen clustering (clusters_fingerprint = mc-v1);
+    # pre-protocol pilots are excluded and surfaced via `legacy_matches`.
     # Dialect-neutral SQL (no ::bigint casts): the section is also exercised
     # on the sqlite verification DB, unlike the rest of this PG-only module.
+    v = {'v': MATCH_CLUSTERS_VERSION}
     try:
         by_status = _rows(
             "SELECT status, COUNT(*) AS n, COUNT(DISTINCT user_id) AS users "
-            "FROM matches GROUP BY status")
+            "FROM matches WHERE clusters_fingerprint = :v GROUP BY status", **v)
     except Exception:
         db.session.rollback()
         return None
 
     status_map = {r['status']: {'n': int(r['n']), 'users': int(r['users'])} for r in by_status}
-    total = sum(v['n'] for v in status_map.values())
-    users_any = _one("SELECT COUNT(DISTINCT user_id) AS n FROM matches").get('n', 0)
+    total = sum(v2['n'] for v2 in status_map.values())
+    users_any = _one(
+        "SELECT COUNT(DISTINCT user_id) AS n FROM matches "
+        "WHERE clusters_fingerprint = :v", **v).get('n', 0)
 
     round_outcomes = _rows(
         "SELECT COALESCE(mr.outcome, 'pending') AS outcome, COUNT(*) AS n "
-        "FROM match_rounds mr GROUP BY 1")
+        "FROM match_rounds mr JOIN matches m ON m.id = mr.match_id "
+        "WHERE m.clusters_fingerprint = :v GROUP BY 1", **v)
 
     # Per-cluster blocks: assigned/resolved counts + mean final ΔE of the
     # linked rounds (save-ΔE for completed, give-up ΔE for rated skips).
@@ -737,9 +751,11 @@ def _build_matches_section():
           AVG(ms.delta_e) FILTER (WHERE ms.delta_e IS NOT NULL) AS mean_de,
           COUNT(*) FILTER (WHERE ms.delta_e IS NOT NULL) AS n_de
         FROM match_rounds mr
+        JOIN matches m ON m.id = mr.match_id
         LEFT JOIN mixing_sessions ms ON ms.id = mr.mixing_session_id
+        WHERE m.clusters_fingerprint = :v
         GROUP BY mr.cluster_code ORDER BY mr.cluster_code
-        """)
+        """, **v)
 
     # cluster metadata from the frozen artifact (name, size, centroid swatch)
     names = match_cluster_names()
@@ -794,7 +810,8 @@ def _build_matches_section():
     # Where do abandoned matches stop? (current_round at abandonment)
     abandon_at = _rows(
         "SELECT current_round, COUNT(*) AS n FROM matches "
-        "WHERE status='abandoned' GROUP BY 1 ORDER BY 1")
+        "WHERE status='abandoned' AND clusters_fingerprint = :v "
+        "GROUP BY 1 ORDER BY 1", **v)
 
     # Matches drawn under an earlier clustering (pre-protocol pilots): they
     # carry a different clusters_fingerprint and are EXCLUDED from the primary
@@ -821,7 +838,7 @@ def _build_matches_section():
 # ========================================================================== #
 # BUNDLE 2: step-level behaviour + rule-based strategy phenotypes
 # ========================================================================== #
-def build_steps(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
+def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
     p = {'era': era}
 
     # per-attempt step features from the event log (analysis set only)
