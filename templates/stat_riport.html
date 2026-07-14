@@ -99,7 +99,8 @@
   <div class="rpt-main">
     <div class="rpt-head">
       <h1>ShadeStudy – gamut-riport</h1>
-      <p class="lead">Feltáró áttekintés a fő játékmenetről: a <strong>gamut-színkészletről</strong> (332 cél-szín).</p>
+      <p class="lead">Feltáró áttekintés a fő játékmenetről: a <strong>gamut-színkészletről</strong> (332 cél-szín;
+        2026-07-14-től a kiosztás <strong>10 körös, klaszter-blokkolt meccsekben</strong> történik — lásd 2.6).</p>
       <p class="meta" id="metaLine">Betöltés…</p>
     </div>
 
@@ -205,6 +206,27 @@
              <strong>azonos</strong> (identical), <strong>elfogadható</strong> (acceptable),
              <strong>nem elfogadható</strong> (unacceptable). Ez a szubjektív ítélet a mért ΔE mellé rendelhető,
              és lehetővé teszi az „elfogadhatósági küszöb” vizsgálatát.</p>
+        </div>
+
+        <div class="tech">
+          <h4>2.6 A célszínek kiosztása: meccs-alapú, blokkolt randomizáció (2026-07-14-től)</h4>
+          <p><strong>2026-07-14 előtt</strong> a célszínek elérhetősége a játékos korábbi sikerességétől
+             függött: a színek cseppszám-sávokban (band) fokozatosan nyíltak meg, és egy kétszer megjátszott
+             szín többé nem jelent meg. Ez a kiosztás szelekciós torzítást vitt a mintába — a nehezebb
+             színekhez csak az ügyesebb/kitartóbb játékosok jutottak el.</p>
+          <p><strong>2026-07-14-től a kiosztás egysége a meccs.</strong> Egy meccs 10 kör: pontosan egy
+             cél-szín a tíz <strong>fagyasztott</strong> színklaszter mindegyikéből, kevert sorrendben.
+             A klasztereket k-közép eljárás adja (CIELAB, k=10, rögzített kiindulás) a 242 egyenletes fedésű
+             színen; a besorolás a vizsgálati periódusra fagyasztott és verziózott (mc-v1), minden meccs
+             tárolja, melyik verzió alatt sorsolódott. A <strong>bőr-célszínek nem kerülnek kiosztásra</strong>
+             (a spektrális keveréses verzióban térnek vissza). A klaszteren belüli szín véletlen, de
+             résztvevőn belül ismétlés nélküli ciklusból jön; az új meccs összetétele kizárólag a kiosztási
+             előzménytől függ, a teljesítménytől soha. Minden kiosztott kör tárolódik; a 3 napig nem
+             folytatott meccs <em>megszakadt</em> (abandoned) státuszt kap. Egy befejezett meccs így egy
+             teljes, blokkolt, tízklaszteres ismételt mérés; a <strong>primer estimand a tíz klaszter
+             egyenlő súlyú átlaga</strong>. A napi kihívás és a fej-fej melletti párbajok nem randomizált
+             csatornák — az elsődleges elemzésből kizárandók. Részletes számok: 5. szakasz, „Meccs-alapú
+             kiosztás”.</p>
         </div>
 
       </section>
@@ -317,6 +339,11 @@
              képviselve legyen. Ezt <strong>bőrszínekkel egészítettem ki</strong> (Xiao és mtsai. munkája
              alapján), mert azok gyakorlati (pl. orvosi-esztétikai) szempontból kiemelten fontosak, és
              sűrűbb mintavételt érdemelnek.</p>
+          <p class="def"><strong>Fontos, 2026-07-14-től:</strong> a 90 bőr-célszín a katalógusban marad
+             (a korábbi adatok elemzéséhez), de <strong>kiosztásra már nem kerül</strong> — a sűrített
+             bőrklaszter torzítaná a klaszter-kiegyensúlyozott kiosztást (2.6). A bőrszínek a spektrális
+             keveréses verzióban térnek vissza. A lenti lefedettségi ábrákon a bőrszínek keverésszáma
+             ezért a jövőben nem nő.</p>
           <p class="def" id="catalogClasses"></p>
         </div>
         <div class="panel">
@@ -406,6 +433,12 @@
           amely pontosan a ténylegesen elérhető színtartományt fedi le. Egy régión belül a színek
           szomszédosak, de <em>más receptűek</em>, ezért a régión belüli ismétlődő keverés általánosítható
           tanulást mér, nem receptmemorizálást. Minden régiót a tagszínei centroidja színez.
+        </p>
+        <p class="intro">
+          <strong>Megjegyzés:</strong> ez az <em>elemzési</em> felosztás, amely a teljes eddigi adatot
+          (a bőr-célszíneken játszott keveréseket is) lefedi. A 2026-07-14-től élő <em>kiosztási</em>
+          klaszterezés ettől független: fagyasztott, verziózott, és csak a 242 nem-bőr színre terjed ki
+          (lásd 2.6 és lentebb, „Meccs-alapú kiosztás").
         </p>
         <div class="panel">
           <h4>A tíz régió (a pontok a régiójuk centroid-színét viselik)</h4>
@@ -562,9 +595,14 @@
         </p>
         <p class="intro">
           <strong>XP és szintek:</strong> minden befejezett feladat tapasztalati pontot ad, a szintlépés látható
-          haladást mutat. <strong>Sorozat (streak):</strong> a napi visszatérést jutalmazza. <strong>Nehézségi
-          sávok:</strong> a nehezebb színek fokozatosan nyílnak meg, így a kihívás a képességgel együtt nő – se
-          túl könnyű, se csüggesztően nehéz. <strong>Gamut-oklevél:</strong> a színtér „meghódítása” megosztható
+          haladást mutat. <strong>Sorozat (streak):</strong> a napi visszatérést jutalmazza.
+          <strong>Napi küldetés — egy teljes meccs:</strong> a napi cél a kiosztás egységéhez igazodik
+          (egy befejezett meccs = egy teljes, blokkolt mérés). <strong>Egyhuzam-bónusz:</strong> az egy
+          ülésben játszott n-edik meccs n-szeres befejezési bónuszt ér (plafonnal) — a statisztikailag
+          legértékesebb mintázatot, az egymás utáni teljes meccseket jutalmazza; a jutalom a meccsek
+          <em>összetételére</em> soha nem hat vissza. <em>(2026-07-14 előtt a kihívást a cseppszám-sávok
+          fokozatos megnyílása adagolta; ezt a meccs-alapú kiosztás váltotta.)</em>
+          <strong>Gamut-oklevél:</strong> a színtér „meghódítása” megosztható
           oklevéllel zárul, ami hosszú távú célt ad. <strong>Kihívások és emlékeztetők:</strong> a megosztható,
           fej-fej melletti kihívás új játékosokat is behozhat, az opcionális napi emlékeztető pedig a
           visszatérést ösztönzi.
@@ -700,7 +738,8 @@
 
     document.getElementById('metaLine').textContent =
       'Időszak: ' + niceDate(o.first_play_ts) + ' – ' + niceDate(o.last_play_ts) +
-      ' · tiszta gamut-korszak (' + niceDate(d.era_start_utc) + ' UTC-től) · csak feltáró elemzés';
+      ' · tiszta gamut-korszak (' + niceDate(d.era_start_utc) + ' UTC-től)' +
+      ' · meccs-korszak 2026-07-14-től · csak feltáró elemzés';
 
     var coveredPct = o.gamut_targets_total ? (o.gamut_targets_played / o.gamut_targets_total) : null;
     document.getElementById('kpiCards').innerHTML = [
