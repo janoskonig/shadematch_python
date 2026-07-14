@@ -5,7 +5,12 @@ Protocol rule: "an active match not continued within 3 days is abandoned" —
 the same rule is applied lazily whenever a player asks for their match
 (app/matches.get_or_create_active_match); this sweep resolves matches of
 players who never return, so no match stays statistically undecided.
-Idempotent; safe to run from cron (e.g. daily alongside /push/send-daily).
+Idempotent.
+
+Production runs via the existing Render cron: the sweep is executed inside
+POST /push/send-daily (before reminder copy is built) and is also exposed
+standalone as POST /cron/mark-abandoned-matches (X-Cron-Secret guarded).
+This CLI wrapper remains for ad-hoc/manual runs against any DB.
 
 Usage:
     PYTHONPATH=. python3 scripts/mark_abandoned_matches.py [--commit]

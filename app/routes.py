@@ -3808,6 +3808,26 @@ def daily_challenge_submit():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@main.route('/cron/mark-abandoned-matches', methods=['POST'])
+def cron_mark_abandoned_matches():
+    """Cron-triggered sweep: mark active matches idle for >3 days as abandoned
+    (protocol rule — no match may stay statistically undecided). Idempotent.
+    The same sweep also runs inside /push/send-daily, so a single daily cron
+    covers it; this endpoint exists for independent scheduling. Protected by
+    PUSH_CRON_SECRET."""
+    secret = request.headers.get('X-Cron-Secret') or (request.get_json(silent=True) or {}).get('secret')
+    cron_secret = os.environ.get('PUSH_CRON_SECRET', '')
+    if not cron_secret or secret != cron_secret:
+        return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
+    try:
+        n = match_service.abandon_stale_matches()
+        db.session.commit()
+        return jsonify({'status': 'success', 'matches_abandoned': n})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @main.route('/api/daily-challenge/resolve', methods=['POST'])
 def daily_challenge_resolve():
     """Resolve winner for a given date. Protected by PUSH_CRON_SECRET."""
@@ -5158,6 +5178,17 @@ def push_send_daily():
     if not cron_secret or secret != cron_secret:
         return jsonify({'status': 'error', 'message': 'Unauthorized'}), 401
 
+    # Housekeeping first: resolve stale matches (>3 days idle → abandoned)
+    # BEFORE reminder copy is built, so nobody is nudged to "continue" a match
+    # that the protocol already considers abandoned. Idempotent; also exposed
+    # standalone as /cron/mark-abandoned-matches.
+    try:
+        matches_abandoned = match_service.abandon_stale_matches()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        matches_abandoned = None  # never block the reminder send
+
     webpush = None
     WebPushException = None
     try:
@@ -5386,6 +5417,7 @@ def push_send_daily():
         'email_sent': email_sent,
         'email_failed': email_failed,
         'email_skipped_unverified': email_skipped_unverified,
+        'matches_abandoned': matches_abandoned,
     })
 
 
