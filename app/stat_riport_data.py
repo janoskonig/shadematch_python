@@ -471,114 +471,17 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     # partition comment below). Every target belongs to exactly one region;
     # each gets a Hungarian label and the sRGB colour of its centroid for the
     # map / curve plots.
-    from .regions import _srgb_to_lab
     from .gamut_lab import _lab_to_srgb
 
-    # Balanced partition of the ACTUAL gamut, mirroring how the target catalog
-    # was generated (even coverage of the reachable gamut, densified skin zone):
-    # k-means over the targets' CIELAB coordinates (fixed seed →
-    # deterministic) for the background gamut; the skin targets
-    # (even_gamut_v2_skin, 90 colours packed into a small volume) are instead
-    # assigned to the ORIGINAL Xiao et al. (2017) clusters: each skin target
-    # goes to the ethnicity (Caucasian/Chinese/Kurdish/Thai) whose nearest
-    # published site-mean (4 ethnicities × 4 body sites = 16 Lab means) is
-    # closest in CIELAB.
-    _BG_K = 6      # background gamut clusters
-    _XIAO_ETHNICITIES = ['Caucasian', 'Chinese', 'Kurdish', 'Thai']
-    _XIAO_NAME_HU = {'Caucasian': 'bőrszín – kaukázusi', 'Chinese': 'bőrszín – kínai',
-                     'Kurdish': 'bőrszín – kurd', 'Thai': 'bőrszín – thai'}
-
-    def _region_name(L, a, b):
-        light = 'sötét' if L < 35 else ('közepes' if L <= 65 else 'világos')
-        C = math.hypot(a, b)
-        if C < 15:
-            hue = 'szürkés-semleges'
-        else:
-            h = math.degrees(math.atan2(b, a)) % 360
-            if h < 25 or h >= 345:
-                hue = 'piros'
-            elif h < 70:
-                hue = 'narancs–barna'
-            elif h < 105:
-                hue = 'sárga'
-            elif h < 135:
-                hue = 'sárgászöld'
-            elif h < 190:
-                hue = 'zöld'
-            elif h < 230:
-                hue = 'kékeszöld'
-            elif h < 290:
-                hue = 'kék'
-            else:
-                hue = 'lila–bíbor'
-        return '%s %s' % (light, hue)
-
-    def _kmeans(X, K, seed=42):
-        rng = np.random.default_rng(seed)
-        cen = [X[rng.integers(len(X))]]
-        for _ in range(K - 1):
-            d2 = np.min([((X - c) ** 2).sum(1) for c in cen], axis=0)
-            cen.append(X[rng.choice(len(X), p=d2 / d2.sum())])
-        C = np.array(cen)
-        assign = np.zeros(len(X), dtype=int)
-        for _ in range(200):
-            na = np.argmin(((X[:, None, :] - C[None, :, :]) ** 2).sum(2), axis=1)
-            nC = np.array([X[na == k].mean(0) if (na == k).any() else C[k]
-                           for k in range(K)])
-            if np.array_equal(na, assign) and np.allclose(nC, C):
-                break
-            assign, C = na, nC
-        return assign, C
-
-    cat_targets = _rows(
-        "SELECT id, r, g, b, classification FROM target_colors "
-        "WHERE color_type='gamut' ORDER BY id")
-    skin_targets = [t for t in cat_targets if t['classification'] == 'even_gamut_v2_skin']
-    bg_targets = [t for t in cat_targets if t['classification'] != 'even_gamut_v2_skin']
-    Xb = np.array([_srgb_to_lab(t['r'], t['g'], t['b']) for t in bg_targets])
-    Xs = np.array([_srgb_to_lab(t['r'], t['g'], t['b']) for t in skin_targets])
-    assign_b, Cb = _kmeans(Xb, _BG_K)
-    # skin: nearest Xiao site-mean → that mean's ethnicity
-    from .gamut_lab import skin_gamut
-    _xiao_pts = skin_gamut()['points']
-    _xiao_P = np.array([[q['L'], q['a'], q['b']] for q in _xiao_pts])
-    _xiao_eth = [q['ethnicity'] for q in _xiao_pts]
-    assign_s = [
-        _xiao_eth[int(np.argmin(((_xiao_P - lab) ** 2).sum(1)))]
-        for lab in Xs
-    ]
-
-    region_by_target: Dict[int, str] = {}
-    region_labs: Dict[str, List[tuple]] = defaultdict(list)
-    _macro_names: Dict[str, str] = {}
-
-    # background clusters: stable relabel by centroid, verbal light+hue names
-    order_b = sorted(range(_BG_K), key=lambda k: (Cb[k][0], Cb[k][1], Cb[k][2]))
-    relabel_b = {old: 'k%d' % new for new, old in enumerate(order_b)}
-    _seen: Dict[str, int] = {}
-    for i in range(_BG_K):
-        Lc, ac, bc = Cb[order_b[i]]
-        nm = _region_name(float(Lc), float(ac), float(bc))
-        _seen[nm] = _seen.get(nm, 0) + 1
-        if _seen[nm] > 1:
-            nm = '%s %d.' % (nm, _seen[nm])
-        _macro_names['k%d' % i] = nm
-    for t, lab, k in zip(bg_targets, Xb, assign_b):
-        reg = relabel_b[int(k)]
-        region_by_target[t['id']] = reg
-        region_labs[reg].append(tuple(float(v) for v in lab))
-
-    # skin sub-regions: the original Xiao ethnic clusters, in the paper's order
-    _skin_reg_of = {eth: 'sk%d' % i for i, eth in enumerate(_XIAO_ETHNICITIES)}
-    for eth in _XIAO_ETHNICITIES:
-        _macro_names[_skin_reg_of[eth]] = _XIAO_NAME_HU[eth]
-    for t, lab, eth in zip(skin_targets, Xs, assign_s):
-        reg = _skin_reg_of[eth]
-        region_by_target[t['id']] = reg
-        region_labs[reg].append(tuple(float(v) for v in lab))
-
-    MACRO_ORDER = (['k%d' % i for i in range(_BG_K)]
-                   + ['sk%d' % i for i in range(len(_XIAO_ETHNICITIES))])
+    # The 10-macro-cluster partition (6 k-means background + 4 Xiao skin
+    # clusters) lives in app/clusters.py — shared with match drawing, so the
+    # report's learning regions and the in-game matches use the same families.
+    from .clusters import (
+        MACRO_ORDER, cluster_assignments, cluster_display_names, cluster_labs,
+    )
+    region_by_target: Dict[int, str] = cluster_assignments()
+    region_labs: Dict[str, List[tuple]] = cluster_labs()
+    _macro_names: Dict[str, str] = cluster_display_names()
 
     def _macro_name(code):
         return _macro_names.get(code, code)
