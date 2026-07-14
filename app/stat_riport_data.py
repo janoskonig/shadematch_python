@@ -15,8 +15,10 @@ Two bundles keep the page responsive:
 from __future__ import annotations
 
 import math
+from collections import defaultdict
 from typing import Any, Dict, List
 
+import numpy as np
 from sqlalchemy import text
 
 from . import db
@@ -337,11 +339,12 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     # sRGB, with the Xiao skin zone flagged + hull (reproduces the artifact at
     # scripts/plot_gamut_targets_ab.py, live from the DB).
     cat = _rows(
-        "SELECT name, name_hu, classification, r, g, b FROM target_colors "
+        "SELECT id, name, name_hu, classification, r, g, b FROM target_colors "
         "WHERE color_type='gamut' ORDER BY catalog_order")
     catalog_points = []
     for row, (L, a, b) in zip(cat, _rgb_to_lab(cat)):
         catalog_points.append({
+            'tid': row['id'],
             'a': round(a, 2), 'bb': round(b, 2), 'L': round(L, 1),
             'r': row['r'], 'g': row['g'], 'blue': row['b'],
             'skin': row['classification'] == 'even_gamut_v2_skin',
@@ -419,6 +422,165 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     corr_drops_giveup = _pearson([float(r['sum_drops']) for r in solid],
                                  [r['giveup_rate'] for r in solid])
 
+    # ---- 4.2 Difficulty as a multivariate composite (PCA) ---------------- #
+    # Per-colour features: structural (drops, #pigments) + observed (median ΔE,
+    # give-up rate, median steps). Standardise, then PCA (SVD). PC1 = a single
+    # "difficulty" axis; PC1 is oriented so higher = harder (aligned to ΔE).
+    PCA_FEATURES = [('sum_drops', 'cseppszám'), ('n_pigments', 'pigmentszám'),
+                    ('med_de', 'medián ΔE'), ('giveup_rate', 'feladási arány'),
+                    ('med_steps', 'medián lépésszám')]
+    pca_rows = [r for r in per_color
+                if (r['n_plays'] or 0) >= 3
+                and all(r[k] is not None for k, _ in PCA_FEATURES)]
+    difficulty_pca: Dict[str, Any] = {'points': [], 'loadings': [], 'explained': [],
+                                      'features': [lbl for _, lbl in PCA_FEATURES]}
+    if len(pca_rows) >= 6:
+        X = np.array([[float(r[k]) for k, _ in PCA_FEATURES] for r in pca_rows])
+        mu, sd = X.mean(0), X.std(0)
+        sd[sd == 0] = 1.0
+        Z = (X - mu) / sd
+        U, S, Vt = np.linalg.svd(Z, full_matrices=False)
+        evr = (S ** 2) / (S ** 2).sum()
+        scores = U * S
+        de_idx = [i for i, (k, _) in enumerate(PCA_FEATURES) if k == 'med_de'][0]
+        if np.corrcoef(scores[:, 0], X[:, de_idx])[0, 1] < 0:  # PC1: higher = harder
+            scores[:, 0] *= -1
+            Vt[0] *= -1
+        # PC2 sign is arbitrary; fix it so the drop-count loading is positive →
+        # PC2 up = structurally long recipe RELATIVE to its observed accuracy.
+        drops_idx = [i for i, (k, _) in enumerate(PCA_FEATURES) if k == 'sum_drops'][0]
+        if Vt.shape[0] > 1 and scores.shape[1] > 1 and Vt[1][drops_idx] < 0:
+            scores[:, 1] *= -1
+            Vt[1] *= -1
+        difficulty_pca = {
+            'features': [lbl for _, lbl in PCA_FEATURES],
+            'explained': [float(x) for x in evr[:len(PCA_FEATURES)]],
+            'loadings': [[float(v) for v in Vt[i]] for i in range(min(2, Vt.shape[0]))],
+            'points': [{'pc1': float(scores[i, 0]),
+                        'pc2': float(scores[i, 1]) if scores.shape[1] > 1 else 0.0,
+                        'name': r['name_hu'] or r['name'], 'r': r['r'], 'g': r['g'], 'blue': r['b'],
+                        'sum_drops': r['sum_drops'], 'med_de': r['med_de']}
+                       for i, r in enumerate(pca_rows)],
+        }
+
+    # ---- 5) Region-based learning ---------------------------------------- #
+    # A single colour is mixed at most ~twice, but neighbouring colours (which
+    # share a CIELAB region yet have different recipes) are mixed more often. So
+    # "learning" is measured as generalisation within a region: final ΔE by the
+    # user's Nth exposure to *any* colour in that region. Regions get a Hungarian
+    # verbal label + the sRGB colour of their centroid for the map/curve plots.
+    from .regions import region_of_lab, _srgb_to_lab
+    from .gamut_lab import _lab_to_srgb
+    region_by_target: Dict[int, str] = {}
+    region_labs: Dict[str, List[tuple]] = defaultdict(list)
+    region_skin: Dict[str, bool] = {}
+    for t in _rows("SELECT id, r, g, b, classification FROM target_colors WHERE color_type='gamut'"):
+        L, a, b = _srgb_to_lab(t['r'], t['g'], t['b'])
+        skin = t['classification'] == 'even_gamut_v2_skin'
+        reg = region_of_lab(L, a, b, skin)
+        region_by_target[t['id']] = reg
+        region_labs[reg].append((L, a, b))
+        region_skin[reg] = skin
+    # tag the catalog map points with their region id
+    id_to_reg = region_by_target
+    for cp in catalog_points:
+        cp['reg'] = id_to_reg.get(cp.get('tid'))
+
+    reg_att = _rows(
+        f"""SELECT user_id, target_color_id, final_delta_e
+            FROM ({_GA_ANALYSIS}) s
+            WHERE final_delta_e IS NOT NULL
+            ORDER BY user_id, attempt_started_server_ts""", **p)
+    _seq: Dict[Any, int] = defaultdict(int)
+    _rl: Dict[int, List[float]] = defaultdict(list)
+    _rlr: Dict[tuple, List[float]] = defaultdict(list)   # (region, exposure) -> ΔE list
+    region_mixes: Dict[str, int] = defaultdict(int)
+    for r in reg_att:
+        reg = region_by_target.get(r['target_color_id'])
+        if reg is None:
+            continue
+        region_mixes[reg] += 1
+        _seq[(r['user_id'], reg)] += 1
+        idx = _seq[(r['user_id'], reg)]
+        de = float(r['final_delta_e'])
+        if idx <= 8:
+            _rl[idx].append(de)
+        if idx <= 6:
+            _rlr[(reg, idx)].append(de)
+    # Median ΔE is ~0 (most analysed mixes are perfect saves), so the learning
+    # signal lives in the mean (pulled by the give-up tail) and the success rate.
+    region_learning = [{'exposure': i, 'n': len(_rl[i]),
+                        'mean_de': (sum(_rl[i]) / len(_rl[i])),
+                        'median_de': _median(_rl[i]),
+                        'perfect_rate': sum(1 for v in _rl[i] if v <= 0.01) / len(_rl[i])}
+                       for i in sorted(_rl) if _rl[i]]
+
+    # Region catalogue: centroid Lab → sRGB swatch + Hungarian verbal label.
+    def _region_name(L, a, b, skin):
+        light = 'sötét' if L < 35 else ('közepes' if L <= 65 else 'világos')
+        if skin:
+            return 'bőrszín (%s)' % light
+        C = math.hypot(a, b)
+        if C < 15:
+            hue = 'szürkés-semleges'
+        else:
+            h = math.degrees(math.atan2(b, a)) % 360
+            if h < 25 or h >= 345:
+                hue = 'piros'
+            elif h < 70:
+                hue = 'narancs–barna'
+            elif h < 105:
+                hue = 'sárga'
+            elif h < 135:
+                hue = 'sárgászöld'
+            elif h < 190:
+                hue = 'zöld'
+            elif h < 230:
+                hue = 'kékeszöld'
+            elif h < 290:
+                hue = 'kék'
+            else:
+                hue = 'lila–bíbor'
+        return '%s %s' % (light, hue)
+
+    regions_payload: List[Dict[str, Any]] = []
+    for reg, labs in region_labs.items():
+        Lc = sum(x[0] for x in labs) / len(labs)
+        ac = sum(x[1] for x in labs) / len(labs)
+        bc = sum(x[2] for x in labs) / len(labs)
+        rr, gg, bb = _lab_to_srgb(Lc, ac, bc)
+        regions_payload.append({
+            'id': reg, 'skin': region_skin[reg],
+            'name': _region_name(Lc, ac, bc, region_skin[reg]),
+            'r': rr, 'g': gg, 'blue': bb,
+            'L': round(Lc, 1), 'a': round(ac, 1), 'b': round(bc, 1),
+            'n_targets': len(labs), 'n_mixes': int(region_mixes.get(reg, 0)),
+        })
+    regions_payload.sort(key=lambda x: -x['n_mixes'])
+    # uniquify duplicate verbal labels (grid cells can share a descriptor)
+    _seen_names: Dict[str, int] = {}
+    for x in regions_payload:
+        k = x['name']
+        _seen_names[k] = _seen_names.get(k, 0) + 1
+        if _seen_names[k] > 1:
+            x['name'] = '%s %s.' % (k, _seen_names[k])
+
+    # Per-region learning curves for the most-played regions.
+    featured = [x for x in regions_payload if x['n_mixes'] >= 25][:10]
+    region_curves: List[Dict[str, Any]] = []
+    for x in featured:
+        pts = []
+        for idx in range(1, 7):
+            des = _rlr.get((x['id'], idx), [])
+            if len(des) >= 3:
+                pts.append({'exposure': idx, 'n': len(des),
+                            'mean_de': sum(des) / len(des),
+                            'perfect_rate': sum(1 for v in des if v <= 0.01) / len(des)})
+        if len(pts) >= 2:
+            region_curves.append({'id': x['id'], 'name': x['name'],
+                                  'r': x['r'], 'g': x['g'], 'blue': x['blue'],
+                                  'points': pts})
+
     # ---- Non-uniform thresholds: perceptibility / acceptability by L,a,b -- #
     # Subjective give-up ratings (identical / acceptable / unacceptable) carry
     # the ΔE at give-up (mixing_sessions.delta_e) and the target's Lab. Per
@@ -485,26 +647,6 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
         f"""WITH ga AS ({_GA_ANALYSIS})
             SELECT width_bucket(final_delta_e, 0, 10, 20) AS bucket, COUNT(*)::bigint AS n
             FROM ga WHERE final_delta_e IS NOT NULL GROUP BY 1 ORDER BY 1""", **p)
-    # Learning curve reaches the study-wide perceptibility / acceptability
-    # thresholds (from the subjective ratings), not an arbitrary ΔE ≤ 2.
-    _perc = (thresholds['overall'].get('perceptibility') if thresholds['overall'] else None) or 1.0
-    _acc = (thresholds['overall'].get('acceptability') if thresholds['overall'] else None) or 2.0
-    learning = _rows(
-        f"""
-        WITH ranked AS (
-          SELECT final_delta_e,
-            ROW_NUMBER() OVER (PARTITION BY user_id, target_color_id
-                               ORDER BY attempt_started_server_ts) AS attempt_no
-          FROM ({_GA_ANALYSIS}) s)
-        SELECT attempt_no, COUNT(*)::bigint AS n,
-          percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)
-            FILTER (WHERE final_delta_e IS NOT NULL)::double precision AS median_de,
-          AVG(CASE WHEN final_delta_e<=:perc THEN 1.0 ELSE 0.0 END)
-            FILTER (WHERE final_delta_e IS NOT NULL)::double precision AS perc_rate,
-          AVG(CASE WHEN final_delta_e<=:acc THEN 1.0 ELSE 0.0 END)
-            FILTER (WHERE final_delta_e IS NOT NULL)::double precision AS acc_rate
-        FROM ranked WHERE attempt_no <= 8 GROUP BY attempt_no ORDER BY attempt_no
-        """, **{**p, 'perc': _perc, 'acc': _acc})
     daily_volume = _rows(
         f"""WITH ga AS ({_GA})
             SELECT to_char(date_trunc('day', attempt_started_server_ts),'YYYY-MM-DD') AS day,
@@ -543,9 +685,12 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
         'coverage_stats': cover_stats,
         'per_color': per_color,
         'difficulty_corr': {'drops_vs_de': corr_drops_de, 'drops_vs_giveup': corr_drops_giveup},
+        'difficulty_pca': difficulty_pca,
         # performance
         'de_hist': de_hist,
-        'learning': learning,
+        'region_learning': region_learning,
+        'regions': regions_payload,
+        'region_curves': region_curves,
         'daily_volume': daily_volume,
     }
 
@@ -664,7 +809,7 @@ def build_steps(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     pheno_counts: Dict[str, int] = {}
     pheno_out: Dict[str, Dict[str, Any]] = {}
     PHENO_ORDER = ['rövid próba', 'egyenletes javító', 'próbálgató',
-                   'kitartó finomító', 'vegyes']
+                   'maratoni keverő', 'kitartó finomító', 'vegyes']
 
     def classify(r):
         na = r['n_actions'] or 0
@@ -677,6 +822,8 @@ def build_steps(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
             return 'egyenletes javító'
         if rem >= 0.30 or imp <= 0.45:
             return 'próbálgató'
+        if na >= 40:
+            return 'maratoni keverő'
         if na >= 12:
             return 'kitartó finomító'
         return 'vegyes'
@@ -704,6 +851,95 @@ def build_steps(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
             'giveup_rate': (o['giveup'] / o['n']) if o['n'] else None,
         })
 
+    # ---- data-driven strategy clusters (k-means) ------------------------- #
+    # Alternative to the fixed rules: standardise five per-attempt behaviour
+    # features and cluster them. No predefined rules — each cluster is described
+    # post-hoc by its centroid (mean features), which is what makes it readable.
+    CLUST_FEATURES = [('hossz (cselekvés)', lambda r: math.log1p(r['n_actions'])),
+                      ('javító arány', lambda r: r['n_improve'] / r['n_measured']),
+                      ('rontó arány', lambda r: r['n_worsen'] / r['n_measured']),
+                      ('eltávolítási arány', lambda r: r['n_remove'] / r['n_actions']),
+                      ('végső ΔE', lambda r: float(r['final_delta_e']))]
+    crows = [r for r in feats
+             if (r['n_measured'] or 0) >= 3 and (r['n_actions'] or 0) >= 3
+             and r['final_delta_e'] is not None]
+    clusters: List[Dict[str, Any]] = []
+    cluster_k = 0
+    if len(crows) >= 30:
+        Xc = np.array([[f(r) for _, f in CLUST_FEATURES] for r in crows])
+        mu, sd = Xc.mean(0), Xc.std(0)
+        sd[sd == 0] = 1.0
+        Zc = (Xc - mu) / sd
+        K = 6
+        rng = np.random.default_rng(42)
+        # k-means++ init
+        cen = [Zc[rng.integers(len(Zc))]]
+        for _ in range(K - 1):
+            d2 = np.min([((Zc - c) ** 2).sum(1) for c in cen], axis=0)
+            cen.append(Zc[rng.choice(len(Zc), p=d2 / d2.sum())])
+        C = np.array(cen)
+        assign = np.zeros(len(Zc), dtype=int)
+        for _ in range(100):
+            new_assign = np.argmin(((Zc[:, None, :] - C[None, :, :]) ** 2).sum(2), axis=1)
+            new_C = np.array([Zc[new_assign == k].mean(0) if (new_assign == k).any() else C[k]
+                              for k in range(K)])
+            if np.array_equal(new_assign, assign) and np.allclose(new_C, C):
+                assign = new_assign
+                break
+            assign, C = new_assign, new_C
+        cluster_k = K
+        for k in range(K):
+            members = [crows[i] for i in range(len(crows)) if assign[i] == k]
+            if not members:
+                continue
+            feat_means = {lbl: float(np.mean([f(r) for r in members]))
+                          for lbl, f in CLUST_FEATURES}
+            # report length on the raw (not log) scale
+            feat_means['hossz (cselekvés)'] = float(np.mean([r['n_actions'] for r in members]))
+            des = [float(r['final_delta_e']) for r in members]
+            gv = sum(1 for r in members if r.get('end_reason') in ('skipped', 'abandoned'))
+            clusters.append({
+                'id': k + 1, 'orig_k': k, 'n': len(members),
+                'mean_actions': feat_means['hossz (cselekvés)'],
+                'improve_rate': feat_means['javító arány'],
+                'worsen_rate': feat_means['rontó arány'],
+                'remove_rate': feat_means['eltávolítási arány'],
+                'median_de': _median(des),
+                'giveup_rate': gv / len(members),
+            })
+        clusters.sort(key=lambda c: -c['n'])
+
+        # Post-hoc verbal label from the centroid profile (interpretation aid).
+        def _cluster_label(c):
+            if c['median_de'] is not None and c['median_de'] > 5:
+                return 'sikertelen (nagy ΔE)'
+            if c['mean_actions'] < 20:
+                return 'rövid, hatékony' if c['improve_rate'] >= 0.7 else 'rövid, ingadozó'
+            long_word = 'nagyon hosszú' if c['mean_actions'] >= 60 else 'hosszú'
+            if c['remove_rate'] >= 0.2:
+                return long_word + ', sok visszavonás, feladó'
+            if c['giveup_rate'] >= 0.5:
+                return long_word + ', gyakran feladó'
+            return long_word + ', kitartó'
+        for rank, c in enumerate(clusters, start=1):
+            c['label'] = _cluster_label(c)
+            c['display_id'] = rank
+
+        # 2-D projection of the standardized feature space (PCA via SVD) so the
+        # clusters can be SEEN, not just tabulated. Points carry the display id.
+        Uc, Sc, Vtc = np.linalg.svd(Zc - Zc.mean(0), full_matrices=False)
+        proj = Uc * Sc
+        evr_c = (Sc ** 2) / (Sc ** 2).sum()
+        rank_of = {c['orig_k']: c['display_id'] for c in clusters}
+        cluster_scatter = [
+            {'x': round(float(proj[i, 0]), 3), 'y': round(float(proj[i, 1]), 3),
+             'k': rank_of.get(int(assign[i]), 0)}
+            for i in range(len(crows))
+        ]
+        cluster_evr = [float(evr_c[0]), float(evr_c[1]) if len(evr_c) > 1 else 0.0]
+    else:
+        cluster_scatter, cluster_evr = [], []
+
     return {
         'status': 'success',
         'era_start_utc': era,
@@ -713,4 +949,8 @@ def build_steps(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
         'steps_vs_outcome': steps_vs_outcome,
         'scatter_steps': scatter_steps,
         'phenotypes': phenotypes,
+        'clusters': clusters,
+        'cluster_k': cluster_k,
+        'cluster_scatter': cluster_scatter,
+        'cluster_evr': cluster_evr,
     }

@@ -115,7 +115,7 @@
           <dt>Pigment / csepp</dt><dd>Az öt alap-„festék” (fehér, fekete, piros, sárga, kék). A keverék ezek egész számú cseppjeiből áll össze.</dd>
           <dt>CIE</dt><dd>Commission Internationale de l’Éclairage – a nemzetközi színügyi szabványtestület.</dd>
           <dt>CIELAB (L*, a*, b*)</dt><dd>Háromdimenziós színtér: L* a világosság, a* a zöld–piros, b* a kék–sárga tengely. Úgy szerkesztették, hogy a benne mért euklideszi távolság közelítse az észlelt színkülönbséget.</dd>
-          <dt>ΔE₀₀ (CIEDE2000)</dt><dd>Két szín eltérésének mérőszáma a CIELAB-ban, észleleti súlyozással. Kisebb = pontosabb; ΔE₀₀ ≈ 0 tökéletes egyezés, a ~1 körüli érték az épphogy észrevehető különbség (JND). A skála a színtérben nem egyenletes.</dd>
+          <dt>ΔE₀₀ (CIEDE2000)</dt><dd>Két szín eltérésének objektív mérőszáma a CIELAB-ban, észleleti súlyozással. Kisebb = pontosabb; ΔE₀₀ ≈ 0 tökéletes egyezés, a ~1 körüli érték az épphogy észrevehető különbség (JND). Az észlelési és elfogadhatósági <em>küszöbök</em> viszont szubjektívek, és színtartományonként eltérhetnek.</dd>
           <dt>Gamut</dt><dd>Az öt pigmenttel elérhető színek halmaza – a teljes színtér egy részhalmaza.</dd>
           <dt>Recept / cseppszám</dt><dd>Egy cél-szín megoldása: a pigmentcseppek száma. A cseppszám a strukturális nehézség mérőszáma.</dd>
           <dt>Mentés / feladás</dt><dd>Egy keverés zárása: mentés (a felhasználó elfogadja az eredményt) vagy feladás (továbblép / félbehagyja).</dd>
@@ -172,11 +172,13 @@
              tökéletes egyezés; <strong>ΔE &lt; 1</strong> az emberi szem számára jellemzően még nem érzékelhető;
              <strong>ΔE ≈ 1</strong> az épphogy észrevehető különbség (just-noticeable difference, JND);
              <strong>ΔE ≈ 2–3</strong> figyelmes összehasonlításnál jól látható; nagyobb érték ránézésre is nyilvánvaló.</p>
-          <p class="def">A képlet lokális súlyfüggvényei és a színezet–króma forgatási tagja miatt a ΔE₀₀
-             <strong>nem euklideszi, helyfüggő</strong> mérőszám a CIELAB-ban: ugyanakkora ΔE₀₀ a színtér más-más
-             tartományában (más világosságnál, telítettségnél, színezetnél) eltérő <em>látható</em> különbséget
-             jelenthet. A pontos képlet a hivatkozott irodalomban (Sharma és mtsai. 2005; lásd 8.), a jelenséget
-             pedig a mintán is megnézem (lásd 3.4).</p>
+          <p class="def">Fontos megkülönböztetés: maga a ΔE₀₀ objektív mérőszám – a súlyfüggvényeit épp úgy
+             tervezték, hogy a nyers CIELAB-távolságnál egyenletesebben kövesse az emberi észlelést. Ami a
+             színtér tartományai szerint változik, az a <strong>küszöbök</strong> szintje: hogy mekkora ΔE₀₀-t
+             vesz észre, illetve fogad el valaki, az szubjektív, és függ a színtartománytól – sötét színeknél
+             például magasabb észlelési és elfogadhatósági küszöböket mértek, mint világosaknál (Paravina és
+             mtsai. 2009; lásd 8.). A pontos képlet a hivatkozott irodalomban (Sharma és mtsai. 2005), a
+             küszöbök színtér-függését pedig a saját mintán is megnézem (lásd 3.4).</p>
         </div>
 
         <div class="tech">
@@ -246,7 +248,9 @@
           felezőpontjaként, az <strong>elfogadhatósági küszöböt</strong> az „elfogadható” és a „nem elfogadható”
           medián ΔE-jének felezőpontjaként. Mindezt az <em>L*</em>, az <em>a*</em> és a <em>b*</em> tengely mentén,
           harmadolt (alacsony / közép / magas) sávokra bontva – ha a küszöbök egyenletesek volnának, a sávok
-          között nem mozognának. (Ez visszaigazolja a 2.2 megjegyzését a ΔE₀₀ helyfüggéséről.)
+          között nem mozognának. (Összhangban az irodalommal: Paravina és mtsai. 2009 sötét bőrszín-mintákon
+          magasabb észlelési és elfogadhatósági küszöböket mértek, mint világosakon – a küszöb tehát a
+          megítélt színtartománytól függ, nem a mérőszám hibája.)
         </p>
         <p class="intro" id="thresholdNote"></p>
         <div class="grid2">
@@ -264,7 +268,12 @@
         </div>
         <div class="grid2">
           <div class="panel"><h4>Kijelző színtartománya (color gamut)</h4>
-            <p class="cap">Szélesebb (P3) és szűkebb (sRGB) kijelzők eltérően jelenítik meg ugyanazt a színt.</p>
+            <p class="cap">A böngésző jelzi, hogy a kijelző mekkora színtartományt (gamutot) tud megjeleníteni.
+              Az <strong>sRGB</strong> a szabványos, szűkebb tartomány; a <strong>P3</strong> ennél kb. negyedével
+              nagyobb, főleg a telített színeknél. A játék cél-színei sRGB-ben definiáltak, és a ΔE-t is a kódolt
+              színértékekből számolom – így egy eszközön belül az összehasonlítás konzisztens. A torzítás abból
+              adódik, hogy ugyanaz a kódolt szín más kijelzőn kissé másként jelenik meg: a szubjektív ítéletek
+              (azonos / elfogadható) és a feladat érzékelt nehézsége kijelzőnként eltérhet.</p>
             <div class="chart" id="chScreenGamut"></div></div>
           <div class="panel"><h4>Ablak / teljes képernyő</h4><div class="chart" id="chFullscreen"></div></div>
         </div>
@@ -275,7 +284,11 @@
           <div class="panel"><h4>Nem szerinti megoszlás</h4>
             <p class="cap">A gamut-színeket ténylegesen keverő, regisztrált felhasználók.</p>
             <div class="chart" id="chGender"></div></div>
-          <div class="panel"><h4>Ország (időzóna alapján)</h4><div class="chart" id="chCountry"></div></div>
+          <div class="panel"><h4>Ország (időzóna alapján)</h4>
+            <p class="cap">Csak a gamut-korszak keverései. A vizsgálat korábbi (gamut előtti) fázisában további
+              országokból is érkeztek keverések (pl. Luxemburg, Belgium, Svájc, Norvégia); azok kívül esnek e
+              riport hatókörén.</p>
+            <div class="chart" id="chCountry"></div></div>
           <div class="panel"><h4>Napszak (helyi óra)</h4><div class="chart" id="chHour"></div></div>
           <div class="panel"><h4>A keverések eloszlása a felhasználók között</h4>
             <p class="cap">Kumulatív (Lorenz-) görbe; a szaggatott vonal a teljes egyenletesség.</p>
@@ -328,7 +341,31 @@
             <div class="chart" id="chDiffGiveup"></div></div>
         </div>
         <div class="note key" id="diffNote"></div>
-        <h3>4.3 A legnehezebben kikeverhető színek (megfigyelt)</h3>
+
+        <h3>4.3 A nehézség mint többváltozós mutató: főkomponens-elemzés (PCA)</h3>
+        <p class="intro">
+          A nehézségnek nincs egyetlen természetes mérőszáma, ezért többváltozósan is megnézem. Színenként öt
+          jellemzőt használok (≥3 keveréssel bíró színeken): a recept <strong>cseppszáma</strong> és
+          <strong>pigmentszáma</strong> (strukturális oldal), valamint a megfigyelt <strong>medián ΔE</strong>,
+          <strong>feladási arány</strong> és <strong>medián lépésszám</strong>. A jellemzőket standardizálom,
+          majd PCA-t futtatok; a tengelyek jelentését a súlyok (loadingok) adják – ezeket mutatja az alábbi ábra.
+        </p>
+        <p class="intro" id="pcaNote"></p>
+        <div class="grid2">
+          <div class="panel"><h4>PC1- és PC2-súlyok: miből állnak a tengelyek?</h4>
+            <p class="cap">Az első két főkomponens súlyai jellemzőnként. A PC1-nél minden súly azonos előjelű
+              (általános nehézség); a PC2-nél a recept-jellemzők és a megfigyelt pontosság <em>ellentétes</em>
+              előjelűek – ez a két nehézség-fogalom szétválásának tengelye.</p>
+            <div class="chart" id="chPcaLoadings"></div></div>
+          <div class="panel"><h4>A színek a PC1–PC2 síkon</h4>
+            <p class="cap">Egy pont = egy cél-szín, a saját valódi színére festve. Jobbra = összességében
+              nehezebb (PC1); felfelé = a recept-oldal, lefelé = a pontatlanság dominál (PC2). A négy negyed
+              olvasatát a halvány sarokfeliratok adják – diagnosztikailag a jobb alsó „csapda”-negyed a
+              legérdekesebb: receptre egyszerű, mégis elhibázott színek.</p>
+            <div class="chart" id="chPcaScatter"></div></div>
+        </div>
+
+        <h3>4.4 A legnehezebben kikeverhető színek (megfigyelt)</h3>
         <div class="panel table-wrap"><table id="hardTable"></table></div>
       </section>
 
@@ -342,13 +379,39 @@
           <div class="panel"><h4>Napi keverésszám</h4>
             <p class="cap">A gamut-keverések napi darabszáma.</p>
             <div class="chart" id="chDaily"></div></div>
-          <div class="panel"><h4>Végső ΔE az ismételt próbálkozások szerint</h4>
-            <p class="cap">Ugyanaz a felhasználó ugyanazt a színt hányadszor próbálja (n = keverésszám).</p>
-            <div class="chart" id="chLearn"></div></div>
-          <div class="panel"><h4>A vizsgálati küszöbök elérése a próbálkozás sorszáma szerint</h4>
-            <p class="cap">A keverések aránya, amely a mintán kihozott átlagos <strong>észlelhetőségi</strong>,
-              illetve <strong>elfogadhatósági</strong> küszöb alá ér (nem a fix ΔE ≤ 2 alá). A küszöbök a 3.4-ből.</p>
-            <div class="chart" id="chLearnRate"></div></div>
+        </div>
+
+        <h3>Tanulás a színtér-régiók mentén</h3>
+        <p class="intro">
+          Egy konkrét színt egy játékos legfeljebb egyszer-kétszer kever ki, ezért az egy színen belüli
+          ismétlésből nem mérhető tanulás. Ehelyett a színteret <strong>régiókra</strong> osztom: rögzített
+          CIELAB-rácscellákra (a bőrszín-zónában finomabb, 18 egységnyi, máshol 36 egységnyi cellamérettel) –
+          így 54 régió adódik. Egy régió több szomszédos, de <em>más receptű</em> színt tartalmaz, ezért a
+          régión belüli ismétlődő keverés általánosítható tanulást mér, nem receptmemorizálást. Minden régiót
+          a tagszínei átlagával (centroidjával) színezek és szavakkal is jellemzek.
+        </p>
+        <div class="panel">
+          <h4>A színtér-régiók (a pontok a régiójuk centroid-színét viselik)</h4>
+          <p class="cap">Ugyanaz a 3D CIELAB-térkép, mint a 4.1-ben, de itt minden cél-szín a <strong>régiója</strong>
+            átlagszínére festve – így a cellák összefüggő tömbökként látszanak. Húzással forgatható; rámutatva a
+            régió neve és a szín neve.</p>
+          <div class="chart" id="chRegionMap" style="min-height:480px;"></div>
+          <details class="table-collapse"><summary style="cursor:pointer;color:var(--text-secondary);font-size:0.85rem;margin-top:8px;">A régiók táblázata (54 régió, keverésszám szerint)</summary>
+            <div class="table-wrap" style="max-height:340px;overflow-y:auto;margin-top:8px;"><table id="regionTable"></table></div>
+          </details>
+        </div>
+        <div class="grid2">
+          <div class="panel"><h4>Régiónkénti tanulási görbék: átlagos végső ΔE</h4>
+            <p class="cap">Egy vonal = egy régió, a régió centroid-színével (a vastag fekete vonal az összes
+              régió együtt). X: hányadik keverés a régióban (kitettség sorszáma), y: átlagos végső ΔE.
+              A szaggatott vízszintes vonalak a 3.4-ben becsült <strong>észlelhetőségi</strong> és
+              <strong>elfogadhatósági</strong> küszöbök. Csak a legalább 25 keveréssel bíró régiók (10 db);
+              rámutatva a régió neve és az elemszám.</p>
+            <div class="chart" id="chLearn" style="min-height:340px;"></div></div>
+          <div class="panel"><h4>Tökéletes találat régiónként</h4>
+            <p class="cap">Ugyanazok a régiók és színek; a tökéletes (ΔE ≈ 0) találatok aránya a kitettség
+              sorszáma szerint.</p>
+            <div class="chart" id="chLearnRate" style="min-height:340px;"></div></div>
         </div>
         <div class="note" id="learnNote"></div>
         <div class="tech">
@@ -370,9 +433,9 @@
             <p class="cap">Mely „festékekből” tesznek be a legtöbbet (hozzáadás-események).</p>
             <div class="chart" id="chPigments"></div></div>
           <div class="panel"><h4>Lépésszám ↔ végeredmény</h4>
-            <p class="cap">Minden pont egy keverés: a cselekvések száma (x) és a végső ΔE (y). Zöld = teljesítve,
-              piros = feladva. A fekete vonal a medián végső ΔE cselekvésszám-sávonként. (Néhány szélső érték a
-              tengelyeken kívülre esik.)</p>
+            <p class="cap">Dobozdiagram: a végső ΔE eloszlása a cselekvésszám-sávok szerint, kimenetenként
+              bontva (zöld = teljesítve, piros = feladva). A doboz a kvartiliseket, a vonal a mediánt mutatja;
+              a kiugró értékeket az áttekinthetőség kedvéért nem rajzolom ki, és a tengely ΔE 16-nál vágva.</p>
             <div class="chart" id="chStepsOutcome"></div></div>
           <div class="panel"><h4>Rontó lépések ↔ feladás</h4>
             <p class="cap">A ΔE-t rontó lépések aránya a teljesített és a feladott próbálkozásokban.</p>
@@ -399,7 +462,8 @@
           <li><strong>rövid próba</strong> — ha a hossz &lt; 3 cselekvés.</li>
           <li><strong>egyenletes javító</strong> — ha a javító arány ≥ 70% <em>és</em> az eltávolítási arány ≤ 15%.</li>
           <li><strong>próbálgató</strong> — ha az eltávolítási arány ≥ 30% <em>vagy</em> a javító arány ≤ 45%.</li>
-          <li><strong>kitartó finomító</strong> — ha a hossz ≥ 12 cselekvés (és egyik fenti sem illett).</li>
+          <li><strong>maratoni keverő</strong> — ha a hossz ≥ 40 cselekvés (és egyik fenti sem illett).</li>
+          <li><strong>kitartó finomító</strong> — ha a hossz 12–39 cselekvés (és egyik fenti sem illett).</li>
           <li><strong>vegyes</strong> — minden más eset.</li>
         </ul>
         <p class="intro">Feltáró jellegű felosztás; a küszöbök választása gyakorlati, nem modellből származik.</p>
@@ -409,6 +473,29 @@
             <p class="cap">Medián végső ΔE és feladási arány típusonként.</p>
             <div class="table-wrap"><table id="phenoTable"></table></div></div>
         </div>
+
+        <h3>6.7 Adatvezérelt ellenpróba: k-közép klaszterezés</h3>
+        <p class="intro">
+          A fenti szabályok átláthatók, de a küszöbeik önkényesek. Ellenpróbaként ugyanazokat a keveréseket
+          <strong>szabályok nélkül</strong>, k-közép klaszterezéssel is csoportosítom (k = 6). Jellemzők
+          keverésenként, standardizálva: hossz (log-skálán), javító arány, rontó arány, eltávolítási arány és a
+          végső ΔE. A klaszterek értelmezése utólagos: az alábbi táblázat az egyes klaszterek átlagos profilját
+          (centroidját) mutatja – innen olvasható le, „miféle” viselkedés került egy csoportba.
+        </p>
+        <div class="grid2">
+          <div class="panel"><h4>A klaszterek a jellemzőtér síkján</h4>
+            <p class="cap">Az öt standardizált jellemző főkomponens-vetülete (PC1–PC2): minden pont egy keverés,
+              a színe a klasztere. Ha a színek jól elkülönülő foltokat alkotnak, a csoportok valósak, nem
+              önkényes vágások.</p>
+            <div class="chart" id="chClusterScatter" style="min-height:360px;"></div></div>
+          <div class="panel"><h4>Klaszter-profilok (centroidok)</h4>
+            <div class="table-wrap"><table id="clusterTable"></table></div></div>
+        </div>
+        <p class="intro">
+          A klaszterek nagyjából visszaadják a szabályalapú képet – gyors, egyenletes javítók; hosszan küzdő,
+          gyakran feladó keverők; kis létszámú, kiugróan rossz kimenetű csoport –, ami arra utal, hogy a
+          fenotípusok nem a kézzel választott küszöbök műtermékei.
+        </p>
       </section>
 
       <!-- 7) GAMIFIKÁCIÓ -->
@@ -453,9 +540,10 @@
           <li><strong>CIEDE2000 (kidolgozás):</strong> Luo, M. R., Cui, G., &amp; Rigg, B. (2001).
             <em>The development of the CIE 2000 colour-difference formula: CIEDE2000.</em>
             Color Research &amp; Application, 26(5), 340–350.</li>
-          <li><strong>Észlelhetőségi / elfogadhatósági küszöbök:</strong> Paravina, R. D., et&nbsp;al. (2015).
-            <em>Color difference thresholds in dentistry.</em> Journal of Esthetic and Restorative Dentistry,
-            27(S1), S1–S9.</li>
+          <li><strong>Észlelhetőségi / elfogadhatósági küszöbök:</strong> Paravina, R. D., Majkic, G.,
+            Del Mar Perez, M., &amp; Kiat-Amnuay, S. (2009). <em>Color difference thresholds of maxillofacial
+            skin replications.</em> Journal of Prosthodontics, 18(7), 618–625.
+            doi:10.1111/j.1532-849X.2009.00465.x</li>
           <li><strong>Bőrszín-tartomány (Xiao et al.):</strong> Xiao, K., Yates, J. M., Zardawi, F., et&nbsp;al. (2017).
             <em>Characterising the variations in ethnic skin colours: a new calibrated data base for human skin.</em>
             Skin Research and Technology, 23(1), 21–29.</li>
@@ -717,9 +805,26 @@
     var nf = +dem.n_female || 0, nm = +dem.n_male || 0, noth = (+dem.n_players || 0) - nf - nm;
     var gl = ['nő', 'férfi'], gv = [nf, nm]; if (noth > 0) { gl.push('egyéb / n.a.'); gv.push(noth); }
     bar('chGender', gl, gv, { color: T.warn, ytitle: 'játékos', hover: '%{x}: %{y} játékos' });
-    var ct = (d.bias_country || []).slice(0, 8);
-    bar('chCountry', ct.map(function (r) { return r.n_attempts; }), ct.map(function (r) { return r.label; }),
-      { horizontal: true, color: T.accent, xtitle: 'keverés', hover: '%{y}: %{x}', margin: { l: 110, r: 12, t: 8, b: 36 } });
+    (function () {
+      var ct = (d.bias_country || []).filter(function (r) { return r.label !== 'Ismeretlen'; });
+      if (!ct.length) { document.getElementById('chCountry').innerHTML = '<p class="cap">Nincs adat</p>'; return; }
+      var lay = {
+        margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: 'rgba(0,0,0,0)',
+        font: { family: T.font, color: T.sub, size: 11 },
+        geo: { scope: 'world', fitbounds: 'locations', showframe: false,
+               showcoastlines: true, coastlinecolor: T.border,
+               landcolor: '#f3f1ec', bgcolor: 'rgba(0,0,0,0)' }
+      };
+      Plotly.react(document.getElementById('chCountry'), [{
+        type: 'choropleth', locationmode: 'country names',
+        locations: ct.map(function (r) { return r.label; }),
+        z: ct.map(function (r) { return +r.n_attempts; }),
+        colorscale: 'Blues', reversescale: true, zmin: 0,
+        colorbar: { thickness: 10, title: { text: 'keverés', font: { size: 10 } } },
+        marker: { line: { color: '#fff', width: 0.5 } },
+        hovertemplate: '%{location}: %{z} keverés<extra></extra>'
+      }], lay, CFG);
+    })();
     var hr = (d.bias_hour || []).filter(function (r) { return r.label !== 'ismeretlen'; })
       .slice().sort(function (a, b) { return (+a.label) - (+b.label); });
     bar('chHour', hr.map(function (r) { return +r.label; }), hr.map(function (r) { return r.n_attempts; }),
@@ -816,6 +921,84 @@
       fmt(corr.drops_vs_giveup, 2) + '): a bonyolultabb recepteket gyakrabban adják fel. Vannak rövid receptű, ' +
       'mégis nehezen eltalálható színek is.';
 
+    // 4.3 difficulty PCA: loadings + PC1×PC2 scatter
+    (function () {
+      var pca = d.difficulty_pca || {};
+      var pts = pca.points || [];
+      if (!pts.length || !(pca.loadings || []).length) {
+        document.getElementById('chPcaLoadings').innerHTML = '<p class="cap">Kevés adat a PCA-hoz.</p>';
+        document.getElementById('chPcaScatter').innerHTML = '';
+        return;
+      }
+      var evr1 = pca.explained[0] || 0, evr2 = pca.explained[1] || 0;
+      var lo = pca.loadings[0];
+      var lo2 = pca.loadings[1] || [];
+      // PC2 interpretation, data-driven: list the opposing feature groups by sign.
+      var pc2pos = [], pc2neg = [];
+      lo2.forEach(function (v, i) {
+        if (v >= 0.3) pc2pos.push(pca.features[i]);
+        else if (v <= -0.3) pc2neg.push(pca.features[i]);
+      });
+      var pc2Sentence = '';
+      if (pc2pos.length && pc2neg.length) {
+        pc2Sentence = ' A <strong>PC2</strong> (a különbségek további ' + pct(evr2, 0) + '-a) mást mér: a ' +
+          'súlyai vegyes előjelűek – pozitív a <strong>' + esc(pc2pos.join(' és a ')) + '</strong>, negatív a ' +
+          '<strong>' + esc(pc2neg.join(' és a ')) + '</strong>. Ez tehát nem azt mutatja, <em>mennyire</em> ' +
+          'nehéz egy szín, hanem azt, <em>melyik fajta</em> nehézség jellemzi: a sík tetején a bonyolult ' +
+          'receptű, de pontosan eltalált színek ülnek, az alján az egyszerű receptű, mégis pontatlanul ' +
+          'eltaláltak. Ez ugyanaz a szétválás, amit a 4.2 gyenge cseppszám↔ΔE korrelációja jelzett.';
+      } else {
+        pc2Sentence = ' A PC2 (' + pct(evr2, 0) + ') önálló, jól elkülönülő kontrasztot nem mutat.';
+      }
+      document.getElementById('pcaNote').innerHTML =
+        'Az eredmény: a <strong>PC1</strong> egyetlen számba sűríti a színek közti különbségek <strong>' +
+        pct(evr1, 0) + '</strong>-át. Minden jellemző pozitív súllyal szerepel benne: minél nagyobb egy szín ' +
+        'PC1-értéke, annál rosszabb <em>minden</em> mutatóban. Ezért olvasható általános „nehézségként”. ' +
+        'A megfigyelt jellemzők (feladás, lépésszám) súlya nagyobb, mint a recept-jellemzőké: a nehézséget ' +
+        'inkább a viselkedés hordozza, mint a recept hossza.' + pc2Sentence;
+      (function () {
+        var lay = baseLayout({ showlegend: true, barmode: 'group',
+          margin: { l: 130, r: 12, t: 8, b: 36 },
+          xaxis: { title: { text: 'súly (loading)', font: { size: 10 } }, zeroline: true, zerolinecolor: '#bbb' } });
+        lay.legend = { orientation: 'h', y: 1.12, font: { size: 10 } };
+        Plotly.react(document.getElementById('chPcaLoadings'), [
+          { type: 'bar', orientation: 'h', name: 'PC1 (' + pct(evr1, 0) + ')',
+            y: pca.features, x: lo.map(function (v) { return +v; }),
+            marker: { color: T.accent }, hovertemplate: 'PC1 · %{y}: %{x:.2f}<extra></extra>' },
+          { type: 'bar', orientation: 'h', name: 'PC2 (' + pct(evr2, 0) + ')',
+            y: pca.features, x: lo2.map(function (v) { return +v; }),
+            marker: { color: T.warn }, hovertemplate: 'PC2 · %{y}: %{x:.2f}<extra></extra>' }
+        ], lay, CFG);
+      })();
+      var lay = baseLayout({
+        xaxis: { title: { text: 'PC1 (nehézség; ' + pct(evr1, 0) + ')', font: { size: 10 } } },
+        yaxis: { title: { text: 'PC2 (' + pct(evr2, 0) + ')', font: { size: 10 } } } });
+      // quadrant guides: zero lines + one short reading per corner
+      lay.shapes = [
+        { type: 'line', xref: 'x', x0: 0, x1: 0, yref: 'paper', y0: 0, y1: 1, line: { color: '#c9c4bd', width: 1, dash: 'dot' } },
+        { type: 'line', yref: 'y', y0: 0, y1: 0, xref: 'paper', x0: 0, x1: 1, line: { color: '#c9c4bd', width: 1, dash: 'dot' } }
+      ];
+      function corner(x, y, txt, anchor) {
+        return { xref: 'paper', yref: 'paper', x: x, y: y, xanchor: anchor, yanchor: (y > 0.5 ? 'top' : 'bottom'),
+          showarrow: false, text: txt, font: { size: 9, color: T.sub },
+          bgcolor: 'rgba(255,255,255,0.75)', borderpad: 2 };
+      }
+      lay.annotations = [
+        corner(0.99, 0.99, 'munkaigényes,<br>de eltalálható', 'right'),
+        corner(0.01, 0.99, 'bonyolult recept,<br>pontosan kikeverve', 'left'),
+        corner(0.01, 0.01, 'egyszerű,<br>rendben', 'left'),
+        corner(0.99, 0.01, 'csapda: egyszerűbb recept,<br>pontatlan találat', 'right')
+      ];
+      Plotly.react(document.getElementById('chPcaScatter'), [{
+        type: 'scatter', mode: 'markers',
+        x: pts.map(function (r) { return r.pc1; }), y: pts.map(function (r) { return r.pc2; }),
+        text: pts.map(function (r) { return r.name; }),
+        marker: { size: 9, color: pts.map(function (r) { return 'rgb(' + r.r + ',' + r.g + ',' + r.blue + ')'; }),
+                  line: { width: 1, color: 'rgba(0,0,0,0.25)' } },
+        hovertemplate: '%{text}<br>PC1 %{x:.2f}, PC2 %{y:.2f}<extra></extra>'
+      }], lay, CFG);
+    })();
+
     var hard = (d.per_color || []).filter(function (r) { return (r.n_plays || 0) >= 5; }).slice(0, 12);
     var hh = '<thead><tr><th>Szín</th><th class="num">Cseppszám</th><th class="num">Pigmentek</th>' +
       '<th class="num">Medián ΔE</th><th class="num">Feladás</th><th class="num">Keverés</th></tr></thead><tbody>';
@@ -833,38 +1016,128 @@
     bar('chDeHist', hx, hy, { color: T.accent, xtitle: 'végső ΔE', ytitle: 'keverés', hover: 'ΔE≈%{x}: %{y}' });
     var dvl = d.daily_volume || [];
     bar('chDaily', dvl.map(function (r) { return r.day; }), dvl.map(function (r) { return +r.n; }), { color: T.accent, ytitle: 'keverés', hover: '%{x}: %{y}' });
-    var lr = d.learning || [];
+    // ── Region-based learning ──────────────────────────────────────────────
+    var rl = d.region_learning || [];
+    var regionsAll = d.regions || [];
+    var regCurves = d.region_curves || [];
+    function regRgb(x) { return 'rgb(' + x.r + ',' + x.g + ',' + x.blue + ')'; }
+
+    // Region map: same 3-D CIELAB cloud as 4.1, but each point painted with its
+    // REGION's centroid colour, so the grid cells show up as coherent blocks.
     (function () {
-      var lay = baseLayout({ xaxis: { dtick: 1, title: { text: 'próbálkozás sorszáma', font: { size: 10 } } },
-        yaxis: { title: { text: 'medián végső ΔE', font: { size: 10 } }, rangemode: 'tozero' } });
-      Plotly.react(document.getElementById('chLearn'), [{
-        type: 'scatter', mode: 'lines+markers+text', x: lr.map(function (r) { return r.attempt_no; }), y: lr.map(function (r) { return r.median_de; }),
-        text: lr.map(function (r) { return 'n=' + r.n; }), textposition: 'top center', textfont: { size: 9, color: T.sub },
-        line: { color: T.accent, width: 2 }, marker: { size: 7, color: T.accent },
-        hovertemplate: '%{x}. próbálkozás: medián ΔE %{y:.2f}<extra></extra>'
+      var cpAll = d.catalog_points || [];
+      var regById = {};
+      regionsAll.forEach(function (x) { regById[x.id] = x; });
+      var lay = {
+        margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: 'rgba(0,0,0,0)',
+        font: { family: T.font, color: T.sub, size: 11 }, showlegend: false,
+        scene: {
+          xaxis: { title: 'a* (zöld→piros)', gridcolor: T.border, zerolinecolor: '#bbb', backgroundcolor: 'rgba(0,0,0,0)' },
+          yaxis: { title: 'b* (kék→sárga)', gridcolor: T.border, zerolinecolor: '#bbb', backgroundcolor: 'rgba(0,0,0,0)' },
+          zaxis: { title: 'L* (világosság)', gridcolor: T.border, zerolinecolor: '#bbb', backgroundcolor: 'rgba(0,0,0,0)', range: [0, 100] },
+          camera: { eye: { x: 1.5, y: 1.5, z: 0.9 } }, aspectmode: 'cube'
+        }
+      };
+      Plotly.react(document.getElementById('chRegionMap'), [{
+        type: 'scatter3d', mode: 'markers',
+        x: cpAll.map(function (p2) { return p2.a; }),
+        y: cpAll.map(function (p2) { return p2.bb; }),
+        z: cpAll.map(function (p2) { return p2.L; }),
+        text: cpAll.map(function (p2) {
+          var rg = regById[p2.reg];
+          return (rg ? rg.name : '?') + ' — ' + p2.name;
+        }),
+        marker: {
+          size: 4.5,
+          color: cpAll.map(function (p2) { var rg = regById[p2.reg]; return rg ? regRgb(rg) : '#999'; }),
+          line: { width: 0.5, color: 'rgba(0,0,0,0.3)' }
+        },
+        hovertemplate: '%{text}<br>L* %{z:.0f}, a* %{x:.0f}, b* %{y:.0f}<extra></extra>'
       }], lay, CFG);
     })();
+
+    // Region table: all 54 regions, sorted by mix count, swatch + verbal label.
+    (function () {
+      var el = document.getElementById('regionTable');
+      if (!el) return;
+      var h = '<thead><tr><th>Régió</th><th class="num">Cél-színek</th><th class="num">Keverések</th>' +
+        '<th class="num">Centroid (L*, a*, b*)</th></tr></thead><tbody>';
+      regionsAll.forEach(function (x) {
+        h += '<tr><td><span class="swatch" style="background:' + regRgb(x) + '"></span> ' + esc(x.name) + '</td>' +
+          '<td class="num">' + fmt(x.n_targets) + '</td><td class="num">' + fmt(x.n_mixes) + '</td>' +
+          '<td class="num">' + fmt(x.L, 0) + ', ' + fmt(x.a, 0) + ', ' + fmt(x.b, 0) + '</td></tr>';
+      });
+      el.innerHTML = h + '</tbody>';
+    })();
+
+    // Per-region ΔE trajectories + overall + threshold lines.
     (function () {
       var ov = (d.thresholds || {}).overall || {};
       var perc = ov.perceptibility, acc = ov.acceptability;
-      var lay = baseLayout({ showlegend: true, xaxis: { dtick: 1, title: { text: 'próbálkozás sorszáma', font: { size: 10 } } },
-        yaxis: { title: { text: 'keverések aránya', font: { size: 10 } }, range: [0, 1], tickformat: '.0%' } });
-      Plotly.react(document.getElementById('chLearnRate'), [
-        { type: 'scatter', mode: 'lines+markers', name: 'elfogadhatóság (ΔE ≤ ' + fmt(acc, 1) + ')',
-          x: lr.map(function (r) { return r.attempt_no; }), y: lr.map(function (r) { return r.acc_rate; }),
-          line: { color: T.ok, width: 2 }, marker: { size: 7, color: T.ok },
-          hovertemplate: '%{x}. próbálkozás: %{y:.0%} (elfogadhatóság)<extra></extra>' },
-        { type: 'scatter', mode: 'lines+markers', name: 'észlelhetőség (ΔE ≤ ' + fmt(perc, 1) + ')',
-          x: lr.map(function (r) { return r.attempt_no; }), y: lr.map(function (r) { return r.perc_rate; }),
-          line: { color: T.accent, width: 2 }, marker: { size: 7, color: T.accent },
-          hovertemplate: '%{x}. próbálkozás: %{y:.0%} (észlelhetőség)<extra></extra>' }
-      ], lay, CFG);
+      var allVals = [acc || 0];
+      regCurves.forEach(function (rc2) { rc2.points.forEach(function (pp) { allVals.push(pp.mean_de); }); });
+      var ymax = Math.max.apply(null, allVals) * 1.2 + 0.2;
+      var lay = baseLayout({ showlegend: true, margin: { l: 46, r: 12, t: 8, b: 40 },
+        xaxis: { dtick: 1, title: { text: 'kitettség sorszáma a régióban', font: { size: 10 } } },
+        yaxis: { title: { text: 'átlagos végső ΔE', font: { size: 10 } }, range: [0, ymax] } });
+      lay.legend = { orientation: 'v', x: 1.02, y: 1, font: { size: 9 } };
+      lay.shapes = []; lay.annotations = [];
+      if (perc != null) {
+        lay.shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: perc, y1: perc,
+          line: { color: T.accent, width: 1.4, dash: 'dash' } });
+        lay.annotations.push({ xref: 'paper', x: 0.01, xanchor: 'left', y: perc, yanchor: 'bottom',
+          showarrow: false, text: 'észlelhetőség', font: { size: 9, color: T.accent } });
+      }
+      if (acc != null) {
+        lay.shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: acc, y1: acc,
+          line: { color: T.danger, width: 1.4, dash: 'dash' } });
+        lay.annotations.push({ xref: 'paper', x: 0.01, xanchor: 'left', y: acc, yanchor: 'bottom',
+          showarrow: false, text: 'elfogadhatóság', font: { size: 9, color: T.danger } });
+      }
+      var traces = regCurves.map(function (rc2) {
+        return { type: 'scatter', mode: 'lines+markers', name: rc2.name,
+          x: rc2.points.map(function (pp) { return pp.exposure; }),
+          y: rc2.points.map(function (pp) { return pp.mean_de; }),
+          customdata: rc2.points.map(function (pp) { return pp.n; }),
+          line: { color: regRgb(rc2), width: 1.6 },
+          marker: { size: 5, color: regRgb(rc2), line: { width: 0.5, color: 'rgba(0,0,0,0.4)' } },
+          hovertemplate: rc2.name + '<br>%{x}. kitettség: átlag ΔE %{y:.2f} (n=%{customdata})<extra></extra>' };
+      });
+      traces.push({ type: 'scatter', mode: 'lines+markers', name: 'összes régió',
+        x: rl.map(function (r) { return r.exposure; }), y: rl.map(function (r) { return r.mean_de; }),
+        customdata: rl.map(function (r) { return r.n; }),
+        line: { color: '#111827', width: 3 }, marker: { size: 6, color: '#111827' },
+        hovertemplate: 'összes régió<br>%{x}. kitettség: átlag ΔE %{y:.2f} (n=%{customdata})<extra></extra>' });
+      Plotly.react(document.getElementById('chLearn'), traces, lay, CFG);
+    })();
+
+    // Per-region perfect-rate curves + overall.
+    (function () {
+      var lay = baseLayout({ showlegend: true, margin: { l: 46, r: 12, t: 8, b: 40 },
+        xaxis: { dtick: 1, title: { text: 'kitettség sorszáma a régióban', font: { size: 10 } } },
+        yaxis: { title: { text: 'tökéletes találat aránya', font: { size: 10 } }, range: [0, 1.02], tickformat: '.0%' } });
+      lay.legend = { orientation: 'v', x: 1.02, y: 1, font: { size: 9 } };
+      var traces = regCurves.map(function (rc2) {
+        return { type: 'scatter', mode: 'lines+markers', name: rc2.name,
+          x: rc2.points.map(function (pp) { return pp.exposure; }),
+          y: rc2.points.map(function (pp) { return pp.perfect_rate; }),
+          customdata: rc2.points.map(function (pp) { return pp.n; }),
+          line: { color: regRgb(rc2), width: 1.6 },
+          marker: { size: 5, color: regRgb(rc2), line: { width: 0.5, color: 'rgba(0,0,0,0.4)' } },
+          hovertemplate: rc2.name + '<br>%{x}. kitettség: %{y:.0%} tökéletes (n=%{customdata})<extra></extra>' };
+      });
+      traces.push({ type: 'scatter', mode: 'lines+markers', name: 'összes régió',
+        x: rl.map(function (r) { return r.exposure; }), y: rl.map(function (r) { return r.perfect_rate; }),
+        customdata: rl.map(function (r) { return r.n; }),
+        line: { color: '#111827', width: 3 }, marker: { size: 6, color: '#111827' },
+        hovertemplate: 'összes régió<br>%{x}. kitettség: %{y:.0%} tökéletes (n=%{customdata})<extra></extra>' });
+      Plotly.react(document.getElementById('chLearnRate'), traces, lay, CFG);
     })();
     document.getElementById('learnNote').innerHTML =
-      '<strong>Óvatosan az „ismételt próbálkozás” görbével.</strong> A medián ΔE nem csökken a sorszámmal – de ez ' +
-      'nem azt jelenti, hogy a gyakorlás ront. Aki újra próbálkozik ugyanazzal a színnel, jellemzően az, akinek ' +
-      'elsőre nem sikerült; a nehezebb esetek felül vannak reprezentálva a későbbi próbálkozásokban ' +
-      '(kiválasztódási hatás). Leíró megfigyelés, nem oksági következtetés.';
+      '<strong>Óvatosan a tanulási görbével.</strong> Az átlagos ΔE végig az észlelhetőségi küszöb környékén, ' +
+      'jóval az elfogadhatósági küszöb alatt fut – de a görbe nem tiszta tanulási hatás. Aki sokadszor kever egy ' +
+      'régióban, az önszelektált (kitartóbb vagy gyengébb) játékos, és a magasabb kitettségeknél az elemszám már ' +
+      'kicsi. Leíró megfigyelés, nem oksági következtetés.';
 
     // 2.6 perceptibility / acceptability thresholds by L*, a*, b*
     (function () {
@@ -919,30 +1192,36 @@
     bar('chPigments', pg.map(function (r) { return PIG_HU[r.color] || r.color; }), pg.map(function (r) { return +r.n; }),
       { colors: pg.map(function (r) { return PIG[r.color] || T.accent; }), ytitle: 'csepp', hover: '%{x}: %{y} csepp' });
 
-    // steps ↔ outcome: all attempts as a scatter (completed vs gave up), with a
-    // median-ΔE-by-bucket line overlaid. Axes clipped to the bulk (outliers hidden).
+    // steps ↔ outcome: grouped box plots of final ΔE per action-count bucket,
+    // split by outcome. Readable summary instead of ~1300 raw points.
     (function () {
       var pts = d.scatter_steps || [];
-      var comp = pts.filter(function (p2) { return !p2.g; });
-      var gav = pts.filter(function (p2) { return p2.g; });
-      function sc(arr, color, name) {
-        return { type: 'scattergl', mode: 'markers', name: name,
-          x: arr.map(function (p2) { return p2.s; }), y: arr.map(function (p2) { return p2.de; }),
-          marker: { size: 5, color: color, opacity: 0.45 },
-          hovertemplate: name + '<br>%{x} cselekvés, ΔE %{y:.2f}<extra></extra>' };
+      var ORDER = ['1–2', '3–5', '6–10', '11–20', '21–40', '41+'];
+      function bucketOf(n) {
+        if (n <= 2) return '1–2';
+        if (n <= 5) return '3–5';
+        if (n <= 10) return '6–10';
+        if (n <= 20) return '11–20';
+        if (n <= 40) return '21–40';
+        return '41+';
       }
-      var so = d.steps_vs_outcome || [];
-      var BC = { '1–2': 1.5, '3–5': 4, '6–10': 8, '11–20': 15, '21–40': 30, '41+': 50 };
-      var med = so.filter(function (r) { return r.median_de != null; });
-      var lay = baseLayout({ showlegend: true, margin: { l: 46, r: 12, t: 8, b: 40 },
-        xaxis: { title: { text: 'cselekvésszám', font: { size: 10 } }, range: [0, 70] },
+      function boxTrace(sel, color, name) {
+        var xs = [], ys = [];
+        pts.forEach(function (p2) {
+          if (sel(p2)) { xs.push(bucketOf(p2.s)); ys.push(p2.de); }
+        });
+        return { type: 'box', name: name, x: xs, y: ys, marker: { color: color },
+          line: { width: 1.4 }, boxpoints: false,
+          hovertemplate: name + ' (%{x} cselekvés)<extra></extra>' };
+      }
+      var lay = baseLayout({ showlegend: true, barmode: 'group', margin: { l: 46, r: 12, t: 8, b: 40 },
+        xaxis: { title: { text: 'cselekvésszám', font: { size: 10 } },
+                 categoryorder: 'array', categoryarray: ORDER },
         yaxis: { title: { text: 'végső ΔE', font: { size: 10 } }, range: [0, 16] } });
+      lay.boxmode = 'group';
       Plotly.react(document.getElementById('chStepsOutcome'), [
-        sc(comp, T.ok, 'teljesítve'), sc(gav, T.danger, 'feladva'),
-        { type: 'scatter', mode: 'lines+markers', name: 'medián',
-          x: med.map(function (r) { return BC[r.bucket]; }), y: med.map(function (r) { return r.median_de; }),
-          line: { color: '#111827', width: 2 }, marker: { size: 6, color: '#111827' },
-          hovertemplate: 'medián ΔE %{y:.2f}<extra></extra>' }
+        boxTrace(function (p2) { return !p2.g; }, T.ok, 'teljesítve'),
+        boxTrace(function (p2) { return p2.g; }, T.danger, 'feladva')
       ], lay, CFG);
     })();
 
@@ -968,6 +1247,53 @@
         '<td class="num">' + fmt(r.median_de, 2) + '</td><td class="num">' + pct(r.giveup_rate, 0) + '</td></tr>';
     });
     document.getElementById('phenoTable').innerHTML = pt + '</tbody>';
+
+    // 6.7 k-means: PCA-projection scatter (coloured by cluster) + centroid table
+    var CLUSTER_COL = ['#4A90D9', '#5CB85C', '#F0AD4E', '#D9534F', '#8b5cf6', '#6B6B6B'];
+    (function () {
+      var cl = d.clusters || [];
+      var sc2 = d.cluster_scatter || [];
+      var evr = d.cluster_evr || [];
+      var el = document.getElementById('chClusterScatter');
+      if (el) {
+        if (!sc2.length) {
+          el.innerHTML = '<p class="cap">Kevés adat a klaszterezéshez.</p>';
+        } else {
+          var traces = cl.map(function (c) {
+            var pts2 = sc2.filter(function (p2) { return p2.k === c.display_id; });
+            var col = CLUSTER_COL[(c.display_id - 1) % CLUSTER_COL.length];
+            return { type: 'scattergl', mode: 'markers',
+              name: c.display_id + '. ' + c.label + ' (n=' + c.n + ')',
+              x: pts2.map(function (p2) { return p2.x; }), y: pts2.map(function (p2) { return p2.y; }),
+              marker: { size: 5, color: col, opacity: 0.6 },
+              hovertemplate: c.display_id + '. ' + c.label + '<extra></extra>' };
+          });
+          var lay = baseLayout({ showlegend: true, margin: { l: 42, r: 12, t: 8, b: 40 },
+            xaxis: { title: { text: 'PC1 (' + pct(evr[0] || 0, 0) + ')', font: { size: 10 } } },
+            yaxis: { title: { text: 'PC2 (' + pct(evr[1] || 0, 0) + ')', font: { size: 10 } } } });
+          lay.legend = { orientation: 'h', y: -0.22, font: { size: 9 } };
+          Plotly.react(el, traces, lay, CFG);
+        }
+      }
+      var tbl = document.getElementById('clusterTable');
+      if (!tbl) return;
+      if (!cl.length) { tbl.innerHTML = '<tbody><tr><td>Kevés adat a klaszterezéshez.</td></tr></tbody>'; return; }
+      var ch = '<thead><tr><th>Klaszter</th><th>Jellemzés</th><th class="num">Db</th><th class="num">Átlag cselekvés</th>' +
+        '<th class="num">Javító</th><th class="num">Rontó</th><th class="num">Eltávolítás</th>' +
+        '<th class="num">Medián ΔE</th><th class="num">Feladás</th></tr></thead><tbody>';
+      cl.forEach(function (c) {
+        var col = CLUSTER_COL[(c.display_id - 1) % CLUSTER_COL.length];
+        ch += '<tr><td><span class="swatch" style="background:' + col + '"></span> ' + c.display_id + '.</td>' +
+          '<td>' + esc(c.label) + '</td><td class="num">' + fmt(c.n) + '</td>' +
+          '<td class="num">' + fmt(c.mean_actions, 0) + '</td>' +
+          '<td class="num">' + pct(c.improve_rate, 0) + '</td>' +
+          '<td class="num">' + pct(c.worsen_rate, 0) + '</td>' +
+          '<td class="num">' + pct(c.remove_rate, 0) + '</td>' +
+          '<td class="num">' + fmt(c.median_de, 2) + '</td>' +
+          '<td class="num">' + pct(c.giveup_rate, 0) + '</td></tr>';
+      });
+      tbl.innerHTML = ch + '</tbody>';
+    })();
     resizeAll();
   }
 
@@ -1006,6 +1332,104 @@
     document.getElementById('loadingMsg').textContent = 'Hálózati hiba a riport betöltésekor.';
     if (window.console) console.error(err);
   });
+})();
+
+// ── Visit telemetry (first-party only; no IP, no third parties) ──────────
+// riport_open → 30s heartbeats while visible → riport_close snapshots.
+// Every event carries cumulative visible_sec / max_scroll_pct / sections_seen,
+// so the analysis takes MAX per client_session_id (close may fire repeatedly).
+(function () {
+  function uuid() {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
+      var r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+      return v.toString(16);
+    });
+  }
+  var visitId = uuid();
+  var viewerId = null, userId = null;
+  try {
+    viewerId = localStorage.getItem('riportViewerId');
+    if (!viewerId) { viewerId = uuid(); localStorage.setItem('riportViewerId', viewerId); }
+    userId = window.currentUserId || localStorage.getItem('userId') || null;
+  } catch (e) {}
+
+  var t0 = Date.now();
+  var visibleMs = 0;
+  var lastTick = (document.visibilityState === 'visible') ? Date.now() : null;
+  var maxScroll = 0;
+  var sections = {}; // section id -> seconds since open when first seen
+
+  function accumulate() {
+    if (lastTick != null) { visibleMs += Date.now() - lastTick; lastTick = Date.now(); }
+  }
+  window.addEventListener('scroll', function () {
+    var h = document.documentElement.scrollHeight - window.innerHeight;
+    if (h > 0) {
+      var p2 = Math.min(100, Math.round(100 * window.scrollY / h));
+      if (p2 > maxScroll) maxScroll = p2;
+    }
+  }, { passive: true });
+  if (window.IntersectionObserver) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        var id = en.target.id;
+        if (en.isIntersecting && id && !(id in sections)) {
+          sections[id] = Math.round((Date.now() - t0) / 1000);
+        }
+      });
+    }, { threshold: 0.35 });
+    document.querySelectorAll('section.sec').forEach(function (s) { io.observe(s); });
+  }
+
+  function payload(event) {
+    accumulate();
+    return JSON.stringify({
+      event: event,
+      ts: new Date().toISOString(),
+      user_id: userId,
+      metadata: {
+        client_session_id: visitId,
+        viewer_id: viewerId,
+        page: '/stat/riport',
+        visible_sec: Math.round(visibleMs / 1000),
+        max_scroll_pct: maxScroll,
+        sections_seen: sections,
+        referrer: document.referrer || null,
+        locale: navigator.language || null,
+        tz: (function () { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || null; } catch (e) { return null; } })(),
+        viewport: { w: window.innerWidth, h: window.innerHeight },
+        screen: { w: (window.screen || {}).width || null, h: (window.screen || {}).height || null }
+      }
+    });
+  }
+  function post(ev) {
+    try {
+      fetch('/api/analytics/event', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: payload(ev), keepalive: true
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  function sendClose() {
+    var body = payload('riport_close');
+    try {
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('/api/analytics/event', new Blob([body], { type: 'application/json' }));
+      } else {
+        fetch('/api/analytics/event', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body, keepalive: true }).catch(function () {});
+      }
+    } catch (e) {}
+  }
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') { lastTick = Date.now(); }
+    else { accumulate(); lastTick = null; sendClose(); }
+  });
+  window.addEventListener('pagehide', sendClose);
+
+  post('riport_open');
+  setInterval(function () {
+    if (document.visibilityState === 'visible') post('riport_heartbeat');
+  }, 30000);
 })();
 </script>
 {% endblock %}

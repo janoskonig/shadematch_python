@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+
+{% block title %}ShadeStudy – Riport-látogatások{% endblock %}
+
+{% block extra_css %}
+<style>
+  .rv-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 16px 64px; }
+  .rv-wrap h1 { margin: 0 0 6px; font-size: 1.5rem; }
+  .rv-wrap .lead { margin: 0 0 18px; color: var(--text-secondary); font-size: 0.95rem; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 0 0 18px; }
+  .card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 11px 13px; }
+  .card .k { color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .card .v { margin-top: 5px; font-size: 1.4rem; font-weight: 800; }
+  .card .s { margin-top: 3px; color: var(--text-secondary); font-size: 0.76rem; }
+  .panel { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px 14px; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { border-bottom: 1px solid var(--border); padding: 6px 8px; text-align: left; white-space: nowrap; }
+  th { color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  td.num, th.num { text-align: right; }
+  .table-wrap { overflow-x: auto; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 20px; font-size: 0.72rem; font-weight: 700; }
+  .badge.ret { color: #1d4ed8; background: rgba(29,78,216,0.1); }
+  .badge.new { color: var(--text-secondary); background: var(--bg-primary); }
+  .badge.usr { color: #157347; background: rgba(21,115,71,0.1); }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem; color: var(--text-secondary); }
+  .secs { color: var(--text-secondary); font-size: 0.78rem; }
+  .loading { color: var(--text-secondary); padding: 30px 0; text-align: center; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="rv-wrap">
+  <h1>/stat/riport – látogatások</h1>
+  <p class="lead">First-party telemetria: ki, mikor, mennyi <em>látható</em> időt töltött az oldalon, meddig
+    görgetett, és mely szekciókig jutott. Egy sor = egy látogatás. IP-cím nincs tárolva.</p>
+  <div class="cards" id="rvCards"></div>
+  <div class="panel table-wrap"><table id="rvTable"></table></div>
+  <div class="loading" id="rvLoading">Betöltés…</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+  var SEC_HU = { s0: 'Fogalmak', s1: '1. Áttekintés', s2: '2. Módszer', s3: '3. Minta',
+    s4: '4. Célszínek', s5: '5. Tanulás', s6: '6. Lépések', s7: '7. Gamifikáció', s8: '8. Hivatkozások' };
+  var SEC_ORDER = ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8'];
+
+  function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function dur(sec) {
+    sec = +sec || 0;
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m ? (m + ' p ' + s + ' mp') : (s + ' mp');
+  }
+  function when(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso + (iso.endsWith('Z') ? '' : 'Z'));
+    return d.toLocaleString('hu-HU', { dateStyle: 'short', timeStyle: 'short' });
+  }
+  function card(k, v, s) {
+    return '<div class="card"><div class="k">' + esc(k) + '</div><div class="v">' + v + '</div>' +
+      (s ? '<div class="s">' + esc(s) + '</div>' : '') + '</div>';
+  }
+
+  fetch('/api/stat/riport-visits').then(function (r) { return r.json(); }).then(function (d) {
+    document.getElementById('rvLoading').style.display = 'none';
+    if (d.status !== 'success') {
+      document.getElementById('rvLoading').style.display = 'block';
+      document.getElementById('rvLoading').textContent = 'Hiba: ' + (d.message || 'ismeretlen');
+      return;
+    }
+    var s = d.summary || {}, vs = d.visits || [];
+    var durs = vs.map(function (v) { return v.visible_sec; }).sort(function (a, b) { return a - b; });
+    var med = durs.length ? durs[Math.floor(durs.length / 2)] : 0;
+    document.getElementById('rvCards').innerHTML = [
+      card('Látogatás', s.n_visits || 0, 'kliens-oldali (JS) látogatások'),
+      card('Egyedi néző', s.n_viewers || 0, 'tartós néző-azonosító alapján'),
+      card('Azonosított játékos', s.n_identified_users || 0, 'bejelentkezett userId-vel'),
+      card('Medián időtartam', dur(med), 'látható idő'),
+      card('Oldalletöltés (szerver)', s.server_opens || 0, 'JS nélkülieket is számolja')
+    ].join('');
+
+    var h = '<thead><tr><th>Mikor</th><th>Ki</th><th class="num">Időtartam</th><th class="num">Görgetés</th>' +
+      '<th>Szekciók (első látás mp-e)</th><th>Nyelv / időzóna</th><th>Viewport</th><th>Referrer</th></tr></thead><tbody>';
+    if (!vs.length) h += '<tr><td colspan="8">Még nincs látogatás.</td></tr>';
+    vs.forEach(function (v) {
+      var who;
+      if (v.user_id) who = '<span class="badge usr">' + esc(v.user_id) + '</span>';
+      else who = '<span class="mono">' + esc((v.viewer_id || '—').slice(0, 8)) + '</span>';
+      who += ' ' + (v.returning ? '<span class="badge ret">visszatérő</span>' : '<span class="badge new">új</span>');
+      var secs = v.sections_seen || {};
+      var secTxt = SEC_ORDER.filter(function (k) { return k in secs; })
+        .map(function (k) { return (SEC_HU[k] || k) + ' (' + secs[k] + 's)'; }).join(' · ');
+      var vp = v.viewport ? (v.viewport.w + '×' + v.viewport.h) : '—';
+      var ref = v.referrer ? esc(v.referrer.replace(/^https?:\/\//, '').slice(0, 40)) : '—';
+      h += '<tr><td>' + when(v.started_at) + '</td><td>' + who + '</td>' +
+        '<td class="num">' + dur(v.visible_sec) + '</td>' +
+        '<td class="num">' + (v.max_scroll_pct || 0) + '%</td>' +
+        '<td class="secs">' + (secTxt || '—') + '</td>' +
+        '<td class="secs">' + esc(v.locale || '—') + ' / ' + esc(v.tz || '—') + '</td>' +
+        '<td class="secs">' + vp + '</td><td class="secs">' + ref + '</td></tr>';
+    });
+    document.getElementById('rvTable').innerHTML = h + '</tbody>';
+  }).catch(function () {
+    document.getElementById('rvLoading').textContent = 'Hálózati hiba.';
+  });
+})();
+</script>
+{% endblock %}

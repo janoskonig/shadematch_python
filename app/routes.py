@@ -504,7 +504,7 @@ def _guard_stat_requires_postgres():
     queries fail with a cryptic "unrecognized token" error. Return a clear,
     actionable message for the /stat page and its APIs instead."""
     path = request.path
-    if path not in ('/stat', '/stat/riport') and not path.startswith('/api/stat/'):
+    if path not in ('/stat', '/stat/riport', '/stat/riport-visits') and not path.startswith('/api/stat/'):
         return None
     try:
         dialect = db.engine.dialect.name  # resolved from the URL, no connection
@@ -3904,6 +3904,11 @@ ALLOWED_EVENTS = frozenset({
     'instruction_acknowledged',
     'fullscreen_change',
     'visibility_change',
+    # /stat/riport visit telemetry (first-party only, no IP stored):
+    # open → periodic heartbeat (visible time, scroll, sections) → close.
+    'riport_open',
+    'riport_heartbeat',
+    'riport_close',
 })
 
 _STAT_SUMMARY_CACHE_TTL_SEC = int(os.environ.get('STAT_SUMMARY_CACHE_SECONDS', '120'))
@@ -4609,6 +4614,23 @@ def _cached_riport(key, builder):
 
 @main.route('/stat/riport')
 def stat_riport_page():
+    # Server-side view log: robust even without JS. First-party only; no IP is
+    # stored (only referrer + user agent + Accept-Language from the request).
+    try:
+        db.session.add(AnalyticsEvent(
+            user_id=None,
+            event='riport_open',
+            ts=datetime.utcnow(),
+            metadata_json={
+                'source': 'server',
+                'referrer': (request.referrer or '')[:512],
+                'ua': (request.headers.get('User-Agent') or '')[:512],
+                'accept_language': (request.headers.get('Accept-Language') or '')[:128],
+            },
+        ))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
     return render_template('stat_riport.html')
 
 
@@ -4636,6 +4658,86 @@ def stat_gamut_steps():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@main.route('/stat/riport-visits')
+def stat_riport_visits_page():
+    return render_template('stat_riport_visits.html')
+
+
+@main.route('/api/stat/riport-visits', methods=['GET'])
+def stat_riport_visits():
+    """Visits to /stat/riport, stitched from riport_open / riport_heartbeat /
+    riport_close analytics events. One row per client_session_id; the events
+    carry CUMULATIVE visible_sec / max_scroll_pct / sections_seen, so a visit's
+    totals are the max over its events. Server-side opens (no JS) are counted
+    separately. Uncached — the volume is tiny."""
+    try:
+        rows = db.session.execute(db.text(
+            """
+            SELECT event, ts, user_id, metadata_json
+            FROM analytics_events
+            WHERE event IN ('riport_open','riport_heartbeat','riport_close')
+            ORDER BY ts ASC
+            """
+        )).mappings().all()
+
+        visits = {}
+        server_opens = 0
+        for r in rows:
+            m = r['metadata_json'] or {}
+            if m.get('source') == 'server':
+                server_opens += 1
+                continue
+            vid = m.get('client_session_id')
+            if not vid:
+                continue
+            v = visits.setdefault(vid, {
+                'visit_id': vid,
+                'started_at': r['ts'].isoformat(),
+                'user_id': None,
+                'viewer_id': m.get('viewer_id'),
+                'visible_sec': 0,
+                'max_scroll_pct': 0,
+                'sections_seen': {},
+                'referrer': None,
+                'locale': m.get('locale'),
+                'tz': m.get('tz'),
+                'viewport': m.get('viewport'),
+                'n_events': 0,
+            })
+            v['n_events'] += 1
+            if r['user_id']:
+                v['user_id'] = r['user_id']
+            if m.get('referrer'):
+                v['referrer'] = m['referrer']
+            v['visible_sec'] = max(v['visible_sec'], int(m.get('visible_sec') or 0))
+            v['max_scroll_pct'] = max(v['max_scroll_pct'], int(m.get('max_scroll_pct') or 0))
+            secs = m.get('sections_seen') or {}
+            if isinstance(secs, dict) and len(secs) > len(v['sections_seen']):
+                v['sections_seen'] = secs
+
+        out = sorted(visits.values(), key=lambda v: v['started_at'], reverse=True)
+        # mark returning viewers: an earlier visit exists with the same viewer_id
+        first_seen = {}
+        for v in sorted(out, key=lambda v: v['started_at']):
+            vw = v.get('viewer_id')
+            v['returning'] = bool(vw) and vw in first_seen
+            if vw and vw not in first_seen:
+                first_seen[vw] = v['started_at']
+
+        return jsonify({
+            'status': 'success',
+            'visits': out[:500],
+            'summary': {
+                'n_visits': len(out),
+                'n_viewers': len({v['viewer_id'] for v in out if v['viewer_id']}),
+                'n_identified_users': len({v['user_id'] for v in out if v['user_id']}),
+                'server_opens': server_opens,
+            },
+        })
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
 @main.route('/api/stat/calibration-summary', methods=['GET'])
