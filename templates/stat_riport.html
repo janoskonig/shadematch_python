@@ -115,7 +115,7 @@
           <dt>Pigment / csepp</dt><dd>Az öt alap-„festék” (fehér, fekete, piros, sárga, kék). A keverék ezek egész számú cseppjeiből áll össze.</dd>
           <dt>CIE</dt><dd>Commission Internationale de l’Éclairage – a nemzetközi színügyi szabványtestület.</dd>
           <dt>CIELAB (L*, a*, b*)</dt><dd>Háromdimenziós színtér: L* a világosság, a* a zöld–piros, b* a kék–sárga tengely. Úgy szerkesztették, hogy a benne mért euklideszi távolság közelítse az észlelt színkülönbséget.</dd>
-          <dt>ΔE₀₀ (CIEDE2000)</dt><dd>Két szín eltérésének mérőszáma a CIELAB-ban, észleleti súlyozással. Kisebb = pontosabb; ΔE₀₀ ≈ 0 tökéletes egyezés. A skála a színtérben nem egyenletes.</dd>
+          <dt>ΔE₀₀ (CIEDE2000)</dt><dd>Két szín eltérésének mérőszáma a CIELAB-ban, észleleti súlyozással. Kisebb = pontosabb; ΔE₀₀ ≈ 0 tökéletes egyezés, a ~1 körüli érték az épphogy észrevehető különbség (JND). A skála a színtérben nem egyenletes.</dd>
           <dt>Gamut</dt><dd>Az öt pigmenttel elérhető színek halmaza – a teljes színtér egy részhalmaza.</dd>
           <dt>Recept / cseppszám</dt><dd>Egy cél-szín megoldása: a pigmentcseppek száma. A cseppszám a strukturális nehézség mérőszáma.</dd>
           <dt>Mentés / feladás</dt><dd>Egy keverés zárása: mentés (a felhasználó elfogadja az eredményt) vagy feladás (továbblép / félbehagyja).</dd>
@@ -169,13 +169,14 @@
           <p>A cél és a keverék közti eltérést a <strong>ΔE₀₀ (CIEDE2000)</strong> képlettel számolom – ez a
              CIELAB-távolság továbbfejlesztett változata, amely külön súlyozza a világosság-, telítettség- és
              színezetkülönbséget, és korrigálja ezek kölcsönhatásait. Durva nagyságrendek: <strong>ΔE ≈ 0</strong>
-             tökéletes egyezés; <strong>ΔE ≤ 1</strong> alig érzékelhető; <strong>ΔE ≈ 2</strong> a szemmel
-             épphogy észrevehető határ.</p>
+             tökéletes egyezés; <strong>ΔE &lt; 1</strong> az emberi szem számára jellemzően még nem érzékelhető;
+             <strong>ΔE ≈ 1</strong> az épphogy észrevehető különbség (just-noticeable difference, JND);
+             <strong>ΔE ≈ 2–3</strong> figyelmes összehasonlításnál jól látható; nagyobb érték ránézésre is nyilvánvaló.</p>
           <p class="def">A képlet lokális súlyfüggvényei és a színezet–króma forgatási tagja miatt a ΔE₀₀
              <strong>nem euklideszi, helyfüggő</strong> mérőszám a CIELAB-ban: ugyanakkora ΔE₀₀ a színtér más-más
              tartományában (más világosságnál, telítettségnél, színezetnél) eltérő <em>látható</em> különbséget
              jelenthet. A pontos képlet a hivatkozott irodalomban (Sharma és mtsai. 2005; lásd 8.), a jelenséget
-             pedig a mintán is megnézem (lásd 2.6).</p>
+             pedig a mintán is megnézem (lásd 3.4).</p>
         </div>
 
         <div class="tech">
@@ -202,21 +203,6 @@
              és lehetővé teszi az „elfogadhatósági küszöb” vizsgálatát.</p>
         </div>
 
-        <div class="tech">
-          <h4>2.6 A küszöbök nem egyenletesek a színtérben (empirikus)</h4>
-          <p>A 2.2-ben említett helyfüggést a mintán is megnézem. A feladott, szubjektíven értékelt keverésekhez
-             tartozik a feladáskori ΔE₀₀ és a cél-szín CIELAB-helye. Az <strong>észlelhetőségi küszöböt</strong> az
-             „azonos” és az „elfogadható” ítéletek medián ΔE-jének felezőpontjaként, az <strong>elfogadhatósági
-             küszöböt</strong> az „elfogadható” és a „nem elfogadható” medián ΔE-jének felezőpontjaként becsülöm.
-             Mindezt az <em>L*</em>, az <em>a*</em> és a <em>b*</em> tengely mentén, harmadolt (alacsony / közép /
-             magas) sávokra bontva. Ha a küszöbök egyenletesek volnának, a sávok között nem mozognának.</p>
-          <p class="def" id="thresholdNote"></p>
-        </div>
-        <div class="grid2">
-          <div class="panel"><h4>Küszöbök az L* (világosság) mentén</h4><div class="chart" id="chThreshL"></div></div>
-          <div class="panel"><h4>Küszöbök az a* (zöld→piros) mentén</h4><div class="chart" id="chThreshA"></div></div>
-          <div class="panel"><h4>Küszöbök a b* (kék→sárga) mentén</h4><div class="chart" id="chThreshB"></div></div>
-        </div>
       </section>
 
       <!-- 3) TOBORZÁS ÉS MINTA -->
@@ -252,7 +238,24 @@
             <div class="cards" id="analyzableCards"></div></div>
         </div>
 
-        <h3>3.4 Eszköz, böngésző, kijelző (mérési torzítás)</h3>
+        <h3>3.4 Az észlelhetőségi és elfogadhatósági küszöb nem egyenletes a színtérben</h3>
+        <p class="intro">
+          A fenti feladott keverésekhez a felhasználó szubjektív ítélete (azonos / elfogadható / nem elfogadható)
+          és a feladáskori ΔE₀₀ is tartozik, valamint a cél-szín CIELAB-helye. Ebből becsülöm a két küszöböt.
+          Az <strong>észlelhetőségi küszöböt</strong> az „azonos” és az „elfogadható” ítéletek medián ΔE-jének
+          felezőpontjaként, az <strong>elfogadhatósági küszöböt</strong> az „elfogadható” és a „nem elfogadható”
+          medián ΔE-jének felezőpontjaként. Mindezt az <em>L*</em>, az <em>a*</em> és a <em>b*</em> tengely mentén,
+          harmadolt (alacsony / közép / magas) sávokra bontva – ha a küszöbök egyenletesek volnának, a sávok
+          között nem mozognának. (Ez visszaigazolja a 2.2 megjegyzését a ΔE₀₀ helyfüggéséről.)
+        </p>
+        <p class="intro" id="thresholdNote"></p>
+        <div class="grid2">
+          <div class="panel"><h4>Küszöbök az L* (világosság) mentén</h4><div class="chart" id="chThreshL"></div></div>
+          <div class="panel"><h4>Küszöbök az a* (zöld→piros) mentén</h4><div class="chart" id="chThreshA"></div></div>
+          <div class="panel"><h4>Küszöbök a b* (kék→sárga) mentén</h4><div class="chart" id="chThreshB"></div></div>
+        </div>
+
+        <h3>3.5 Eszköz, böngésző, kijelző (mérési torzítás)</h3>
         <div class="panel">
           <h4>Eszköztípus × böngésző (mozaikplot)</h4>
           <p class="cap">Az oszlopok szélessége az eszköztípus gyakoriságával, a mezők magassága az adott
@@ -267,7 +270,7 @@
         </div>
         <div class="note bias" id="deviceNote"></div>
 
-        <h3>3.5 Kik és mikor (résztvevői és időbeli torzítás)</h3>
+        <h3>3.6 Kik és mikor (résztvevői és időbeli torzítás)</h3>
         <div class="grid2">
           <div class="panel"><h4>Nem szerinti megoszlás</h4>
             <p class="cap">A gamut-színeket ténylegesen keverő, regisztrált felhasználók.</p>
@@ -344,7 +347,7 @@
             <div class="chart" id="chLearn"></div></div>
           <div class="panel"><h4>A vizsgálati küszöbök elérése a próbálkozás sorszáma szerint</h4>
             <p class="cap">A keverések aránya, amely a mintán kihozott átlagos <strong>észlelhetőségi</strong>,
-              illetve <strong>elfogadhatósági</strong> küszöb alá ér (nem a fix ΔE ≤ 2 alá). A küszöbök a 2.6-ból.</p>
+              illetve <strong>elfogadhatósági</strong> küszöb alá ér (nem a fix ΔE ≤ 2 alá). A küszöbök a 3.4-ből.</p>
             <div class="chart" id="chLearnRate"></div></div>
         </div>
         <div class="note" id="learnNote"></div>
@@ -565,12 +568,12 @@
 
     var coveredPct = o.gamut_targets_total ? (o.gamut_targets_played / o.gamut_targets_total) : null;
     document.getElementById('kpiCards').innerHTML = [
-      kpiCard('Keverésok (össz.)', fmt(o.total_plays), 'utolsó 24 óra: ' + fmt(cur.plays),
+      kpiCard('Keverések (össz.)', fmt(o.total_plays), 'ebből elemzett: ' + fmt(o.analyzed_plays),
         { badge: deltaBadge(cur.plays, prev.plays, false), spark: sparkline(col('plays'), false) }),
       kpiCard('Aktív játékos (24 ó)', fmt(cur.users), 'előző 24 ó: ' + fmt(prev.users),
         { badge: deltaBadge(cur.users, prev.users, false), spark: sparkline(col('users'), false) }),
       kpiCard('Új regisztráció (24 ó)', fmt(tr.new_users_24h), 'összes regisztrált: ' + fmt(o.registered_users), {}),
-      kpiCard('Medián ΔE', fmt(o.median_delta_e, 2), '24 ó: ' + fmt(cur.median_de, 2),
+      kpiCard('Medián ΔE', fmt(o.median_delta_e, 2), 'átlag ' + fmt(o.mean_delta_e, 1) + ' · 90%-nál ' + fmt(o.p90_delta_e, 1),
         { badge: deltaBadge(cur.median_de, prev.median_de, true), spark: sparkline(col('median_de'), true) }),
       kpiCard('Tökéletes találat', pct(o.perfect_rate), '24 ó: ' + pct(cur.perfect_rate),
         { badge: deltaBadge(cur.perfect_rate, prev.perfect_rate, false, true), spark: sparkline(col('perfect_rate'), false) }),
@@ -582,9 +585,11 @@
     ].join('');
     document.getElementById('kpiProse').innerHTML =
       'Összesen <strong>' + fmt(o.total_plays) + '</strong> gamut-keverés <strong>' + fmt(o.distinct_users) +
-      '</strong> játékostól. A tipikus (medián) színeltérés <strong>ΔE ' + fmt(o.median_delta_e, 2) +
-      '</strong>, a keverések <strong>' + pct(o.perfect_rate) + '</strong>-a tökéletes találat, ' +
-      '<strong>' + pct(o.acceptable_rate) + '</strong>-a ΔE ≤ 2.';
+      '</strong> játékostól; ebből <strong>' + fmt(o.analyzed_plays) + '</strong> az elemzett (befejezett vagy ' +
+      'feladott) keverés. Az eredménymutatók (ΔE, tökéletes %) csak ezekre vonatkoznak: az elemzett keverések ' +
+      '<strong>' + pct(o.perfect_rate) + '</strong>-a tökéletes találat, medián színeltérésük <strong>ΔE ' +
+      fmt(o.median_delta_e, 2) + '</strong>. Az újrakezdett és az elhagyott keveréseket kizártam – ezek csak a ' +
+      '3.3-ban szerepelnek.';
 
     // 3.1 funnel — regisztrált → kevert (a legfontosabb konverzió)
     var f = d.funnel || {};

@@ -25,12 +25,22 @@ from . import db
 GAMUT_ERA_START_UTC = '2026-07-06 08:00:00'
 
 # Gamut-attempt filter, inlined per statement (CTE scope is per-statement).
+# Full set: every gamut attempt (used for engagement/volume counts + the 3.3
+# outcome breakdown, where the excluded outcomes are shown).
 _GA = (
     "SELECT ma.* FROM mixing_attempts ma "
     "JOIN target_colors tc ON tc.id = ma.target_color_id "
     "WHERE tc.color_type = 'gamut' AND ma.user_id IS NOT NULL "
     "AND ma.attempt_started_server_ts >= :era"
 )
+# Analysis set: only mixes that carry a meaningful final outcome — completed
+# (saved) or a deliberate give-up (skipped). Restarted (reset/restart) and
+# abandoned/unknown attempts are process artifacts and are EXCLUDED from every
+# outcome / quality / behaviour analysis (ΔE, learning, difficulty, steps).
+# They appear once only, in the 3.3 outcome breakdown.
+_ANALYSIS_REASONS = "('saved_match','saved_stop','skipped')"
+_ANALYSIS_COND = f"end_reason IN {_ANALYSIS_REASONS}"
+_GA_ANALYSIS = _GA + f" AND ma.end_reason IN {_ANALYSIS_REASONS}"
 # Naive-UTC "now" so comparisons with attempt_started_server_ts (naive UTC) work.
 _NOW = "(now() at time zone 'utc')"
 
@@ -100,25 +110,29 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     p = {'era': era}
 
     # ---- 1) Overview headline numbers ------------------------------------ #
+    # Volume/engagement counts on the full set; ΔE / quality metrics on the
+    # analysis set (saved + skipped only). completion_rate stays full (it is an
+    # outcome-composition number, same as the 3.3 breakdown).
     overview = _one(
         f"""
-        WITH ga AS ({_GA})
+        WITH ga AS ({_GA}), gaa AS ({_GA_ANALYSIS})
         SELECT
           (SELECT COUNT(*)::bigint FROM target_colors WHERE color_type='gamut') AS gamut_targets_total,
           (SELECT COUNT(DISTINCT target_color_id)::bigint FROM ga) AS gamut_targets_played,
           (SELECT COUNT(*)::bigint FROM ga) AS total_plays,
+          (SELECT COUNT(*)::bigint FROM gaa) AS analyzed_plays,
           (SELECT COUNT(DISTINCT user_id)::bigint FROM ga) AS distinct_users,
           (SELECT COUNT(*)::bigint FROM users) AS registered_users,
           (SELECT MIN(attempt_started_server_ts)::text FROM ga) AS first_play_ts,
           (SELECT MAX(attempt_started_server_ts)::text FROM ga) AS last_play_ts,
-          (SELECT AVG(final_delta_e)::double precision FROM ga WHERE final_delta_e IS NOT NULL) AS mean_delta_e,
-          (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)::double precision FROM ga WHERE final_delta_e IS NOT NULL) AS median_delta_e,
-          (SELECT percentile_cont(0.90) WITHIN GROUP (ORDER BY final_delta_e)::double precision FROM ga WHERE final_delta_e IS NOT NULL) AS p90_delta_e,
-          (SELECT AVG(CASE WHEN final_delta_e<=0.01 THEN 1.0 ELSE 0.0 END)::double precision FROM ga WHERE final_delta_e IS NOT NULL) AS perfect_rate,
-          (SELECT AVG(CASE WHEN final_delta_e<=2.0 THEN 1.0 ELSE 0.0 END)::double precision FROM ga WHERE final_delta_e IS NOT NULL) AS acceptable_rate,
+          (SELECT AVG(final_delta_e)::double precision FROM gaa WHERE final_delta_e IS NOT NULL) AS mean_delta_e,
+          (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)::double precision FROM gaa WHERE final_delta_e IS NOT NULL) AS median_delta_e,
+          (SELECT percentile_cont(0.90) WITHIN GROUP (ORDER BY final_delta_e)::double precision FROM gaa WHERE final_delta_e IS NOT NULL) AS p90_delta_e,
+          (SELECT AVG(CASE WHEN final_delta_e<=0.01 THEN 1.0 ELSE 0.0 END)::double precision FROM gaa WHERE final_delta_e IS NOT NULL) AS perfect_rate,
+          (SELECT AVG(CASE WHEN final_delta_e<=2.0 THEN 1.0 ELSE 0.0 END)::double precision FROM gaa WHERE final_delta_e IS NOT NULL) AS acceptable_rate,
           (SELECT AVG(CASE WHEN end_reason IN ('saved_match','saved_stop') THEN 1.0 ELSE 0.0 END)::double precision FROM ga) AS completion_rate,
           (SELECT percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec)::double precision
-             FROM ga WHERE duration_sec IS NOT NULL AND duration_sec>0 AND duration_sec<=300) AS median_duration_sec
+             FROM gaa WHERE duration_sec IS NOT NULL AND duration_sec>0 AND duration_sec<=300) AS median_duration_sec
         """, **p) or {}
     overview = {k: _f(v) if k not in ('first_play_ts', 'last_play_ts') else v
                 for k, v in overview.items()}
@@ -138,12 +152,12 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
           COUNT(*)::bigint AS plays,
           COUNT(DISTINCT user_id)::bigint AS users,
           percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)
-            FILTER (WHERE final_delta_e IS NOT NULL)::double precision AS median_de,
+            FILTER (WHERE {_ANALYSIS_COND} AND final_delta_e IS NOT NULL)::double precision AS median_de,
           AVG(CASE WHEN final_delta_e<=0.01 THEN 1.0 ELSE 0.0 END)
-            FILTER (WHERE final_delta_e IS NOT NULL)::double precision AS perfect_rate,
+            FILTER (WHERE {_ANALYSIS_COND} AND final_delta_e IS NOT NULL)::double precision AS perfect_rate,
           AVG(CASE WHEN end_reason IN ('saved_match','saved_stop') THEN 1.0 ELSE 0.0 END)::double precision AS completion_rate,
           percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec)
-            FILTER (WHERE duration_sec>0 AND duration_sec<=300)::double precision AS median_time
+            FILTER (WHERE {_ANALYSIS_COND} AND duration_sec>0 AND duration_sec<=300)::double precision AS median_time
         FROM w WHERE win IS NOT NULL GROUP BY win
         """, **p)
     trend = {'cur': {}, 'prev': {}}
@@ -162,12 +176,12 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
           COUNT(*)::bigint AS plays,
           COUNT(DISTINCT user_id)::bigint AS users,
           percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)
-            FILTER (WHERE final_delta_e IS NOT NULL)::double precision AS median_de,
+            FILTER (WHERE {_ANALYSIS_COND} AND final_delta_e IS NOT NULL)::double precision AS median_de,
           AVG(CASE WHEN final_delta_e<=0.01 THEN 1.0 ELSE 0.0 END)
-            FILTER (WHERE final_delta_e IS NOT NULL)::double precision AS perfect_rate,
+            FILTER (WHERE {_ANALYSIS_COND} AND final_delta_e IS NOT NULL)::double precision AS perfect_rate,
           AVG(CASE WHEN end_reason IN ('saved_match','saved_stop') THEN 1.0 ELSE 0.0 END)::double precision AS completion_rate,
           percentile_cont(0.50) WITHIN GROUP (ORDER BY duration_sec)
-            FILTER (WHERE duration_sec>0 AND duration_sec<=300)::double precision AS median_time
+            FILTER (WHERE {_ANALYSIS_COND} AND duration_sec>0 AND duration_sec<=300)::double precision AS median_time
         FROM ga
         WHERE attempt_started_server_ts >= {_NOW} - interval '14 days'
         GROUP BY 1 ORDER BY 1
@@ -373,7 +387,7 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     # per-color difficulty: structural (sum_drop_count) vs observed (ΔE / giveup / steps)
     per_color = _rows(
         f"""
-        WITH ga AS ({_GA}),
+        WITH ga AS ({_GA_ANALYSIS}),
         per AS (
           SELECT target_color_id AS id, COUNT(*)::bigint AS n_plays,
             percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)
@@ -468,7 +482,7 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
 
     # ---- 5) Performance / learning --------------------------------------- #
     de_hist = _rows(
-        f"""WITH ga AS ({_GA})
+        f"""WITH ga AS ({_GA_ANALYSIS})
             SELECT width_bucket(final_delta_e, 0, 10, 20) AS bucket, COUNT(*)::bigint AS n
             FROM ga WHERE final_delta_e IS NOT NULL GROUP BY 1 ORDER BY 1""", **p)
     # Learning curve reaches the study-wide perceptibility / acceptability
@@ -481,7 +495,7 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
           SELECT final_delta_e,
             ROW_NUMBER() OVER (PARTITION BY user_id, target_color_id
                                ORDER BY attempt_started_server_ts) AS attempt_no
-          FROM ({_GA}) s)
+          FROM ({_GA_ANALYSIS}) s)
         SELECT attempt_no, COUNT(*)::bigint AS n,
           percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)
             FILTER (WHERE final_delta_e IS NOT NULL)::double precision AS median_de,
@@ -542,10 +556,10 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
 def build_steps(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     p = {'era': era}
 
-    # per-attempt step features from the event log
+    # per-attempt step features from the event log (analysis set only)
     feats = _rows(
         f"""
-        WITH ga AS ({_GA}),
+        WITH ga AS ({_GA_ANALYSIS}),
         steps AS (
           SELECT e.attempt_uuid,
             COUNT(*) FILTER (WHERE e.action_type IN ('add','remove'))::int AS n_actions,
@@ -586,10 +600,10 @@ def build_steps(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
         if r['final_delta_e'] is not None and (r['n_actions'] or 0) > 0
     ]
 
-    # pigment choice (add events only), gamut-scoped
+    # pigment choice (add events only), gamut-scoped, analysis set
     pigments = _rows(
         f"""
-        WITH ga AS ({_GA})
+        WITH ga AS ({_GA_ANALYSIS})
         SELECT e.action_color AS color, COUNT(*)::bigint AS n
         FROM mixing_attempt_events e JOIN ga ON ga.attempt_uuid = e.attempt_uuid
         WHERE e.action_type='add' AND e.action_color IS NOT NULL
