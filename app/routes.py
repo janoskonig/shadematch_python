@@ -1819,6 +1819,20 @@ def api_match_skip_round():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+@main.route('/api/match/history', methods=['POST'])
+def api_match_history():
+    """The user's recent matches with round outcomes (results page ledger)."""
+    data = request.get_json() or {}
+    user_id = (data.get('user_id') or '').strip().upper()
+    if not user_id:
+        return jsonify({'status': 'error', 'message': 'user_id required'}), 400
+    try:
+        return jsonify({'status': 'success',
+                        'matches': match_service.match_history(user_id)})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @main.route('/api/match/summary', methods=['POST'])
 def api_match_summary():
     """Round-by-round summary of one of the user's matches (reload-safe)."""
@@ -5036,8 +5050,7 @@ def push_unsubscribe():
 # Duolingo-style rotating messages. Each user gets one entry per day, chosen
 # deterministically from (day-of-year + user-id hash), so the copy changes
 # every day without repeating for weeks and no two neighbours necessarily see
-# the same line. Placeholders: {streak}, {color}, {rem}, {rem_word},
-# {completed}, {total}.
+# the same line. Placeholders: {streak}, {round}, {total}, {matches}.
 
 CTA_PUSH_STREAK = [
     {'title': '🔥 Day {streak}. Don\'t blow it.',
@@ -5054,34 +5067,26 @@ CTA_PUSH_STREAK = [
      'body': 'Don\'t make your streak start over from 1. It hates starting over.'},
 ]
 
-CTA_PUSH_COLOR = [
-    {'title': '{color} is judging you',
-     'body': 'Only {rem} {rem_word} left to master it. It\'s basically begging at this point.'},
-    {'title': 'You left {color} on read',
-     'body': 'It needs {rem} more {rem_word}. Reply with drops.'},
-    {'title': '{color} won\'t mix itself',
-     'body': 'Believe us, it\'s tried. {rem} {rem_word} to go — finish the job.'},
-    {'title': 'So close to mastering {color}',
-     'body': '{rem} {rem_word} left. Future you is already bragging about it.'},
-    {'title': 'A wild {color} appeared!',
-     'body': 'It\'s weak — {rem} {rem_word} from defeat. Choose your drops wisely.'},
-    {'title': 'Today\'s target: {color}',
-     'body': '{rem} {rem_word} between you and mastery. The pipette is right there.'},
+CTA_PUSH_MATCH_CONTINUE = [
+    {'title': 'Paused at round {round} of {total}',
+     'body': 'Your match didn\'t go anywhere. Pick it up and finish strong.'},
+    {'title': 'A match left open 🎨',
+     'body': 'Round {round} of {total} is on the table. After 3 idle days it counts as abandoned — don\'t let it.'},
+    {'title': 'Round {round}/{total} is calling',
+     'body': 'One sitting finishes the match. Your streak will thank you too.'},
+    {'title': 'Unfinished business: round {round}/{total}',
+     'body': 'The next color is already drawn. Come mix it.'},
 ]
 
-CTA_PUSH_GENERIC = [
-    {'title': 'The pigments miss you 🎨',
-     'body': 'It\'s been a whole day. One mix and they\'ll stop sulking.'},
-    {'title': 'Doing science today?',
-     'body': 'Every mix you make is a real data point in a real study. Be the data.'},
-    {'title': '5 pigments. 1 target. 0 excuses.',
-     'body': 'Today\'s challenge is live. Show it who owns the pipette.'},
-    {'title': 'Your daily color fix is ready',
-     'body': '60 seconds of mixing beats 60 minutes of scrolling. Probably.'},
-    {'title': 'Beep beep. Palette delivery 🚚',
-     'body': 'A fresh daily challenge just dropped. Sign here with 5 drops.'},
-    {'title': 'Color theory won\'t learn itself',
-     'body': 'Today\'s challenge is live — go mix something beautiful.'},
+CTA_PUSH_MATCH_NEW = [
+    {'title': 'A fresh match is ready',
+     'body': '10 rounds, one from every color family. Start mixing.'},
+    {'title': '10 colors picked for you',
+     'body': 'One from each color family — your next match is waiting.'},
+    {'title': 'Match time? 🎨',
+     'body': 'Ten rounds, a few minutes, real science. Start your match.'},
+    {'title': 'The palette reshuffled overnight',
+     'body': 'A brand-new 10-round match is ready. Show it who owns the pipette.'},
 ]
 
 CTA_PUSH_MAXED = [
@@ -5100,18 +5105,18 @@ CTA_EMAIL_SUBJECT_STREAK = [
     'Your streak survived {streak} days. Then came today.',
 ]
 
-CTA_EMAIL_SUBJECT_COLOR = [
-    '{color} is still waiting for you',
-    '{rem} {rem_word} from mastering {color}',
-    'You left {color} unfinished…',
-    'Today\'s mission: {color}',
+CTA_EMAIL_SUBJECT_MATCH_CONTINUE = [
+    'Your match is paused at round {round}/{total}',
+    'Round {round} of {total} is waiting for you',
+    'Finish your match — you\'re at round {round} of {total}',
+    'An open match is about to expire…',
 ]
 
 CTA_EMAIL_SUBJECT_GENERIC = [
-    'The pigments miss you 🎨',
-    'Your daily challenge is getting cold',
-    '60 seconds. 5 drops. Go.',
-    'Science needs you (seriously)',
+    'A fresh 10-round match is ready',
+    'Your next match is drawn 🎨',
+    '10 colors, one match, a few minutes',
+    'New match, new colors — come mix',
 ]
 
 
@@ -5154,59 +5159,26 @@ def push_send_daily():
     def _build_personalized_context(user_id):
         """Compute per-user reminder context, shared by push + email channels.
 
-        Returns a dict with: ``is_maxed_out``, ``best_tc``, ``best_rem``,
-        ``completed``, ``total``, ``matches_completed``, ``current_streak``.
-        On any error it falls back to a generic context so we still send
-        *something* friendly.
+        Returns a dict with: ``is_maxed_out``, ``active_match`` (resumable
+        match snapshot or None), ``completed``, ``total``,
+        ``matches_completed``, ``current_streak``. On any error it falls back
+        to a generic context so we still send *something* friendly.
         """
         try:
             coverage = compute_coverage_progress(user_id)
             up = UserProgress.query.filter_by(user_id=user_id).first()
-            current_streak = int(up.current_streak) if up else 0
-            matches_completed = match_service.matches_completed_count(user_id)
-
-            if coverage['is_maxed_out']:
-                return {
-                    'is_maxed_out': True,
-                    'best_tc': None,
-                    'best_rem': None,
-                    'completed': coverage['completed_colors'],
-                    'total': coverage['total_tracked_colors'],
-                    'matches_completed': matches_completed,
-                    'current_streak': current_streak,
-                }
-
-            # Suggest the first (catalog order) recipe colour the user has not
-            # completed yet — one save finishes it ("1 attempt to master").
-            completed_ids = {
-                s.target_color_id
-                for s in UserTargetColorStats.query.filter_by(user_id=user_id).all()
-                if int(s.completed_count or 0) > 0
-            }
-            best_tc = None
-            for tc in (TargetColor.query
-                       .filter_by(color_type='gamut')
-                       .order_by(TargetColor.catalog_order.asc()).all()):
-                if target_color_sum_drop(tc) is None:
-                    continue
-                if tc.id not in completed_ids:
-                    best_tc = tc
-                    break
-
             return {
-                'is_maxed_out': False,
-                'best_tc': best_tc,
-                'best_rem': 1 if best_tc is not None else None,
+                'is_maxed_out': coverage['is_maxed_out'],
+                'active_match': match_service.active_match_snapshot(user_id),
                 'completed': coverage['completed_colors'],
                 'total': coverage['total_tracked_colors'],
-                'matches_completed': matches_completed,
-                'current_streak': current_streak,
+                'matches_completed': match_service.matches_completed_count(user_id),
+                'current_streak': int(up.current_streak) if up else 0,
             }
         except Exception:
             return {
                 'is_maxed_out': False,
-                'best_tc': None,
-                'best_rem': None,
+                'active_match': None,
                 'completed': 0,
                 'total': 0,
                 'matches_completed': 0,
@@ -5214,26 +5186,24 @@ def push_send_daily():
             }
 
     def _cta_fields(ctx, locale='en'):
-        """Values available to CTA copy templates (rem_word in the recipient's language)."""
+        """Values available to CTA copy templates."""
+        am = ctx.get('active_match') or {}
         return {
             'streak': ctx['current_streak'],
-            'color': _color_display_name(ctx['best_tc'], locale) if ctx['best_tc'] else '',
-            'rem': ctx['best_rem'] or 0,
-            'rem_word': (t_for(locale, 'attempt') if ctx['best_rem'] == 1
-                         else t_for(locale, 'attempts')),
-            'completed': ctx['completed'],
-            'total': ctx['total'],
+            'round': am.get('round_no') or 1,
+            'total': am.get('round_count') or 10,
+            'matches': ctx.get('matches_completed', 0),
         }
 
-    def _pick_cta_pool(ctx, streak_pool, color_pool, generic_pool, maxed_pool):
-        """Priority: maxed-out > streak in danger (>=3) > specific color > generic."""
+    def _pick_cta_pool(ctx, streak_pool, continue_pool, new_pool, maxed_pool):
+        """Priority: maxed-out > streak in danger (>=3) > open match > fresh match."""
         if ctx['is_maxed_out']:
             return maxed_pool
         if ctx['current_streak'] >= 3:
             return streak_pool
-        if ctx['best_tc']:
-            return color_pool
-        return generic_pool
+        if ctx.get('active_match'):
+            return continue_pool
+        return new_pool
 
     def _build_push_payload(user_id):
         """Return personalized push payload dict for this user.
@@ -5244,8 +5214,8 @@ def push_send_daily():
         recipient = User.query.get(user_id) if user_id else None
         loc = (recipient.locale if recipient and recipient.locale else 'en')
         ctx = _build_personalized_context(user_id)
-        pool = _pick_cta_pool(ctx, CTA_PUSH_STREAK, CTA_PUSH_COLOR,
-                              CTA_PUSH_GENERIC, CTA_PUSH_MAXED)
+        pool = _pick_cta_pool(ctx, CTA_PUSH_STREAK, CTA_PUSH_MATCH_CONTINUE,
+                              CTA_PUSH_MATCH_NEW, CTA_PUSH_MAXED)
         msg = _pick_daily_cta(pool, user_id)
         fields = _cta_fields(ctx, locale=loc)
         return {
@@ -5280,6 +5250,9 @@ def push_send_daily():
             })
         if ctx.get('matches_completed'):
             stats.append({'label': t_for(loc, 'Matches played'), 'value': str(ctx['matches_completed'])})
+        if ctx.get('completed'):
+            stats.append({'label': t_for(loc, 'Colors completed'),
+                          'value': f"{ctx['completed']}/{ctx['total']}"})
 
         if ctx['is_maxed_out']:
             return {
@@ -5289,41 +5262,44 @@ def push_send_daily():
                 'subhead': t_for(loc, 'Every color in the catalog is mastered. A single mix today keeps your run going — go for a personal best Delta-E?'),
                 'preheader': t_for(loc, 'A quick mix today protects your streak.'),
                 'cta_url': cta_url,
-                'cta_label': t_for(loc, "Open today's challenge →"),
+                'cta_label': t_for(loc, 'Play a match →'),
                 'stats': stats,
                 'tip': t_for(loc, 'Even a 30-second attempt counts toward your streak.'),
             }
 
-        best_tc = ctx['best_tc']
-        if best_tc:
-            attempts_word = fields['rem_word']
-            best_name = _color_display_name(best_tc, loc)
-            swatch_hex = f"#{best_tc.r:02X}{best_tc.g:02X}{best_tc.b:02X}"
-            return {
-                'subject': _subject(CTA_EMAIL_SUBJECT_COLOR),
-                'eyebrow': t_for(loc, "Today's target color"),
-                'headline': t_for(loc, '{color} is calling, {user_id}', color=best_name, user_id=user.id),
-                'subhead': t_for(loc, "You're {rem} {rem_word} away from mastering this shade. Today is a great day to close it out.",
-                                 rem=ctx['best_rem'], rem_word=attempts_word),
-                'preheader': t_for(loc, '{color} needs {rem} more {rem_word} — open the daily challenge.',
-                                   color=best_name, rem=ctx['best_rem'], rem_word=attempts_word),
-                'swatch_hex': swatch_hex,
-                'swatch_label': best_name,
-                'swatch_caption': t_for(loc, '{rem} {rem_word} to master', rem=ctx['best_rem'], rem_word=attempts_word),
+        am = ctx.get('active_match')
+        if am:
+            swatch_hex = None
+            if am.get('target_rgb'):
+                r, g, b = am['target_rgb']
+                swatch_hex = f"#{r:02X}{g:02X}{b:02X}"
+            out = {
+                'subject': _subject(CTA_EMAIL_SUBJECT_MATCH_CONTINUE),
+                'eyebrow': t_for(loc, 'Your open match'),
+                'headline': t_for(loc, 'Round {round} of {total} is waiting, {user_id}',
+                                  round=am['round_no'], total=am['round_count'], user_id=user.id),
+                'subhead': t_for(loc, 'Ten colors, one from every color family. One sitting finishes the match — after 3 idle days it counts as abandoned.'),
+                'preheader': t_for(loc, 'Your match is paused at round {round} of {total} — pick it up.',
+                                   round=am['round_no'], total=am['round_count']),
                 'cta_url': cta_url,
-                'cta_label': t_for(loc, 'Mix {color} now →', color=best_name),
+                'cta_label': t_for(loc, 'Continue your match →'),
                 'stats': stats,
                 'tip': t_for(loc, 'Match the lightness first, then nudge the hue — a single drop can change everything.'),
             }
+            if swatch_hex:
+                out['swatch_hex'] = swatch_hex
+                out['swatch_label'] = am.get('target_name') or ''
+                out['swatch_caption'] = t_for(loc, 'the next target in your match')
+            return out
 
         return {
             'subject': _subject(CTA_EMAIL_SUBJECT_GENERIC),
-            'eyebrow': t_for(loc, "Today's palette"),
-            'headline': t_for(loc, 'Your daily challenge is ready'),
-            'subhead': t_for(loc, "Mix today's colors and watch your progress climb. Even one attempt keeps the streak alive."),
-            'preheader': t_for(loc, 'Open the daily challenge — every drop counts.'),
+            'eyebrow': t_for(loc, "Today's match"),
+            'headline': t_for(loc, 'A fresh 10-round match is ready'),
+            'subhead': t_for(loc, 'Ten colors, one from every color family — mix them all and keep your streak alive.'),
+            'preheader': t_for(loc, 'Your next match is drawn — 10 rounds, a few minutes.'),
             'cta_url': cta_url,
-            'cta_label': t_for(loc, "Open today's challenge →"),
+            'cta_label': t_for(loc, 'Start your match →'),
             'stats': stats,
             'tip': t_for(loc, 'Aim for low Delta-E by tweaking one drop at a time.'),
         }

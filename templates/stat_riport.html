@@ -120,7 +120,8 @@
           <dt>Recept / cseppszám</dt><dd>Egy cél-szín megoldása: a pigmentcseppek száma. A cseppszám a strukturális nehézség mérőszáma.</dd>
           <dt>Mentés / feladás</dt><dd>Egy keverés zárása: mentés (a felhasználó elfogadja az eredményt) vagy feladás (továbblép / félbehagyja).</dd>
           <dt>Teljesítési arány</dt><dd>A mentett (befejezett) keverések aránya az összes keveréshez képest.</dd>
-          <dt>Nehézségi sáv (band)</dt><dd>A cél-színek cseppszám szerinti csoportjai, amelyek fokozatosan nyílnak meg a játékban.</dd>
+          <dt>Meccs</dt><dd>2026-07-14-től a játék egysége: 10 kör, pontosan egy cél-szín a tíz fagyasztott színklaszter mindegyikéből, kevert sorrendben. Egy befejezett meccs egy teljes, blokkolt, tízklaszteres ismételt mérés.</dd>
+          <dt>Nehézségi sáv (band)</dt><dd>Történeti: a cél-színek cseppszám szerinti csoportjai, amelyek 2026-07-14-ig fokozatosan nyíltak meg a játékban. A meccs-alapú kiosztás ezt megszüntette.</dd>
           <dt>Fenotípus</dt><dd>Egy keverés szabályalapú viselkedési kategóriája a kikeverés útja alapján (lásd 6.6).</dd>
         </dl>
       </section>
@@ -432,12 +433,35 @@
             <div class="chart" id="chLearnRate" style="min-height:340px;"></div></div>
         </div>
         <div class="note" id="learnNote"></div>
-        <div class="tech">
-          <h4>A nehézségi létra és a megtartás</h4>
-          <p>A cseppszám a játék <strong>nehézségi létrája</strong> is: a színek sávokba (band) rendezve
-             fokozatosan nyílnak meg, ahogy a játékos halad. A kevesebb cseppes (egyszerűbb) színek elöl,
-             a több cseppesek hátrébb. Cél a fokozatos kihívás fenntartása – hogy a feladat se ne legyen
-             unalmasan könnyű, se ne legyen csüggesztően nehéz –, ami a 7. szakasz megtartási logikájához kapcsolódik.</p>
+
+        <h3 id="s5m">Meccs-alapú kiosztás (2026-07-14-től)</h3>
+        <p class="intro">
+          A játékmenet egysége a <strong>meccs</strong>: 10 kör, pontosan egy cél-szín a tíz
+          <strong>fagyasztott</strong> színklaszter mindegyikéből. A klasztereket k-közép eljárás adja
+          (CIELAB, k=10, rögzített kiindulás) a <strong>242 egyenletes fedésű színen</strong> – a bőr-célszínek
+          nem szerepelnek a kiosztásban (a spektrális keveréses verzióban térnek vissza). A besorolás a
+          vizsgálati periódus alatt <strong>fagyasztott és verziózott</strong> (aktuális verzió lentebb).
+          A klaszterek sorrendje meccsenkét véletlen; a klaszteren belüli cél-szín véletlen, de
+          résztvevőn belül <strong>ismétlés nélküli ciklusból</strong> származik (egy szín addig nem
+          ismétlődik, amíg a klasztere ki nem merül). Az új meccs összetétele csak a kiosztási előzménytől
+          függ, a teljesítménytől soha. A 3 napig nem folytatott aktív meccs <strong>megszakadt</strong>
+          (abandoned) státuszt kap, a le nem játszott körei is ezzel a kimenettel záródnak – minden kiosztott
+          kör tárolódik és előbb-utóbb determinált kimenetet kap. A <strong>primer estimand a tíz klaszter
+          egyenlő súlyú átlaga</strong>; a napi kihívás és a párbaj-körök nem randomizált csatornák, az
+          elsődleges elemzésből külön kezelendők.
+        </p>
+        <div class="cards" id="matchKpis"></div>
+        <div class="note" id="matchEmpty" style="display:none;"></div>
+        <div class="grid2" id="matchPanels">
+          <div class="panel"><h4>Klaszterblokkok: kiosztott körök és kimenetek</h4>
+            <p class="cap">Egy sor = egy fagyasztott klaszter. A „teljesítési arány” a lezárt körökön belül
+              a teljesítettek hányada; az „átlag ΔE” a körhöz mentett keverés végső ΔE-je (mentésnél 0,
+              értékelt feladásnál a feladáskori érték).</p>
+            <div class="table-wrap"><table id="matchClusterTable"></table></div></div>
+          <div class="panel"><h4>Hol szakadnak meg a meccsek?</h4>
+            <p class="cap">A megszakadt meccsek hányadik körnél álltak, amikor a 3 napos szabály lezárta őket.</p>
+            <div class="chart" id="chMatchAbandon"></div>
+            <p class="intro" id="matchEstimand" style="margin-top:10px;"></p></div>
         </div>
       </section>
 
@@ -1223,9 +1247,88 @@
         '(A becslés medián-alapú, kis sávonkénti elemszámmal; feltáró jellegű.)';
     })();
 
+    renderMatches(d.matches);
+
     document.getElementById('loadingMsg').style.display = 'none';
     document.getElementById('reportBody').style.display = 'block';
     resizeAll();
+  }
+
+  function renderMatches(m) {
+    var kpis = document.getElementById('matchKpis');
+    var empty = document.getElementById('matchEmpty');
+    var panels = document.getElementById('matchPanels');
+    if (!kpis) return;
+    if (!m || !m.total_matches) {
+      kpis.innerHTML = '';
+      panels.style.display = 'none';
+      empty.style.display = '';
+      empty.innerHTML = m
+        ? 'Még nincs meccs-adat — a meccs-alapú kiosztás 2026-07-14-én indult.'
+        : 'A meccs-táblák még nem léteznek ezen az adatbázison (a migráció még nem futott le).';
+      return;
+    }
+    empty.style.display = 'none';
+    panels.style.display = '';
+
+    var st = m.by_status || {};
+    function n(s) { return (st[s] || {}).n || 0; }
+    var resolvedMatches = n('completed') + n('abandoned');
+    var legacySub = 'klaszterverzió: ' + esc(m.clusters_version || '—') +
+      (m.legacy_matches ? ' · ' + m.legacy_matches + ' protokoll előtti (kizárva)' : '');
+    kpis.innerHTML = [
+      kpiCard('Meccs (össz.)', fmt(m.total_matches), legacySub, {}),
+      kpiCard('Befejezett', fmt(n('completed')),
+        resolvedMatches ? pct(n('completed') / resolvedMatches, 0) + ' a lezártakból' : '', {}),
+      kpiCard('Megszakadt', fmt(n('abandoned')), '3 napig nem folytatott', { cls: 'warn' }),
+      kpiCard('Aktív', fmt(n('active')), 'folyamatban lévő meccs', {}),
+      kpiCard('Meccselő játékos', fmt(m.users_with_match), 'legalább 1 meccsel', {})
+    ].join('');
+
+    // per-cluster block table
+    (function () {
+      var el = document.getElementById('matchClusterTable');
+      if (!el) return;
+      var h = '<thead><tr><th>Klaszter</th><th class="num">Színek</th><th class="num">Kiosztott kör</th>' +
+        '<th class="num">Teljesített</th><th class="num">Kihagyott</th><th class="num">Megszakadt</th>' +
+        '<th class="num">Függő</th><th class="num">Telj. arány</th><th class="num">Átlag ΔE</th></tr></thead><tbody>';
+      (m.clusters || []).forEach(function (c) {
+        var sw = c.swatch ? '<span class="swatch" style="background:rgb(' + c.swatch.join(',') + ')"></span> ' : '';
+        h += '<tr><td>' + sw + esc(c.name) + ' <span style="opacity:.55">(' + esc(c.code) + ')</span></td>' +
+          '<td class="num">' + fmt(c.n_targets) + '</td>' +
+          '<td class="num">' + fmt(c.assigned) + '</td>' +
+          '<td class="num">' + fmt(c.completed) + '</td>' +
+          '<td class="num">' + fmt(c.skipped) + '</td>' +
+          '<td class="num">' + fmt(c.abandoned) + '</td>' +
+          '<td class="num">' + fmt(c.pending) + '</td>' +
+          '<td class="num">' + (c.completed_rate == null ? '—' : pct(c.completed_rate, 0)) + '</td>' +
+          '<td class="num">' + (c.mean_de == null ? '—' : fmt(c.mean_de, 2)) +
+          (c.n_de ? ' <span style="opacity:.55">(n=' + fmt(c.n_de) + ')</span>' : '') + '</td></tr>';
+      });
+      el.innerHTML = h + '</tbody>';
+    })();
+
+    // abandonment position histogram
+    var ab = m.abandon_at_round || [];
+    var abMap = {};
+    ab.forEach(function (r) { abMap[r.round] = r.n; });
+    var xs = [], ys = [];
+    for (var i = 0; i < 10; i++) { xs.push((i + 1) + '. kör'); ys.push(abMap[i] || 0); }
+    bar('chMatchAbandon', xs, ys, { color: T.warn, ytitle: 'megszakadt meccs', hover: '%{x}: %{y}' });
+
+    // estimand preview: equal-weight cluster means
+    var est = m.estimand || {};
+    var eEl = document.getElementById('matchEstimand');
+    if (eEl) {
+      eEl.innerHTML = est.clusters_with_data
+        ? '<strong>Az estimand előnézete</strong> (a tíz klaszter egyenlő súlyú átlaga, ' +
+          est.clusters_with_data + ' klaszter adatával): teljesítési arány <strong>' +
+          (est.eq_weight_completed_rate == null ? '—' : pct(est.eq_weight_completed_rate, 1)) +
+          '</strong>, átlag ΔE <strong>' +
+          (est.eq_weight_mean_de == null ? '—' : fmt(est.eq_weight_mean_de, 2)) +
+          '</strong>. Feltáró előnézet — nem modellbecslés.'
+        : '';
+    }
   }
 
   function renderSteps(d) {

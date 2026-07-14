@@ -640,6 +640,17 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
             SELECT to_char(date_trunc('day', attempt_started_server_ts),'YYYY-MM-DD') AS day,
                    COUNT(*)::bigint AS n FROM ga GROUP BY 1 ORDER BY 1""", **p)
 
+    # ---- 5m) Matches: the blocked 10-cluster design ----------------------- #
+    # From 2026-07-14 gameplay is match-based: a match = 10 rounds, exactly one
+    # target from each FROZEN cluster (app/clusters.py match_cluster_*), the
+    # cluster order shuffled, the within-cluster target from a per-participant
+    # no-repeat cycle. Every assigned round is stored; unresolved rounds of a
+    # >3-day-idle match resolve to 'abandoned'. The primary estimand is the
+    # EQUAL-WEIGHT cluster average, so the section previews per-cluster blocks
+    # and their unweighted mean. Wrapped defensively: before the matches
+    # migration runs, the tables may not exist yet.
+    matches_section = _build_matches_section()
+
     return {
         'status': 'success',
         'era_start_utc': era,
@@ -680,6 +691,130 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
         'regions': regions_payload,
         'region_curves': region_curves,
         'daily_volume': daily_volume,
+        # matches (blocked 10-cluster design; None until the tables exist)
+        'matches': matches_section,
+    }
+
+
+def _build_matches_section():
+    """Descriptive numbers for the match-based design. Returns None when the
+    matches tables do not exist yet (pre-migration deploys must not 500)."""
+    from .clusters import (
+        MATCH_CLUSTERS_VERSION, MATCH_CLUSTER_ORDER,
+        match_cluster_assignments, match_cluster_names,
+    )
+    from .gamut_lab import _lab_to_srgb
+    import json as _json
+
+    # Dialect-neutral SQL (no ::bigint casts): the section is also exercised
+    # on the sqlite verification DB, unlike the rest of this PG-only module.
+    try:
+        by_status = _rows(
+            "SELECT status, COUNT(*) AS n, COUNT(DISTINCT user_id) AS users "
+            "FROM matches GROUP BY status")
+    except Exception:
+        db.session.rollback()
+        return None
+
+    status_map = {r['status']: {'n': int(r['n']), 'users': int(r['users'])} for r in by_status}
+    total = sum(v['n'] for v in status_map.values())
+    users_any = _one("SELECT COUNT(DISTINCT user_id) AS n FROM matches").get('n', 0)
+
+    round_outcomes = _rows(
+        "SELECT COALESCE(mr.outcome, 'pending') AS outcome, COUNT(*) AS n "
+        "FROM match_rounds mr GROUP BY 1")
+
+    # Per-cluster blocks: assigned/resolved counts + mean final ΔE of the
+    # linked rounds (save-ΔE for completed, give-up ΔE for rated skips).
+    per_cluster = _rows(
+        """
+        SELECT mr.cluster_code,
+          COUNT(*) AS assigned,
+          COUNT(*) FILTER (WHERE mr.outcome='completed') AS completed,
+          COUNT(*) FILTER (WHERE mr.outcome='skipped') AS skipped,
+          COUNT(*) FILTER (WHERE mr.outcome='abandoned') AS abandoned,
+          COUNT(*) FILTER (WHERE mr.outcome IS NULL) AS pending,
+          AVG(ms.delta_e) FILTER (WHERE ms.delta_e IS NOT NULL) AS mean_de,
+          COUNT(*) FILTER (WHERE ms.delta_e IS NOT NULL) AS n_de
+        FROM match_rounds mr
+        LEFT JOIN mixing_sessions ms ON ms.id = mr.mixing_session_id
+        GROUP BY mr.cluster_code ORDER BY mr.cluster_code
+        """)
+
+    # cluster metadata from the frozen artifact (name, size, centroid swatch)
+    names = match_cluster_names()
+    sizes: Dict[str, int] = defaultdict(int)
+    for code in match_cluster_assignments().values():
+        sizes[code] += 1
+    swatches = {}
+    try:
+        from pathlib import Path
+        f = _json.loads((Path(__file__).resolve().parents[1] / 'data'
+                         / ('match_clusters_%s.json' % MATCH_CLUSTERS_VERSION)).read_text())
+        for code, lab in f.get('centroids', {}).items():
+            rr, gg, bb = _lab_to_srgb(*lab)
+            swatches[code] = [rr, gg, bb]
+    except Exception:
+        pass
+
+    pc_map = {r['cluster_code']: r for r in per_cluster}
+    clusters = []
+    for code in MATCH_CLUSTER_ORDER:
+        r = pc_map.get(code, {})
+        assigned = int(r.get('assigned') or 0)
+        resolved = int(r.get('completed') or 0) + int(r.get('skipped') or 0) \
+            + int(r.get('abandoned') or 0)
+        clusters.append({
+            'code': code,
+            'name': names.get(code, code),
+            'n_targets': sizes.get(code, 0),
+            'swatch': swatches.get(code),
+            'assigned': assigned,
+            'completed': int(r.get('completed') or 0),
+            'skipped': int(r.get('skipped') or 0),
+            'abandoned': int(r.get('abandoned') or 0),
+            'pending': int(r.get('pending') or 0),
+            'completed_rate': (int(r.get('completed') or 0) / resolved) if resolved else None,
+            'mean_de': _f(r.get('mean_de')),
+            'n_de': int(r.get('n_de') or 0),
+        })
+
+    # Estimand preview: the UNWEIGHTED mean of the per-cluster values — the
+    # structure of the declared primary estimand (equal cluster weights).
+    with_rate = [c for c in clusters if c['completed_rate'] is not None]
+    with_de = [c for c in clusters if c['mean_de'] is not None]
+    estimand = {
+        'clusters_with_data': len(with_rate),
+        'eq_weight_completed_rate': (sum(c['completed_rate'] for c in with_rate)
+                                     / len(with_rate)) if with_rate else None,
+        'eq_weight_mean_de': (sum(c['mean_de'] for c in with_de)
+                              / len(with_de)) if with_de else None,
+    }
+
+    # Where do abandoned matches stop? (current_round at abandonment)
+    abandon_at = _rows(
+        "SELECT current_round, COUNT(*) AS n FROM matches "
+        "WHERE status='abandoned' GROUP BY 1 ORDER BY 1")
+
+    # Matches drawn under an earlier clustering (pre-protocol pilots): they
+    # carry a different clusters_fingerprint and are EXCLUDED from the primary
+    # analysis; surfaced here so the count is never silently absorbed.
+    legacy = _one(
+        "SELECT COUNT(*) AS n FROM matches "
+        "WHERE clusters_fingerprint IS NULL OR clusters_fingerprint != :v",
+        v=MATCH_CLUSTERS_VERSION).get('n', 0)
+
+    return {
+        'clusters_version': MATCH_CLUSTERS_VERSION,
+        'legacy_matches': int(legacy or 0),
+        'total_matches': total,
+        'by_status': status_map,
+        'users_with_match': int(users_any or 0),
+        'round_outcomes': {r['outcome']: int(r['n']) for r in round_outcomes},
+        'clusters': clusters,
+        'estimand': estimand,
+        'abandon_at_round': [{'round': int(r['current_round']), 'n': int(r['n'])}
+                             for r in abandon_at],
     }
 
 

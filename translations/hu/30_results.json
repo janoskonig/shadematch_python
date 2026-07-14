@@ -113,7 +113,7 @@
   "Not acceptable": "Nem elfogadható",
   "legacy": "régi",
   "Total": "Összes",
-  "Completed": "Teljesítve",
+  "Completed": "Befejezve",
   "Skipped": "Kihagyva",
   "Sum of elapsed time across all rounds. Each round capped at 30 min to ignore abandoned tabs.": "Az összes kör eltelt idejének összege. Minden kör 30 percnél van maximálva, hogy az otthagyott fülek ne számítsanak.",
   "Total Time": "Összes idő",
@@ -235,5 +235,14 @@
   "{n} matches played": "{n} meccs lejátszva",
   "Matches completed": "Teljesített meccsek",
   "matches": "meccs",
-  "Daily Mission: Match Complete": "Napi küldetés: meccs teljesítve"
+  "Daily Mission: Match Complete": "Napi küldetés: meccs teljesítve",
+  "Your matches": "Meccseid",
+  "In progress": "Folyamatban",
+  "Abandoned": "Megszakadt",
+  "not played": "nem játszott",
+  "abandoned": "megszakadt",
+  "skipped": "kihagyva",
+  "mean ΔE {n}": "átlag ΔE {n}",
+  "round {i} of {n}": "kör: {i}/{n}",
+  "{done} completed · {skip} skipped": "{done} teljesítve · {skip} kihagyva"
 }

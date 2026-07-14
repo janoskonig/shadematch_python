@@ -550,6 +550,22 @@
         </div>
       </section>
 
+      <!-- Match ledger: one row per 10-round match, newest first -->
+      <section class="collapsible-card" id="matchHistoryCard" data-open="true" style="display:none;" aria-labelledby="matchHistoryHeading">
+        <button type="button" class="collapsible-toggle" aria-expanded="true" aria-controls="matchHistoryBody"
+                onclick="toggleCollapsible('matchHistoryCard', this)">
+          <span class="collapsible-title" id="matchHistoryHeading">{{ t('Your matches') }}</span>
+          <span class="collapsible-meta" id="matchHistoryMeta"></span>
+          <svg class="collapsible-chevron" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <div class="collapsible-body" id="matchHistoryBody">
+          <div id="matchHistoryList"></div>
+          <div id="matchHistoryMore"></div>
+        </div>
+      </section>
+
       <section class="collapsible-card" id="awardsCard" data-open="true" style="display:none;" aria-labelledby="awardsHeading">
         <button type="button" class="collapsible-toggle" aria-expanded="true" aria-controls="awardsBody"
                 onclick="toggleCollapsible('awardsCard', this)">
@@ -764,10 +780,72 @@
         renderColorStats(data.color_stats);
         renderDiplomaCta(data.region_mastery, userId);
         document.getElementById('profileSection').style.display = '';
+        loadMatchHistory(userId);
         loadHueAccuracy(userId);
       } catch (e) {
         console.error('Profile load error:', e);
       }
+    }
+
+    // ── Match ledger (one row per 10-round match) ─────────────
+    var MAX_MATCHES_SHOWN = 5;
+
+    async function loadMatchHistory(userId) {
+      try {
+        const res = await fetch('/api/match/history', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ user_id: userId }),
+        });
+        const data = await res.json();
+        if (data.status === 'success') renderMatchHistory(data.matches || []);
+      } catch (e) { console.error('Match history load error:', e); }
+    }
+
+    function matchStatusChip(status) {
+      if (status === 'completed') return '<span style="color:#00b894;font-weight:700;">' + t('Completed') + '</span>';
+      if (status === 'active') return '<span style="color:#667eea;font-weight:700;">' + t('In progress') + '</span>';
+      return '<span style="color:var(--text-secondary);font-weight:700;">' + t('Abandoned') + '</span>';
+    }
+
+    function renderMatchHistory(matches) {
+      const card = document.getElementById('matchHistoryCard');
+      const list = document.getElementById('matchHistoryList');
+      const meta = document.getElementById('matchHistoryMeta');
+      if (!card || !list || !matches.length) return;
+      if (meta) meta.textContent = String(matches.length);
+
+      list.innerHTML = matches.map((m, i) => {
+        const day = (m.completed_at || m.started_at || '').slice(0, 10);
+        const dots = (m.rounds || []).map((r) => {
+          const rgb = Array.isArray(r.target_rgb) ? r.target_rgb : [235, 235, 235];
+          let style = 'width:16px;height:16px;border-radius:4px;display:inline-block;margin-right:3px;' +
+            'background:rgb(' + rgb.join(',') + ');border:1px solid rgba(0,0,0,.18);vertical-align:middle;';
+          let mark = '';
+          if (r.outcome === 'skipped') style += 'opacity:.55;';
+          else if (r.outcome === 'abandoned') style += 'opacity:.22;';
+          else if (r.outcome == null) { style += 'opacity:.35;border-style:dashed;'; }
+          const de = Number.isFinite(r.delta_e) ? 'ΔE ' + r.delta_e.toFixed(2)
+            : (r.outcome === 'skipped' ? t('skipped')
+               : (r.outcome === 'abandoned' ? t('abandoned') : t('not played')));
+          const tip = (r.cluster_name || r.cluster_code || '') + ' · ' + de;
+          return '<span style="' + style + '" title="' + escHtml(tip) + '">' + mark + '</span>';
+        }).join('');
+        const deTxt = m.mean_delta_e != null
+          ? t('mean ΔE {n}').replace('{n}', m.mean_delta_e.toFixed(2)) : '';
+        const roundsTxt = m.status === 'active'
+          ? t('round {i} of {n}').replace('{i}', String(m.current_round + 1)).replace('{n}', String(m.round_count))
+          : t('{done} completed · {skip} skipped')
+              .replace('{done}', String(m.completed_rounds)).replace('{skip}', String(m.skipped_rounds));
+        const extra = i >= MAX_MATCHES_SHOWN ? ' extra-item is-hidden' : '';
+        return `<div class="color-stat-bar-row${extra}" style="flex-wrap:wrap;row-gap:4px;">
+          <span class="csr-label" style="min-width:96px;">${escHtml(day)}<br>${matchStatusChip(m.status)}</span>
+          <span style="flex:1;min-width:180px;">${dots}</span>
+          <span class="csr-count" style="text-align:right;min-width:150px;">${escHtml(roundsTxt)}${deTxt ? '<br>' + escHtml(deTxt) : ''}</span>
+        </div>`;
+      }).join('');
+      document.getElementById('matchHistoryMore').innerHTML = matches.length > MAX_MATCHES_SHOWN
+        ? showMoreButtonHTML('matchHistoryList', matches.length, t('matches')) : '';
+      card.style.display = '';
     }
 
     // ── Diploma call-to-action (gamut-region mastery) ─────────

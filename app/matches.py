@@ -332,3 +332,54 @@ def match_summary(match: Match) -> dict:
 
 def matches_completed_count(user_id: str) -> int:
     return Match.query.filter_by(user_id=user_id, status='completed').count()
+
+
+def active_match_snapshot(user_id: str):
+    """Read-only view of the user's resumable active match for reminder copy
+    (push/email): respects the staleness rule but never mutates. Returns
+    {'round_no' (1-based), 'round_count', 'target_name', 'target_rgb'} or None."""
+    match = (Match.query
+             .filter_by(user_id=user_id, status='active')
+             .order_by(Match.started_at.desc())
+             .first())
+    if match is None:
+        return None
+    rounds = _rounds_of(match)
+    if _last_activity(match, rounds) < datetime.utcnow() - timedelta(days=ABANDON_AFTER_DAYS):
+        return None  # will be abandoned at the next open — advertise a fresh match instead
+    rnd = next((r for r in rounds if r.round_index == match.current_round), None)
+    tc = db.session.get(TargetColor, rnd.target_color_id) if rnd is not None else None
+    return {
+        'match_id': match.id,
+        'round_no': match.current_round + 1,
+        'round_count': match.round_count,
+        'target_name': (tc.name_hu or tc.name) if tc is not None else None,
+        'target_rgb': [tc.r, tc.g, tc.b] if tc is not None else None,
+    }
+
+
+def match_history(user_id: str, limit: int = 20) -> list:
+    """The user's recent matches (newest first) with their round summaries —
+    the results page's match ledger."""
+    rows = (Match.query
+            .filter_by(user_id=user_id)
+            .order_by(Match.started_at.desc())
+            .limit(limit)
+            .all())
+    out = []
+    for match in rows:
+        s = match_summary(match)
+        out.append({
+            'match_id': match.id,
+            'status': match.status,
+            'current_round': match.current_round,
+            'round_count': match.round_count,
+            'started_at': match.started_at.isoformat() if match.started_at else None,
+            'completed_at': match.completed_at.isoformat() if match.completed_at else None,
+            'rounds': s['rounds'],
+            'completed_rounds': s['completed_rounds'],
+            'skipped_rounds': s['skipped_rounds'],
+            'mean_delta_e': s['mean_delta_e'],
+            'best_delta_e': s['best_delta_e'],
+        })
+    return out
