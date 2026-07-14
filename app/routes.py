@@ -1809,8 +1809,11 @@ def api_match_skip_round():
         if state is None:
             return jsonify({'status': 'error',
                             'message': 'No such active match round'}), 404
+        # An unmixed skip of the last round completes the match too — grant
+        # the daily "finish a match" mission here as well (idempotent).
+        new_awards = grant_daily_mission_awards(user_id) if state.get('match_completed') else []
         db.session.commit()
-        return jsonify({'status': 'success', 'match': state})
+        return jsonify({'status': 'success', 'match': state, 'new_awards': new_awards})
     except Exception as e:
         db.session.rollback()
         return jsonify({'status': 'error', 'message': str(e)}), 500

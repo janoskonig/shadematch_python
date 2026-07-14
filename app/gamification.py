@@ -83,27 +83,17 @@ HEAT_MAX_BONUS_PCT = 0.50
 QUOTA_GLOBAL_MILESTONE_PCTS = [25, 50, 75]
 
 
+# One mission, matching the unit of play: finish a whole 10-round match today.
+# (The old per-colour micro-missions — perfect hit / fast finish / few steps —
+# were retired with match-based gameplay; their historical awards keep their
+# keys and labels on the results page.)
 DAILY_MISSIONS = [
     {
-        'id': 'precision_hit',
-        'label': 'Precision Hit',
-        'description': 'Get at least one perfect match today.',
-        'award_name': 'Daily Precision Hit',
-        'icon': '🎯',
-    },
-    {
-        'id': 'fast_finish',
-        'label': 'Fast Finish',
-        'description': 'Complete one color in 25 seconds or less.',
-        'award_name': 'Daily Fast Finish',
-        'icon': '⚡',
-    },
-    {
-        'id': 'efficient_mixer',
-        'label': 'Efficient Mixer',
-        'description': 'Complete one color in 12 steps or fewer.',
-        'award_name': 'Daily Efficient Mixer',
-        'icon': '🧪',
+        'id': 'complete_match',
+        'label': 'Daily Match',
+        'description': 'Finish one full 10-round match today.',
+        'award_name': 'Daily Match Complete',
+        'icon': '🏁',
     },
 ]
 
@@ -212,29 +202,19 @@ def _effective_steps_for_session(session, step_map):
 
 
 def build_daily_missions(user_id: str, day: date = None):
-    """Return today's mission board with completion flags."""
+    """Return today's mission board with completion flags. The single mission
+    is finishing one whole match (all 10 rounds resolved) today."""
     if not user_id:
         return {'date': (day or date.today()).isoformat(), 'missions': []}
     day = day or date.today()
     start_dt, end_dt = _day_window(day)
-    sessions = (
-        MixingSession.query
-        .filter(MixingSession.user_id == user_id)
-        .filter(MixingSession.timestamp >= start_dt, MixingSession.timestamp < end_dt)
-        .all()
+    finished_today = (
+        Match.query
+        .filter_by(user_id=user_id, status='completed')
+        .filter(Match.completed_at >= start_dt, Match.completed_at < end_dt)
+        .count()
     )
-    step_map = _build_day_session_step_map(sessions)
-    completed_ids = set()
-
-    for s in sessions:
-        if s.match_category == 'perfect':
-            completed_ids.add('precision_hit')
-        if (not s.skipped) and s.time_sec is not None and s.time_sec <= 25:
-            completed_ids.add('fast_finish')
-        if not s.skipped:
-            steps = _effective_steps_for_session(s, step_map)
-            if steps <= 12:
-                completed_ids.add('efficient_mixer')
+    completed_ids = {'complete_match'} if finished_today > 0 else set()
 
     missions = []
     for m in DAILY_MISSIONS:

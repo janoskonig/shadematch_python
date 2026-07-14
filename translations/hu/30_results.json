@@ -234,5 +234,6 @@
   "{n} match played": "{n} meccs lejátszva",
   "{n} matches played": "{n} meccs lejátszva",
   "Matches completed": "Teljesített meccsek",
-  "matches": "meccs"
+  "matches": "meccs",
+  "Daily Mission: Match Complete": "Napi küldetés: meccs teljesítve"
 }

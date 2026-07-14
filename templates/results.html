@@ -1040,6 +1040,7 @@
       if (key.startsWith('daily_champion')) return '🏆';
       if (key === 'daily_fastest_match') return '⚡';
       if (key === 'daily_fewest_steps') return '🪄';
+      if (key.startsWith('daily_mission_complete_match')) return '🏁';
       if (key.startsWith('daily_mission_precision_hit')) return '🎯';
       if (key.startsWith('daily_mission_fast_finish')) return '⚡';
       if (key.startsWith('daily_mission_efficient_mixer')) return '🧪';
@@ -1061,6 +1062,7 @@
       if (key.startsWith('daily_champion')) return t('Daily Champion') + (meta && meta.date ? ' ' + meta.date : '');
       if (key === 'daily_fastest_match') return t('Fastest Color Match of the Day');
       if (key === 'daily_fewest_steps') return t('Fewest Steps of the Day');
+      if (key === 'daily_mission_complete_match') return t('Daily Mission: Match Complete');
       if (key === 'daily_mission_precision_hit') return t('Daily Mission: Precision Hit');
       if (key === 'daily_mission_fast_finish') return t('Daily Mission: Fast Finish');
       if (key === 'daily_mission_efficient_mixer') return t('Daily Mission: Efficient Mixer');

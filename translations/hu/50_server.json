@@ -221,5 +221,8 @@
   "Round {i} of {n}": "Kör: {i}/{n}",
   "Start a match": "Indíts egy meccset",
   "10 rounds, one from every color family": "10 kör — minden színcsaládból egy szín",
-  "Matches played": "Lejátszott meccsek"
+  "Matches played": "Lejátszott meccsek",
+  "Daily Match": "Napi meccs",
+  "Finish one full 10-round match today.": "Játssz végig ma egy teljes, 10 körös meccset!",
+  "Daily Match Complete": "Napi meccs teljesítve"
 }
