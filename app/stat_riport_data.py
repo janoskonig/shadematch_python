@@ -476,11 +476,17 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
 
     # Balanced partition of the ACTUAL gamut, mirroring how the target catalog
     # was generated (even coverage of the reachable gamut, densified skin zone):
-    # k-means over the 332 targets' CIELAB coordinates (K=8, fixed seed →
-    # deterministic). Because the targets spread evenly over the gamut, the
-    # clusters come out compact and similar-sized — no empty / 1-colour sliver
-    # regions like fixed axis cuts produce on a curved gamut blob.
-    _REGION_K = 8
+    # k-means over the targets' CIELAB coordinates (fixed seed →
+    # deterministic) for the background gamut; the skin targets
+    # (even_gamut_v2_skin, 90 colours packed into a small volume) are instead
+    # assigned to the ORIGINAL Xiao et al. (2017) clusters: each skin target
+    # goes to the ethnicity (Caucasian/Chinese/Kurdish/Thai) whose nearest
+    # published site-mean (4 ethnicities × 4 body sites = 16 Lab means) is
+    # closest in CIELAB.
+    _BG_K = 6      # background gamut clusters
+    _XIAO_ETHNICITIES = ['Caucasian', 'Chinese', 'Kurdish', 'Thai']
+    _XIAO_NAME_HU = {'Caucasian': 'bőrszín – kaukázusi', 'Chinese': 'bőrszín – kínai',
+                     'Kurdish': 'bőrszín – kurd', 'Thai': 'bőrszín – thai'}
 
     def _region_name(L, a, b):
         light = 'sötét' if L < 35 else ('közepes' if L <= 65 else 'világos')
@@ -507,43 +513,72 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
                 hue = 'lila–bíbor'
         return '%s %s' % (light, hue)
 
-    cat_targets = _rows("SELECT id, r, g, b FROM target_colors WHERE color_type='gamut' ORDER BY id")
-    X = np.array([_srgb_to_lab(t['r'], t['g'], t['b']) for t in cat_targets])
-    rng = np.random.default_rng(42)
-    cen = [X[rng.integers(len(X))]]
-    for _ in range(_REGION_K - 1):
-        d2 = np.min([((X - c) ** 2).sum(1) for c in cen], axis=0)
-        cen.append(X[rng.choice(len(X), p=d2 / d2.sum())])
-    C = np.array(cen)
-    assign = np.zeros(len(X), dtype=int)
-    for _ in range(200):
-        na = np.argmin(((X[:, None, :] - C[None, :, :]) ** 2).sum(2), axis=1)
-        nC = np.array([X[na == k].mean(0) if (na == k).any() else C[k]
-                       for k in range(_REGION_K)])
-        if np.array_equal(na, assign) and np.allclose(nC, C):
-            break
-        assign, C = na, nC
-    # stable ids/names: relabel clusters sorted by centroid (L, a, b)
-    order = sorted(range(_REGION_K), key=lambda k: (C[k][0], C[k][1], C[k][2]))
-    relabel = {old: 'k%d' % new for new, old in enumerate(order)}
-    MACRO_ORDER = ['k%d' % i for i in range(_REGION_K)]
+    def _kmeans(X, K, seed=42):
+        rng = np.random.default_rng(seed)
+        cen = [X[rng.integers(len(X))]]
+        for _ in range(K - 1):
+            d2 = np.min([((X - c) ** 2).sum(1) for c in cen], axis=0)
+            cen.append(X[rng.choice(len(X), p=d2 / d2.sum())])
+        C = np.array(cen)
+        assign = np.zeros(len(X), dtype=int)
+        for _ in range(200):
+            na = np.argmin(((X[:, None, :] - C[None, :, :]) ** 2).sum(2), axis=1)
+            nC = np.array([X[na == k].mean(0) if (na == k).any() else C[k]
+                           for k in range(K)])
+            if np.array_equal(na, assign) and np.allclose(nC, C):
+                break
+            assign, C = na, nC
+        return assign, C
+
+    cat_targets = _rows(
+        "SELECT id, r, g, b, classification FROM target_colors "
+        "WHERE color_type='gamut' ORDER BY id")
+    skin_targets = [t for t in cat_targets if t['classification'] == 'even_gamut_v2_skin']
+    bg_targets = [t for t in cat_targets if t['classification'] != 'even_gamut_v2_skin']
+    Xb = np.array([_srgb_to_lab(t['r'], t['g'], t['b']) for t in bg_targets])
+    Xs = np.array([_srgb_to_lab(t['r'], t['g'], t['b']) for t in skin_targets])
+    assign_b, Cb = _kmeans(Xb, _BG_K)
+    # skin: nearest Xiao site-mean → that mean's ethnicity
+    from .gamut_lab import skin_gamut
+    _xiao_pts = skin_gamut()['points']
+    _xiao_P = np.array([[q['L'], q['a'], q['b']] for q in _xiao_pts])
+    _xiao_eth = [q['ethnicity'] for q in _xiao_pts]
+    assign_s = [
+        _xiao_eth[int(np.argmin(((_xiao_P - lab) ** 2).sum(1)))]
+        for lab in Xs
+    ]
 
     region_by_target: Dict[int, str] = {}
     region_labs: Dict[str, List[tuple]] = defaultdict(list)
-    for t, lab, k in zip(cat_targets, X, assign):
-        reg = relabel[int(k)]
-        region_by_target[t['id']] = reg
-        region_labs[reg].append(tuple(float(v) for v in lab))
     _macro_names: Dict[str, str] = {}
+
+    # background clusters: stable relabel by centroid, verbal light+hue names
+    order_b = sorted(range(_BG_K), key=lambda k: (Cb[k][0], Cb[k][1], Cb[k][2]))
+    relabel_b = {old: 'k%d' % new for new, old in enumerate(order_b)}
     _seen: Dict[str, int] = {}
-    for i in range(_REGION_K):
-        reg = 'k%d' % i
-        Lc, ac, bc = C[order[i]]
+    for i in range(_BG_K):
+        Lc, ac, bc = Cb[order_b[i]]
         nm = _region_name(float(Lc), float(ac), float(bc))
         _seen[nm] = _seen.get(nm, 0) + 1
         if _seen[nm] > 1:
             nm = '%s %d.' % (nm, _seen[nm])
-        _macro_names[reg] = nm
+        _macro_names['k%d' % i] = nm
+    for t, lab, k in zip(bg_targets, Xb, assign_b):
+        reg = relabel_b[int(k)]
+        region_by_target[t['id']] = reg
+        region_labs[reg].append(tuple(float(v) for v in lab))
+
+    # skin sub-regions: the original Xiao ethnic clusters, in the paper's order
+    _skin_reg_of = {eth: 'sk%d' % i for i, eth in enumerate(_XIAO_ETHNICITIES)}
+    for eth in _XIAO_ETHNICITIES:
+        _macro_names[_skin_reg_of[eth]] = _XIAO_NAME_HU[eth]
+    for t, lab, eth in zip(skin_targets, Xs, assign_s):
+        reg = _skin_reg_of[eth]
+        region_by_target[t['id']] = reg
+        region_labs[reg].append(tuple(float(v) for v in lab))
+
+    MACRO_ORDER = (['k%d' % i for i in range(_BG_K)]
+                   + ['sk%d' % i for i in range(len(_XIAO_ETHNICITIES))])
 
     def _macro_name(code):
         return _macro_names.get(code, code)
