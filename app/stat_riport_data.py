@@ -467,26 +467,28 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     # A single colour is mixed at most ~twice, but neighbouring colours (which
     # share a region yet have different recipes) are mixed more often. So
     # "learning" is measured as generalisation within a region. For the report
-    # the space is split into EIGHT octants covering the whole gamut (see the
-    # partition comment below). Every target belongs to exactly one octant;
+    # the space is split into SIXTEEN regions covering the whole gamut (see the
+    # partition comment below). Every target belongs to exactly one region;
     # each gets a Hungarian label and the sRGB colour of its centroid for the
     # map / curve plots.
     from .regions import _srgb_to_lab
     from .gamut_lab import _lab_to_srgb
 
-    # Octant partition with minimal arbitrariness: cut each CIELAB axis in two.
-    # a* and b* split at their natural zero (the neutral axis); L* has no sign,
-    # so it splits at 50, the midpoint of its 0–100 scale. 2×2×2 = 8 octants.
-    MACRO_ORDER = ['dgb', 'dgy', 'drb', 'dry', 'lgb', 'lgy', 'lrb', 'lry']
+    # Partition with minimal arbitrariness: a* and b* split at their natural
+    # zero (the neutral axis); L* has no sign, so it is QUARTERED on its 0–100
+    # scale (cuts at 25/50/75). 4×2×2 = 16 regions.
+    _L_BAND_NAMES = ['nagyon sötét', 'sötét', 'világos', 'nagyon világos']
+    MACRO_ORDER = ['%d%s%s' % (i, aa, bb)
+                   for i in range(4) for aa in ('g', 'r') for bb in ('b', 'y')]
 
     def _macro_of(L, a, b):
-        return (('d' if L < 50 else 'l')
+        return ('%d' % min(3, int(L // 25))
                 + ('g' if a < 0 else 'r')
                 + ('b' if b < 0 else 'y'))
 
     def _macro_name(code):
         return ' · '.join([
-            'sötét' if code[0] == 'd' else 'világos',
+            _L_BAND_NAMES[int(code[0])],
             'zöldes' if code[1] == 'g' else 'pirosas',
             'kékes' if code[2] == 'b' else 'sárgás',
         ])
