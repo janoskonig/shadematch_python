@@ -3281,18 +3281,18 @@ def _daily_target_ids(d=None):
     rows = (TargetColor.query
             .filter_by(color_type='gamut')
             .order_by(TargetColor.catalog_order.asc()).all())
-    sorted_skin = [r for r in rows if r.classification == 'even_gamut_v2_skin']
+    # Skin-zone targets are retired from serving everywhere (they distort the
+    # cluster-balanced design; skin returns in the spectral-mixing version).
     sorted_bg = [r for r in rows if r.classification != 'even_gamut_v2_skin']
 
     seed = _daily_seed(d)
     rng = _random.Random(seed)
 
-    first_three = sorted_bg[:3]                       # easy low-band anchors
-    remaining_bg = sorted_bg[3:11]
-    selected_bg = rng.sample(remaining_bg, min(3, len(remaining_bg)))
-    selected_skin = rng.sample(sorted_skin, min(5, len(sorted_skin)))
+    first_three = sorted_bg[:3]                       # easy anchors
+    remaining_bg = sorted_bg[3:16]
+    selected_bg = rng.sample(remaining_bg, min(8, len(remaining_bg)))
 
-    seeded_ids = [c.id for c in first_three + selected_bg + selected_skin]
+    seeded_ids = [c.id for c in first_three + selected_bg]
     if not scheduled_ids:
         return seeded_ids
     return scheduled_ids + [cid for cid in seeded_ids if cid not in scheduled_ids]

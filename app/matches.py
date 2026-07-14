@@ -1,48 +1,91 @@
-"""Match service: 10-round matches, one target per macro-cluster.
+"""Match service: 10-round matches, one target per frozen colour cluster.
 
-A match is drawn server-side at creation: the 10 cluster codes
-(app/clusters.py MACRO_ORDER) are shuffled, and for each cluster one target is
-drawn uniformly at random from its recipe-complete members (repeats across
-matches are allowed by design — the draw is memoryless). Round accounting is
-server-authoritative: the save endpoints (and the unmixed-skip endpoint)
-advance current_round; saves without match fields never touch a match, which
-keeps daily-challenge, head-to-head and probe rounds match-neutral.
+Design (study protocol):
+  * A match = 10 rounds, exactly one target from each of the 10 FROZEN
+    clusters (app/clusters.py match_cluster_*, artifact
+    data/match_clusters_<version>.json). Cluster membership is fixed and
+    versioned for the whole study period; each match records the version it
+    was drawn under (Match.clusters_fingerprint).
+  * Xiao skin-zone targets are excluded from matches entirely — the clusters
+    partition the even-coverage background gamut only.
+  * Cluster ORDER is shuffled uniformly per match. The target WITHIN a
+    cluster is random but drawn from a per-participant no-repeat cycle:
+    among the cluster's members, only those the participant has been
+    ASSIGNED least often are eligible, so a colour cannot repeat for a
+    participant until its whole cluster is exhausted. The draw depends only
+    on assignment history, never on performance, so a new match's
+    composition is independent of how the previous one went.
+  * Every assigned round is stored (MatchRound rows exist from the draw),
+    whether or not it was ever started; skips and match abandonment are
+    recorded as distinct outcomes ('skipped' / 'abandoned').
+  * Abandonment rule: an active match not continued for ABANDON_AFTER_DAYS
+    (last activity = match start or latest played round) is marked
+    'abandoned' and its unplayed rounds get outcome='abandoned', so no match
+    stays statistically undecided forever. Applied lazily when the player
+    next asks for a match, and sweepable via scripts/mark_abandoned_matches.py.
+  * Primary estimand (declared in the protocol): the EQUAL-WEIGHT average of
+    the per-cluster expected outcomes over the 10 frozen clusters —
+    (1/10) * sum_c E(Y | cluster = c) — i.e. every completed match is one
+    complete, blocked, ten-cluster repeated measurement. Daily-challenge,
+    head-to-head and probe rounds are non-randomised channels: they carry no
+    match fields and are analysed separately.
 
-All functions add to db.session without committing (caller commits), matching
-the probe.py convention.
+Round accounting is server-authoritative: the save endpoints (and the
+unmixed-skip endpoint) advance current_round; saves without match fields
+never touch a match. All functions add to db.session without committing
+(caller commits), matching the probe.py convention.
 """
 import random
-from datetime import datetime
+from datetime import datetime, timedelta
+
+from sqlalchemy import func
 
 from . import db
 from .models import Match, MatchRound, MixingSession, TargetColor
 from .clusters import (
-    MACRO_ORDER, cluster_assignments, cluster_display_names, current_fingerprint,
+    MATCH_CLUSTERS_VERSION, MATCH_CLUSTER_ORDER,
+    match_cluster_assignments, match_cluster_names,
 )
 from .gamification import target_color_sum_drop
 
 ROUNDS_PER_MATCH = 10
+ABANDON_AFTER_DAYS = 3
 
 
-def _recipe_complete_gamut_targets():
-    """Every served target must be mixable: full 5-channel recipe required."""
+def _drawable_targets():
+    """Frozen-cluster members present in the catalog with a full recipe."""
+    assign = match_cluster_assignments()
     return [
         tc for tc in TargetColor.query.filter_by(color_type='gamut').all()
-        if target_color_sum_drop(tc) is not None
+        if tc.id in assign and target_color_sum_drop(tc) is not None
     ]
 
 
+def _assignment_counts(user_id: str) -> dict:
+    """How many times each target has ever been ASSIGNED to this user in a
+    match (played or not) — the basis of the no-repeat cycle."""
+    rows = (db.session.query(MatchRound.target_color_id, func.count(MatchRound.id))
+            .join(Match, Match.id == MatchRound.match_id)
+            .filter(Match.user_id == user_id)
+            .group_by(MatchRound.target_color_id)
+            .all())
+    return {tid: int(n) for tid, n in rows}
+
+
 def create_match(user_id: str) -> Match:
-    """Draw a fresh match: shuffled cluster order, one uniform draw per cluster."""
-    pool = _recipe_complete_gamut_targets()
-    assign = cluster_assignments()
-    by_cluster = {code: [] for code in MACRO_ORDER}
+    """Draw a fresh match: shuffled cluster order; within each cluster a
+    uniform draw among the participant's least-assigned members (no-repeat
+    cycle until the cluster is exhausted)."""
+    pool = _drawable_targets()
+    assign = match_cluster_assignments()
+    by_cluster = {code: [] for code in MATCH_CLUSTER_ORDER}
     for tc in pool:
         code = assign.get(tc.id)
         if code in by_cluster:
             by_cluster[code].append(tc)
+    counts = _assignment_counts(user_id)
 
-    order = list(MACRO_ORDER)
+    order = list(MATCH_CLUSTER_ORDER)
     random.shuffle(order)
 
     match = Match(
@@ -50,14 +93,17 @@ def create_match(user_id: str) -> Match:
         status='active',
         current_round=0,
         round_count=ROUNDS_PER_MATCH,
-        clusters_fingerprint=current_fingerprint(),
+        clusters_fingerprint=MATCH_CLUSTERS_VERSION,
     )
     db.session.add(match)
     db.session.flush()  # match.id for the rounds
 
     for idx, code in enumerate(order):
         members = by_cluster.get(code) or pool  # defensive: empty cluster → whole pool
-        tc = random.choice(members)
+        low = min(counts.get(tc.id, 0) for tc in members)
+        cycle_pool = [tc for tc in members if counts.get(tc.id, 0) == low]
+        tc = random.choice(cycle_pool)
+        counts[tc.id] = counts.get(tc.id, 0) + 1
         db.session.add(MatchRound(
             match_id=match.id,
             round_index=idx,
@@ -74,30 +120,68 @@ def _rounds_of(match: Match):
             .all())
 
 
-def get_or_create_active_match(user_id: str) -> Match:
-    """Resume the user's active match, or draw a new one. A stale match whose
-    targets no longer exist (gamut reload) is abandoned and redrawn."""
-    match = (Match.query
-             .filter_by(user_id=user_id, status='active')
-             .order_by(Match.started_at.desc())
-             .first())
-    if match is not None:
+def _last_activity(match: Match, rounds) -> datetime:
+    played = [r.played_at for r in rounds if r.played_at is not None]
+    return max([match.started_at] + played)
+
+
+def abandon_match(match: Match, rounds=None) -> None:
+    """Mark a match abandoned; unplayed rounds get a definite outcome so no
+    assigned round stays undecided."""
+    match.status = 'abandoned'
+    for r in (rounds if rounds is not None else _rounds_of(match)):
+        if r.outcome is None:
+            r.outcome = 'abandoned'
+
+
+def abandon_stale_matches(now=None) -> int:
+    """Sweep: abandon every active match idle for > ABANDON_AFTER_DAYS.
+    Used by scripts/mark_abandoned_matches.py (cron-able); the same rule is
+    applied lazily in get_or_create_active_match."""
+    now = now or datetime.utcnow()
+    cutoff = now - timedelta(days=ABANDON_AFTER_DAYS)
+    n = 0
+    for match in Match.query.filter_by(status='active').all():
         rounds = _rounds_of(match)
+        if _last_activity(match, rounds) < cutoff:
+            abandon_match(match, rounds)
+            n += 1
+    return n
+
+
+def get_or_create_active_match(user_id: str) -> Match:
+    """Resume the user's active match, or draw a new one. Every active match
+    is inspected (duplicates can only arise defensively — the DB enforces one
+    active per user on Postgres): stale ones (> ABANDON_AFTER_DAYS idle) and
+    ones whose targets no longer exist (gamut reload) are abandoned; the
+    newest healthy one is resumed, extras are abandoned."""
+    actives = (Match.query
+               .filter_by(user_id=user_id, status='active')
+               .order_by(Match.started_at.desc())
+               .all())
+    cutoff = datetime.utcnow() - timedelta(days=ABANDON_AFTER_DAYS)
+    resumable = None
+    for match in actives:
+        rounds = _rounds_of(match)
+        if resumable is not None or _last_activity(match, rounds) < cutoff:
+            abandon_match(match, rounds)
+            continue
         target_ids = [r.target_color_id for r in rounds]
         existing = {
             tc.id for tc in TargetColor.query
             .filter(TargetColor.id.in_(target_ids)).all()
         } if target_ids else set()
         if len(rounds) == match.round_count and all(t in existing for t in target_ids):
-            return match
-        match.status = 'abandoned'
-    return create_match(user_id)
+            resumable = match
+        else:
+            abandon_match(match, rounds)
+    return resumable if resumable is not None else create_match(user_id)
 
 
 def match_payload(match: Match, public_dict) -> dict:
     """Client JSON for a match. *public_dict* is routes._target_color_public_dict
     (recipes stay withheld)."""
-    names = cluster_display_names()
+    names = match_cluster_names()
     rounds = _rounds_of(match)
     targets = {
         tc.id: tc for tc in TargetColor.query
@@ -156,7 +240,7 @@ def _validated_current_round(user_id, match_id, round_index):
         round_index = int(round_index)
     except (TypeError, ValueError):
         return None
-    match = Match.query.get(match_id)
+    match = db.session.get(Match, match_id)
     if match is None or match.user_id != user_id or match.status != 'active':
         return None
     if round_index != match.current_round:
@@ -202,7 +286,7 @@ def skip_round_unmixed(user_id, match_id, round_index):
 
 def match_summary(match: Match) -> dict:
     """Per-round outcomes joined to their mixing sessions (ΔE, category)."""
-    names = cluster_display_names()
+    names = match_cluster_names()
     rounds = _rounds_of(match)
     session_ids = [r.mixing_session_id for r in rounds if r.mixing_session_id]
     sessions = {

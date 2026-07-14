@@ -18,10 +18,22 @@ app/__pycache__/
 # Local analysis scratch files
 notes/
 factor2-pigmentek.csv
-/data/
+# data/ is local-only, EXCEPT the frozen match-cluster artifacts: versioned
+# protocol assets the deployed app loads at runtime
+# (see scripts/freeze_match_clusters.py). `/data/*` (not `/data/`) so the
+# negation below can re-include files inside.
+/data/*
+!/data/match_clusters_*.json
 
 # Local editor / agent tooling (per-machine, not for the repo)
 .claude/
 
 # Generated demo voiceover/video build artifacts
 demo/voiceover/
+
+# Generated recruitment flyer PDFs (regenerate: artifacts/flyers/make_flyer.py + render_flyer.js)
+artifacts/flyers/*.pdf
+
+# Generated Instagram ad images/videos (regenerate: artifacts/insta/make_insta*.py + render_*.js)
+artifacts/insta/*.png
+artifacts/insta/*.mp4

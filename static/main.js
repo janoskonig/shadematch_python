@@ -1552,7 +1552,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   if (serveMatchRoundTarget()) {
     setGameTarget(currentTargetColor);
   } else {
-    currentTargetColor = fullCatalog[Math.floor(Math.random() * fullCatalog.length)];
+    currentTargetColor = pickGuestTarget() || fullCatalog[0];
     setGameTarget(currentTargetColor);
   }
   updateMatchProgressUI();
@@ -1560,7 +1560,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   // ── Guest demo round ─────────────────────────────────────────────────────
   function pickGuestTarget() {
     // Prefer an easy shade (few recipe drops) so the demo is winnable fast.
-    const withRgb = fullCatalog.filter((c) => Array.isArray(c.rgb) && c.rgb.length === 3);
+    // Skin-zone targets are retired from serving (spectral version will bring
+    // them back), so the demo draws from the even-coverage set only.
+    const withRgb = fullCatalog.filter((c) => Array.isArray(c.rgb) && c.rgb.length === 3
+      && c.classification !== 'even_gamut_v2_skin');
     const easy = withRgb.filter((c) => {
       const s = c.sum_drop_count;
       return Number.isFinite(s) && s >= 3 && s <= 7;

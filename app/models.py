@@ -195,9 +195,11 @@ class UserTargetColorStats(db.Model):
 
 class Match(db.Model):
     """A 10-round gameplay match: one randomly drawn target from each of the
-    10 macro-clusters (see app/clusters.py), cluster order shuffled per match.
-    Server-authoritative: the save endpoints advance current_round; an
-    interrupted match resumes on reload / another device."""
+    10 FROZEN colour clusters (app/clusters.py match_cluster_*), cluster order
+    shuffled per match. Server-authoritative: the save endpoints advance
+    current_round; an interrupted match resumes on reload / another device.
+    An active match idle for > matches.ABANDON_AFTER_DAYS becomes 'abandoned'
+    (lazily + via scripts/mark_abandoned_matches.py)."""
     __tablename__ = 'matches'
 
     id = db.Column(db.Integer, primary_key=True)
@@ -205,7 +207,7 @@ class Match(db.Model):
     status = db.Column(db.String(12), nullable=False, default='active')  # active|completed|abandoned
     current_round = db.Column(db.Integer, nullable=False, default=0)     # next unplayed round_index, 0..round_count
     round_count = db.Column(db.Integer, nullable=False, default=10)
-    # Which clustering drew this match (audit; see clusters.catalog_fingerprint).
+    # Frozen clustering version this match was drawn under (e.g. 'mc-v1').
     clusters_fingerprint = db.Column(db.String(64), nullable=True)
     started_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime, nullable=True)
@@ -225,9 +227,12 @@ class MatchRound(db.Model):
         db.Integer, db.ForeignKey('matches.id', ondelete='CASCADE'), nullable=False,
     )
     round_index = db.Column(db.Integer, nullable=False)                  # 0..round_count-1
-    cluster_code = db.Column(db.String(8), nullable=False)               # 'k0'..'k5','sk0'..'sk3'
+    cluster_code = db.Column(db.String(8), nullable=False)               # 'c0'..'c9' (frozen match clusters)
     target_color_id = db.Column(db.Integer, db.ForeignKey('target_colors.id'), nullable=False)
-    outcome = db.Column(db.String(12), nullable=True)                    # NULL|completed|skipped
+    # NULL = assigned, not yet resolved; every round resolves eventually
+    # (completed | skipped | abandoned) — assigned rounds are kept even if the
+    # round was never started and has no mixing_session.
+    outcome = db.Column(db.String(12), nullable=True)
     played_at = db.Column(db.DateTime, nullable=True)
     attempt_uuid = db.Column(db.String(36), nullable=True)
     mixing_session_id = db.Column(db.Integer, db.ForeignKey('mixing_sessions.id'), nullable=True)

@@ -21,7 +21,9 @@ at match creation, so in-flight matches are unaffected by re-clustering.
 from __future__ import annotations
 
 import hashlib
+import json
 import math
+from pathlib import Path
 from typing import Dict, List, Tuple
 
 import numpy as np
@@ -174,3 +176,61 @@ def cluster_labs() -> Dict[str, List[Tuple[float, float, float]]]:
 
 def current_fingerprint() -> str:
     return _bundle()['fingerprint']
+
+
+# ---------------------------------------------------------------------------
+# FROZEN match clusters (protocol: fixed, versioned for the study period)
+# ---------------------------------------------------------------------------
+# Match drawing does NOT use the runtime partition above (that one serves the
+# /stat/riport report and recomputes when the catalog changes). Matches use a
+# frozen, versioned artifact generated once by scripts/freeze_match_clusters.py:
+# 10 k-means clusters over the even-coverage background gamut ONLY — the Xiao
+# skin-zone targets (even_gamut_v2_skin) are excluded from matches by design
+# (their densified cluster would distort the cluster-balanced estimand; skin
+# returns in the spectral-mixing version). Entries are keyed by
+# catalog_order + RGB so the same file works across DBs; RGB mismatches are
+# treated as "not in the frozen set" (silent catalog drift cannot re-cluster).
+
+MATCH_CLUSTERS_VERSION = 'mc-v1'
+_MATCH_CLUSTERS_FILE = Path(__file__).resolve().parents[1] / 'data' / (
+    'match_clusters_%s.json' % MATCH_CLUSTERS_VERSION)
+
+_MATCH_FILE_CACHE: Dict | None = None
+_MATCH_ASSIGN_CACHE: Dict[str, Dict[int, str]] = {}
+
+MATCH_CLUSTER_ORDER = ['c%d' % i for i in range(10)]
+
+
+def _match_file() -> Dict:
+    global _MATCH_FILE_CACHE
+    if _MATCH_FILE_CACHE is None:
+        with open(_MATCH_CLUSTERS_FILE, encoding='utf-8') as f:
+            data = json.load(f)
+        data['_by_order'] = {
+            e['catalog_order']: e for e in data['entries']
+        }
+        _MATCH_FILE_CACHE = data
+    return _MATCH_FILE_CACHE
+
+
+def match_cluster_assignments() -> Dict[int, str]:
+    """target_color_id → 'c0'..'c9' from the FROZEN artifact, for the current
+    catalog rows whose (catalog_order, rgb) match a frozen entry. Cached per
+    catalog fingerprint."""
+    rows = _gamut_rows()
+    fp = catalog_fingerprint(rows)
+    if fp not in _MATCH_ASSIGN_CACHE:
+        by_order = _match_file()['_by_order']
+        out = {}
+        for tc in rows:
+            e = by_order.get(tc.catalog_order)
+            if e is not None and e['rgb'] == [tc.r, tc.g, tc.b]:
+                out[tc.id] = e['cluster']
+        _MATCH_ASSIGN_CACHE.clear()
+        _MATCH_ASSIGN_CACHE[fp] = out
+    return _MATCH_ASSIGN_CACHE[fp]
+
+
+def match_cluster_names() -> Dict[str, str]:
+    """'c0'..'c9' → Hungarian display name (frozen with the assignment)."""
+    return _match_file()['names']
