@@ -474,32 +474,79 @@ def build_report(era: str = GAMUT_ERA_START_UTC) -> Dict[str, Any]:
     from .regions import _srgb_to_lab
     from .gamut_lab import _lab_to_srgb
 
-    # Partition with minimal arbitrariness: a* and b* split at their natural
-    # zero (the neutral axis); L* has no sign, so it is QUARTERED on its 0–100
-    # scale (cuts at 25/50/75). 4×2×2 = 16 regions.
-    _L_BAND_NAMES = ['nagyon sötét', 'sötét', 'világos', 'nagyon világos']
-    MACRO_ORDER = ['%d%s%s' % (i, aa, bb)
-                   for i in range(4) for aa in ('g', 'r') for bb in ('b', 'y')]
+    # Balanced partition of the ACTUAL gamut, mirroring how the target catalog
+    # was generated (even coverage of the reachable gamut, densified skin zone):
+    # k-means over the 332 targets' CIELAB coordinates (K=8, fixed seed →
+    # deterministic). Because the targets spread evenly over the gamut, the
+    # clusters come out compact and similar-sized — no empty / 1-colour sliver
+    # regions like fixed axis cuts produce on a curved gamut blob.
+    _REGION_K = 8
 
-    def _macro_of(L, a, b):
-        return ('%d' % min(3, int(L // 25))
-                + ('g' if a < 0 else 'r')
-                + ('b' if b < 0 else 'y'))
+    def _region_name(L, a, b):
+        light = 'sötét' if L < 35 else ('közepes' if L <= 65 else 'világos')
+        C = math.hypot(a, b)
+        if C < 15:
+            hue = 'szürkés-semleges'
+        else:
+            h = math.degrees(math.atan2(b, a)) % 360
+            if h < 25 or h >= 345:
+                hue = 'piros'
+            elif h < 70:
+                hue = 'narancs–barna'
+            elif h < 105:
+                hue = 'sárga'
+            elif h < 135:
+                hue = 'sárgászöld'
+            elif h < 190:
+                hue = 'zöld'
+            elif h < 230:
+                hue = 'kékeszöld'
+            elif h < 290:
+                hue = 'kék'
+            else:
+                hue = 'lila–bíbor'
+        return '%s %s' % (light, hue)
 
-    def _macro_name(code):
-        return ' · '.join([
-            _L_BAND_NAMES[int(code[0])],
-            'zöldes' if code[1] == 'g' else 'pirosas',
-            'kékes' if code[2] == 'b' else 'sárgás',
-        ])
+    cat_targets = _rows("SELECT id, r, g, b FROM target_colors WHERE color_type='gamut' ORDER BY id")
+    X = np.array([_srgb_to_lab(t['r'], t['g'], t['b']) for t in cat_targets])
+    rng = np.random.default_rng(42)
+    cen = [X[rng.integers(len(X))]]
+    for _ in range(_REGION_K - 1):
+        d2 = np.min([((X - c) ** 2).sum(1) for c in cen], axis=0)
+        cen.append(X[rng.choice(len(X), p=d2 / d2.sum())])
+    C = np.array(cen)
+    assign = np.zeros(len(X), dtype=int)
+    for _ in range(200):
+        na = np.argmin(((X[:, None, :] - C[None, :, :]) ** 2).sum(2), axis=1)
+        nC = np.array([X[na == k].mean(0) if (na == k).any() else C[k]
+                       for k in range(_REGION_K)])
+        if np.array_equal(na, assign) and np.allclose(nC, C):
+            break
+        assign, C = na, nC
+    # stable ids/names: relabel clusters sorted by centroid (L, a, b)
+    order = sorted(range(_REGION_K), key=lambda k: (C[k][0], C[k][1], C[k][2]))
+    relabel = {old: 'k%d' % new for new, old in enumerate(order)}
+    MACRO_ORDER = ['k%d' % i for i in range(_REGION_K)]
 
     region_by_target: Dict[int, str] = {}
     region_labs: Dict[str, List[tuple]] = defaultdict(list)
-    for t in _rows("SELECT id, r, g, b FROM target_colors WHERE color_type='gamut'"):
-        L, a, b = _srgb_to_lab(t['r'], t['g'], t['b'])
-        reg = _macro_of(L, a, b)
+    for t, lab, k in zip(cat_targets, X, assign):
+        reg = relabel[int(k)]
         region_by_target[t['id']] = reg
-        region_labs[reg].append((L, a, b))
+        region_labs[reg].append(tuple(float(v) for v in lab))
+    _macro_names: Dict[str, str] = {}
+    _seen: Dict[str, int] = {}
+    for i in range(_REGION_K):
+        reg = 'k%d' % i
+        Lc, ac, bc = C[order[i]]
+        nm = _region_name(float(Lc), float(ac), float(bc))
+        _seen[nm] = _seen.get(nm, 0) + 1
+        if _seen[nm] > 1:
+            nm = '%s %d.' % (nm, _seen[nm])
+        _macro_names[reg] = nm
+
+    def _macro_name(code):
+        return _macro_names.get(code, code)
     # tag the catalog map points with their region id
     for cp in catalog_points:
         cp['reg'] = region_by_target.get(cp.get('tid'))

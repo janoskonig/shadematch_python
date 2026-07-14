@@ -393,17 +393,18 @@
         <h3>Tanulás a színtér-régiók mentén</h3>
         <p class="intro">
           Egy konkrét színt egy játékos legfeljebb egyszer-kétszer kever ki, ezért az egy színen belüli
-          ismétlésből nem mérhető tanulás. Ehelyett a színteret <strong>tizenhat régióra</strong> osztom,
-          minimális önkénnyel. Az <em>a*</em> és a <em>b*</em> a természetes nullpontjánál válik ketté
-          (<strong>zöldes/pirosas</strong>, illetve <strong>kékes/sárgás</strong>); az <em>L*</em>-nak nincs
-          előjele, ezért a 0–100 skáláját negyedelem (25/50/75-nél vágva: <strong>nagyon sötét / sötét /
-          világos / nagyon világos</strong>). 4×2×2 = 16 régió; minden cél-szín pontosan egybe esik, a teljes
-          színtér lefedve. Egy régión belül a színek szomszédosak, de <em>más receptűek</em>, ezért a régión
-          belüli ismétlődő keverés általánosítható tanulást mér, nem receptmemorizálást. Minden régiót a
-          tagszínei átlagával (centroidjával) színezek.
+          ismétlésből nem mérhető tanulás. Ehelyett a színteret régiókra osztom – ugyanazzal a logikával,
+          amellyel a cél-színek a gamutot egyenletesen lefedik. Rögzített tengelyvágások helyett (amelyek a
+          görbült gamut-testből üres vagy egy-két színes szilánkokat metszenének ki) a 332 cél-színt
+          CIELAB-koordinátáik alapján <strong>k-közép klaszterezéssel nyolc kompakt régióba</strong> sorolom
+          (rögzített kiindulással, determinisztikusan). Mivel a cél-színek egyenletesen terítik a gamutot, a
+          régiók <strong>közel azonos méretűek</strong> (28–83 szín), és pontosan a ténylegesen elérhető
+          színtartományt fedik le. Egy régión belül a színek szomszédosak, de <em>más receptűek</em>, ezért a
+          régión belüli ismétlődő keverés általánosítható tanulást mér, nem receptmemorizálást. Minden régiót
+          a centroidja színez és nevez el.
         </p>
         <div class="panel">
-          <h4>A tizenhat régió (a pontok a régiójuk centroid-színét viselik)</h4>
+          <h4>A nyolc régió (a pontok a régiójuk centroid-színét viselik)</h4>
           <p class="cap">Ugyanaz a 3D CIELAB-térkép, mint a 4.1-ben, de itt minden cél-szín a <strong>régiója</strong>
             átlagszínére festve – így a régiók összefüggő tömbökként látszanak. Húzással forgatható; rámutatva
             a régió neve és a szín neve.</p>
