@@ -1118,6 +1118,10 @@
       if (key.startsWith('daily_champion')) return '🏆';
       if (key === 'daily_fastest_match') return '⚡';
       if (key === 'daily_fewest_steps') return '🪄';
+      if (key === 'match_chain_2') return '🏁';
+      if (key === 'match_chain_3') return '🎩';
+      if (key === 'match_chain_5') return '🔥';
+      if (key === 'match_chain_10') return '🏆';
       if (key.startsWith('daily_mission_complete_match')) return '🏁';
       if (key.startsWith('daily_mission_precision_hit')) return '🎯';
       if (key.startsWith('daily_mission_fast_finish')) return '⚡';
@@ -1140,6 +1144,10 @@
       if (key.startsWith('daily_champion')) return t('Daily Champion') + (meta && meta.date ? ' ' + meta.date : '');
       if (key === 'daily_fastest_match') return t('Fastest Color Match of the Day');
       if (key === 'daily_fewest_steps') return t('Fewest Steps of the Day');
+      if (key === 'match_chain_2') return t('Back-to-Back Matches');
+      if (key === 'match_chain_3') return t('Match Hat-Trick');
+      if (key === 'match_chain_5') return t('Five Matches in One Sitting');
+      if (key === 'match_chain_10') return t('Match Marathon');
       if (key === 'daily_mission_complete_match') return t('Daily Mission: Match Complete');
       if (key === 'daily_mission_precision_hit') return t('Daily Mission: Precision Hit');
       if (key === 'daily_mission_fast_finish') return t('Daily Mission: Fast Finish');

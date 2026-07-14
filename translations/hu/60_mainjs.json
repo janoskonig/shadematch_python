@@ -100,5 +100,7 @@
   "Average ΔE: {n}": "Átlagos ΔE: {n}",
   "skipped": "kihagyva",
   "Could not load your match. Check your connection and try again.": "Nem sikerült betölteni a meccset. Ellenőrizd a kapcsolatot, és próbáld újra!",
-  "{done} of {total} colors completed": "{done}/{total} szín teljesítve"
+  "{done} of {total} colors completed": "{done}/{total} szín teljesítve",
+  "🏁 {n} matches in one sitting — +{xp} XP bonus": "🏁 {n} meccs egyhuzamban — +{xp} XP bónusz",
+  "🏁 Match complete — +{xp} XP": "🏁 Meccs teljesítve — +{xp} XP"
 }

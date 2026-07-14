@@ -82,6 +82,20 @@ HEAT_MAX_BONUS_PCT = 0.50
 # Global coverage % milestones (share of catalog colours completed at least once).
 QUOTA_GLOBAL_MILESTONE_PCTS = [25, 50, 75]
 
+# ── Back-to-back match chain (matches completed in one sitting) ─────────────
+# n consecutive completed matches in one sitting = an n-times replicated
+# randomized block design — statistically the most valuable play pattern, so
+# it earns the most: every completed match grants a bonus that GROWS with the
+# chain position (1st match +BASE, 2nd +2×BASE, ...), capped. A match chains
+# to the previous one when it STARTED within MATCH_CHAIN_GAP_MINUTES of that
+# match's completion. Server-authoritative (persisted timestamps only); the
+# chain never influences what the next match contains (draws stay
+# assignment-history-only).
+MATCH_COMPLETE_XP_BASE = 150
+MATCH_CHAIN_GAP_MINUTES = 15
+MATCH_CHAIN_XP_CAP = 6            # bonus stops growing past this chain length
+MATCH_CHAIN_MILESTONES = [2, 3, 5, 10]
+
 
 # One mission, matching the unit of play: finish a whole 10-round match today.
 # (The old per-colour micro-missions — perfect hit / fast finish / few steps —
@@ -261,6 +275,72 @@ def grant_daily_mission_awards(user_id: str, day: date = None):
                 'date': mission_state['date'],
             })
     return new_awards
+
+
+# ── Back-to-back match chain rewards ────────────────────────────────────────
+
+def _match_chain_length(user_id: str, match) -> int:
+    """How many completed matches this one closes off in ONE SITTING: walk
+    backwards while each match STARTED within MATCH_CHAIN_GAP_MINUTES of the
+    previous one's completion. Persisted timestamps only."""
+    if match.started_at is None:
+        return 1
+    earlier = (
+        Match.query
+        .filter_by(user_id=user_id, status='completed')
+        .filter(Match.id != match.id, Match.completed_at.isnot(None))
+        .order_by(Match.completed_at.desc())
+        .limit(30)
+        .all()
+    )
+    chain = 1
+    gap = timedelta(minutes=MATCH_CHAIN_GAP_MINUTES)
+    prev = match
+    for m in earlier:
+        if m.completed_at > prev.started_at:
+            continue  # overlapping bookkeeping oddity — skip, don't chain
+        if prev.started_at - m.completed_at <= gap:
+            chain += 1
+            prev = m
+        else:
+            break
+    return chain
+
+
+def grant_match_completion_rewards(user_id: str, match) -> tuple:
+    """Called when a match reaches 'completed' (inside the open transaction).
+    Grants the chain-scaled XP bonus (+ lifetime chain-milestone awards) and
+    returns (xp_bonus, chain_length, new_awards). The reward never feeds back
+    into match composition — draws depend on assignment history only."""
+    chain = _match_chain_length(user_id, match)
+    xp_bonus = MATCH_COMPLETE_XP_BASE * min(chain, MATCH_CHAIN_XP_CAP)
+
+    up = UserProgress.query.filter_by(user_id=user_id).first()
+    if up is not None:
+        up.xp += xp_bonus
+        up.updated_at = datetime.utcnow()
+
+    new_awards = []
+    milestone_names = {
+        2: ('Back-to-Back Matches!', '🏁'),
+        3: ('Match Hat-Trick!', '🎩'),
+        5: ('Five Matches in One Sitting!', '🔥'),
+        10: ('Match Marathon!', '🏆'),
+    }
+    for m in MATCH_CHAIN_MILESTONES:
+        if chain >= m:
+            name, icon = milestone_names[m]
+            _, is_new = _grant_award(user_id, f'match_chain_{m}',
+                                     metadata={'chain': m})
+            if is_new:
+                new_awards.append({
+                    'key': f'match_chain_{m}',
+                    'name': _t(name),
+                    'type': 'match_chain',
+                    'award_class': 'reinforcement',
+                    'icon': icon,
+                })
+    return xp_bonus, chain, new_awards
 
 
 def grant_daily_performance_awards(day: date):

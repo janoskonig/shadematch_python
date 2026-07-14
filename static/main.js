@@ -562,12 +562,27 @@ const SEQ_GAP = 420;
 
 function _delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// Back-to-back match chain: toast for the completion bonus. n matches in one
+// sitting = an n-times replicated block design, so the reward scales with n.
+function maybeMatchChainToast(matchState) {
+  if (!matchState || !matchState.match_completed || !matchState.chain) return;
+  const c = matchState.chain;
+  if (c.length > 1) {
+    showToast(t('🏁 {n} matches in one sitting — +{xp} XP bonus')
+      .replace('{n}', String(c.length)).replace('{xp}', String(c.xp_bonus)), 'levelup', 5200);
+  } else if (c.xp_bonus) {
+    showToast(t('🏁 Match complete — +{xp} XP')
+      .replace('{xp}', String(c.xp_bonus)), 'xp', 3600);
+  }
+}
+
 async function handleProgressionResponse(data) {
   if (!data || data.status !== 'success' || data.duplicate) return;
 
   // Match accounting first (synchronous): the save may have advanced the
   // match or completed it (summary shown on the next round transition).
   if (data.match && window.__applyMatchUpdate) window.__applyMatchUpdate(data.match);
+  maybeMatchChainToast(data.match);
 
   // Claim a sequence slot; abort if a newer response arrives mid-sequence.
   const mySeq = ++_seqId;
@@ -1923,6 +1938,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const d = await res.json().catch(() => ({}));
         if (d.status === 'success' && d.match) {
           applyMatchUpdate(d.match);
+          maybeMatchChainToast(d.match);
         }
       } catch { /* the next /api/match/current resyncs */ }
     }

@@ -244,5 +244,9 @@
   "skipped": "kihagyva",
   "mean ΔE {n}": "átlag ΔE {n}",
   "round {i} of {n}": "kör: {i}/{n}",
-  "{done} completed · {skip} skipped": "{done} teljesítve · {skip} kihagyva"
+  "{done} completed · {skip} skipped": "{done} teljesítve · {skip} kihagyva",
+  "Back-to-Back Matches": "Két meccs egyhuzamban",
+  "Match Hat-Trick": "Meccs-mesterhármas",
+  "Five Matches in One Sitting": "Öt meccs egy ültő helyben",
+  "Match Marathon": "Meccsmaraton"
 }

@@ -42,6 +42,7 @@ from .gamification import (
     grant_daily_champion,
     grant_daily_mission_awards,
     grant_daily_performance_awards,
+    grant_match_completion_rewards,
     build_daily_missions,
     get_user_profile,
     STREAK_FREEZE_CAP,
@@ -1810,8 +1811,11 @@ def api_match_skip_round():
             return jsonify({'status': 'error',
                             'message': 'No such active match round'}), 404
         # An unmixed skip of the last round completes the match too — grant
-        # the daily "finish a match" mission here as well (idempotent).
-        new_awards = grant_daily_mission_awards(user_id) if state.get('match_completed') else []
+        # the daily mission and the back-to-back chain rewards here as well.
+        new_awards = []
+        if state.get('match_completed'):
+            new_awards.extend(grant_daily_mission_awards(user_id))
+            _apply_match_completion_rewards(user_id, state, new_awards)
         db.session.commit()
         return jsonify({'status': 'success', 'match': state, 'new_awards': new_awards})
     except Exception as e:
@@ -2728,6 +2732,22 @@ def mixing_attempt_ingest():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+def _apply_match_completion_rewards(user_id, match_state, new_awards):
+    """When this request completed a match: grant the back-to-back chain XP
+    bonus + milestone awards. Mutates match_state (adds 'chain') and
+    new_awards; returns the bonus XP (0 when no match completed)."""
+    if not match_state or not match_state.get('match_completed'):
+        return 0
+    from .models import Match
+    match = db.session.get(Match, match_state['match_id'])
+    if match is None:
+        return 0
+    xp_bonus, chain, awards = grant_match_completion_rewards(user_id, match)
+    match_state['chain'] = {'length': chain, 'xp_bonus': xp_bonus}
+    new_awards.extend(awards)
+    return xp_bonus
+
+
 # ── Save session (completed attempt) ──────────────────────────────────────
 
 @main.route('/save_session', methods=['POST'])
@@ -2798,6 +2818,7 @@ def save_session():
             is_challenge=is_challenge,
         )
         new_awards.extend(grant_daily_mission_awards(user_id))
+        xp_earned += _apply_match_completion_rewards(user_id, match_state, new_awards)
 
         try:
             delta_for_reason = float(data.get('delta_e'))
@@ -2904,6 +2925,7 @@ def save_skip():
             is_challenge=is_challenge,
         )
         new_awards.extend(grant_daily_mission_awards(user_id))
+        xp_earned += _apply_match_completion_rewards(user_id, match_state, new_awards)
 
         _ensure_terminal_telemetry_from_gameplay(data, end_reason='skipped', authenticated_user_id=user_id)
 
