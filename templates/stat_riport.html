@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}ShadeStudy – Gamut-riport{% endblock %}
+{% block title %}ShadeStudy – Gamut-riport{% if old_era %} (régi adatokkal){% endif %}{% endblock %}
 
 {% block extra_head %}
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
@@ -599,6 +599,13 @@
       <!-- 8) SZAKDOLGOZAT TERVE -->
       <section class="sec" id="sHyp">
         <h2><span class="num">8.</span>Szakdolgozat terve – a pigmentfelhasználás hatékonysága</h2>
+        <p class="intro">
+          <strong>A dolgozat címe:</strong> „Speciális eloszlású teljesítménymutatók modellezése és
+          varianciafelbontása: alkalmazás egy digitális tréningrendszer adataira”. A cím elemei a
+          lenti három lépésnek felelnek meg: a <em>speciális eloszlás</em> a sok nullát tartalmazó,
+          nemnegatív teljesítménymutatókra utal (8.1–8.2), a <em>varianciafelbontás</em> a harmadik
+          lépésre (8.3), a <em>digitális tréningrendszer</em> pedig a ShadeStudy.
+        </p>
         <p class="intro">
           A riport eddig <strong>feltáró</strong> volt: leírta, mi történik a játékban. Ez a szakasz
           előre néz: a tervezett szakdolgozat vázát adja. A kiindulópont egy hiányérzet: a ΔE önmagában
