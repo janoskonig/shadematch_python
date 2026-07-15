@@ -92,7 +92,8 @@
       <li><a href="#s5" data-sec="s5">5. Teljesítmény és tanulás</a></li>
       <li><a href="#s6" data-sec="s6">6. Lépésszintű viselkedés</a></li>
       <li><a href="#s7" data-sec="s7">7. Gamifikáció és megtartás</a></li>
-      <li><a href="#s8" data-sec="s8">8. Hivatkozások</a></li>
+      <li><a href="#sHyp" data-sec="sHyp">8. Tervezett hipotézisek</a></li>
+      <li><a href="#s8" data-sec="s8">9. Hivatkozások</a></li>
     </ol>
   </nav>
 
@@ -180,7 +181,7 @@
              vesz észre, illetve fogad el valaki, az szubjektív, és függ a színtartománytól – Paravina és
              mtsai. (2009) például sötét mintáknál szisztematikusan magasabb küszöböket
              mértek, mint világosaknál (CIEDE2000-ben: észlelhetőség 0,7 vs. 1,2; elfogadhatóság 2,1 vs. 3,1;
-             lásd 8.). A pontos képlet a hivatkozott irodalomban (Sharma és mtsai. 2005), a küszöbök
+             lásd 9.). A pontos képlet a hivatkozott irodalomban (Sharma és mtsai. 2005), a küszöbök
              színtér-függését pedig a saját mintán is megnézem (lásd 3.4).</p>
         </div>
 
@@ -584,9 +585,120 @@
         </p>
       </section>
 
-      <!-- 8) HIVATKOZÁSOK -->
+      <!-- 8) TERVEZETT HIPOTÉZISEK -->
+      <section class="sec" id="sHyp">
+        <h2><span class="num">8.</span>Tervezett hipotézisek – a megerősítő fázis váza</h2>
+        <p class="intro">
+          A riport eddig <strong>feltáró</strong> volt: leírta, mi történik a játékban. Ez a szakasz előre
+          néz: azt vázolja ötletszinten, milyen hipotéziseket lehet a fenti adatszerkezetre építeni a
+          tervezett kohorsz-fázisban (30–40 résztvevő, fejenként 6 meccs, azonos protokoll szerint).
+          Itt nincs eredmény és nincs illesztett modell. Minden hipotézis ugyanazt a szerkezetet követi:
+          <strong>(1) tudományos hipotézis</strong>, amely oksági viszonyt feltételez;
+          <strong>(2) predikció</strong> – ellenőrizhető jóslat, amelyen keresztül a hipotézis
+          tesztelhetővé (és cáfolhatóvá) válik; <strong>(3) a predikcióhoz tartozó mérendő
+          változók</strong>; és ezekre épülve <strong>(4) a statisztikai null- és
+          ellenhipotézis-pár</strong> a tervezett teszttel. (Nullhipotézis, H0: „nincs hatás”;
+          ellenhipotézis, H1: a predikcióból következő, előre rögzített irányú eltérés.)
+        </p>
+        <p class="intro">
+          <strong>A kutatási kérdés:</strong> ha a játékosok gyakorlással javulnak, <em>mit</em> tanulnak
+          meg valójában – a keverés stratégiáját, a hatékony útvonalat, vagy csak konkrét színeket?
+          A kérdés nem az, hogy „van-e tanulás”, hanem hogy <em>melyik mechanizmus</em> hordozza.
+          Három tulajdonság teszi ezt itt jól vizsgálhatóvá: (1) a lépésszintű napló – minden cseppről
+          tudjuk, javította vagy rontotta-e a ΔE-t (6. fejezet); (2) a meccs randomizált blokk – a
+          nehézség meccsek között <em>tervezésből</em> azonos eloszlású, nem utólagos korrekcióból (2.6);
+          (3) minden cél-szín receptje ismert, így objektív viszonyítási pont a <em>minimális</em>
+          cseppszám.
+        </p>
+
+        <h3>H‑A: Stratégiai tanulás (hiba → beavatkozás leképezés)</h3>
+        <dl class="gloss">
+          <dt>Tudományos hipotézis</dt>
+          <dd>Az ismételt cselekvés–visszajelzés párok (csepp → látható ΔE-változás) <strong>okozzák</strong>
+            a játékos belső keverési modelljének pontosodását: a gyakorlás hatására egyre inkább az
+            észlelt hibának megfelelő pigmenthez nyúl.</dd>
+          <dt>Predikció</dt>
+          <dd>Ha a hipotézis igaz, a ΔE-t csökkentő lépések aránya (a 6.6-ban definiált „javító arány”)
+            személyen belül meccsről meccsre nő. Élesített jóslat: az <em>első</em> lépés helyessége nő –
+            az első lépésnél még nincs próbálgatásos visszacsatolás, csak a belső modell.</dd>
+          <dt>Mérendő változók</dt>
+          <dd>Függő: a javító arány, illetve az első lépés helyessége (a lépésenkénti ΔE-változásból).
+            Magyarázó: a meccs sorszáma (1–6). Kontroll: a színklaszter; az elemzés személyen belüli
+            (mindenki önmaga kontrollja).</dd>
+          <dt>Statisztikai hipotézisek</dt>
+          <dd><strong>H0:</strong> a javító arány meccs-sorszám szerinti meredeksége nulla.
+            <strong>H1:</strong> a meredekség pozitív (egyoldali). Tervezett teszt: kevert (többszintű)
+            logisztikus regresszió, résztvevőnkénti véletlen hatással.</dd>
+        </dl>
+
+        <h3>H‑B: Hatékonysági tanulás (rövidebb út ugyanoda)</h3>
+        <dl class="gloss">
+          <dt>Tudományos hipotézis</dt>
+          <dd>A gyakorlás a keresési stratégiát hatékonyabbá teszi: azt <strong>okozza</strong>, hogy
+            ugyanahhoz az eredményhez kevesebb felesleges kitérő kell.</dd>
+          <dt>Predikció</dt>
+          <dd>A <strong>többletlépés</strong> – a tényleges cselekvésszám és a recept szerinti minimum
+            különbsége – meccsről meccsre csökken. (A többletlépés a nyers lépésszámnál tisztább mutató,
+            mert a cél-szín nehézségét kivonja magából.)</dd>
+          <dt>Mérendő változók</dt>
+          <dd>Függő: a többletlépés. Magyarázó: a meccs sorszáma. Kontroll: a színklaszter és a kör
+            kimenete (teljesítve / feladva).</dd>
+          <dt>Statisztikai hipotézisek</dt>
+          <dd><strong>H0:</strong> a többletlépés meccs-sorszám szerinti meredeksége nulla.
+            <strong>H1:</strong> a meredekség negatív (egyoldali). Tervezett teszt: kevert lineáris
+            regresszió; a többletlépés ferde eloszlása miatt szükség esetén log-skálán.</dd>
+        </dl>
+
+        <h3>H‑C: Általánosuló tanulás vagy színmemorizálás?</h3>
+        <dl class="gloss">
+          <dt>Tudományos hipotézis</dt>
+          <dd>A javulást a színcsalád szintjén <strong>általánosuló</strong> tanulás okozza, nem konkrét
+            receptek bemagolása. A meccs-szerkezet ezt „ingyen” szétválasztja: a tíz klaszter meccsenként
+            <em>ismétlődik</em>, de a kisorsolt konkrét cél-szín szinte mindig <em>új</em>.</dd>
+          <dt>Predikció</dt>
+          <dd>A H‑A és H‑B szerinti javulás az <strong>először látott</strong> cél-színekre szűkített
+            részmintán is fennáll. Ha csak memorizálás történik, az új színeken nincs javulás.</dd>
+          <dt>Mérendő változók</dt>
+          <dd>Ugyanazok, mint H‑A-nál és H‑B-nél, kiegészítve egy jelölővel: kevert-e már a résztvevő
+            korábban az adott cél-színnel.</dd>
+          <dt>Statisztikai hipotézisek</dt>
+          <dd><strong>H0:</strong> az először látott színek részmintáján a meredekség nulla.
+            <strong>H1:</strong> a meredekség az előrejelzett irányú (H‑A-nál pozitív, H‑B-nél negatív).
+            Tervezett teszt: ugyanazok a kevert modellek, a részmintán.</dd>
+        </dl>
+
+        <h3>H‑D: Rivális magyarázat – felület-tanulás</h3>
+        <dl class="gloss">
+          <dt>Tudományos hipotézis</dt>
+          <dd>Versengő oksági állítás: a javulást nem színtani tanulás okozza, hanem a kezelőfelület
+            megszokása (hol vannak a gombok, hogyan adagol a csúszka).</dd>
+          <dt>Predikció</dt>
+          <dd>A két mechanizmus lenyomata eltér. A felület-tanulás gyors, már az első meccsen belül
+            telítődik, és a <em>motoros</em> mutatókban él (két cselekvés közt eltelt idő), nem a lépések
+            <em>irányhelyességében</em>. Ha tehát a javító arány az első meccs kizárása után, a meccsek
+            <em>között</em> is tovább nő, azt a felület-tanulás nem magyarázza.</dd>
+          <dt>Mérendő változók</dt>
+          <dd>Függő: a két cselekvés közt eltelt idő (motoros mutató) és a javító arány (stratégiai
+            mutató). Magyarázó: a meccs sorszáma, az első meccs kizárásával. Kontroll: mint H‑A-nál.</dd>
+          <dt>Statisztikai hipotézisek</dt>
+          <dd><strong>H0:</strong> az első meccs kizárása után a javító arány meccsek közti meredeksége
+            nulla. <strong>H1:</strong> a meredekség pozitív (egyoldali). Tervezett teszt: mint H‑A-nál,
+            az 1. meccs nélküli adaton.</dd>
+        </dl>
+
+        <p class="intro">
+          <strong>Őszinte korlát, előre kimondva:</strong> a gyakorlási „dózis” nem randomizált – minden
+          résztvevő ugyanabban a sorrendben kapja a hat meccsét –, ezért az időbeli trend elvileg
+          összekeveredhet bármivel, ami idővel együtt változik. Ezt két eszköz kezeli: az elemzés
+          személyen <em>belüli</em> (mindenki önmaga kontrollja), és a H‑D kifejezetten a legkézenfekvőbb
+          rivális magyarázatot teszi próbára. Ami ezek után marad, azt a dolgozat korlátként fogja
+          megnevezni, nem elhallgatni.
+        </p>
+      </section>
+
+      <!-- 9) HIVATKOZÁSOK -->
       <section class="sec" id="s8">
-        <h2><span class="num">8.</span>Hivatkozások</h2>
+        <h2><span class="num">9.</span>Hivatkozások</h2>
         <ol class="refs">
           <li><strong>Mixbox (pigmentkeverés):</strong> Sochorová, Š., &amp; Jamriška, O. (2021).
             <em>Practical Pigment Mixing for Digital Painting.</em> ACM Transactions on Graphics, 40(6)
