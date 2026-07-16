@@ -65,6 +65,8 @@
   th { color: var(--text-secondary); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.03em; }
   td.num, th.num { text-align: right; }
   .table-wrap { overflow-x: auto; }
+  table.cand td { white-space: normal; vertical-align: top; font-size: 0.95rem; line-height: 1.55; }
+  table.cand td.f { white-space: nowrap; }
   .funnel { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
   .funnel .step { display: flex; align-items: center; gap: 10px; }
   .funnel .bar { height: 34px; border-radius: 8px; background: var(--accent-primary); display: flex; align-items: center; padding: 0 10px; color: #fff; font-weight: 700; font-size: 0.9rem; min-width: 60px; }
@@ -680,6 +682,101 @@
           pazarlás a legnagyobb. Így a tréning nemcsak a színpontosságot, hanem az anyaghatékony
           színkeverést is fejleszti – vagyis pontosan azt a két készséget, amelyet a drága, valódi
           pigmentekkel dolgozó gyakorlat megkövetel.
+        </p>
+
+        <h3>8.4 Jelölt-mutatók – a takarékosság lehetséges mérőszámai</h3>
+        <p class="intro">
+          A dolgozat nem egyetlen mutatót véd, hanem több <strong>jelöltet</strong> hasonlít össze,
+          előre rögzített kritériumokkal: megbízhatóság (a mutató ingadozásából mekkora hányad
+          köthető a résztvevőhöz), érvényesség (ad-e új információt a ΔE mellé), modellezhetőség,
+          értelmezhetőség és robusztusság (hogyan viselkedik a szél-esetekben). Így a „miért pont
+          ez a mutató?” kérdésre maga az összehasonlítás a válasz. A jelöltek két családba
+          tartoznak: a <strong>végállapot-alapúak</strong> csak a kikevert végeredményt nézik, az
+          <strong>útvonal-alapúak</strong> a lépésnaplót is – azt, hogy útközben mennyi anyag ment
+          kárba.
+        </p>
+        <dl class="gloss">
+          <dt>d<sub>i</sub></dt>
+          <dd>a felhasználó cseppjeinek száma az <i>i</i>-edik pigmentből (i = 1…5);
+            D = Σ<sub>i</sub> d<sub>i</sub> az összes felhasznált csepp</dd>
+          <dt>m<sub>i</sub></dt>
+          <dd>a célszín <em>minimális</em> (tovább már nem egyszerűsíthető) receptje;
+            M = Σ<sub>i</sub> m<sub>i</sub> a minimális cseppszám</dd>
+          <dt>A</dt>
+          <dd>a lépésnapló szerint összesen <em>hozzáadott</em> csepp;
+            lost = max(A − D, 0) az útközben kivett/eldobott cseppek száma</dd>
+          <dt>ΔE₀, ΔE<sub>vég</sub></dt>
+          <dd>színeltérés az első cseppművelet előtt, illetve a mentéskor/feladáskor</dd>
+        </dl>
+        <div class="table-wrap">
+          <table class="cand">
+            <thead>
+              <tr><th>Jelölt</th><th>Képlet</th><th>Mit fog meg</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>1. W</strong> – eltérés a minimális recepttől<br>(végállapot)</td>
+                <td class="f">W = Σ<sub>i</sub> |d<sub>i</sub> − m<sub>i</sub>|</td>
+                <td>Cseppben mért távolság a minimális recepttől. Az arányhibát és a fölösleges
+                  többszörözést is bünteti; nulla, ha a keverés pontosan a minimális recept.</td>
+              </tr>
+              <tr>
+                <td><strong>2. W<sub>k</sub></strong> – eltérés a legközelebbi többszöröstől<br>(végállapot)</td>
+                <td class="f">W<sub>k</sub> = min<sub>k=1,2,…</sub> Σ<sub>i</sub> |d<sub>i</sub> − k·m<sub>i</sub>|</td>
+                <td>A recept legközelebbi egész számú többszörösétől mért távolság: szétválasztja
+                  az arányhibát a skálahibától (a duplázást enyhébben bünteti, mint a W).</td>
+              </tr>
+              <tr>
+                <td><strong>3a. Arány-távolság</strong> (koszinusz)<br>(végállapot)</td>
+                <td class="f">d<sub>cos</sub> = 1 − Σ<sub>i</sub> d<sub>i</sub>m<sub>i</sub> /
+                  (√(Σ<sub>i</sub> d<sub>i</sub>²) · √(Σ<sub>i</sub> m<sub>i</sub>²))</td>
+                <td>Tisztán az arányhiba, a mennyiségtől függetlenül: a recept bármely többszörösére
+                  nulla. Üres keverésre (D = 0) nem értelmezett.</td>
+              </tr>
+              <tr>
+                <td><strong>3b. Arány-távolság</strong> (Aitchison)<br>(végállapot)</td>
+                <td class="f">d<sub>Ait</sub> = √( Σ<sub>i</sub> ( ln(p<sub>i</sub>/g(p)) − ln(q<sub>i</sub>/g(q)) )² )</td>
+                <td>Összetétel-statisztikai távolság a csepparányok között; p és q a 0,5
+                  pszeudo-cseppel kiegészített arányok (a nulla cseppek miatt), g(·) a mértani
+                  közép. Szintén skálafüggetlen.</td>
+              </tr>
+              <tr>
+                <td><strong>4a. Relatív eltérés</strong><br>(végállapot)</td>
+                <td class="f">W<sub>rel</sub> = W / M</td>
+                <td>A W a receptmérethez viszonyítva: egy 3 cseppes és egy 30 cseppes receptnél
+                  nem ugyanakkora hiba ugyanannyi csepp eltérés.</td>
+              </tr>
+              <tr>
+                <td><strong>4b. Hatásfok</strong><br>(végállapot)</td>
+                <td class="f">eff = M / (M + W)</td>
+                <td>0 és 1 közé eső, „hány százalékos” alakú mutató; a 4a monoton tükörképe
+                  (ugyanazt az információt hordozza, csak korlátos skálán).</td>
+              </tr>
+              <tr>
+                <td><strong>5. W<sub>path</sub></strong> – valódi anyagköltség<br>(útvonal)</td>
+                <td class="f">W<sub>path</sub> = W + lost</td>
+                <td>A virtuális környezetben a csepp kivehető, a valóságban nem: a kivett/eldobott
+                  csepp is elfogyott volna. A W-t ezért az útközbeni veszteséggel egészíti ki.</td>
+              </tr>
+              <tr>
+                <td><strong>6. Többszörözési hányados</strong><br>(útvonal)</td>
+                <td class="f">r = A / M</td>
+                <td>Hányszorosát adagolta a minimális receptnek összesen. Ha nem volt cseppművelet
+                  (A = 0), nem értelmezett.</td>
+              </tr>
+              <tr>
+                <td><strong>7. Cseppenkénti hozam</strong><br>(útvonal)</td>
+                <td class="f">hozam = (ΔE₀ − ΔE<sub>vég</sub>) / A</td>
+                <td>Mekkora színjavulást ért el egy hozzáadott cseppel. Iránya fordított: a nagyobb
+                  a jobb; a többivel szemben nincs pont-tömege az optimumnál.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="intro">
+          Egy kritérium szándékosan hiányzik a listáról: az, hogy „melyik mutatja legszebben a
+          tanulást”. Az a kívánt eredmény alapján választana mutatót – a tanulási kérdést ezért
+          csak a kritériumok szerint kiválasztott győztes mutatón tesszük majd fel.
         </p>
       </section>
 
