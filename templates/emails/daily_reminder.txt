@@ -2,16 +2,21 @@
 {% if subhead %}
 {{ subhead }}
 {% endif %}
+{% if subhead2 %}
+{{ subhead2 }}
+{% endif %}
 {% if stats %}
 {{ tr('Your stats:') }}
 {% for stat in stats %}  - {{ stat.label }}: {{ stat.value }}
 {% endfor %}{% endif %}
-{{ tr("Open today's challenge:") }}
+{{ cta_label|default(tr("Open today's challenge:")) }}
 {{ cta_url }}
 
 {% if tip %}{{ tr('Tip:') }} {{ tip }}
 
-{% endif %}{{ tr('Streaks are kind — even a quick 30-second mix keeps your run alive.') }}
+{% endif %}{% set footer_line = footer_note if footer_note is defined
+   else tr('Streaks are kind — even a quick 30-second mix keeps your run alive.') %}{% if footer_line %}{{ footer_line }}
+{% endif %}
 
 {{ tr('— The {brand} team', brand=brand_name) }}
 

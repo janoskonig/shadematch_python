@@ -2966,6 +2966,7 @@ def get_user_progress_route():
             'status': 'success',
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
+            **build_challenge_echo(user_id),
             **build_next_action(user_id),
         })
     except Exception as e:
@@ -3676,6 +3677,57 @@ def challenge_played():
         return jsonify({'status': 'success', 'challenges': challenges})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+# ── Challenge echo ─────────────────────────────────────────────────────────
+
+CHALLENGE_ECHO_WINDOW_DAYS = 7
+
+
+def build_challenge_echo(user_id):
+    """Recent acceptances on the challenges this user created.
+
+    The challenge history on /results is pull-only, so a creator whose link was
+    played never finds out unless they go looking. This rides on
+    /api/user-progress to feed the banner that tells them.
+
+    Scoped to a rolling window rather than a per-user seen-marker so it needs no
+    schema change; the client suppresses banners it has already acknowledged.
+    Returns {} when there is nothing to say.
+    """
+    codes = [c for (c,) in db.session.query(ChallengeLink.code)
+             .filter_by(creator_user_id=user_id)]
+    if not codes:
+        return {}
+
+    since = datetime.utcnow() - timedelta(days=CHALLENGE_ECHO_WINDOW_DAYS)
+    rows = (ChallengeAttempt.query
+            .filter(ChallengeAttempt.challenge_code.in_(codes),
+                    ChallengeAttempt.created_at >= since)
+            .all())
+    if not rows:
+        return {}
+
+    stamps = [r.created_at for r in rows if r.created_at]
+    echo = {
+        'count': len(rows),
+        'latest_at': max(stamps).isoformat() if stamps else None,
+    }
+
+    beats = [r for r in rows if r.won]
+    if beats:
+        best = min(beats, key=lambda r: _challenge_score_key(
+            r.delta_e, r.drops, r.time_sec))
+        nicks = _batch_nicknames(r.acceptor_user_id for r in beats)
+        echo['best_beat'] = {
+            'user': (nicks.get(best.acceptor_user_id) if best.acceptor_user_id
+                     else t('Guest')),
+            # 'user' is already localized for the request; is_guest lets a caller
+            # outside a request context (send_challenge_echo.py) word it itself.
+            'is_guest': bool(best.is_guest),
+            'delta_e': best.delta_e,
+        }
+    return {'challenge_echo': echo}
 
 
 @main.route('/api/daily-challenge/today', methods=['GET'])

@@ -102,5 +102,11 @@
   "Could not load your match. Check your connection and try again.": "Nem sikerült betölteni a meccset. Ellenőrizd a kapcsolatot, és próbáld újra!",
   "{done} of {total} colors completed": "{done}/{total} szín teljesítve",
   "🏁 {n} matches in one sitting — +{xp} XP bonus": "🏁 {n} meccs egyhuzamban — +{xp} XP bónusz",
-  "🏁 Match complete — +{xp} XP": "🏁 Meccs teljesítve — +{xp} XP"
+  "🏁 Match complete — +{xp} XP": "🏁 Meccs teljesítve — +{xp} XP",
+  "{name} beat your challenge — ΔE {de}": "{name} megverte a kihívásod — ΔE {de}",
+  "{n} played it this week.": "{n}-an játszották a héten.",
+  "Someone played your challenge": "Valaki lejátszotta a kihívásod",
+  "{n} people played your challenge": "{n}-an lejátszották a kihívásod",
+  "Nobody has beaten you yet.": "Még senki nem vert meg.",
+  "See it": "Megnézem"
 }

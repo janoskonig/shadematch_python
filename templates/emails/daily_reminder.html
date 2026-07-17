@@ -1,7 +1,11 @@
 {% extends 'emails/_base.html' %}
 
 {% block preheader %}{{ preheader|default(tr('{headline} — open the daily challenge.', headline=headline)) }}{% endblock %}
-{% block header_eyebrow %}{{ tr('Daily challenge') }}{% endblock %}
+{# Repurposed by the win-back and challenge-echo campaigns, which are not the
+   daily nudge: `header_badge` and `footer_note` let a caller replace the two
+   daily-specific bits. Omit them and this renders exactly as it always has;
+   pass footer_note='' to drop the footer entirely. #}
+{% block header_eyebrow %}{{ header_badge|default(tr('Daily challenge')) }}{% endblock %}
 
 {% block body %}
   <p style="margin:0 0 8px; font-size:12px; font-weight:800; letter-spacing:1.6px; color:#4A90D9; text-transform:uppercase;">
@@ -12,6 +16,9 @@
   </h1>
   {% if subhead %}
     <p style="margin:0 0 22px; font-size:16px; line-height:1.6; color:#3A3A3A;">{{ subhead }}</p>
+  {% endif %}
+  {% if subhead2 %}
+    <p style="margin:-8px 0 22px; font-size:15px; line-height:1.6; color:#6B6B6B;">{{ subhead2 }}</p>
   {% endif %}
 
   {% if swatch_hex %}
@@ -76,8 +83,12 @@
     </table>
   {% endif %}
 
-  <hr style="border:none; border-top:1px solid #EFEAE2; margin:28px 0 18px;">
-  <p style="margin:0; font-size:13px; color:#6B6B6B;">
-    {{ tr('Streaks are kind: a single attempt counts. Even a quick 30-second mix keeps your run alive.') }}
-  </p>
+  {% set footer_line = footer_note if footer_note is defined
+     else tr('Streaks are kind: a single attempt counts. Even a quick 30-second mix keeps your run alive.') %}
+  {% if footer_line %}
+    <hr style="border:none; border-top:1px solid #EFEAE2; margin:28px 0 18px;">
+    <p style="margin:0; font-size:13px; color:#6B6B6B;">
+      {{ footer_line }}
+    </p>
+  {% endif %}
 {% endblock %}

@@ -513,6 +513,8 @@ async function loadAndRenderProgress() {
       if (data.next_action) renderNextAction(data.next_action);
       if (data.daily_status) renderDailyStatusBadge(data.daily_status);
       if (data.daily_missions) renderDailyMissions(data.daily_missions);
+      // Unconditional: absent echo must clear a banner left from a prior load.
+      renderChallengeEcho(data.challenge_echo);
     }
   } catch { /* silent */ }
 }
@@ -700,8 +702,8 @@ function setDailyChip(on) {
 
 // ── Unified CTA slot ──────────────────────────────────────────────────────
 // One in-page surface for every transient message that used to have its own
-// banner (post-match share, challenge invite, streak-at-risk, verify-email,
-// enable-reminders, install-app, daily-missions). Sources call
+// banner (post-match share, challenge invite, challenge-echo, streak-at-risk,
+// verify-email, enable-reminders, install-app, daily-missions). Sources call
 // setCta(key, descriptor|null); the slot renders only the highest-priority
 // eligible message, so at most one shows at a time in one consistent style.
 // Exposed on window so the inline template script (push/email prompts) and
@@ -709,7 +711,7 @@ function setDailyChip(on) {
 //   descriptor: { icon, labelHtml, reasonHtml?, onDismiss?, variant?,
 //                  actions?: [{ label, onClick, variant? }],
 //                  actionLabel?, onAction? (single-action shorthand) }
-const CTA_PRIORITY = ['share', 'challenge', 'streak', 'emailVerify', 'push', 'pwa', 'missions'];
+const CTA_PRIORITY = ['share', 'challenge', 'challengeEcho', 'streak', 'emailVerify', 'push', 'pwa', 'missions'];
 const _ctaState = {};
 
 function setCta(key, descriptor) {
@@ -842,6 +844,62 @@ function renderDailyMissions(dm) {
     labelHtml: t('Daily missions {done}/{total}').replace('{done}', String(completed)).replace('{total}', String(total)),
     reasonHtml: chips,
     variant: 'missions',
+  });
+}
+
+// ── Challenge echo ────────────────────────────────────────────────────────
+// Challenge history lives on /results and is pull-only, so a creator whose link
+// was played never learns it happened. The server sends a rolling 7-day window
+// (build_challenge_echo); the seen-marker keeps an acknowledged echo from
+// reappearing until a newer acceptance lands.
+const CHALLENGE_ECHO_SEEN_KEY = 'sm_challenge_echo_seen';
+
+function renderChallengeEcho(echo) {
+  if (!echo || !echo.count) { setCta('challengeEcho', null); return; }
+
+  let seen = '';
+  try { seen = localStorage.getItem(CHALLENGE_ECHO_SEEN_KEY) || ''; } catch { /* blocked storage */ }
+  // Both stamps are naive-UTC isoformat from the same source, so a lexicographic
+  // compare is chronological.
+  if (echo.latest_at && seen && seen >= echo.latest_at) {
+    setCta('challengeEcho', null);
+    return;
+  }
+
+  const ack = () => {
+    try {
+      if (echo.latest_at) localStorage.setItem(CHALLENGE_ECHO_SEEN_KEY, echo.latest_at);
+    } catch { /* blocked storage */ }
+    setCta('challengeEcho', null);
+  };
+
+  const beat = echo.best_beat;
+  let labelHtml;
+  let reasonHtml = null;
+  if (beat) {
+    labelHtml = t('{name} beat your challenge — ΔE {de}')
+      .replace('{name}', escapeHtml(String(beat.user)))
+      .replace('{de}', Number(beat.delta_e).toFixed(2));
+    if (echo.count > 1) {
+      reasonHtml = t('{n} played it this week.').replace('{n}', String(echo.count));
+    }
+  } else {
+    labelHtml = echo.count === 1
+      ? t('Someone played your challenge')
+      : t('{n} people played your challenge').replace('{n}', String(echo.count));
+    reasonHtml = t('Nobody has beaten you yet.');
+  }
+
+  setCta('challengeEcho', {
+    icon: beat ? '⚔️' : '👀',
+    labelHtml,
+    reasonHtml,
+    variant: 'challenge',
+    actions: [{
+      label: t('See it'),
+      onClick: () => { ack(); window.location.href = '/results#challenges-section'; },
+    }],
+    onDismiss: ack,
   });
 }
 
