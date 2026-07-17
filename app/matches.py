@@ -51,6 +51,16 @@ from .gamification import target_color_sum_drop
 ROUNDS_PER_MATCH = 10
 ABANDON_AFTER_DAYS = 3
 
+# Outcomes that count as "made it": a perfect finish, or a skip the player
+# judged identical/acceptable. Big-difference skips and legacy stops do not.
+# Lives here (not routes.py) so match_summary can flag challengeable rounds
+# without a circular import; routes.py imports it from here.
+COMPLETED_MATCH_CATEGORIES = (
+    'perfect',
+    'no_perceivable_difference',
+    'acceptable_difference',
+)
+
 
 def _drawable_targets():
     """Frozen-cluster members present in the catalog with a full recipe."""
@@ -310,6 +320,9 @@ def match_summary(match: Match) -> dict:
             skipped += 1
         if de is not None:
             delta_es.append(de)
+        drops = (sum(int(v or 0) for v in (
+            s.drop_white, s.drop_black, s.drop_red, s.drop_yellow, s.drop_blue,
+        )) if s is not None else None)
         out.append({
             'round_index': r.round_index,
             'cluster_code': r.cluster_code,
@@ -319,6 +332,14 @@ def match_summary(match: Match) -> dict:
             'outcome': r.outcome,
             'delta_e': de,
             'match_category': s.match_category if s is not None else None,
+            # For the summary's "challenge a friend" button: which round can be
+            # minted into a challenge, and what it would carry. Mirrors the
+            # /api/challenge/create gate so the client never offers a dead link.
+            'attempt_uuid': s.attempt_uuid if s is not None else None,
+            'drops': drops,
+            'time_sec': (float(s.time_sec) if s is not None and s.time_sec is not None else None),
+            'challengeable': (s is not None and s.attempt_uuid is not None
+                              and s.match_category in COMPLETED_MATCH_CATEGORIES),
         })
     return {
         'match_id': match.id,

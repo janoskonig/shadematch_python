@@ -1331,16 +1331,40 @@ document.addEventListener('DOMContentLoaded', async () => {
       const meanDe = summary && Number.isFinite(summary.mean_delta_e)
         ? `<div style="margin-top:8px;font-size:.9rem;">${t('Average ΔE: {n}').replace('{n}', summary.mean_delta_e.toFixed(2))}</div>`
         : '';
+      // The ask, at the proudest moment there is: a finished match. Offer to
+      // mint a challenge from the best completed round (same ordering the
+      // challenge itself is scored by: accuracy, then drops, then time).
+      const challengeable = (summary && Array.isArray(summary.rounds) ? summary.rounds : [])
+        .filter((r) => r.challengeable && r.attempt_uuid);
+      const best = challengeable.slice().sort((a, b) =>
+        challengeBeats(a, b) ? -1 : (challengeBeats(b, a) ? 1 : 0))[0] || null;
+      const challengeBtnHtml = best
+        ? `<button type="button" id="matchSummaryChallengeBtn" class="skip-choice">⚔️ ${t('Challenge a friend with your best colour')}</button>`
+        : '';
       overlay.innerHTML = `
         <div class="skip-modal-panel" style="max-width:420px;max-height:85vh;overflow:auto;">
           <h2 class="skip-modal-title">🏁 ${t('Match complete!')}</h2>
           <div>${rowsHtml}</div>
           ${meanDe}
           <div class="skip-choices" style="margin-top:12px;">
+            ${challengeBtnHtml}
             <button type="button" id="matchSummaryNewBtn" class="skip-choice skip-choice--accept">${t('New match')}</button>
           </div>
         </div>`;
       document.body.appendChild(overlay);
+      const chBtn = overlay.querySelector('#matchSummaryChallengeBtn');
+      if (chBtn && best) {
+        chBtn.addEventListener('click', async () => {
+          chBtn.disabled = true;
+          const ok = await window.shadeMatchCreateChallenge(best.attempt_uuid, {
+            text: t('⚔️ I finished a ShadeMatch match — beat my best colour:'),
+          });
+          chBtn.disabled = false;
+          // The modal stays up: sharing happens in the sheet, and the player
+          // still decides whether to start the next match.
+          if (!ok) return;
+        });
+      }
       const btn = overlay.querySelector('#matchSummaryNewBtn');
       btn.addEventListener('click', () => { overlay.remove(); resolve(); });
     });

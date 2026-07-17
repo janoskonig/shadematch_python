@@ -116,12 +116,9 @@ RESEARCH_CONSENT_TEXT = RESEARCH_CONSENT_INTRO + "\n\n" + "\n".join(
 # A session "counts as completed" when the user either reached a perfect match
 # OR explicitly skipped while rating the result as visually identical or as an
 # acceptable small difference. Skips marked as a big/unacceptable difference and
-# legacy "stopped" rows do NOT qualify.
-COMPLETED_MATCH_CATEGORIES = (
-    'perfect',
-    'no_perceivable_difference',
-    'acceptable_difference',
-)
+# legacy "stopped" rows do NOT qualify. Defined in matches.py (match_summary
+# flags challengeable rounds with it); re-exported here for the query sites.
+COMPLETED_MATCH_CATEGORIES = match_service.COMPLETED_MATCH_CATEGORIES
 
 
 def derive_match_category(delta_e, skipped, skip_perception=None):
