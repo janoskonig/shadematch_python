@@ -4786,6 +4786,31 @@ def stat_gamut_steps():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+# --- gamut coverage: the sampling frame behind the report's Limitációk ----- #
+# Static, DB-free: the five pigments' mixbox gamut vs the full sRGB space, as
+# CIELAB surfaces + coverage stats. Precomputed by
+# `scripts/gamut_coverage_figure.py --emit-json`; nothing here depends on the
+# database, so it deliberately sits outside the /api/stat/ Postgres guard.
+_gamut_coverage_cache = None
+
+
+@main.route('/api/gamut-coverage', methods=['GET'])
+def gamut_coverage():
+    """Served as raw text, not jsonify(): the file is already minified, and
+    re-serializing it through Flask's pretty printer inflates 362 KB to 874 KB."""
+    global _gamut_coverage_cache
+    try:
+        if _gamut_coverage_cache is None:
+            path = os.path.join(os.path.dirname(__file__), 'data', 'gamut_coverage.json')
+            with open(path, encoding='utf-8') as fh:
+                _gamut_coverage_cache = fh.read()
+        return Response(_gamut_coverage_cache, mimetype='application/json')
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @main.route('/stat/riport-visits')
 def stat_riport_visits_page():
     return render_template('stat_riport_visits.html')

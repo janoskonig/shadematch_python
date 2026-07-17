@@ -95,7 +95,8 @@
       <li><a href="#s6" data-sec="s6">6. Lépésszintű viselkedés</a></li>
       <li><a href="#s7" data-sec="s7">7. Gamifikáció és megtartás</a></li>
       <li><a href="#sHyp" data-sec="sHyp">8. Szakdolgozat terve</a></li>
-      <li><a href="#s8" data-sec="s8">9. Hivatkozások</a></li>
+      <li><a href="#sLim" data-sec="sLim">9. Limitációk</a></li>
+      <li><a href="#s8" data-sec="s8">10. Hivatkozások</a></li>
     </ol>
   </nav>
 
@@ -351,8 +352,9 @@
         <div class="tech">
           <h4>4.1 A gamut-katalógus felépítése</h4>
           <p>A cél-színek nem véletlenszerűek: az <strong>öt pigmenttel elérhető színtartomány (gamut)
-             egyenletes lefedésére</strong> terveztem őket, hogy a színtér minden része arányosan
-             képviselve legyen.</p>
+             egyenletes lefedésére</strong> terveztem őket, hogy ennek a tartománynak minden része
+             arányosan képviselve legyen. Maga a gamut viszont szűkebb, mint a teljes színtér – lásd a
+             9. Limitációkat.</p>
           <p class="def" id="catalogClasses"></p>
         </div>
         <div class="panel">
@@ -780,9 +782,84 @@
         </p>
       </section>
 
-      <!-- 9) HIVATKOZÁSOK -->
+      <!-- 9) LIMITÁCIÓK -->
+      <section class="sec" id="sLim">
+        <h2><span class="num">9.</span>Limitációk</h2>
+        <p class="intro">
+          Négy korlát, amit az eredmények olvasásakor végig érdemes fejben tartani. Az első a feladat
+          természetéből jön, a másik három a mérésből és a mintából; ez utóbbiak elemzése a maga helyén
+          van (3.4–3.6), itt azt mondom ki, mit jelentenek a következtetésekre.
+        </p>
+
+        <h3>9.1 Nem minden szín keverhető ki</h3>
+        <p class="intro">
+          Az öt pigmenttel nem lehet minden színt kikeverni. A keveréssel bejárható tartomány – a
+          <strong>gamut</strong> – a teljes sRGB színtérnek a <strong>61%-a</strong>. Ami kimarad: a nagy
+          telítettségű zöld, a magenta és a cián. Ezekre nincs pigment: a zöld sárga+kékből, a lila
+          piros+kékből áll elő, és ezek az utak tompább színt adnak, mint a kijelző sarkai.
+        </p>
+        <p class="intro">
+          Ez keret, nem hiba. A cél-színek ebből a tartományból valók, egyenletesen lefedve (4.1). Az
+          eredmények tehát a <strong>kikeverhető színekre</strong> érvényesek – a kereten kívülre nem
+          általánosítok.
+        </p>
+        <p class="intro">
+          A hatókör nem is tágítható. A tervezett hatékonysági mutató (8.1) a cél-szín <em>legkisebb
+          receptjéhez</em> viszonyít, a legkisebb recept pedig a palettából következik: más palettával más
+          receptek lennének a legkisebbek, és a mutató mást mérne. Nincs olyan paletta, amellyel a
+          következtetés „az egész színtérre” szólna – a paletta a mutató definíciójának a része.
+        </p>
+        <p class="intro">
+          Több pigment sem oldaná meg. A nyereség a neon sarkokban van, nem ott, ahol a feladat: a
+          közel-semleges színeket – amelyek a szürke tengely körül vannak, és ide esnek a bőrszínek is – az
+          öt pigment már most 93%-ban lefedi. Öt valódi festéktubussal sem lehet kikeverni az sRGB-t: a
+          korlát a feladat sajátja, nem a szimulációé.
+        </p>
+        <div class="panel">
+          <h4>A teljes sRGB színtér és a bejárható gamut (CIELAB tér: a*, b*, L*)</h4>
+          <p class="cap">A színes test a keveréssel bejárható gamut, a saját valódi színeire festve; a
+            szürke test az, ami az sRGB-ből kimarad. A kettő együtt adja ki a teljes színteret.
+            <strong>Húzással forgatható</strong>, a jelmagyarázatból ki-be kapcsolható. A szürke a zöld és a
+            magenta irányban ül – a piros és a sárga sarkot a pigmentek elérik.</p>
+          <div class="chart" id="chGamutHull" style="min-height:520px;"></div>
+        </div>
+        <div class="panel table-wrap">
+          <h4>Mit hozna egy 6. vagy 7. pigment?</h4>
+          <p class="cap">Minden sor egy paletta: mennyit fed le az sRGB-ből, és mennyit a közel-semleges
+            magból (a szürkéhez közeli színek, kroma ≤ 10). A 100% szubtraktív keveréssel elvileg sem
+            érhető el.</p>
+          <table id="palTable"></table>
+        </div>
+
+        <h3>9.2 Ugyanaz a ΔE nem ugyanazt jelenti mindenhol</h3>
+        <p class="intro">
+          A ΔE₀₀ egyetlen szám, de az észlelhetőségi és az elfogadhatósági küszöb mozog a színtérben: az
+          irodalomban sötét mintákon magasabb, mint világosokon (Paravina és mtsai. 2009), és a 3.4-ben a
+          saját adaton is megnézem ezt a mozgást az L*, a* és b* tengely mentén. Ugyanakkora ΔE tehát a
+          színtér két pontján nem feltétlenül ugyanakkora észlelt hibát jelent. Ahol a riport ΔE-t átlagol
+          vagy színek között hasonlít össze, ott erre nem korrigálok.
+        </p>
+
+        <h3>9.3 A kijelzők kalibrálatlanok</h3>
+        <p class="intro">
+          Mindenki a saját eszközén játszik, ellenőrizetlen fényviszonyok között. A ΔE-t a kódolt
+          színértékekből számolom, tehát egy eszközön belül konzisztens – de ugyanaz a kódolt szín más
+          kijelzőn másképp jelenik meg (sRGB vagy P3 tartomány, fényerő, környezeti fény) (3.5). Ez a
+          szubjektív ítéleteket (azonos / elfogadható) és az érzékelt nehézséget érinti, a mért ΔE-t nem.
+        </p>
+
+        <h3>9.4 A minta önkéntes és egyenetlen</h3>
+        <p class="intro">
+          Nincs mintavételi keret: az kerül be, aki eljut a játékig és marad is (3.6). A keverések ráadásul
+          nem egyenletesen oszlanak el a résztvevők között (Lorenz-görbe, 3.6), így a keverés-szintű átlagok
+          az aktívabb játékosok felé súlyozódnak. A nem, az ország és a napszak szerinti megoszlás sem a
+          populációé. Az eredmények erre a mintára vonatkoznak.
+        </p>
+      </section>
+
+      <!-- 10) HIVATKOZÁSOK -->
       <section class="sec" id="s8">
-        <h2><span class="num">9.</span>Hivatkozások</h2>
+        <h2><span class="num">10.</span>Hivatkozások</h2>
         <ol class="refs">
           <li><strong>Mixbox (pigmentkeverés):</strong> Sochorová, Š., &amp; Jamriška, O. (2021).
             <em>Practical Pigment Mixing for Digital Painting.</em> ACM Transactions on Graphics, 40(6)
@@ -1702,6 +1779,55 @@
     window.addEventListener('scroll', onScroll, { passive: true });
     onScroll();
   }
+
+  // 9. Limitációk — the sampling frame: what the five pigments can and cannot mix.
+  // Static, DB-free payload (app/data/gamut_coverage.json); fetched on its own so a
+  // failure here cannot take the report down, and vice versa.
+  function renderGamut(g) {
+    var m = g.mesh_mix5, x = g.mesh_miss;
+    if (!m || !x) return;
+    Plotly.react(document.getElementById('chGamutHull'), [
+      {
+        type: 'mesh3d', name: 'kikeverhető (az 5 pigmenttel)', showlegend: true,
+        x: m.a, y: m.b, z: m.L, i: m.i, j: m.j, k: m.k,
+        vertexcolor: m.c, flatshading: true, hoverinfo: 'skip',
+        lighting: { ambient: 0.72, diffuse: 0.55, specular: 0.06 }
+      },
+      {
+        type: 'mesh3d', name: 'nem keverhető ki', showlegend: true,
+        x: x.a, y: x.b, z: x.L, i: x.i, j: x.j, k: x.k,
+        color: '#9b9b9b', opacity: 0.45, flatshading: true, hoverinfo: 'skip',
+        lighting: { ambient: 0.85, diffuse: 0.4, specular: 0.03 }
+      }
+    ], {
+      margin: { l: 0, r: 0, t: 0, b: 0 },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      font: { family: T.font, color: T.sub, size: 11 },
+      showlegend: true, legend: { orientation: 'h', y: 1.02, font: { size: 10 } },
+      scene: {
+        xaxis: { title: 'a* (zöld→piros)', gridcolor: T.border, zerolinecolor: '#bbb', backgroundcolor: 'rgba(0,0,0,0)' },
+        yaxis: { title: 'b* (kék→sárga)', gridcolor: T.border, zerolinecolor: '#bbb', backgroundcolor: 'rgba(0,0,0,0)' },
+        zaxis: { title: 'L* (világosság)', gridcolor: T.border, zerolinecolor: '#bbb', backgroundcolor: 'rgba(0,0,0,0)', range: [0, 100] },
+        camera: { eye: { x: 1.5, y: 1.5, z: 0.9 } },
+        aspectmode: 'cube'
+      }
+    }, CFG);
+
+    var ph = '<thead><tr><th>Paletta</th><th class="num">Pigment</th>' +
+      '<th class="num">sRGB-lefedettség</th><th class="num">Közel-semleges mag</th></tr></thead><tbody>';
+    (g.palettes || []).forEach(function (r) {
+      var now = (r.n === 5 && /jelenlegi/.test(r.label || ''));
+      ph += '<tr' + (now ? ' style="font-weight:700"' : '') + '><td>' + esc(r.label) + '</td>' +
+        '<td class="num">' + fmt(r.n) + '</td><td class="num">' + fmt(r.pct, 1) + '%</td>' +
+        '<td class="num">' + fmt(r.core10_pct, 1) + '%</td></tr>';
+    });
+    document.getElementById('palTable').innerHTML = ph + '</tbody>';
+  }
+
+  fetch('/api/gamut-coverage')
+    .then(function (r) { return r.json(); })
+    .then(function (g) { if (g && !g.status) renderGamut(g); })
+    .catch(function (err) { if (window.console) console.error(err); });
 
   Promise.all([
     fetch('/api/stat/gamut-report').then(function (r) { return r.json(); }),
