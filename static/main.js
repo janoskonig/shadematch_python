@@ -448,6 +448,7 @@ function displayUserId() {
 document.addEventListener('DOMContentLoaded', function () {
   displayUserId();
   loadAndRenderProgress();
+  processPendingChallengeClaim();
 
   const justRegistered = localStorage.getItem('justRegistered');
   if (justRegistered === 'true') {
@@ -461,6 +462,7 @@ document.addEventListener('DOMContentLoaded', function () {
       window.currentUserId = currentUserId;
       displayUserId();
       loadAndRenderProgress();
+      processPendingChallengeClaim();
       clearInterval(checkUserIdInterval);
     }
   }, 1000);
@@ -901,6 +903,51 @@ function renderChallengeEcho(echo) {
     }],
     onDismiss: ack,
   });
+}
+
+// ── Guest challenge claim ─────────────────────────────────────────────────
+// A guest's /c/<code> attempt is recorded under a client-generated
+// attempt_uuid that only this browser knows. Remember it, and once the same
+// browser is logged in, attach the attempt to that account so it shows up in
+// their challenge history (and the creator sees a name instead of "Guest").
+const GUEST_CLAIM_KEY = 'sm_guest_challenge_claim';
+const GUEST_CLAIM_TTL_MS = 7 * 24 * 3600 * 1000;
+
+function rememberGuestChallengeClaim(attemptUuid, code) {
+  try {
+    localStorage.setItem(GUEST_CLAIM_KEY, JSON.stringify({
+      attempt_uuid: attemptUuid, code: code, ts: Date.now(),
+    }));
+  } catch { /* blocked storage */ }
+}
+
+async function processPendingChallengeClaim() {
+  const uid = getAuthenticatedUserId();
+  if (!uid) return;
+  let claim = null;
+  try { claim = JSON.parse(localStorage.getItem(GUEST_CLAIM_KEY) || 'null'); } catch { /* corrupt */ }
+  if (!claim || !claim.attempt_uuid || (Date.now() - (claim.ts || 0)) > GUEST_CLAIM_TTL_MS) {
+    if (claim !== null) { try { localStorage.removeItem(GUEST_CLAIM_KEY); } catch { /* ignore */ } }
+    return;
+  }
+  try {
+    const res = await fetch('/api/challenge/claim-attempt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ attempt_uuid: claim.attempt_uuid, user_id: uid }),
+    });
+    // Any definitive answer settles the claim; only a server/network failure
+    // leaves the marker for the next load.
+    if (res.status < 500) {
+      try { localStorage.removeItem(GUEST_CLAIM_KEY); } catch { /* ignore */ }
+    }
+    if (res.ok) {
+      const d = await res.json();
+      if (d && d.claimed) {
+        showToast(t('✅ Your challenge result now lives in your account'), 'success', 3500);
+      }
+    }
+  } catch { /* offline — retry on the next load */ }
 }
 
 // ── Badge helper ──────────────────────────────────────────────────────────
@@ -1666,6 +1713,26 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
   }
 
+  function recordGuestChallengeAcceptance(cmp) {
+    // Best-effort: the creator's echo and the guest's later claim-on-register
+    // both hang off this row; the local comparison shows regardless.
+    const attemptUuid = generateUUID();
+    fetch('/api/challenge/accept-guest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        challenge_code: cmp.code,
+        attempt_uuid: attemptUuid,
+        delta_e: cmp.your_delta_e,
+        drops: cmp.your_drops,
+        time_sec: cmp.your_time_sec,
+      }),
+    }).then((res) => {
+      // Only a recorded attempt is claimable after registration.
+      if (res.ok) rememberGuestChallengeClaim(attemptUuid, cmp.code);
+    }).catch(() => {});
+  }
+
   async function startGuestRound() {
     const tc = pickGuestTarget();
     if (!tc) return;
@@ -1762,21 +1829,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             setControlState('completed');
             if (challengeMode) {
               const cmp = buildGuestChallengeComparison(data.delta_e);
-              // Record the guest acceptance so the challenge creator can see it
-              // (anonymous — guests have no account). Best-effort; the local
-              // comparison shows regardless. Registering (via the modal's
-              // rematch button) is what unlocks personal challenge history.
-              fetch('/api/challenge/accept-guest', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  challenge_code: cmp.code,
-                  attempt_uuid: generateUUID(),
-                  delta_e: cmp.your_delta_e,
-                  drops: cmp.your_drops,
-                  time_sec: cmp.your_time_sec,
-                }),
-              }).catch(() => {});
+              recordGuestChallengeAcceptance(cmp);
               showChallengeComparison(cmp, { delayMs: 1500 });
               challengeMode = null;
             } else {
@@ -1896,7 +1949,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       window.__guestRoundDone = true;
       const de = Number.isFinite(window.lastMixDeltaE) ? window.lastMixDeltaE : NaN;
       if (challengeMode) {
-        showChallengeComparison(buildGuestChallengeComparison(de));
+        const cmp = buildGuestChallengeComparison(de);
+        // A give-up after real mixing is still an acceptance the creator can
+        // hear about (and the guest can later claim); an untouched palette
+        // producing NaN is not.
+        if (Number.isFinite(de)) recordGuestChallengeAcceptance(cmp);
+        showChallengeComparison(cmp);
         challengeMode = null;
       } else {
         showGuestResult(de);
@@ -2617,11 +2675,21 @@ function showChallengeComparison(c, { delayMs = 0 } = {}) {
         Number.isFinite(c.creator_drops) ? c.creator_drops : '—') +
       row(t('Time'), t('{n}s').replace('{n}', fmt(c.your_time_sec, 1)), t('{n}s').replace('{n}', fmt(c.creator_time_sec, 1))) +
       `<div style="font-size:0.72rem;color:var(--text-secondary);margin-top:6px;">` +
-      `${t('you vs {name} — accuracy decides, then drops, then time').replace('{name}', escapeHtml(c.creator))}</div>`;
+      `${t('you vs {name} — accuracy decides, then drops, then time').replace('{name}', escapeHtml(c.creator))}</div>` +
+      (isGuest()
+        ? `<div style="margin-top:10px;padding:10px 12px;border:1px dashed var(--border);` +
+          `border-radius:10px;font-size:0.8rem;color:var(--text-secondary);">` +
+          `${t('Guest result — leave now and it is lost to you. Register and it stays yours, in your challenge history.')}</div>`
+        : '');
   }
 
   const rematch = document.getElementById('challengeRematchBtn');
   if (rematch) {
+    // A winner wants to gloat, not replay; a loser wants revenge. Same door
+    // (for guests: registration), different handle.
+    rematch.textContent = c.won
+      ? t('⚔️ Send {name} one back').replace('{name}', String(c.creator))
+      : t('Rematch — beat {name}').replace('{name}', String(c.creator));
     rematch.onclick = async () => {
       modal.style.display = 'none';
       if (isGuest()) {

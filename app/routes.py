@@ -3532,6 +3532,49 @@ def challenge_accept_guest():
     })
 
 
+@main.route('/api/challenge/claim-attempt', methods=['POST'])
+def challenge_claim_attempt():
+    """Attach a guest challenge attempt to the account its player registered.
+
+    A guest who plays a /c/<code> round gets an accept-guest row with
+    acceptor_user_id NULL — if they close the tab, that result is orphaned
+    forever. The client stores the attempt_uuid locally and calls this once the
+    same browser is logged in, so the attempt shows up in their own challenge
+    history and the creator sees a name instead of 'Guest'.
+
+    The attempt_uuid is a client-generated UUID known only to the browser that
+    played the round, which is what makes the claim safe to honour without any
+    other proof. Idempotent for the same user; a second account cannot steal an
+    already-claimed attempt."""
+    data = request.get_json() or {}
+    attempt_uuid = (data.get('attempt_uuid') or '').strip()
+    user_id = (data.get('user_id') or '').strip().upper()
+    if not attempt_uuid or not user_id:
+        return jsonify({'status': 'error', 'message': 'attempt_uuid and user_id required'}), 400
+    if not _rate_limit_allow(f'claimattempt:{request.remote_addr}', max_hits=10, window_sec=3600):
+        return jsonify({'status': 'error', 'message': t('Too many attempts — try again later')}), 429
+
+    attempt = ChallengeAttempt.query.filter_by(attempt_uuid=attempt_uuid).first()
+    if attempt is None:
+        return jsonify({'status': 'error', 'message': t('Unknown challenge')}), 404
+    if attempt.acceptor_user_id == user_id:
+        return jsonify({'status': 'success', 'claimed': False})  # already theirs
+    if attempt.acceptor_user_id is not None:
+        return jsonify({'status': 'error', 'message': 'Already claimed'}), 409
+    if db.session.get(User, user_id) is None:
+        return jsonify({'status': 'error', 'message': 'Unknown user'}), 404
+    link = db.session.get(ChallengeLink, attempt.challenge_code)
+    if link is not None and link.creator_user_id == user_id:
+        # A creator opening their own link logged-out must not become their
+        # own acceptor.
+        return jsonify({'status': 'error', 'message': 'Cannot claim your own challenge'}), 400
+
+    attempt.acceptor_user_id = user_id
+    attempt.is_guest = False
+    db.session.commit()
+    return jsonify({'status': 'success', 'claimed': True})
+
+
 def _batch_color_names(color_ids):
     """id -> localized display name for a set of target-color ids (one query)."""
     out = {}

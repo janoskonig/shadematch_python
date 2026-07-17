@@ -108,5 +108,9 @@
   "Someone played your challenge": "Valaki lejátszotta a kihívásod",
   "{n} people played your challenge": "{n}-an lejátszották a kihívásod",
   "Nobody has beaten you yet.": "Még senki nem vert meg.",
-  "See it": "Megnézem"
+  "See it": "Megnézem",
+  "⚔️ Send {name} one back": "⚔️ Küldj vissza egyet neki",
+  "Rematch — beat {name}": "Visszavágó {name} ellen",
+  "Guest result — leave now and it is lost to you. Register and it stays yours, in your challenge history.": "Vendég-eredmény — ha most kilépsz, számodra elvész. Regisztrálj, és a tiéd marad a kihívás-történetedben.",
+  "✅ Your challenge result now lives in your account": "✅ A kihívás-eredményed mostantól a fiókodban él"
 }
