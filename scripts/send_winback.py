@@ -50,7 +50,6 @@ from sqlalchemy import text as sql_text  # noqa: E402
 
 from app import create_app, email_utils  # noqa: E402
 from app.models import User, db  # noqa: E402
-from app.i18n import t_for  # noqa: E402
 
 SENT_LOG = os.path.join(REPO_ROOT, 'artifacts', 'winback', 'sent_log.csv')
 
@@ -76,6 +75,7 @@ CANDIDATE_SQL = sql_text(
     )
     SELECT u.id                                    AS user_id,
            u.email                                 AS email,
+           u.nickname                              AS nickname,
            u.locale                                AS locale,
            p.attempts                              AS attempts,
            p.active_days                           AS active_days,
@@ -114,56 +114,85 @@ def candidates(*, lapse_days, min_days, min_attempts, min_streak):
     return [dict(r) for r in rows]
 
 
-# ── Win-back copy (rendered in the recipient's locale) ─────────────────────
+# ── Win-back copy (bilingual: Hungarian first, English mirror below) ───────
 
 def build_context(row) -> dict:
-    """Build the daily_reminder template context with win-back copy."""
-    loc = row.get('locale') or 'en'
-    uid = row['user_id']
+    """Build the daily_reminder template context with heartfelt HU+EN copy.
+
+    Every recipient gets both languages in one email (HU paragraph, then the
+    EN mirror as ``subhead2``; short fields carry both joined with " · ").
+    The ``locale`` passed to the template only affects the fixed chrome
+    (footer, Tip label), not this copy.
+    """
     away = int(row['days_since_last'])
     longest = int(row['longest_streak'])
     mastered = int(row['mastered_colors'])
+    name = (row.get('nickname') or '').strip()
 
     if mastered > 0 and longest >= 2:
-        subhead = t_for(
-            loc,
-            "You mastered {mastered} colors and reached a {longest}-day streak "
-            "before stepping away {away} days ago. One quick mix picks up right "
-            "where you left off.",
-            mastered=mastered, longest=longest, away=away,
+        hu = (
+            f"Mielőtt elcsendesedtél, {mastered} színt kevertél ki tökéletesen, "
+            f"és {longest} napos sorozatot építettél. Ebből semmi sem veszett el: "
+            f"minden eredményed ott vár, ahol hagytad. {away} napja hiányzol — "
+            "egyetlen keveréssel ott folytathatod, ahol abbahagytad."
+        )
+        en = (
+            f"Before things went quiet, you mixed {mastered} colors to perfection "
+            f"and built a {longest}-day streak. None of that is lost — it is all "
+            f"waiting right where you left it. It has been {away} days; one quick "
+            "mix picks it right back up."
         )
     elif longest >= 2:
-        subhead = t_for(
-            loc,
-            "You were on a {longest}-day streak before stepping away {away} days "
-            "ago. One quick mix picks up right where you left off.",
-            longest=longest, away=away,
+        hu = (
+            f"Egy szép, {longest} napos sorozat közepén hagytál itt minket, "
+            f"és azóta {away} nap telt el. A palettád nem felejtett el — "
+            "egyetlen keveréssel újra otthon vagy."
+        )
+        en = (
+            f"You stepped away in the middle of a lovely {longest}-day streak, "
+            f"{away} days ago. Your palette has not forgotten you — one quick "
+            "mix and you are right back home."
         )
     else:
-        subhead = t_for(
-            loc,
-            "It's been {away} days since your last mix. Pick a shade and jump "
-            "back in — it only takes a minute.",
-            away=away,
+        hu = (
+            f"{away} napja nem kevertél velünk, és ez feltűnt: a színeknek "
+            "hiányzol. Válassz egy árnyalatot, és gyere vissza egy percre — "
+            "csak ennyi kell az újrakezdéshez."
+        )
+        en = (
+            f"It has been {away} days since your last mix, and we noticed: the "
+            "colors miss you. Pick a shade and come back for a minute — that is "
+            "all a fresh start takes."
         )
 
     stats = []
     if mastered > 0:
-        stats.append({'label': t_for(loc, 'Colors mastered'), 'value': str(mastered)})
+        stats.append({'label': 'Kikevert színek · Colors mastered', 'value': str(mastered)})
     if longest > 0:
-        stats.append({'label': t_for(loc, 'Longest streak'), 'value': str(longest)})
-    stats.append({'label': t_for(loc, 'Days away'), 'value': str(away)})
+        stats.append({'label': 'Leghosszabb sorozat · Longest streak', 'value': str(longest)})
+    stats.append({'label': 'Napja nem láttunk · Days away', 'value': str(away)})
 
+    greeting_hu = f'Hiányzol a színeknek, {name}!' if name else 'Hiányzol a színeknek!'
+    # Subject: calm, specific, no emoji/exclamation/"we miss you" tropes —
+    # those are classic spam-filter triggers for re-engagement campaigns.
+    if mastered > 0:
+        subject = (f'{mastered} kikevert színed vár rád a ShadeMatch-ben · '
+                   f'Your {mastered} mixed colors are waiting')
+    else:
+        subject = ('A palettád ott vár, ahol hagytad · '
+                   'Your palette is right where you left it')
     return {
-        'subject': t_for(loc, 'Your ShadeMatch colors are waiting'),
-        'eyebrow': t_for(loc, 'We kept your palette warm'),
-        'headline': t_for(loc, 'Your colors miss you, {user_id}', user_id=uid),
-        'subhead': subhead,
-        'preheader': t_for(loc, 'Pick up right where you left off — one quick mix.'),
+        'subject': subject,
+        'eyebrow': 'Megőriztük a helyed · We saved your spot',
+        'headline': f'{greeting_hu} · Your colors miss you!',
+        'subhead': hu,
+        'subhead2': en,
+        'preheader': 'A palettád ott vár, ahol hagytad. · Your palette is right where you left it.',
         'cta_url': email_utils.base_url() + '/',
-        'cta_label': t_for(loc, 'Jump back in →'),
+        'cta_label': 'Folytatom → · Jump back in →',
         'stats': stats,
-        'tip': t_for(loc, 'No streak pressure — even a single 30-second mix counts.'),
+        'tip': ('Nincs nyomás: egyetlen 30 másodperces keverés is számít. Jó lesz újra látni! · '
+                "No pressure — a single 30-second mix counts. It'll be good to see you again."),
     }
 
 
@@ -252,8 +281,14 @@ def main() -> int:
                 return 1
             preview = dict(sample)
             preview['email'] = args.test_to
+            # Never mail a real participant's unsubscribe token to the tester:
+            # the link is live, and one click would opt THEM out, not you. The
+            # sentinel still signs a valid token, but it resolves to no user, so
+            # /email/unsubscribe answers 404 and nothing happens.
+            preview['user_id'] = 'PREVEW'
             send_one(preview)
-            print(f"\nTest win-back sent to {args.test_to} (copy modeled on user {sample['user_id']}).")
+            print(f"\nTest win-back sent to {args.test_to} (copy modeled on user {sample['user_id']}, "
+                  "sent under a preview id so the unsubscribe link is inert).")
             return 0
 
         if not args.send:
