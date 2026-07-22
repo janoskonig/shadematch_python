@@ -18,7 +18,7 @@
 {% endblock %}
 
 {% block extra_css %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260710a">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}?v=20260722-nobar">
 <style>
 /* ── Language pill (header + guest modal) ─────────────────── */
 .lang-pill {
@@ -609,14 +609,8 @@
               <div id="currentMix" class="color-half" style="background-color:rgb(255,255,255);"></div>
             </div>
 
-            <!-- Floating top chip: match bar + compact RGB readout -->
+            <!-- Floating top chip: compact RGB readout -->
             <div class="canvas-top-chip" id="canvasTopChip">
-              <div class="match-bar-wrap" id="matchBarContainer" style="display:none;">
-                <div class="match-bar">
-                  <div class="match-bar-fill" id="matchBarFill"></div>
-                </div>
-                <span class="match-bar-label" id="matchBarLabel"></span>
-              </div>
               <span id="mixedRgbValues" class="rgb-readout">RGB: [255, 255, 255]</span>
             </div>
 
@@ -1448,7 +1442,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260709-i18n1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260714-match1"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260722-nobar"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>

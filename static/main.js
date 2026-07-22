@@ -977,42 +977,6 @@ function updateRecipeStrip(counts) {
   });
 }
 
-// ── Match quality bar ─────────────────────────────────────────────────────
-function updateMatchBar(deltaE) {
-  const container = document.getElementById('matchBarContainer');
-  const fill = document.getElementById('matchBarFill');
-  const label = document.getElementById('matchBarLabel');
-  if (!container || !fill || !label) return;
-
-  container.style.display = '';
-
-  if (isPerfectMatch(deltaE)) {
-    fill.style.width = '100%';
-    fill.style.backgroundColor = 'var(--accent-success)';
-    label.textContent = t('Match!');
-    return;
-  }
-
-  // Exponential decay: K=3 keeps the bar well below full for deltaE ~0.5-1.0
-  const K = 3;
-  const progress = Math.max(0, Math.min(99, 100 * Math.exp(-deltaE / K)));
-  fill.style.width = progress + '%';
-
-  if (progress < 19) {
-    fill.style.backgroundColor = 'var(--accent-danger)';
-    label.textContent = t('Far');
-  } else if (progress < 51) {
-    fill.style.backgroundColor = 'var(--accent-warning)';
-    label.textContent = t('Closer');
-  } else if (progress < 85) {
-    fill.style.backgroundColor = '#8BC34A';
-    label.textContent = t('Very close');
-  } else {
-    fill.style.backgroundColor = '#8BC34A';
-    label.textContent = t('Nearly there!');
-  }
-}
-
 // ── Progress indicator ────────────────────────────────────────────────────
 function updateProgressIndicator(currentIndex, total, visitCount) {
   const textEl = document.getElementById('progressText');
@@ -1103,9 +1067,6 @@ function resetMix() {
   window.shadeMatchDropCounts = dropCounts;
   resetAllBadges();
   updateRecipeStrip(dropCounts);
-
-  const matchContainer = document.getElementById('matchBarContainer');
-  if (matchContainer) matchContainer.style.display = 'none';
 
   _calcColorGen++;          // invalidate any in-flight /calculate responses for the old color
   deltaJourney = [];        // fresh journey for the new color (guests included)
@@ -1839,7 +1800,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (_calcColorGen !== _myGen) return;  // response belongs to a previous color — discard
         if (data.error) return console.error('Server error:', data.error);
         window.lastMixDeltaE = data.delta_e;
-        updateMatchBar(data.delta_e);
         updateBufferedEventDelta(stepId, data.delta_e);
         if (Number.isFinite(data.delta_e)) deltaJourney.push(data.delta_e);
 

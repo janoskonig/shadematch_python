@@ -79,13 +79,6 @@
 @supports not (backdrop-filter: blur(1px)) {
   .canvas-top-chip { background: rgba(255, 255, 255, 0.92); }
 }
-.canvas-top-chip .match-bar-wrap {
-  margin: 0;
-  display: flex; align-items: center; gap: var(--space-sm);
-  min-width: 200px;
-}
-.canvas-top-chip .match-bar { width: 160px; }
-.canvas-top-chip .match-bar-label { min-width: auto; }
 .canvas-top-chip .rgb-readout {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.75rem;
@@ -353,15 +346,9 @@
   .controls-bar .timer-display { font-size: 0.78rem; padding: 0; }
   .overflow-trigger { min-width: 40px; min-height: 40px; }
 
-  .canvas-top-chip {
-    gap: var(--space-sm);
-    padding: 4px 10px;
-    top: var(--space-xs);
-    max-width: calc(100vw - 2 * var(--space-sm));
-  }
-  .canvas-top-chip .match-bar-wrap { min-width: 0; gap: 6px; }
-  .canvas-top-chip .match-bar { width: 110px; }
-  .canvas-top-chip .rgb-readout { display: none; }
+  /* The chip's only remaining content (RGB readout) was hidden on phones,
+     so drop the whole chip rather than leave an empty pill. */
+  .canvas-top-chip { display: none; }
 
   .sidebar-drawer-trigger {
     top: calc(var(--app-header-h) + var(--space-xs));
@@ -396,9 +383,6 @@
   }
   .controls-bar .timer-display { font-size: 0.72rem; }
   .overflow-trigger { min-width: 36px; min-height: 36px; }
-  .canvas-top-chip { padding: 3px 8px; gap: 6px; }
-  .canvas-top-chip .match-bar { width: 90px; }
-  .canvas-top-chip .match-bar-label { font-size: 0.72rem; }
 }
 
 /* ---- Extra-small screens (≤ 360 px, e.g. iPhone SE) ---- */
@@ -424,8 +408,6 @@
   .sidebar-drawer-trigger-label { display: none; }
   .sidebar-drawer-trigger { padding: 6px 9px; }
   .ps-streak { display: none; }
-  .canvas-top-chip .match-bar { width: 70px; }
-  .canvas-top-chip .match-bar-label { font-size: 0.7rem; }
 }
 
 /* ---- Landscape phones (short screens) ----
@@ -464,7 +446,6 @@
   .overflow-trigger { min-width: 34px; min-height: 32px; }
 
   .canvas-top-chip { padding: 3px 8px; }
-  .canvas-top-chip .match-bar { width: 90px; }
   .sidebar-drawer-trigger {
     padding: 4px 9px;
     font-size: 0.75rem;
