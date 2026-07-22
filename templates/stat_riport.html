@@ -894,7 +894,7 @@
           két pontfelhő áll egymás mellett, saját peremeloszlásokkal, közös függőleges skálán:
           balra a <strong>tökéletes (ΔE = 0)</strong>, jobbra a <strong>nem tökéletes</strong>
           keverések – ahogy a kétrészes (hurdle) modell is bontja őket. A bal rajzon a vízszintes
-          szórás csak a láthatóságot szolgálja.
+          jitter csak a láthatóságot szolgálja.
         </p>
         <p class="intro">
           Két dolog olvasható le. <strong>Az eloszlás alakja:</strong> sok pontosan optimális
@@ -1953,7 +1953,7 @@
         var layA = jointLayout(c, yRange, {
           range: [-0.6, 0.6], tickvals: [0], ticktext: ['ΔE = 0'],
           zeroline: false, showgrid: false, fixedrange: true,
-          title: { text: 'végső ΔE (szétszórva)', font: { size: 10 } } });
+          title: { text: 'végső ΔE (jitterelve)', font: { size: 10 } } });
         Plotly.react(elA, [
           { type: 'scatter', mode: 'markers',
             x: perfP.map(function () { return (Math.random() - 0.5) * 0.8; }),
