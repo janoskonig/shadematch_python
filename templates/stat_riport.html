@@ -769,18 +769,16 @@
                 <td class="f">W = Σ<sub>i</sub> |d<sub>i</sub> − m<sub>i</sub>|</td>
                 <td>Cseppben mért távolság a minimális recepttől. Az arányhibát és a fölösleges
                   többszörözést is bünteti; nulla, ha a keverés pontosan a minimális recept.</td>
-                <td><em>A kiindulópont:</em> a pazarlás legközvetlenebb megfogalmazása. Nyitva
-                  hagyja: összemossa az arányhibát a mennyiséghibával – a pontosan kétszeres adag
-                  színe tökéletes, a W-je mégis M-nyi, mintha arányt tévesztett volna.</td>
+                <td>A kiindulópont. Összemossa az arányhibát a mennyiséghibával: a pontos dupla
+                  adag W-je M-nyi, pedig a színe tökéletes.</td>
               </tr>
               <tr>
                 <td><strong>2. W<sub>k</sub></strong> – eltérés a legközelebbi többszöröstől<br>(végállapot)</td>
                 <td class="f">W<sub>k</sub> = min<sub>k=1,2,…</sub> Σ<sub>i</sub> |d<sub>i</sub> − k·m<sub>i</sub>|</td>
                 <td>A recept legközelebbi egész számú többszörösétől mért távolság: szétválasztja
                   az arányhibát a skálahibától (a duplázást enyhébben bünteti, mint a W).</td>
-                <td>Az 1. gyengéjét oldja: a tiszta többszörözés nála már nem számít arányhibának.
-                  Cserébe az ellenkező irányba téved: a többszörözést teljesen megbocsátja – az
-                  ötszörös adag W<sub>k</sub>-ja nulla, pedig az maga a pazarlás.</td>
+                <td>Szétválasztja az arány- és a skálahibát. Cserébe a többszörözést megbocsátja:
+                  az ötszörös adag W<sub>k</sub>-ja nulla.</td>
               </tr>
               <tr>
                 <td><strong>3a. Arány-távolság</strong> (koszinusz)<br>(végállapot)</td>
@@ -788,10 +786,8 @@
                   (√(Σ<sub>i</sub> d<sub>i</sub>²) · √(Σ<sub>i</sub> m<sub>i</sub>²))</td>
                 <td>Tisztán az arányhiba, a mennyiségtől függetlenül: a recept bármely többszörösére
                   nulla. Üres keverésre (D = 0) nem értelmezett.</td>
-                <td>A 2. után a következő lépés: ha már majdnem az arányhibát mérjük, mérjük azt
-                  tisztán és folytonosan (nem cseppugrásokban). Nyitva hagyja: euklideszi szemmel
-                  nézi az arányokat – 1→2 csepp fekete (duplázás, nagy színhatás) és 10→11 nála
-                  hasonló súlyú eltérés.</td>
+                <td>Tisztán az arányhiba, mennyiségtől függetlenül. De euklideszi szemmel néz:
+                  1→2 csepp (duplázás) és 10→11 nála hasonló súlyú.</td>
               </tr>
               <tr>
                 <td><strong>3b. Arány-távolság</strong> (Aitchison)<br>(végállapot)</td>
@@ -799,59 +795,48 @@
                 <td>Összetétel-statisztikai távolság a csepparányok között; p és q a 0,5
                   pszeudo-cseppel kiegészített arányok (a nulla cseppek miatt), g(·) a mértani
                   közép. Szintén skálafüggetlen.</td>
-                <td>A 3a geometriáját javítja: log-arány alapon a komponensenkénti eltérés
-                  multiplikatívan számít – úgy, ahogy az arány a színre hat. A 3a-val közös ára:
-                  az érték-dimenzió elvész (a mennyiség egyáltalán nem számít), és a nullák miatt
-                  önkényes pszeudo-cseppre szorul.</td>
+                <td>A 3a szabályos (log-arány) geometriával: a relatív eltérés számít. Közös áruk:
+                  a mennyiség-dimenzió elvész, és pszeudo-cseppre szorul.</td>
               </tr>
               <tr>
                 <td><strong>4a. Relatív eltérés</strong><br>(végállapot)</td>
                 <td class="f">W<sub>rel</sub> = W / M</td>
                 <td>A W a receptmérethez viszonyítva: egy 3 cseppes és egy 30 cseppes receptnél
                   nem ugyanakkora hiba ugyanannyi csepp eltérés.</td>
-                <td>A W másik gyengéjét oldja: a nyers cseppszám a színek és családok
-                  összehasonlítását torzítja, M-mel osztva a hiba receptméretek között
-                  összevethető. Örökli viszont a W többi tulajdonságát (arány+skála összemosva,
-                  csak végállapot), és felülről korlátlan, ferde.</td>
+                <td>A hibát receptméretek között összevethetővé teszi. Örökli a W többi gyengéjét,
+                  és felülről korlátlan.</td>
               </tr>
               <tr>
                 <td><strong>4b. Hatásfok</strong><br>(végállapot)</td>
                 <td class="f">eff = M / (M + W)</td>
                 <td>0 és 1 közé eső, „hány százalékos” alakú mutató; a 4a monoton tükörképe
                   (ugyanazt az információt hordozza, csak korlátos skálán).</td>
-                <td>A 4a korlátlanságát oldja: 0–1 skálán, „százalékos” alakban – visszajelzésre
-                  és kommunikációra alkalmasabb. Tartalmilag újat nem ad, és a nagyon pazarló
-                  keverések közti különbséget összenyomja.</td>
+                <td>A 4a korlátos, „százalékos” alakban. Újat nem ad; a nagy pazarlások
+                  különbségét összenyomja.</td>
               </tr>
               <tr>
                 <td><strong>5. W<sub>path</sub></strong> – valódi anyagköltség<br>(útvonal)</td>
                 <td class="f">W<sub>path</sub> = W + lost</td>
                 <td>A virtuális környezetben a csepp kivehető, a valóságban nem: a kivett/eldobott
                   csepp is elfogyott volna. A W-t ezért az útközbeni veszteséggel egészíti ki.</td>
-                <td>Az 1–4. közös vakfoltját oldja: azok csak a végállapotot nézik – aki 50 cseppet
-                  adagol és 40-et kivesz, annak a végállapota akár tökéletes, pedig 40 csepp
-                  elfogyott. Nyitva hagyja: a veszteséget összegben számolja, nem pigmentenként,
-                  és cseppben mér, nem értékben.</td>
+                <td>Végállapot helyett útvonal: a kivett csepp is elfogyott. A veszteséget
+                  összegben számolja, nem pigmentenként.</td>
               </tr>
               <tr>
                 <td><strong>6. Többszörözési hányados</strong><br>(útvonal)</td>
                 <td class="f">r = A / M</td>
                 <td>Hányszorosát adagolta a minimális receptnek összesen. Ha nem volt cseppművelet
                   (A = 0), nem értelmezett.</td>
-                <td>A 3-asok tükörképe: ahogy azok az arányhibát, ez a tiszta mennyiséghibát
-                  izolálja, egyetlen intuitív szorzóként (1 = tökéletes gazdaságosság). Mivel a
-                  mennyiség a színen láthatatlan, majdnem független a ΔE-től. Nyitva hagyja: nem
-                  tudja, melyik pigmentből ment a többlet, és az arányhibáról hallgat.</td>
+                <td>Tisztán a mennyiséghiba (1 = tökéletes), ezért majdnem ΔE-független. Az
+                  arányhibáról hallgat, pigmentet nem ismer.</td>
               </tr>
               <tr>
                 <td><strong>7. Cseppenkénti hozam</strong><br>(útvonal)</td>
                 <td class="f">hozam = (ΔE₀ − ΔE<sub>vég</sub>) / A</td>
                 <td>Mekkora színjavulást ért el egy hozzáadott cseppel. Iránya fordított: a nagyobb
                   a jobb; a többivel szemben nincs pont-tömege az optimumnál.</td>
-                <td>Nézőpontváltás: költség helyett termelékenység (kimenet/ráfordítás), és nincs
-                  pont-tömege – modellezésre kényelmes, sima eloszlás. Cserébe visszakeveri a két
-                  dimenziót (a számlálója maga a pontosság), és függ a kiinduló ΔE₀-tól: nehezebb
-                  színnél könnyebb nagy hozamot elérni.</td>
+                <td>Költség helyett termelékenység; nincs pont-tömege. Cserébe visszakeveri a két
+                  dimenziót (számlálója a pontosság), és függ a ΔE₀-tól.</td>
               </tr>
               <tr>
                 <td><strong>8. C</strong> – elpazarolt érték<br>(útvonal, árazott)</td>
@@ -861,13 +846,9 @@
                   pénzre váltható. A hiányzó csepp nem pazarlás (az pontatlanság: azt a ΔE méri).
                   Érzékenységi próbában a rangsor gyakorlatilag érzéketlen az árvektorra (200
                   véletlen árazással ρ ≥ 0,97), ezért amíg valós árlista nincs, ár<sub>i</sub> = 1.</td>
-                <td>A szintézis az 5. vonalán, három javítással: <em>pigmentenként</em> számol (nem
-                  mindegy, melyik pigmentből van a veszteség), csak a <em>többletet</em> bünteti
-                  (a hiányzó csepp nem fogyaszt anyagot – a következménye a rossz szín, amit a ΔE
-                  már megmér; a W szimmetrikus |d−m|-je ugyanazt a hibát kétszer számolná), és
-                  <em>árazható</em>. Nyitva hagyja: valós árlistát igényel a pénzbeli
-                  értelmezéshez, és az arányhibát teljes egészében a ΔE-re bízza – csak vele
-                  párban értelmes.</td>
+                <td>Az 5. pigmentenként és árazva; csak a többletet bünteti – a hiány nem fogyaszt
+                  anyagot, az színhiba, és azt a ΔE már megméri. Valós árlistát igényel; csak a
+                  ΔE-vel párban értelmes.</td>
               </tr>
             </tbody>
           </table>
