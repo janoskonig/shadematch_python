@@ -894,19 +894,21 @@
           tárolt recept legnagyobb közös osztóval leosztva), a lépésnaplóból a hozzáadott cseppek
           összesen és pigmentenként (A, A<sub>i</sub>), valamint az első cseppművelet előtti ΔE₀.
           Az alábbi táblázat és pontfelhők a jelöltek <strong>együttes empirikus eloszlását</strong>
-          mutatják a végső ΔE-vel: minden pont egy keverés, vízszintesen a végső ΔE, függőlegesen a
-          jelölt értéke. A pontfelhők szélein a <strong>peremeloszlások</strong> (hisztogramok)
-          láthatók – ezek teszik láthatóvá a pont-tömegeket (a ΔE = 0-nál tornyosuló tökéletes
-          mentéseket és a jelölt-optimumnál ülő keveréseket), amelyeket az egymásra rajzolódó
-          pontok önmagukban elrejtenének.
+          mutatják a végső ΔE-vel, a keveréseket <strong>két részre bontva, de egy rajzon</strong> –
+          pontosan úgy, ahogy a kétrészes (hurdle) modell is nézi őket. A bal oldali sávban a
+          <strong>tökéletes (ΔE = 0)</strong> keverések állnak (vízszintesen véletlenszerűen
+          szétszórva, hogy ne takarják egymást – a vízszintes helyüknek ott nincs jelentése), a fő
+          mezőben a <strong>nem tökéletesek</strong> a végső ΔE szerint; a függőleges tengely közös.
+          A jobb szélső peremeloszlás a jelölt eloszlását mutatja a két csoportban (zöld = tökéletes,
+          piros = nem az), a felső perem a ΔE &gt; 0 értékek eloszlását.
         </p>
         <p class="intro">
           Két dolgot érdemes bennük keresni. <strong>Az eloszlás alakját:</strong> a 8.2 jóslata
           szerint a mutatók nemnegatívak, sok a pontosan optimális érték (pont-tömeg), a többi
           jobbra ferde – ezt a táblázat „pontosan optimális” oszlopa és a pontfelhők alja mutatja.
           <strong>És az új információt:</strong> ha egy jelölt a ΔE-vel tökéletesen együtt mozogna,
-          nem volna második dimenzió. A rangkorreláció (Spearman ρ) ezt számszerűsíti; a
-          ΔE = 0-nál (tökéletes színtalálat) függőlegesen szóródó pontok pedig épp a lényeget
+          nem volna második dimenzió. A rangkorreláció (Spearman ρ) ezt számszerűsíti; a bal
+          sávban (tökéletes találatok) függőlegesen szóródó pontok pedig épp a lényeget
           mutatják: <em>azonos pontosság mellett is nagyon különböző az anyagfelhasználás</em>.
         </p>
         <div class="panel table-wrap"><table id="effTable"></table></div>
@@ -1890,13 +1892,25 @@
       ];
       var sm = {};
       (eff.summary || []).forEach(function (s) { sm[s.key] = s; });
+      function medOf(arr) {
+        if (!arr.length) return null;
+        var s2 = arr.slice().sort(function (a, b) { return a - b; });
+        var m2 = Math.floor(s2.length / 2);
+        return s2.length % 2 ? s2[m2] : (s2[m2 - 1] + s2[m2]) / 2;
+      }
       var h = '<thead><tr><th>Jelölt</th><th class="num">n</th><th class="num">Pontosan optimális</th>' +
-        '<th class="num">Medián</th><th class="num">P90</th><th class="num">Spearman ρ a ΔE-vel</th></tr></thead><tbody>';
+        '<th class="num">Medián (ΔE=0)</th><th class="num">Medián (ΔE&gt;0)</th>' +
+        '<th class="num">P90</th><th class="num">Spearman ρ a ΔE-vel</th></tr></thead><tbody>';
       CAND.forEach(function (c) {
         var s = sm[c.key] || {};
+        var mPerf = medOf(pts.filter(function (p2) { return p2.de <= 0.01 && p2[c.key] != null; })
+          .map(function (p2) { return p2[c.key]; }));
+        var mPos = medOf(pts.filter(function (p2) { return p2.de > 0.01 && p2[c.key] != null; })
+          .map(function (p2) { return p2[c.key]; }));
         h += '<tr><td>' + esc(c.label) + '</td><td class="num">' + fmt(s.n) + '</td>' +
           '<td class="num">' + (s.opt_share == null ? '—' : pct(s.opt_share, 0)) + '</td>' +
-          '<td class="num">' + fmt(s.median, 2) + '</td><td class="num">' + fmt(s.p90, 2) + '</td>' +
+          '<td class="num">' + fmt(mPerf, 2) + '</td><td class="num">' + fmt(mPos, 2) + '</td>' +
+          '<td class="num">' + fmt(s.p90, 2) + '</td>' +
           '<td class="num">' + fmt(s.spearman_de, 2) + '</td></tr>';
       });
       tbl.innerHTML = h + '</tbody>';
@@ -1911,21 +1925,24 @@
         var s2 = vs.slice().sort(function (a, b) { return a - b; });
         return s2[Math.min(s2.length - 1, Math.floor(q * s2.length))];
       }
-      // Scatter + MARGINAL HISTOGRAMS: the top marginal shows the ΔE point
-      // mass (perfect saves), the right one the candidate's own zero-mass —
-      // overplotted dots alone would hide both.
+      // TWO-PART display on ONE plot (the hurdle structure made visual):
+      // a left strip holds the perfect (ΔE=0) mixes (x-jittered so they do
+      // not overprint), the main field the ΔE>0 mixes; shared y-axis. The
+      // right marginal shows the candidate's distribution in BOTH groups
+      // (green = perfect, red = imperfect), the top marginal the ΔE>0 dist.
       CAND.forEach(function (c, i) {
         var el = document.getElementById('chEff' + i);
         var sub = pts.filter(function (p2) { return p2[c.key] != null && p2.de != null; });
         if (!sub.length) { el.innerHTML = '<p class="cap">Nincs adat.</p>'; return; }
+        var perfP = sub.filter(function (p2) { return p2.de <= 0.01; });
+        var posP = sub.filter(function (p2) { return p2.de > 0.01; });
         var ys = sub.map(function (p2) { return p2[c.key]; });
-        var xs = sub.map(function (p2) { return p2.de; });
         var yhi = quant(ys, 0.99), ylo = Math.min.apply(null, ys);
         var clipped = ys.filter(function (v) { return v > yhi; }).length;
         var lay = baseLayout({ showlegend: true, margin: { l: 50, r: 6, t: 6, b: 38 } });
         lay.xaxis = Object.assign(lay.xaxis, {
-          domain: [0, 0.8], rangemode: 'tozero',
-          title: { text: 'végső ΔE', font: { size: 10 } } });
+          domain: [0, 0.13], range: [-0.6, 0.6], tickvals: [0], ticktext: ['ΔE=0'],
+          zeroline: false, showgrid: false, fixedrange: true });
         lay.yaxis = Object.assign(lay.yaxis, {
           domain: [0, 0.78],
           title: { text: c.unit ? 'érték (' + c.unit + ')' : 'érték', font: { size: 10 } } });
@@ -1933,26 +1950,40 @@
           var pad = 0.06 * (yhi - ylo);
           lay.yaxis.range = [Math.min(0, ylo) - pad, yhi + pad];
         }
-        lay.xaxis2 = { domain: [0.82, 1], showticklabels: false, gridcolor: T.border,
-                       zeroline: false, fixedrange: true };
-        lay.yaxis2 = { domain: [0.8, 1], showticklabels: false, gridcolor: T.border,
-                       zeroline: false, fixedrange: true };
+        lay.xaxis3 = { domain: [0.17, 0.8], anchor: 'y', rangemode: 'tozero',
+                       gridcolor: T.border, zerolinecolor: T.border, automargin: true,
+                       title: { text: 'végső ΔE (>0)', font: { size: 10 } } };
+        lay.xaxis2 = { domain: [0.84, 1], anchor: 'y', showticklabels: false,
+                       gridcolor: T.border, zeroline: false, fixedrange: true };
+        lay.yaxis2 = { domain: [0.8, 1], anchor: 'x3', showticklabels: false,
+                       gridcolor: T.border, zeroline: false, fixedrange: true };
         lay.legend = { orientation: 'h', y: 1.24, font: { size: 9 } };
         lay.bargap = 0.05;
-        function tr2(sel, color, name) {
-          var s2 = sub.filter(sel);
-          return { type: 'scatter', mode: 'markers', name: name + ' (n=' + s2.length + ')',
-            x: s2.map(function (p2) { return p2.de; }), y: s2.map(function (p2) { return p2[c.key]; }),
-            marker: { size: 5, color: color, opacity: 0.45 },
-            hovertemplate: name + '<br>ΔE %{x:.2f} · érték %{y:.2f}<extra></extra>' };
-        }
+        lay.barmode = 'overlay';
         Plotly.react(el, [
-          tr2(function (p2) { return !p2.g; }, T.ok, 'teljesítve'),
-          tr2(function (p2) { return p2.g; }, T.danger, 'feladva'),
-          { type: 'histogram', x: xs, yaxis: 'y2', marker: { color: '#9ca3af' },
-            showlegend: false, hovertemplate: 'ΔE≈%{x}: %{y} keverés<extra></extra>' },
-          { type: 'histogram', y: ys, xaxis: 'x2', marker: { color: '#9ca3af' },
-            showlegend: false, hovertemplate: '%{x} keverés<extra></extra>' }
+          { type: 'scatter', mode: 'markers',
+            name: 'tökéletes (ΔE=0, n=' + perfP.length + ')',
+            x: perfP.map(function () { return (Math.random() - 0.5) * 0.75; }),
+            y: perfP.map(function (p2) { return p2[c.key]; }),
+            xaxis: 'x', yaxis: 'y',
+            marker: { size: 5, color: T.ok, opacity: 0.45 },
+            hovertemplate: 'ΔE = 0 · érték %{y:.2f}<extra></extra>' },
+          { type: 'scatter', mode: 'markers',
+            name: 'nem tökéletes (ΔE>0, n=' + posP.length + ')',
+            x: posP.map(function (p2) { return p2.de; }),
+            y: posP.map(function (p2) { return p2[c.key]; }),
+            xaxis: 'x3', yaxis: 'y',
+            marker: { size: 5, color: T.danger, opacity: 0.45 },
+            hovertemplate: 'ΔE %{x:.2f} · érték %{y:.2f}<extra></extra>' },
+          { type: 'histogram', x: posP.map(function (p2) { return p2.de; }),
+            xaxis: 'x3', yaxis: 'y2', marker: { color: '#9ca3af' }, showlegend: false,
+            hovertemplate: 'ΔE≈%{x}: %{y} keverés<extra></extra>' },
+          { type: 'histogram', y: perfP.map(function (p2) { return p2[c.key]; }),
+            xaxis: 'x2', yaxis: 'y', marker: { color: T.ok }, opacity: 0.6,
+            showlegend: false, hovertemplate: '%{x} keverés (ΔE=0)<extra></extra>' },
+          { type: 'histogram', y: posP.map(function (p2) { return p2[c.key]; }),
+            xaxis: 'x2', yaxis: 'y', marker: { color: T.danger }, opacity: 0.55,
+            showlegend: false, hovertemplate: '%{x} keverés (ΔE>0)<extra></extra>' }
         ], lay, CFG);
         var cap = document.getElementById('chEffCap' + i);
         if (cap) {
