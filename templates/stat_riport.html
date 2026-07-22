@@ -140,8 +140,8 @@
           <dt>Recept / cseppszám</dt><dd>Egy cél-szín megoldása: a pigmentcseppek száma. A cseppszám a strukturális nehézség mérőszáma.</dd>
           <dt>Mentés / feladás</dt><dd>Egy keverés zárása: mentés (a felhasználó elfogadja az eredményt) vagy feladás (továbblép / félbehagyja).</dd>
           <dt>Teljesítési arány</dt><dd>A mentett (befejezett) keverések aránya az összes keveréshez képest.</dd>
-          <dt>Meccs</dt><dd>A játék egysége: 10 kör, pontosan egy cél-szín a tíz fagyasztott színklaszter mindegyikéből, véletlen sorrendben. Egy befejezett meccs egy teljes véletlen blokk (lásd 2.6).</dd>
-          <dt>Színcsalád (klaszter)</dt><dd>A bejárható gamut tíz összefüggő, nagyjából egyenlő tartományának egyike; a 242 cél-szín mindegyike pontosan egy családba tartozik. A családok a vizsgálati elrendezés részei: a kiosztás blokkjai és az elemzés egységei is ezek. Keletkezésük: 2.7.</dd>
+          <dt>Meccs</dt><dd>A játék egysége: 10 kör, pontosan egy cél-szín a tíz fagyasztott színcsalád mindegyikéből, véletlen sorrendben. Egy befejezett meccs egy teljes véletlen blokk (lásd 2.6).</dd>
+          <dt>Színcsalád</dt><dd>A bejárható gamut tíz összefüggő, nagyjából egyenlő tartományának egyike; a 242 cél-szín mindegyike pontosan egy családba tartozik. A családok a vizsgálati elrendezés részei: a kiosztás blokkjai és az elemzés egységei is ezek. Keletkezésük: 2.7.</dd>
           <dt>Fenotípus</dt><dd>Egy keverés szabályalapú viselkedési kategóriája a kikeverés útja alapján (lásd 6.6).</dd>
         </dl>
       </section>
@@ -234,18 +234,18 @@
              összefüggő, nagyjából egyenlő tartománya (keletkezésüket a 2.7 írja le). A besorolás a
              vizsgálati periódusra <strong>fagyasztott és verziózott</strong> (mc-v1); minden meccs
              tárolja, melyik verzió alatt sorsolódott.</p>
-          <p>Egy meccs 10 kör: <strong>mind a tíz klaszterből pontosan egy cél-szín</strong>. A
-             randomizáció kétszintű: (1) a klaszterek <strong>sorrendje</strong> meccsenkét véletlen,
-             (2) a klaszteren belüli <strong>szín</strong> véletlen, résztvevőn belül ismétlés nélküli
-             ciklusból (egy szín addig nem tér vissza, amíg a klasztere ki nem merül). A meccs összetétele
+          <p>Egy meccs 10 kör: <strong>mind a tíz családból pontosan egy cél-szín</strong>. A
+             randomizáció kétszintű: (1) a családok <strong>sorrendje</strong> meccsenkét véletlen,
+             (2) a családon belüli <strong>szín</strong> véletlen, résztvevőn belül ismétlés nélküli
+             ciklusból (egy szín addig nem tér vissza, amíg a családja ki nem merül). A meccs összetétele
              kizárólag a kiosztási előzménytől függ, a teljesítménytől soha — a színekhez való hozzáférés
              tehát nem függ attól, ki milyen ügyes. Bőr-célszín nem kerül kiosztásra (a spektrális
              keveréses verzióban tér vissza).</p>
           <p>Ebből a szerkezetből adódik a riport elemzési kerete: <strong>minden befejezett meccs egy
-             teljes, tízklaszteres ismételt mérés</strong>, ahol a klaszterhatás a blokkon belül
+             teljes, tízcsaládos ismételt mérés</strong>, ahol a családhatás a blokkon belül
              hasonlítható össze; aki egy ülésben n meccset játszik végig, az n-szeresen replikált
-             blokkos elrendezést ad. A <strong>primer estimand a tíz klaszter egyenlő súlyú átlaga</strong>:
-             (1/10)·Σ<sub>c</sub> E(Y | klaszter = c). Minden kiosztott kör tárolódik akkor is, ha nem
+             blokkos elrendezést ad. A <strong>primer estimand a tíz család egyenlő súlyú átlaga</strong>:
+             (1/10)·Σ<sub>c</sub> E(Y | család = c). Minden kiosztott kör tárolódik akkor is, ha nem
              indult el; a 3 napig nem folytatott meccs <em>megszakadt</em> (abandoned) státuszt kap, így
              egyetlen kör sem marad statisztikailag eldöntetlen. A napi kihívás és a fej-fej melletti
              párbajok nem randomizált csatornák — az elsődleges elemzésből ki vannak zárva. Részletes
@@ -268,19 +268,15 @@
           <p class="def"><strong>3. A családok a tér felosztásából születtek, a meccs-design
              igényére.</strong> A meccs 10 körös, és minden meccsnek a teljes gamutot kell
              képviselnie. Ehhez a teret tíz összefüggő, nagyjából egyenlő tartományra kellett vágni:
-             ezek a színcsaládok. A határok megrajzolása determinisztikus eljárással (k-közép,
-             rögzített kiindulással) történt, az eredmény pedig a vizsgálati periódusra fagyasztva és
-             verziózva lett (mc-v1).</p>
-          <p>Ebben az eljárásban a klaszterezés szerepe nem felfedezés, hanem szerkesztés és
-             <strong>ellenőrzés</strong>. Egyenletesen kitöltött térben nincsenek „valódi” csoportok,
-             amelyeket egy algoritmus megtalálhatna – a k-közép itt csak felszabdalja a teret kompakt,
-             szomszédos cellákra. Más véletlen kiindulással az eljárás más, hasonlóan jó felosztást
-             adna; éppen ezért kellett egyetlen konkrét felosztást rögzíteni és verziózni. A futtatás
-             ellenőrzésként azt igazolta, hogy a választott felosztás jól viselkedik: a tíz család
-             összefüggő tömb, a méretük hasonló (18–32 szín), és mindegyik természetes nevet kap a
-             középpontja alapján (pl. „világos narancs–barna”). A „miért pont ez a tíz család?”
-             kérdésre tehát a válasz: mert ez a design – a családok a kiosztás előre rögzített
-             blokkjai, nem utólagos adatelemzés termékei.</p>
+             ezek a színcsaládok. A felosztás a vizsgálati periódusra fagyasztva és verziózva lett
+             (mc-v1).</p>
+          <p>A klaszterezésnek ebben csak <strong>ellenőrző</strong> szerepe volt: vele győződtünk
+             meg arról, hogy a felosztás jól viselkedik – a tíz család összefüggő tömb, a méretük
+             hasonló (18–32 szín), és mindegyik természetes nevet kap a középpontja alapján
+             (pl. „világos narancs–barna”). Egyenletesen kitöltött térben nincsenek „valódi”
+             csoportok, amelyeket egy algoritmus felfedezhetne; a családok a kiosztás előre
+             rögzített blokkjai, nem adatelemzés termékei. A „miért pont ez a tíz család?” kérdésre
+             a válasz: mert ez a design.</p>
         </div>
 
       </section>
@@ -514,15 +510,15 @@
         <h3 id="s5m">Meccs-kiosztás számokban</h3>
         <p class="intro">
           A kiosztás randomizált blokkos elrendezését a 2.6 írja le; itt a megvalósulása látszik:
-          klaszterenként hány kör sorsolódott ki, és mi lett a sorsuk (teljesítve / kihagyva / megszakadt /
-          függőben). A kiegyensúlyozottság beépített: minden meccs minden klaszterből pontosan egy kört ad,
-          ezért a „kiosztott kör” oszlop klaszterek között legfeljebb a folyamatban lévő meccsek miatt térhet el.
+          családonként hány kör sorsolódott ki, és mi lett a sorsuk (teljesítve / kihagyva / megszakadt /
+          függőben). A kiegyensúlyozottság beépített: minden meccs minden családból pontosan egy kört ad,
+          ezért a „kiosztott kör” oszlop családok között legfeljebb a folyamatban lévő meccsek miatt térhet el.
         </p>
         <div class="cards" id="matchKpis"></div>
         <div class="note" id="matchEmpty" style="display:none;"></div>
         <div class="grid2" id="matchPanels">
-          <div class="panel"><h4>Klaszterblokkok: kiosztott körök és kimenetek</h4>
-            <p class="cap">Egy sor = egy fagyasztott klaszter. A „teljesítési arány” a lezárt körökön belül
+          <div class="panel"><h4>Családblokkok: kiosztott körök és kimenetek</h4>
+            <p class="cap">Egy sor = egy fagyasztott színcsalád. A „teljesítési arány” a lezárt körökön belül
               a teljesítettek hányada; az „átlag ΔE” a körhöz mentett keverés végső ΔE-je (mentésnél 0,
               értékelt feladásnál a feladáskori érték).</p>
             <div class="table-wrap"><table id="matchClusterTable"></table></div></div>
@@ -1721,7 +1717,7 @@
     var st = m.by_status || {};
     function n(s) { return (st[s] || {}).n || 0; }
     var resolvedMatches = n('completed') + n('abandoned');
-    var legacySub = 'klaszterverzió: ' + esc(m.clusters_version || '—') +
+    var legacySub = 'felosztás-verzió: ' + esc(m.clusters_version || '—') +
       (m.legacy_matches ? ' · ' + m.legacy_matches + ' protokoll előtti (kizárva)' : '');
     kpis.innerHTML = [
       kpiCard('Meccs (össz.)', fmt(m.total_matches), legacySub, {}),
@@ -1736,7 +1732,7 @@
     (function () {
       var el = document.getElementById('matchClusterTable');
       if (!el) return;
-      var h = '<thead><tr><th>Klaszter</th><th class="num">Színek</th><th class="num">Kiosztott kör</th>' +
+      var h = '<thead><tr><th>Család</th><th class="num">Színek</th><th class="num">Kiosztott kör</th>' +
         '<th class="num">Teljesített</th><th class="num">Kihagyott</th><th class="num">Megszakadt</th>' +
         '<th class="num">Függő</th><th class="num">Telj. arány</th><th class="num">Átlag ΔE</th></tr></thead><tbody>';
       (m.clusters || []).forEach(function (c) {
@@ -1768,8 +1764,8 @@
     var eEl = document.getElementById('matchEstimand');
     if (eEl) {
       eEl.innerHTML = est.clusters_with_data
-        ? '<strong>Az estimand előnézete</strong> (a tíz klaszter egyenlő súlyú átlaga, ' +
-          est.clusters_with_data + ' klaszter adatával): teljesítési arány <strong>' +
+        ? '<strong>Az estimand előnézete</strong> (a tíz család egyenlő súlyú átlaga, ' +
+          est.clusters_with_data + ' család adatával): teljesítési arány <strong>' +
           (est.eq_weight_completed_rate == null ? '—' : pct(est.eq_weight_completed_rate, 1)) +
           '</strong>, átlag ΔE <strong>' +
           (est.eq_weight_mean_de == null ? '—' : fmt(est.eq_weight_mean_de, 2)) +
