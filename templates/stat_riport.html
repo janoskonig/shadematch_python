@@ -832,6 +832,80 @@
           </table>
         </div>
         <p class="intro">
+          <strong>A jelöltek rációja – egy iterációs lánc.</strong> A lista nem független ötletek
+          gyűjteménye: mindegyik jelölt a megelőző egy konkrét gyengéjét oldja meg, és mindegyik
+          nyitva hagy valamit, amit a következő vesz fel. Ettől értelmes az összehasonlítás – a
+          kritériumok azt döntik el, melyik kompromisszum éri meg.
+        </p>
+        <ul class="rules">
+          <li><strong>1. W – a kiindulópont.</strong> A legközvetlenebb megfogalmazás: pazarlás =
+            cseppben mért távolság a minimális recepttől. Egyszerű, a mértékegysége csepp, és
+            pontosan akkor nulla, ha a keverés maga a minimális recept. <em>Amit nyitva hagy:</em>
+            összemossa az arányhibát a mennyiséghibával – aki pontosan a recept kétszeresét keveri,
+            annak a színe tökéletes, a W-je mégis M-nyi, mintha arányt tévesztett volna.</li>
+          <li><strong>2. W<sub>k</sub> – az arány- és a skálahiba szétválasztása.</strong> Az 1.
+            gyengéjére válaszol: nem a minimális recepttől mér, hanem a legközelebbi egész számú
+            többszörösétől – a tiszta duplázás így már nem számít arányhibának. <em>Amit nyitva
+            hagy:</em> az ellenkező irányba téved: a többszörözést teljesen megbocsátja (az ötszörös
+            adag W<sub>k</sub>-ja nulla), pedig az ötszörös anyagfelhasználás maga a pazarlás.</li>
+          <li><strong>3a. Koszinusz-távolság – a tiszta arányhiba.</strong> Ha a 2. már majdnem az
+            arányhibát méri, mérjük azt tisztán: az összetétel-vektorok szöge a mennyiségtől teljesen
+            független, a recept bármely többszörösére nulla, és folytonos (nem cseppugrásokban
+            mozog). <em>Amit nyitva hagy:</em> a cseppvektort közönséges euklideszi vektorként
+            kezeli, pedig az arányoknál a <em>relatív</em> eltérés számít: 1 csepp fekete helyett 2
+            az duplázás (nagy színhatás), 10 helyett 11 alig valami – a koszinusz a kettőt hasonló
+            súllyal látja.</li>
+          <li><strong>3b. Aitchison-távolság – ugyanaz, szabályos geometriával.</strong> A 3a
+            gyengéjére az összetétel-statisztika standard válasza: log-arány geometria, amelyben a
+            komponensenkénti eltérés multiplikatívan számít – úgy, ahogy a pigmentarány a színre
+            hat. <em>Amit nyitva hagy (a 3a-val együtt):</em> az arány-család az érték-dimenziót
+            elejti – a mennyiség egyáltalán nem számít bele, pedig a pazarlás lényege éppen az;
+            a nulla cseppek miatt ráadásul önkényes pszeudo-cseppre (0,5) szorul. Az adat is ezt
+            tükrözi: az arány-alapú jelöltek korrelálnak a legerősebben a ΔE-vel – amit mérnek,
+            azt jórészt a ΔE is méri.</li>
+          <li><strong>4a. W/M – összevethetőség a receptméretek között.</strong> A W másik
+            gyengéjét oldja meg: 5 csepp eltérés egy 3 cseppes receptnél súlyos, egy 28 cseppesnél
+            apróság – a nyers W a színek és családok összehasonlítását torzítja. A receptmérettel
+            osztva a hiba relatívvá válik. <em>Amit nyitva hagy:</em> felülről korlátlan, erősen
+            ferde, és a W minden más tulajdonságát örökli.</li>
+          <li><strong>4b. Hatásfok – ugyanaz, korlátos skálán.</strong> A 4a monoton tükörképe 0 és
+            1 közé szorítva: ugyanaz az információ „hány százalékos” alakban – visszajelzésre,
+            kommunikációra alkalmasabb. <em>Amit nyitva hagy:</em> a nagyon pazarló keverések közti
+            különbséget összenyomja, és tartalmilag semmi újat nem ad a 4a-hoz.</li>
+          <li><strong>5. W_path – a végállapotról az útvonalra.</strong> Az 1–4. közös vakfoltját
+            oldja meg: mind csak a végállapotot nézi, pedig a virtuális pohárból a csepp kivehető,
+            a valódiból nem. Aki 50 cseppet adagol és 40-et kivesz, annak a végállapota akár
+            tökéletes – a valóságban 40 csepp elfogyott. A W-t ezért az útközbeni veszteséggel
+            egészíti ki. <em>Amit nyitva hagy:</em> a veszteséget összegben számolja, nem
+            pigmentenként, és cseppben mér, nem értékben.</li>
+          <li><strong>6. A/M – a tiszta mennyiséghiba.</strong> Ahogy a 3-asok az arányhibát
+            tisztították ki, ez a skálahibát: hányszorosát adagolta a minimális adagnak – egyetlen
+            intuitív szorzó (1 = tökéletes gazdaságosság). Mivel a mennyiség a színen láthatatlan,
+            majdnem független a ΔE-től: az arányhibát teljes egészében a ΔE-re hagyja. <em>Amit
+            nyitva hagy:</em> nem tudja, melyik pigmentből ment a többlet, és az arányhibáról
+            semmit nem mond.</li>
+          <li><strong>7. Hozam – a költségről a termelékenységre.</strong> Fordított nézőpont: nem
+            azt kérdi, mennyi ment kárba, hanem hogy egy csepp mennyi színjavulást vásárolt
+            (kimenet/ráfordítás). Vonzereje, hogy nincs pont-tömege (sima eloszlás, modellezésre
+            kényelmes), és az elért eredményt is beleérti. <em>Amit nyitva hagy:</em> éppen ezzel
+            visszakeveri a két dimenziót (a számlálója a pontosság), függ a kiinduló ΔE₀-tól
+            (nehezebb színnél könnyebb nagy hozamot elérni), és az iránya fordított.</li>
+          <li><strong>8. C – a szintézis.</strong> Az útvonal-gondolatot (5.) viszi végig
+            következetesen: <em>pigmentenként</em> számol (nem mindegy, melyik pigmentből van a
+            veszteség), csak a <em>többletet</em> bünteti (max(·,0): a hiányzó csepp nem pazarlás,
+            hanem pontatlanság – az a ΔE dolga; a W szimmetrikus |d−m|-je ezt még összemosta), és
+            <em>árazható</em> – pénzre váltható, bár a rangsor az árakra érzéketlennek bizonyult.
+            <em>Amit nyitva hagy:</em> valós árlistát igényel a pénzbeli értelmezéshez (addig
+            cseppben mér), és definíció szerint mindent, ami arányhiba, a ΔE-re bíz – tehát csak a
+            ΔE-vel párban értelmes.</li>
+        </ul>
+        <p class="intro">
+          A lánc két tiszta végpontra fut ki: az <strong>arány-dimenziót</strong> a 3b, a
+          <strong>mennyiség/érték-dimenziót</strong> a 6. és a 8. méri a legtisztábban – a többi
+          jelölt e kettő különböző arányú keveréke. A kritérium-alapú választás így lényegében
+          arról dönt, mennyit szabad a takarékosság-mutatónak átfednie a ΔE-vel mért pontossággal.
+        </p>
+        <p class="intro">
           Egy kritérium szándékosan hiányzik a listáról: az, hogy „melyik mutatja legszebben a
           tanulást”. Az a kívánt eredmény alapján választana mutatót – a tanulási kérdést ezért
           csak a kritériumok szerint kiválasztott győztes mutatón tesszük majd fel.
