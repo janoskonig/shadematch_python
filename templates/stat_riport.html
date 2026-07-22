@@ -893,14 +893,15 @@
           végső cseppösszetétel (d<sub>i</sub>), a cél-szín minimális receptje (m<sub>i</sub> – a
           tárolt recept legnagyobb közös osztóval leosztva), a lépésnaplóból a hozzáadott cseppek
           összesen és pigmentenként (A, A<sub>i</sub>), valamint az első cseppművelet előtti ΔE₀.
-          Az alábbi táblázat és pontfelhők a jelöltek <strong>együttes empirikus eloszlását</strong>
-          mutatják a végső ΔE-vel, a keveréseket <strong>két részre bontva, de egy rajzon</strong> –
-          pontosan úgy, ahogy a kétrészes (hurdle) modell is nézi őket. A bal oldali sávban a
-          <strong>tökéletes (ΔE = 0)</strong> keverések állnak (vízszintesen véletlenszerűen
-          szétszórva, hogy ne takarják egymást – a vízszintes helyüknek ott nincs jelentése), a fő
-          mezőben a <strong>nem tökéletesek</strong> a végső ΔE szerint; a függőleges tengely közös.
-          A jobb szélső peremeloszlás a jelölt eloszlását mutatja a két csoportban (zöld = tökéletes,
-          piros = nem az), a felső perem a ΔE &gt; 0 értékek eloszlását.
+          Az alábbi táblázat és ábrák a jelöltek <strong>együttes empirikus eloszlását</strong>
+          mutatják a végső ΔE-vel, a keveréseket <strong>két részre bontva</strong> – pontosan úgy,
+          ahogy a kétrészes (hurdle) modell is nézi őket. Jelöltenként <strong>két pontfelhő áll
+          egymás mellett</strong>, mindkettő saját peremeloszlásokkal (fent a vízszintes, jobbra a
+          függőleges tengely hisztogramja): balra a <strong>tökéletes (ΔE = 0)</strong> keverések
+          (zölddel; a pontok vízszintesen véletlenszerűen szétszórva, hogy ne takarják egymást – a
+          felső perem mutatja, hogy valójában mind a ΔE = 0 pont-tömegben ül), jobbra a
+          <strong>nem tökéletesek</strong> (pirossal) a saját ΔE-tengelyükön. A két rajz függőleges
+          tengelye közös skálájú, így közvetlenül összevethetők.
         </p>
         <p class="intro">
           Két dolgot érdemes bennük keresni. <strong>Az eloszlás alakját:</strong> a 8.2 jóslata
@@ -912,7 +913,7 @@
           mutatják: <em>azonos pontosság mellett is nagyon különböző az anyagfelhasználás</em>.
         </p>
         <div class="panel table-wrap"><table id="effTable"></table></div>
-        <div class="grid2" id="effPanels" style="margin-top:14px;"></div>
+        <div id="effPanels" style="margin-top:14px; display:grid; gap:14px;"></div>
         <p class="intro" id="effNote"></p>
 
         <h3>8.6 Együtt mozog-e a jelölt a ΔE-vel — és baj-e, ha igen?</h3>
@@ -1918,78 +1919,99 @@
       wrap.innerHTML = CAND.map(function (c, i) {
         return '<div class="panel"><h4>' + esc(c.label) + '</h4>' +
           '<p class="cap" id="chEffCap' + i + '"></p>' +
-          '<div class="chart" id="chEff' + i + '" style="min-height:290px;"></div></div>';
+          '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:12px;">' +
+          '<div><p class="cap" id="chEffTA' + i + '" style="margin:0 0 2px;text-align:center;font-weight:600;"></p>' +
+          '<div class="chart" id="chEffA' + i + '" style="min-height:300px;"></div></div>' +
+          '<div><p class="cap" id="chEffTB' + i + '" style="margin:0 0 2px;text-align:center;font-weight:600;"></p>' +
+          '<div class="chart" id="chEffB' + i + '" style="min-height:300px;"></div></div>' +
+          '</div></div>';
       }).join('');
       function quant(vs, q) {
         if (!vs.length) return null;
         var s2 = vs.slice().sort(function (a, b) { return a - b; });
         return s2[Math.min(s2.length - 1, Math.floor(q * s2.length))];
       }
-      // TWO-PART display on ONE plot (the hurdle structure made visual):
-      // a left strip holds the perfect (ΔE=0) mixes (x-jittered so they do
-      // not overprint), the main field the ΔE>0 mixes; shared y-axis. The
-      // right marginal shows the candidate's distribution in BOTH groups
-      // (green = perfect, red = imperfect), the top marginal the ΔE>0 dist.
+      // TWO SIDE-BY-SIDE JOINTPLOTS per candidate: left = the perfect (ΔE=0)
+      // mixes, right = the ΔE>0 mixes. Each is a scatter with its OWN two
+      // marginals (top: x, right: y); the y-axes share the same clipped range
+      // so the two plots are directly comparable. In the left plot the x
+      // position is jitter (no meaning); its top marginal shows the true
+      // point mass at ΔE=0.
+      function jointLayout(c, yRange, xcfg) {
+        var lay = baseLayout({ showlegend: false, margin: { l: 48, r: 6, t: 6, b: 38 } });
+        lay.xaxis = Object.assign(lay.xaxis, { domain: [0, 0.78] }, xcfg);
+        lay.yaxis = Object.assign(lay.yaxis, {
+          domain: [0, 0.78],
+          title: { text: c.unit ? 'érték (' + c.unit + ')' : 'érték', font: { size: 10 } } });
+        if (yRange) lay.yaxis.range = yRange;
+        lay.xaxis2 = { domain: [0.82, 1], anchor: 'y', showticklabels: false,
+                       gridcolor: T.border, zeroline: false, fixedrange: true };
+        lay.yaxis2 = { domain: [0.82, 1], anchor: 'x', showticklabels: false,
+                       gridcolor: T.border, zeroline: false, fixedrange: true };
+        lay.bargap = 0.05;
+        return lay;
+      }
       CAND.forEach(function (c, i) {
-        var el = document.getElementById('chEff' + i);
+        var elA = document.getElementById('chEffA' + i);
+        var elB = document.getElementById('chEffB' + i);
         var sub = pts.filter(function (p2) { return p2[c.key] != null && p2.de != null; });
-        if (!sub.length) { el.innerHTML = '<p class="cap">Nincs adat.</p>'; return; }
+        if (!sub.length) { elA.innerHTML = '<p class="cap">Nincs adat.</p>'; elB.innerHTML = ''; return; }
         var perfP = sub.filter(function (p2) { return p2.de <= 0.01; });
         var posP = sub.filter(function (p2) { return p2.de > 0.01; });
         var ys = sub.map(function (p2) { return p2[c.key]; });
         var yhi = quant(ys, 0.99), ylo = Math.min.apply(null, ys);
         var clipped = ys.filter(function (v) { return v > yhi; }).length;
-        var lay = baseLayout({ showlegend: true, margin: { l: 50, r: 6, t: 6, b: 38 } });
-        lay.xaxis = Object.assign(lay.xaxis, {
-          domain: [0, 0.13], range: [-0.6, 0.6], tickvals: [0], ticktext: ['ΔE=0'],
-          zeroline: false, showgrid: false, fixedrange: true });
-        lay.yaxis = Object.assign(lay.yaxis, {
-          domain: [0, 0.78],
-          title: { text: c.unit ? 'érték (' + c.unit + ')' : 'érték', font: { size: 10 } } });
+        var yRange = null;
         if (yhi != null && yhi > ylo) {
           var pad = 0.06 * (yhi - ylo);
-          lay.yaxis.range = [Math.min(0, ylo) - pad, yhi + pad];
+          yRange = [Math.min(0, ylo) - pad, yhi + pad];
         }
-        lay.xaxis3 = { domain: [0.17, 0.8], anchor: 'y', rangemode: 'tozero',
-                       gridcolor: T.border, zerolinecolor: T.border, automargin: true,
-                       title: { text: 'végső ΔE (>0)', font: { size: 10 } } };
-        lay.xaxis2 = { domain: [0.84, 1], anchor: 'y', showticklabels: false,
-                       gridcolor: T.border, zeroline: false, fixedrange: true };
-        lay.yaxis2 = { domain: [0.8, 1], anchor: 'x3', showticklabels: false,
-                       gridcolor: T.border, zeroline: false, fixedrange: true };
-        lay.legend = { orientation: 'h', y: 1.24, font: { size: 9 } };
-        lay.bargap = 0.05;
-        lay.barmode = 'overlay';
-        Plotly.react(el, [
+        var tA = document.getElementById('chEffTA' + i);
+        var tB = document.getElementById('chEffTB' + i);
+        if (tA) tA.textContent = 'tökéletes keverések (ΔE = 0) · n = ' + perfP.length;
+        if (tB) tB.textContent = 'nem tökéletes keverések (ΔE > 0) · n = ' + posP.length;
+        // LEFT jointplot: perfect mixes
+        var layA = jointLayout(c, yRange, {
+          range: [-0.6, 0.6], tickvals: [0], ticktext: ['ΔE = 0'],
+          zeroline: false, showgrid: false, fixedrange: true,
+          title: { text: 'végső ΔE (szétszórva)', font: { size: 10 } } });
+        Plotly.react(elA, [
           { type: 'scatter', mode: 'markers',
-            name: 'tökéletes (ΔE=0, n=' + perfP.length + ')',
-            x: perfP.map(function () { return (Math.random() - 0.5) * 0.75; }),
+            x: perfP.map(function () { return (Math.random() - 0.5) * 0.8; }),
             y: perfP.map(function (p2) { return p2[c.key]; }),
-            xaxis: 'x', yaxis: 'y',
             marker: { size: 5, color: T.ok, opacity: 0.45 },
             hovertemplate: 'ΔE = 0 · érték %{y:.2f}<extra></extra>' },
+          { type: 'histogram', x: perfP.map(function () { return 0; }),
+            xbins: { start: -0.6, end: 0.6, size: 0.12 },
+            yaxis: 'y2', marker: { color: T.ok },
+            hovertemplate: 'mind a(z) %{y} keverés ΔE = 0-nál<extra></extra>' },
+          { type: 'histogram', y: perfP.map(function (p2) { return p2[c.key]; }),
+            xaxis: 'x2', marker: { color: T.ok },
+            hovertemplate: '%{x} keverés<extra></extra>' }
+        ], layA, CFG);
+        // RIGHT jointplot: imperfect mixes
+        var layB = jointLayout(c, yRange, {
+          rangemode: 'tozero',
+          title: { text: 'végső ΔE (>0)', font: { size: 10 } } });
+        Plotly.react(elB, [
           { type: 'scatter', mode: 'markers',
-            name: 'nem tökéletes (ΔE>0, n=' + posP.length + ')',
             x: posP.map(function (p2) { return p2.de; }),
             y: posP.map(function (p2) { return p2[c.key]; }),
-            xaxis: 'x3', yaxis: 'y',
             marker: { size: 5, color: T.danger, opacity: 0.45 },
             hovertemplate: 'ΔE %{x:.2f} · érték %{y:.2f}<extra></extra>' },
           { type: 'histogram', x: posP.map(function (p2) { return p2.de; }),
-            xaxis: 'x3', yaxis: 'y2', marker: { color: '#9ca3af' }, showlegend: false,
+            yaxis: 'y2', marker: { color: T.danger },
             hovertemplate: 'ΔE≈%{x}: %{y} keverés<extra></extra>' },
-          { type: 'histogram', y: perfP.map(function (p2) { return p2[c.key]; }),
-            xaxis: 'x2', yaxis: 'y', marker: { color: T.ok }, opacity: 0.6,
-            showlegend: false, hovertemplate: '%{x} keverés (ΔE=0)<extra></extra>' },
           { type: 'histogram', y: posP.map(function (p2) { return p2[c.key]; }),
-            xaxis: 'x2', yaxis: 'y', marker: { color: T.danger }, opacity: 0.55,
-            showlegend: false, hovertemplate: '%{x} keverés (ΔE>0)<extra></extra>' }
-        ], lay, CFG);
+            xaxis: 'x2', marker: { color: T.danger },
+            hovertemplate: '%{x} keverés<extra></extra>' }
+        ], layB, CFG);
         var cap = document.getElementById('chEffCap' + i);
         if (cap) {
           cap.textContent = clipped
-            ? 'A függőleges tengely a 99. percentilisnél vágva; ' + clipped + ' pont esik a skála fölé.'
-            : '';
+            ? 'A két rajz függőleges tengelye közös skálájú, a 99. percentilisnél vágva; ' +
+              clipped + ' pont esik a skála fölé.'
+            : 'A két rajz függőleges tengelye közös skálájú.';
         }
       });
       var sW = sm.w || {};
