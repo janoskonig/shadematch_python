@@ -889,28 +889,18 @@
 
         <h3>8.5 A jelöltek az adaton: együttes empirikus eloszlás a ΔE-vel</h3>
         <p class="intro" id="effIntro">
-          A fenti jelölteket kiszámoltam a tényleges adaton. Minden elemzett keveréshez ismert a
-          végső cseppösszetétel (d<sub>i</sub>), a cél-szín minimális receptje (m<sub>i</sub> – a
-          tárolt recept legnagyobb közös osztóval leosztva), a lépésnaplóból a hozzáadott cseppek
-          összesen és pigmentenként (A, A<sub>i</sub>), valamint az első cseppművelet előtti ΔE₀.
-          Az alábbi táblázat és ábrák a jelöltek <strong>együttes empirikus eloszlását</strong>
-          mutatják a végső ΔE-vel, a keveréseket <strong>két részre bontva</strong> – pontosan úgy,
-          ahogy a kétrészes (hurdle) modell is nézi őket. Jelöltenként <strong>két pontfelhő áll
-          egymás mellett</strong>, mindkettő saját peremeloszlásokkal (fent a vízszintes, jobbra a
-          függőleges tengely hisztogramja): balra a <strong>tökéletes (ΔE = 0)</strong> keverések
-          (zölddel; a pontok vízszintesen véletlenszerűen szétszórva, hogy ne takarják egymást – a
-          felső perem mutatja, hogy valójában mind a ΔE = 0 pont-tömegben ül), jobbra a
-          <strong>nem tökéletesek</strong> (pirossal) a saját ΔE-tengelyükön. A két rajz függőleges
-          tengelye közös skálájú, így közvetlenül összevethetők.
+          A jelölteket kiszámoltam az adaton; keverésenként ismert d<sub>i</sub>, a lnko-val
+          leosztott m<sub>i</sub>, a lépésnaplóból A és A<sub>i</sub>, valamint ΔE₀. Jelöltenként
+          két pontfelhő áll egymás mellett, saját peremeloszlásokkal, közös függőleges skálán:
+          balra a <strong>tökéletes (ΔE = 0)</strong>, jobbra a <strong>nem tökéletes</strong>
+          keverések – ahogy a kétrészes (hurdle) modell is bontja őket. A bal rajzon a vízszintes
+          szórás csak a láthatóságot szolgálja.
         </p>
         <p class="intro">
-          Két dolgot érdemes bennük keresni. <strong>Az eloszlás alakját:</strong> a 8.2 jóslata
-          szerint a mutatók nemnegatívak, sok a pontosan optimális érték (pont-tömeg), a többi
-          jobbra ferde – ezt a táblázat „pontosan optimális” oszlopa és a pontfelhők alja mutatja.
-          <strong>És az új információt:</strong> ha egy jelölt a ΔE-vel tökéletesen együtt mozogna,
-          nem volna második dimenzió. A rangkorreláció (Spearman ρ) ezt számszerűsíti; a bal
-          sávban (tökéletes találatok) függőlegesen szóródó pontok pedig épp a lényeget
-          mutatják: <em>azonos pontosság mellett is nagyon különböző az anyagfelhasználás</em>.
+          Két dolog olvasható le. <strong>Az eloszlás alakja:</strong> sok pontosan optimális
+          érték, a többi jobbra ferde – a 8.2 hurdle-tervének alapja. <strong>Az új
+          információ:</strong> a bal rajz függőleges szórása – azonos pontosság mögött nagyon
+          különböző anyagfelhasználás; a Spearman ρ ugyanezt számszerűsíti.
         </p>
         <div class="panel table-wrap"><table id="effTable"></table></div>
         <div id="effPanels" style="margin-top:14px; display:grid; gap:14px;"></div>
@@ -926,43 +916,32 @@
         <p class="intro" id="effStrataNote"></p>
         <div class="grid2">
           <div class="panel table-wrap"><h4>A ΔE-kapcsolat rétegzetten</h4>
-            <p class="cap">Spearman ρ a végső ΔE-vel: a teljes mintán, majd csak a nem tökéletes
-              (ΔE&gt;0) keveréseken. A két oszlop különbsége a szerkezetet mutatja: ami a teljes mintán
-              együttmozgásnak látszik, az nagyrészt a teljesített és a feladott keverések
-              <em>csoportkülönbsége</em> — a rétegen belül a kapcsolat jórészt eltűnik.</p>
+            <p class="cap">Spearman ρ a végső ΔE-vel: a teljes mintán és csak a ΔE&gt;0 keveréseken.</p>
             <table id="effStrataTable"></table></div>
           <div class="panel"><h4>Azonos pontosság, szórt anyagfelhasználás</h4>
             <p class="cap" id="effPerfectCap"></p>
             <div class="chart" id="chEffPerfect"></div></div>
         </div>
         <p class="intro">
-          Ebből következik az is, miért <em>nem</em> cél a nulla korreláció. A pontosság és a
-          takarékosság rokon készségek: aki jó, átlagosan mindkettőben jobb — a közös
-          készség-komponens valódi jel, nem mérési hiba (ahogy a vérnyomás és a koleszterin is
-          összefügg, mégis két külön mérendő mennyiség). A mesterséges függetlenítés — a ΔE-re
-          „kiigazított” mutató — három sebből vérzik: a tréningezőnek elmagyarázhatatlan, a
-          definíciója mintafüggő, és torzít. <span id="residSentence"></span>
-          A szétválasztás helye ezért a <strong>modell</strong>, nem a mutató: a kétrészes terv (8.2)
-          első része a kimenet, második része a pazarlás mértéke — és a kimeneten belül a jelöltek
-          már maguktól is közel korrelálatlanok a ΔE-vel (táblázat, jobb oszlop).
+          A nulla korreláció ezért nem cél: a közös készség-komponens valódi jel, nem mérési hiba.
+          A mesterséges függetlenítés elmagyarázhatatlan, mintafüggő és torzít.
+          <span id="residSentence"></span> A szétválasztás helye a modell (8.2): első rész a
+          kimenet, második a pazarlás – a kimeneten belül a jelöltek maguktól is közel
+          korrelálatlanok (táblázat, jobb oszlop).
         </p>
 
         <h3>8.7 Változik-e a takarékosság gyakorlással — és hol ül a színtérben?</h3>
         <p class="intro">
-          A játékos a ΔE-t folyamatosan látja a képernyőn; az anyagfelhasználásáról viszont soha,
-          semmilyen visszajelzést nem kap. Ha a takarékosság visszajelzés nélkül nem javul, az
-          önmagában érv a mérőszám mellett: amit nem mérnek és nem jeleznek vissza, azt nem lehet
-          megtanulni.
+          A játékos a ΔE-t folyamatosan látja, az anyagfelhasználásáról nem kap visszajelzést –
+          amit nem jeleznek vissza, az nem is javulhat.
         </p>
         <div class="grid2">
           <div class="panel table-wrap"><h4>Gyakorlási trend: a hanyadik keverésnél tart a játékos</h4>
-            <p class="cap">A sávok közti különbség önszelekcióval terhelt (magas sorszámig csak a
-              legaktívabbak jutnak el); a tiszta jel a játékoson belüli trend — lásd az összegzést a
-              táblázatok alatt.</p>
+            <p class="cap">A sávok közti különbség önszelekcióval terhelt; a tiszta jel a játékoson
+              belüli trend (összegzés lent).</p>
             <table id="effPracticeTable"></table></div>
           <div class="panel table-wrap"><h4>A jelöltek a színcsaládokban</h4>
-            <p class="cap">Családonként a takarékossági mutatók a megfigyelt medián ΔE mellett,
-              medián ΔE szerint rendezve. Ott érdekes, ahol a két rangsor szétválik.</p>
+            <p class="cap">Családonként, medián ΔE szerint rendezve.</p>
             <table id="effFamTable"></table></div>
         </div>
         <div class="note" id="effPracticeNote"></div>
@@ -2016,13 +1995,9 @@
       });
       var sW = sm.w || {};
       document.getElementById('effNote').innerHTML =
-        '<strong>Olvasat.</strong> ' + fmt(eff.n_attempts) + ' elemzett keverésen a W-jelölt a keverések ' +
-        (sW.opt_share == null ? '—' : pct(sW.opt_share, 0)) + '-ában pontosan nulla (telitalálat a minimális ' +
-        'receptre), a többi érték nemnegatív és jobbra ferde – ez az a sok-nullás szerkezet, amelyre a 8.2 a ' +
-        'kétrészes (hurdle) modellt tervezi. A táblázat Spearman-oszlopa azt mutatja, mennyire mozog együtt egy ' +
-        'jelölt a ΔE-vel: ahol |ρ| jóval 1 alatt marad, ott a jelölt a pontosság mellé <em>új</em> információt ' +
-        'hordoz. A ΔE = 0-nál függőlegesen szóródó pontok ugyanezt képileg mutatják: azonos (tökéletes) ' +
-        'színtalálat mögött nagyon különböző anyagfelhasználás állhat.';
+        fmt(eff.n_attempts) + ' elemzett keverés; a W ' +
+        (sW.opt_share == null ? '—' : pct(sW.opt_share, 0)) + '-ban pontosan nulla, a többi jobbra ' +
+        'ferde. Ahol |ρ| jóval 1 alatt marad, a jelölt új információt hordoz a ΔE mellé.';
 
       // ---- 8.6 stratified ΔE link + perfect-save spread ------------------
       var st2 = '<thead><tr><th>Jelölt</th><th class="num">ρ (teljes minta)</th>' +
@@ -2036,15 +2011,12 @@
       document.getElementById('effStrataTable').innerHTML = st2 + '</tbody>';
       var sWo = (sm.w || {}).spearman_de, sWp = (sm.w || {}).spearman_de_pos;
       document.getElementById('effStrataNote').innerHTML =
-        'A W-jelölt példáján: a teljes mintán ρ = <strong>' + fmt(sWo, 2) + '</strong>, de a nem ' +
-        'tökéletes keveréseken belül már csak <strong>' + fmt(sWp, 2) + '</strong>. Az együttmozgást tehát ' +
-        'nem az adja, hogy a pazarlás „ugyanaz” volna, mint a pontatlanság, hanem hogy a teljesített és a ' +
-        'feladott keverések csoportja <em>mindkettőben</em> különbözik: aki jó, az átlagosan pontosabb és ' +
-        'takarékosabb is.';
+        'A W példáján: teljes mintán ρ = <strong>' + fmt(sWo, 2) + '</strong>, a ΔE>0 rétegen belül ' +
+        '<strong>' + fmt(sWp, 2) + '</strong>. Az együttmozgás nagyrészt csoportkülönbség: aki jó, ' +
+        'az pontosabb és takarékosabb is.';
       var pw = eff.perfect_w || {};
       document.getElementById('effPerfectCap').textContent =
-        'A W eloszlása a tökéletes (ΔE = 0) keveréseken: azonos pontosság mellett az anyagfelhasználás ' +
-        'széles sávban szór – ez a bizonyíték, hogy a takarékosság nem a pontosság átcímkézése.';
+        'A W eloszlása a tökéletes (ΔE = 0) keveréseken.';
       (function () {
         var vs = pts.filter(function (p2) { return p2.de <= 0.01 && p2.w != null; })
           .map(function (p2) { return p2.w; });
@@ -2058,9 +2030,8 @@
       })();
       var rc = eff.resid_check || {};
       document.getElementById('residSentence').innerHTML =
-        'Ki is próbáltuk: a ΔE-re rang-reziduált W a teljes mintán korrelálatlanná „javul” (ρ = ' +
-        fmt(rc.overall, 2) + '), de a ΔE&gt;0 rétegen belül <strong>ρ = ' + fmt(rc.de_pos, 2) +
-        '</strong>-ös műtermék-összefüggést gyárt – az őszinte szerkezetet megölné, egy hamisat teremtene.';
+        'Kipróbáltuk: a ΔE-re rang-reziduált W összességében korrelálatlan (ρ = ' + fmt(rc.overall, 2) +
+        '), de a ΔE&gt;0 rétegen belül ρ = ' + fmt(rc.de_pos, 2) + ' műterméket gyárt.';
 
       // ---- 8.7 practice trend + families ---------------------------------
       var pr = (eff.practice || {}).bins || [];
@@ -2088,15 +2059,12 @@
         var wU = byKey.w || {}, rU = byKey.ratio || {};
         var fr = (eff.families || {}).rho || {};
         document.getElementById('effPracticeNote').innerHTML =
-          '<strong>Gyakorlás:</strong> a játékoson belüli trend gyakorlatilag nulla – a keverés-sorszám és a ' +
-          'W rangkorrelációjának mediánja <strong>' + fmt(wU.median_rho, 2) + '</strong> (' + fmt(wU.n_users) +
-          ' játékos, javuló irány ' + fmt(wU.improving) + ' főnél), az A/M-é <strong>' + fmt(rU.median_rho, 2) +
-          '</strong>. A takarékosság tehát visszajelzés nélkül nem javul magától – összhangban azzal, hogy a ' +
-          'felület ma csak a ΔE-t mutatja. <strong>Színcsaládok:</strong> a családszintű takarékosság együtt ' +
-          'jár a megfigyelt nehézséggel (medián ΔE ↔ medián W: ρ = ' + fmt(fr.de_vs_w, 2) + '; ↔ P(W=0): ρ = ' +
-          fmt(fr.de_vs_w0, 2) + '; ' + fmt(fr.n_families) + ' családon), de nem determinisztikusan: a ' +
-          'táblázatban látszanak a szétválások – ahol a szín pontos, de az anyag sok (és fordítva), ott a két ' +
-          'dimenzió külön él. Feltáró megfigyelések, kis elemszámokkal.';
+          '<strong>Gyakorlás:</strong> a játékoson belüli trend nulla – sorszám↔W medián ρ = <strong>' +
+          fmt(wU.median_rho, 2) + '</strong> (' + fmt(wU.n_users) + ' játékos, javuló: ' + fmt(wU.improving) +
+          '), A/M: <strong>' + fmt(rU.median_rho, 2) + '</strong>. <strong>Családok:</strong> a takarékosság ' +
+          'együtt jár a nehézséggel (medián ΔE ↔ medián W: ρ = ' + fmt(fr.de_vs_w, 2) + '; ↔ P(W=0): ρ = ' +
+          fmt(fr.de_vs_w0, 2) + '), de nem determinisztikusan – a szétválások a táblázatban. Feltáró, kis ' +
+          'elemszámokkal.';
       })();
     })();
 
