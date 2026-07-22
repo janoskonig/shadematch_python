@@ -137,7 +137,7 @@
           <dt>Mentés / feladás</dt><dd>Egy keverés zárása: mentés (a felhasználó elfogadja az eredményt) vagy feladás (továbblép / félbehagyja).</dd>
           <dt>Teljesítési arány</dt><dd>A mentett (befejezett) keverések aránya az összes keveréshez képest.</dd>
           <dt>Meccs</dt><dd>A játék egysége: 10 kör, pontosan egy cél-szín a tíz fagyasztott színklaszter mindegyikéből, véletlen sorrendben. Egy befejezett meccs egy teljes véletlen blokk (lásd 2.6).</dd>
-          <dt>Színklaszter</dt><dd>A 242 egyenletes fedésű cél-szín tíz rögzített családja (k-közép a CIELAB-ban). A kiosztás és a tanulás-elemzés ugyanezt a felosztást használja.</dd>
+          <dt>Színcsalád (klaszter)</dt><dd>A bejárható gamut tíz összefüggő, nagyjából egyenlő tartományának egyike; a 242 cél-szín mindegyike pontosan egy családba tartozik. A családok a vizsgálati elrendezés részei: a kiosztás blokkjai és az elemzés egységei is ezek. Keletkezésük: 2.7.</dd>
           <dt>Fenotípus</dt><dd>Egy keverés szabályalapú viselkedési kategóriája a kikeverés útja alapján (lásd 6.6).</dd>
         </dl>
       </section>
@@ -226,8 +226,8 @@
         <div class="tech">
           <h4>2.6 A célszínek kiosztása: randomizált blokkos elrendezés</h4>
           <p><strong>A kiosztás egysége a meccs, és egy meccs egy teljes véletlen blokk.</strong>
-             A blokkosítás alapja a tíz <strong>színklaszter</strong>: a 242 egyenletes fedésű cél-színt
-             k-közép eljárás (CIELAB, k=10, rögzített kiindulás) osztja tíz családra. A besorolás a
+             A blokkosítás alapja a tíz <strong>színcsalád</strong>: a bejárható színtartomány tíz
+             összefüggő, nagyjából egyenlő tartománya (keletkezésüket a 2.7 írja le). A besorolás a
              vizsgálati periódusra <strong>fagyasztott és verziózott</strong> (mc-v1); minden meccs
              tárolja, melyik verzió alatt sorsolódott.</p>
           <p>Egy meccs 10 kör: <strong>mind a tíz klaszterből pontosan egy cél-szín</strong>. A
@@ -246,6 +246,37 @@
              egyetlen kör sem marad statisztikailag eldöntetlen. A napi kihívás és a fej-fej melletti
              párbajok nem randomizált csatornák — az elsődleges elemzésből ki vannak zárva. Részletes
              számok: 5. szakasz, „Meccs-kiosztás számokban”.</p>
+        </div>
+
+        <div class="tech">
+          <h4>2.7 Hogyan keletkeztek a színcsaládok?</h4>
+          <p>A tíz színcsalád nem az adatokból „felfedezett” csoport, hanem a vizsgálati elrendezés
+             része. Keletkezésük három lépés:</p>
+          <p class="def"><strong>1. A paletta kijelöli a teret.</strong> Az öt pigment meghatározza a
+             keveréssel bejárható színtartományt, a gamutot (9.1). Minden további döntés ezen a téren
+             belül történik.</p>
+          <p class="def"><strong>2. A katalógus egyenletesen tölti ki a teret.</strong> A 242 cél-szín
+             mindegyike egy egész cseppszámú recept pontos kimenete. A színek kiválasztása
+             „legtávolabbi pont” szabállyal történt: mindig az addig beválasztottaktól legmesszebb eső
+             kikeverhető szín került be, amíg a gamut kb. 12 ΔE sűrűségű, egyenletes fedése össze nem
+             állt. A katalógusban tehát szándékosan <em>nincsenek</em> sűrűsödések vagy természetes
+             csomók: a tér egyenletesen van lefedve.</p>
+          <p class="def"><strong>3. A családok a tér felosztásából születtek, a meccs-design
+             igényére.</strong> A meccs 10 körös, és minden meccsnek a teljes gamutot kell
+             képviselnie. Ehhez a teret tíz összefüggő, nagyjából egyenlő tartományra kellett vágni:
+             ezek a színcsaládok. A határok megrajzolása determinisztikus eljárással (k-közép,
+             rögzített kiindulással) történt, az eredmény pedig a vizsgálati periódusra fagyasztva és
+             verziózva lett (mc-v1).</p>
+          <p>Ebben az eljárásban a klaszterezés szerepe nem felfedezés, hanem szerkesztés és
+             <strong>ellenőrzés</strong>. Egyenletesen kitöltött térben nincsenek „valódi” csoportok,
+             amelyeket egy algoritmus megtalálhatna – a k-közép itt csak felszabdalja a teret kompakt,
+             szomszédos cellákra. Más véletlen kiindulással az eljárás más, hasonlóan jó felosztást
+             adna; éppen ezért kellett egyetlen konkrét felosztást rögzíteni és verziózni. A futtatás
+             ellenőrzésként azt igazolta, hogy a választott felosztás jól viselkedik: a tíz család
+             összefüggő tömb, a méretük hasonló (18–32 szín), és mindegyik természetes nevet kap a
+             középpontja alapján (pl. „világos narancs–barna”). A „miért pont ez a tíz család?”
+             kérdésre tehát a válasz: mert ez a design – a családok a kiosztás előre rögzített
+             blokkjai, nem utólagos adatelemzés termékei.</p>
         </div>
 
       </section>
@@ -377,42 +408,54 @@
         <p class="intro">
           Kétféleképp közelítem. <strong>Strukturális nehézség</strong>: a referenciarecept cseppszáma
           (hány cseppből áll a megoldás). <strong>Megfigyelt nehézség</strong>: a játékosok tényleges
-          eredménye az adott színen (medián ΔE, feladási arány, lépésszám). A kettő nem ugyanaz – megnézem, mennyire függenek össze.
+          eredménye (medián ΔE, feladási arány, lépésszám). A kettő nem ugyanaz – megnézem, mennyire függenek össze.
+        </p>
+        <p class="intro">
+          Az elemzés egysége itt <strong>nem az egyes szín, hanem a színcsalád</strong> (2.7). Egy-egy
+          konkrét szín csak néhány keverést kap, így a színenkénti mutatók nagyrészt zajok; egy család
+          viszont sok tucat keverést gyűjt, ezért a családszintű mutató stabil. A strukturális oldalt a
+          család színeinek katalógus-jellemzőivel (átlagos cseppszám, átlagos pigmentszám), a megfigyelt
+          oldalt a családon belüli összes elemzett keveréssel mérem.
         </p>
         <div class="grid2">
-          <div class="panel"><h4>Cseppszám ↔ megfigyelt medián ΔE</h4>
-            <p class="cap">Egy pont = egy cél-szín (≥3 keverés), a pont színe a valódi cél-szín.</p>
+          <div class="panel"><h4>Cseppszám ↔ megfigyelt medián ΔE (családonként)</h4>
+            <p class="cap">Egy pont = egy színcsalád, a centroidja színére festve; a pont mérete a
+              család keverésszámával arányos. Az x-tengely a család receptjeinek átlagos cseppszáma.</p>
             <div class="chart" id="chDiffDe"></div></div>
-          <div class="panel"><h4>Cseppszám ↔ feladási arány</h4>
-            <p class="cap">Ugyanaz, de a feladott (skipped/abandoned) próbálkozások arányával.</p>
+          <div class="panel"><h4>Cseppszám ↔ feladási arány (családonként)</h4>
+            <p class="cap">Ugyanaz, de a feladott próbálkozások családon belüli arányával.</p>
             <div class="chart" id="chDiffGiveup"></div></div>
         </div>
         <div class="note key" id="diffNote"></div>
 
         <h3>4.3 A nehézség mint többváltozós mutató: főkomponens-elemzés (PCA)</h3>
         <p class="intro">
-          A nehézségnek nincs egyetlen természetes mérőszáma, ezért többváltozósan is megnézem. Színenként öt
-          jellemzőt használok (≥3 keveréssel bíró színeken): a recept <strong>cseppszáma</strong> és
-          <strong>pigmentszáma</strong> (strukturális oldal), valamint a megfigyelt <strong>medián ΔE</strong>,
-          <strong>feladási arány</strong> és <strong>medián lépésszám</strong>. A jellemzőket standardizálom,
-          majd PCA-t futtatok; a tengelyek jelentését a súlyok (loadingok) adják – ezeket mutatja az alábbi ábra.
+          A nehézségnek nincs egyetlen természetes mérőszáma, ezért többváltozósan is megnézem – szintén
+          <strong>családszinten</strong>. Családonként öt jellemzőt használok: a család receptjeinek átlagos
+          <strong>cseppszáma</strong> és <strong>pigmentszáma</strong> (strukturális oldal), valamint a
+          megfigyelt <strong>medián ΔE</strong>, <strong>feladási arány</strong> és <strong>medián
+          lépésszám</strong>. A jellemzőket standardizálom, majd PCA-t futtatok; a tengelyek jelentését a
+          súlyok (loadingok) adják – ezeket mutatja az alábbi ábra. Tíz megfigyelési egységgel ez a PCA
+          feltáró összegzés, nem modell.
         </p>
         <p class="intro" id="pcaNote"></p>
         <div class="grid2">
           <div class="panel"><h4>PC1- és PC2-súlyok: miből állnak a tengelyek?</h4>
-            <p class="cap">Az első két főkomponens súlyai jellemzőnként. A PC1-nél minden súly azonos előjelű
-              (általános nehézség); a PC2-nél a recept-jellemzők és a megfigyelt pontosság <em>ellentétes</em>
-              előjelűek – ez a két nehézség-fogalom szétválásának tengelye.</p>
+            <p class="cap">Az első két főkomponens súlyai jellemzőnként. A PC1 a családok általános
+              nehézség-tengelye (jobbra = nehezebb); a PC2 előjel-mintázata mutatja meg, mely jellemzők
+              válnak szét rajta – jellemzően a recept-oldal és a megfigyelt pontosság.</p>
             <div class="chart" id="chPcaLoadings"></div></div>
-          <div class="panel"><h4>A színek a PC1–PC2 síkon</h4>
-            <p class="cap">Egy pont = egy cél-szín, a saját valódi színére festve. Jobbra = összességében
-              nehezebb (PC1); felfelé = a recept-oldal, lefelé = a pontatlanság dominál (PC2). A négy negyed
-              olvasatát a halvány sarokfeliratok adják – diagnosztikailag a jobb alsó „csapda”-negyed a
-              legérdekesebb: receptre egyszerű, mégis elhibázott színek.</p>
+          <div class="panel"><h4>A családok a PC1–PC2 síkon</h4>
+            <p class="cap">Egy pont = egy színcsalád, a centroidja színére festve, névvel. Jobbra =
+              összességében nehezebb (PC1); felfelé = a recept-oldal, lefelé = a pontatlanság dominál
+              (PC2). A négy negyed olvasatát a halvány sarokfeliratok adják – diagnosztikailag a jobb
+              alsó „csapda”-negyed a legérdekesebb: receptre egyszerű, mégis elhibázott családok.</p>
             <div class="chart" id="chPcaScatter"></div></div>
         </div>
 
-        <h3>4.4 A legnehezebben kikeverhető színek (megfigyelt)</h3>
+        <h3>4.4 A színcsaládok nehézségi rangsora (megfigyelt)</h3>
+        <p class="intro">A tíz család a megfigyelt medián ΔE szerint rendezve; a strukturális oszlopok
+          (átlagos cseppszám, pigmentszám) mellé téve látszik, hol válik szét a kétféle nehézség.</p>
         <div class="panel table-wrap"><table id="hardTable"></table></div>
       </section>
 
@@ -428,20 +471,20 @@
             <div class="chart" id="chDaily"></div></div>
         </div>
 
-        <h3>Tanulás a színklaszterek mentén</h3>
+        <h3>Tanulás a színcsaládok mentén</h3>
         <p class="intro">
           Egy konkrét színt egy játékos ritkán kever ki kétszer, ezért az egy színen belüli ismétlésből
-          nem mérhető tanulás. Ehelyett a tanulást a <strong>tíz színklaszter</strong> mentén mérem —
-          pontosan azokon a családokon, amelyekből a meccsek sorsolnak (2.6), így minden régió egyben
-          a kiosztás egy blokkja is. Egy klaszteren belül a színek szomszédosak, de <em>más receptűek</em>,
-          ezért a klaszteren belüli ismétlődő keverés általánosítható tanulást mér, nem
-          receptmemorizálást. Minden klasztert a tagszínei centroidja színez.
+          nem mérhető tanulás. Ehelyett a tanulást a <strong>tíz színcsalád</strong> mentén mérem —
+          pontosan azokon a családokon, amelyekből a meccsek sorsolnak (2.6–2.7), így minden régió egyben
+          a kiosztás egy blokkja is. Egy családon belül a színek szomszédosak, de <em>más receptűek</em>,
+          ezért a családon belüli ismétlődő keverés általánosítható tanulást mér, nem
+          receptmemorizálást. Minden családot a tagszínei centroidja színez.
         </p>
         <div class="panel">
-          <h4>A tíz színklaszter (a pontok a klaszterük centroid-színét viselik)</h4>
-          <p class="cap">Ugyanaz a 3D CIELAB-térkép, mint a 4.1-ben, de itt minden cél-szín a <strong>klasztere</strong>
+          <h4>A tíz színcsalád (a pontok a családjuk centroid-színét viselik)</h4>
+          <p class="cap">Ugyanaz a 3D CIELAB-térkép, mint a 4.1-ben, de itt minden cél-szín a <strong>családja</strong>
             átlagszínére festve – így a családok összefüggő tömbökként látszanak. Húzással forgatható;
-            rámutatva a klaszter és a szín neve.</p>
+            rámutatva a család és a szín neve.</p>
           <div class="chart" id="chRegionMap" style="min-height:480px;"></div>
           <div class="table-wrap" style="margin-top:10px;"><table id="regionTable"></table></div>
         </div>
@@ -780,6 +823,101 @@
           tanulást”. Az a kívánt eredmény alapján választana mutatót – a tanulási kérdést ezért
           csak a kritériumok szerint kiválasztott győztes mutatón tesszük majd fel.
         </p>
+
+        <h3>8.5 A jelöltek az adaton: együttes empirikus eloszlás a ΔE-vel</h3>
+        <p class="intro" id="effIntro">
+          A fenti jelölteket kiszámoltam a tényleges adaton. Minden elemzett keveréshez ismert a
+          végső cseppösszetétel (d<sub>i</sub>), a cél-szín minimális receptje (m<sub>i</sub> – a
+          tárolt recept legnagyobb közös osztóval leosztva), a lépésnaplóból az összes hozzáadott
+          csepp (A) és az első cseppművelet előtti ΔE₀. Az alábbi táblázat és pontfelhők a jelöltek
+          <strong>együttes empirikus eloszlását</strong> mutatják a végső ΔE-vel: minden pont egy
+          keverés, vízszintesen a végső ΔE, függőlegesen a jelölt értéke.
+        </p>
+        <p class="intro">
+          Két dolgot érdemes bennük keresni. <strong>Az eloszlás alakját:</strong> a 8.2 jóslata
+          szerint a mutatók nemnegatívak, sok a pontosan optimális érték (pont-tömeg), a többi
+          jobbra ferde – ezt a táblázat „pontosan optimális” oszlopa és a pontfelhők alja mutatja.
+          <strong>És az új információt:</strong> ha egy jelölt a ΔE-vel tökéletesen együtt mozogna,
+          nem volna második dimenzió. A rangkorreláció (Spearman ρ) ezt számszerűsíti; a
+          ΔE = 0-nál (tökéletes színtalálat) függőlegesen szóródó pontok pedig épp a lényeget
+          mutatják: <em>azonos pontosság mellett is nagyon különböző az anyagfelhasználás</em>.
+        </p>
+        <div class="panel table-wrap"><table id="effTable"></table></div>
+        <div class="grid2" id="effPanels" style="margin-top:14px;"></div>
+        <p class="intro" id="effNote"></p>
+
+        <h3>8.6 Együtt mozog-e a jelölt a ΔE-vel — és baj-e, ha igen?</h3>
+        <p class="intro">
+          A ΔE-vel való összevetés a jelöltek <strong>érvényességi próbája</strong>, két bukási móddal.
+          Ha egy jelölt majdnem tökéletesen együtt mozog a ΔE-vel (ρ ≈ 1), fölösleges: a pontosságot
+          méri új néven. Ha semmi köze hozzá és értelmezhető szerkezete sincs, lehet, hogy zajt mér.
+          A hasznos zóna a kettő között van: mérsékelt együttmozgás + saját információ.
+        </p>
+        <p class="intro" id="effStrataNote"></p>
+        <div class="grid2">
+          <div class="panel table-wrap"><h4>A ΔE-kapcsolat rétegzetten</h4>
+            <p class="cap">Spearman ρ a végső ΔE-vel: a teljes mintán, majd csak a nem tökéletes
+              (ΔE&gt;0) keveréseken. A két oszlop különbsége a szerkezetet mutatja: ami a teljes mintán
+              együttmozgásnak látszik, az nagyrészt a teljesített és a feladott keverések
+              <em>csoportkülönbsége</em> — a rétegen belül a kapcsolat jórészt eltűnik.</p>
+            <table id="effStrataTable"></table></div>
+          <div class="panel"><h4>Azonos pontosság, szórt anyagfelhasználás</h4>
+            <p class="cap" id="effPerfectCap"></p>
+            <div class="chart" id="chEffPerfect"></div></div>
+        </div>
+        <p class="intro">
+          Ebből következik az is, miért <em>nem</em> cél a nulla korreláció. A pontosság és a
+          takarékosság rokon készségek: aki jó, átlagosan mindkettőben jobb — a közös
+          készség-komponens valódi jel, nem mérési hiba (ahogy a vérnyomás és a koleszterin is
+          összefügg, mégis két külön mérendő mennyiség). A mesterséges függetlenítés — a ΔE-re
+          „kiigazított” mutató — három sebből vérzik: a tréningezőnek elmagyarázhatatlan, a
+          definíciója mintafüggő, és torzít. <span id="residSentence"></span>
+          A szétválasztás helye ezért a <strong>modell</strong>, nem a mutató: a kétrészes terv (8.2)
+          első része a kimenet, második része a pazarlás mértéke — és a kimeneten belül a jelöltek
+          már maguktól is közel korrelálatlanok a ΔE-vel (táblázat, jobb oszlop).
+        </p>
+
+        <h3>8.7 Körkörösségi próba: vesz-e az anyag pontosságot?</h3>
+        <p class="intro">
+          A kézenfekvő ellenvetés a jelöltekkel szemben: a keverés közben hozzáadott csepp finomítja
+          az arányt (nagy össz-cseppszám mellett egy csepp kisebbet mozdít rajta), tehát a több anyag
+          önmagában is kisebb ΔE-t okozhat. Ha ez determinálná a végeredményt, a „pazarlás” nem önálló
+          dimenzió volna, hanem a pontosság ára. A lépésnaplóból ez eldönthető: minden mérhető
+          lépésnél ismert a kumulált hozzáadott cseppszám és a pillanatnyi ΔE.
+        </p>
+        <div class="grid2">
+          <div class="panel"><h4>A keverési pálya: kumulált csepp ↔ pillanatnyi ΔE</h4>
+            <p class="cap">A mérhető lépések medián ΔE-je a kumulált hozzáadott cseppszám sávjaiban,
+              a keverés végkimenete szerint bontva. Poolozott, leíró kép — a tiszta, keverésen belüli
+              bizonyíték a jobb oldali panel.</p>
+            <div class="chart" id="chTrajCurve"></div></div>
+          <div class="panel"><h4>Keverésen belüli irány</h4>
+            <p class="cap">Keverésenként a kumulált cseppszám és a pillanatnyi ΔE rangkorrelációja
+              (legalább 5 mérhető lépésű keverések). A −1 közeli érték azt jelenti: a keverés folyamán
+              az anyag következetesen pontosságot vett.</p>
+            <div class="chart" id="chTrajRho"></div></div>
+        </div>
+        <div class="note key" id="trajNote"></div>
+
+        <h3>8.8 Változik-e a takarékosság gyakorlással — és hol ül a színtérben?</h3>
+        <p class="intro">
+          A játékos a ΔE-t folyamatosan látja a képernyőn; az anyagfelhasználásáról viszont soha,
+          semmilyen visszajelzést nem kap. Ha a takarékosság visszajelzés nélkül nem javul, az
+          önmagában érv a mérőszám mellett: amit nem mérnek és nem jeleznek vissza, azt nem lehet
+          megtanulni.
+        </p>
+        <div class="grid2">
+          <div class="panel table-wrap"><h4>Gyakorlási trend: a hanyadik keverésnél tart a játékos</h4>
+            <p class="cap">A sávok közti különbség önszelekcióval terhelt (magas sorszámig csak a
+              legaktívabbak jutnak el); a tiszta jel a játékoson belüli trend — lásd az összegzést a
+              táblázatok alatt.</p>
+            <table id="effPracticeTable"></table></div>
+          <div class="panel table-wrap"><h4>A jelöltek a színcsaládokban</h4>
+            <p class="cap">Családonként a takarékossági mutatók a megfigyelt medián ΔE mellett,
+              medián ΔE szerint rendezve. Ott érdekes, ahol a két rangsor szétválik.</p>
+            <table id="effFamTable"></table></div>
+        </div>
+        <div class="note" id="effPracticeNote"></div>
       </section>
 
       <!-- 9) LIMITÁCIÓK -->
@@ -908,7 +1046,6 @@
   function pct(x, d) { if (x == null || isNaN(+x)) return '—'; return (100 * (+x)).toFixed(d == null ? 1 : d) + '%'; }
   function esc(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function niceDate(t) { return t ? String(t).slice(0, 10) : '—'; }
-  function rgbCss(c) { return 'rgb(' + [c.r, c.g, c.b].map(function (v) { return Math.max(0, Math.min(255, v | 0)); }).join(',') + ')'; }
 
   function baseLayout(o) {
     o = o || {};
@@ -1221,28 +1358,35 @@
     bar('chDropDist', dd.map(function (r) { return r.drops; }), dd.map(function (r) { return r.n_colors; }),
       { color: T.accent, xtitle: 'recept cseppszáma', ytitle: 'célszínek száma', hover: '%{x} csepp: %{y} szín' });
 
-    var pc = (d.per_color || []).filter(function (r) { return (r.n_plays || 0) >= 3 && r.sum_drops != null; });
+    var pf = (d.per_family || []).filter(function (r) { return r.mean_drops != null; });
+    function famRgb(r) { return 'rgb(' + r.r + ',' + r.g + ',' + r.blue + ')'; }
+    var pfMaxPlays = Math.max.apply(null, pf.map(function (r) { return r.n_plays || 1; }).concat([1]));
     function scatterDiff(id, ykey, ytitle, tickpct) {
-      var lay = baseLayout({ xaxis: { title: { text: 'recept cseppszáma', font: { size: 10 } }, rangemode: 'tozero' },
+      var lay = baseLayout({ margin: { l: 50, r: 12, t: 24, b: 40 },
+        xaxis: { title: { text: 'átlagos recept-cseppszám a családban', font: { size: 10 } } },
         yaxis: { title: { text: ytitle, font: { size: 10 } }, rangemode: 'tozero' } });
       if (tickpct) lay.yaxis.tickformat = '.0%';
       Plotly.react(document.getElementById(id), [{
-        type: 'scatter', mode: 'markers',
-        x: pc.map(function (r) { return r.sum_drops; }), y: pc.map(function (r) { return r[ykey]; }),
-        text: pc.map(function (r) { return r.name_hu || r.name; }),
-        marker: { size: 9, color: pc.map(function (r) { return rgbCss(r); }), line: { width: 1, color: 'rgba(0,0,0,0.25)' } },
-        hovertemplate: '%{text}<br>cseppszám %{x}, ' + ytitle + ' %{y:' + (tickpct ? '.0%' : '.2f') + '}<extra></extra>'
+        type: 'scatter', mode: 'markers+text',
+        x: pf.map(function (r) { return r.mean_drops; }), y: pf.map(function (r) { return r[ykey]; }),
+        text: pf.map(function (r) { return r.name; }),
+        textposition: 'top center', textfont: { size: 9, color: T.sub },
+        customdata: pf.map(function (r) { return r.n_plays; }),
+        marker: { size: pf.map(function (r) { return 8 + 12 * Math.sqrt((r.n_plays || 1) / pfMaxPlays); }),
+                  color: pf.map(famRgb), line: { width: 1, color: 'rgba(0,0,0,0.3)' } },
+        hovertemplate: '%{text}<br>átlag cseppszám %{x:.1f} · ' + ytitle + ' %{y:' + (tickpct ? '.0%' : '.2f') + '} · n=%{customdata} keverés<extra></extra>'
       }], lay, CFG);
     }
     scatterDiff('chDiffDe', 'med_de', 'medián ΔE', false);
     scatterDiff('chDiffGiveup', 'giveup_rate', 'feladási arány', true);
     var corr = d.difficulty_corr || {};
     document.getElementById('diffNote').innerHTML =
-      '<strong>A strukturális és a megfigyelt nehézség nem ugyanaz.</strong> A recept cseppszáma és a megfigyelt ' +
-      'medián ΔE közti korreláció gyenge (r = ' + fmt(corr.drops_vs_de, 2) + '): a hosszabb recept önmagában nem ' +
-      'jár rosszabb végeredménnyel. A cseppszám és a <em>feladási</em> arány viszont közepesen összefügg (r = ' +
-      fmt(corr.drops_vs_giveup, 2) + '): a bonyolultabb recepteket gyakrabban adják fel. Vannak rövid receptű, ' +
-      'mégis nehezen eltalálható színek is.';
+      '<strong>A strukturális és a megfigyelt nehézség családszinten sem ugyanaz.</strong> A családok átlagos ' +
+      'recept-cseppszáma és a megfigyelt medián ΔE közti korreláció r = ' + fmt(corr.drops_vs_de, 2) + ', a ' +
+      '<em>feladási</em> aránnyal r = ' + fmt(corr.drops_vs_giveup, 2) + ' (' + fmt(corr.n_families) +
+      ' családon számolva – ilyen kevés ponton a korreláció csak tájékozódásra való, ezért a 4.4 táblázatban ' +
+      'a nyers családértékek is ott vannak). Ahol a két rangsor szétválik, ott a nehézséget nem a recept ' +
+      'hossza, hanem a színtartomány viselkedése hordozza.';
 
     // 4.3 difficulty PCA: loadings + PC1×PC2 scatter
     (function () {
@@ -1267,18 +1411,16 @@
         pc2Sentence = ' A <strong>PC2</strong> (a különbségek további ' + pct(evr2, 0) + '-a) mást mér: a ' +
           'súlyai vegyes előjelűek – pozitív a <strong>' + esc(pc2pos.join(' és a ')) + '</strong>, negatív a ' +
           '<strong>' + esc(pc2neg.join(' és a ')) + '</strong>. Ez tehát nem azt mutatja, <em>mennyire</em> ' +
-          'nehéz egy szín, hanem azt, <em>melyik fajta</em> nehézség jellemzi: a sík tetején a bonyolult ' +
-          'receptű, de pontosan eltalált színek ülnek, az alján az egyszerű receptű, mégis pontatlanul ' +
-          'eltaláltak. Ez ugyanaz a szétválás, amit a 4.2 gyenge cseppszám↔ΔE korrelációja jelzett.';
+          'nehéz egy család, hanem azt, <em>melyik fajta</em> nehézség jellemzi: a sík tetején a bonyolult ' +
+          'receptű, de pontosan eltalált családok ülnek, az alján az egyszerű receptű, mégis pontatlanul ' +
+          'eltaláltak. Ez ugyanaz a szétválás, amit a 4.2 cseppszám↔ΔE képe mutat.';
       } else {
         pc2Sentence = ' A PC2 (' + pct(evr2, 0) + ') önálló, jól elkülönülő kontrasztot nem mutat.';
       }
       document.getElementById('pcaNote').innerHTML =
-        'Az eredmény: a <strong>PC1</strong> egyetlen számba sűríti a színek közti különbségek <strong>' +
-        pct(evr1, 0) + '</strong>-át. Minden jellemző pozitív súllyal szerepel benne: minél nagyobb egy szín ' +
-        'PC1-értéke, annál rosszabb <em>minden</em> mutatóban. Ezért olvasható általános „nehézségként”. ' +
-        'A megfigyelt jellemzők (feladás, lépésszám) súlya nagyobb, mint a recept-jellemzőké: a nehézséget ' +
-        'inkább a viselkedés hordozza, mint a recept hossza.' + pc2Sentence;
+        'Az eredmény: a <strong>PC1</strong> egyetlen számba sűríti a családok közti különbségek <strong>' +
+        pct(evr1, 0) + '</strong>-át. Minél nagyobb egy család PC1-értéke, annál rosszabb a mutatókban ' +
+        'összességében – ezért olvasható általános „nehézségként”.' + pc2Sentence;
       (function () {
         var lay = baseLayout({ showlegend: true, barmode: 'group',
           margin: { l: 130, r: 12, t: 8, b: 36 },
@@ -1313,23 +1455,26 @@
         corner(0.99, 0.01, 'csapda: egyszerűbb recept,<br>pontatlan találat', 'right')
       ];
       Plotly.react(document.getElementById('chPcaScatter'), [{
-        type: 'scatter', mode: 'markers',
+        type: 'scatter', mode: 'markers+text',
         x: pts.map(function (r) { return r.pc1; }), y: pts.map(function (r) { return r.pc2; }),
         text: pts.map(function (r) { return r.name; }),
-        marker: { size: 9, color: pts.map(function (r) { return 'rgb(' + r.r + ',' + r.g + ',' + r.blue + ')'; }),
+        textposition: 'top center', textfont: { size: 9, color: T.sub },
+        marker: { size: 11, color: pts.map(function (r) { return 'rgb(' + r.r + ',' + r.g + ',' + r.blue + ')'; }),
                   line: { width: 1, color: 'rgba(0,0,0,0.25)' } },
         hovertemplate: '%{text}<br>PC1 %{x:.2f}, PC2 %{y:.2f}<extra></extra>'
       }], lay, CFG);
     })();
 
-    var hard = (d.per_color || []).filter(function (r) { return (r.n_plays || 0) >= 5; }).slice(0, 12);
-    var hh = '<thead><tr><th>Szín</th><th class="num">Cseppszám</th><th class="num">Pigmentek</th>' +
-      '<th class="num">Medián ΔE</th><th class="num">Feladás</th><th class="num">Keverés</th></tr></thead><tbody>';
-    hard.forEach(function (r) {
-      hh += '<tr><td><span class="swatch" style="background:' + rgbCss(r) + '"></span> ' + esc(r.name_hu || r.name) + '</td>' +
-        '<td class="num">' + fmt(r.sum_drops) + '</td><td class="num">' + fmt(r.n_pigments) + '</td>' +
+    var hardF = d.per_family || [];
+    var hh = '<thead><tr><th>Család</th><th class="num">Színek</th><th class="num">Keverés</th>' +
+      '<th class="num">Átlag cseppszám</th><th class="num">Átlag pigmentszám</th>' +
+      '<th class="num">Medián ΔE</th><th class="num">Feladás</th><th class="num">Medián lépés</th></tr></thead><tbody>';
+    hardF.forEach(function (r) {
+      hh += '<tr><td><span class="swatch" style="background:' + famRgb(r) + '"></span> ' + esc(r.name) + '</td>' +
+        '<td class="num">' + fmt(r.n_targets) + '</td><td class="num">' + fmt(r.n_plays) + '</td>' +
+        '<td class="num">' + fmt(r.mean_drops, 1) + '</td><td class="num">' + fmt(r.mean_pigments, 1) + '</td>' +
         '<td class="num">' + fmt(r.med_de, 2) + '</td><td class="num">' + pct(r.giveup_rate, 0) + '</td>' +
-        '<td class="num">' + fmt(r.n_plays) + '</td></tr>';
+        '<td class="num">' + fmt(r.med_steps, 0) + '</td></tr>';
     });
     document.getElementById('hardTable').innerHTML = hh + '</tbody>';
 
@@ -1674,6 +1819,222 @@
         '<td class="num">' + fmt(r.median_de, 2) + '</td><td class="num">' + pct(r.giveup_rate, 0) + '</td></tr>';
     });
     document.getElementById('phenoTable').innerHTML = pt + '</tbody>';
+
+    // 8.5 candidate efficiency metrics: joint empirical distribution with ΔE
+    (function () {
+      var eff = d.efficiency || {};
+      var pts = eff.points || [];
+      var tbl = document.getElementById('effTable');
+      var wrap = document.getElementById('effPanels');
+      if (!tbl || !wrap) return;
+      if (!pts.length) {
+        tbl.innerHTML = '<tbody><tr><td>Még nincs elég adat a jelölt-mutatókhoz.</td></tr></tbody>';
+        return;
+      }
+      var CAND = [
+        { key: 'w', label: '1. W – eltérés a minimális recepttől', unit: 'csepp' },
+        { key: 'wk', label: '2. Wₖ – eltérés a legközelebbi többszöröstől', unit: 'csepp' },
+        { key: 'dcos', label: '3a. Arány-távolság (koszinusz)', unit: '' },
+        { key: 'dait', label: '3b. Arány-távolság (Aitchison)', unit: '' },
+        { key: 'wrel', label: '4a. Relatív eltérés (W/M)', unit: '' },
+        { key: 'eff', label: '4b. Hatásfok (M/(M+W))', unit: '' },
+        { key: 'wpath', label: '5. W_path – valódi anyagköltség', unit: 'csepp' },
+        { key: 'ratio', label: '6. Többszörözési hányados (A/M)', unit: '×' },
+        { key: 'yield', label: '7. Cseppenkénti hozam', unit: 'ΔE/csepp' }
+      ];
+      var sm = {};
+      (eff.summary || []).forEach(function (s) { sm[s.key] = s; });
+      var h = '<thead><tr><th>Jelölt</th><th class="num">n</th><th class="num">Pontosan optimális</th>' +
+        '<th class="num">Medián</th><th class="num">P90</th><th class="num">Spearman ρ a ΔE-vel</th></tr></thead><tbody>';
+      CAND.forEach(function (c) {
+        var s = sm[c.key] || {};
+        h += '<tr><td>' + esc(c.label) + '</td><td class="num">' + fmt(s.n) + '</td>' +
+          '<td class="num">' + (s.opt_share == null ? '—' : pct(s.opt_share, 0)) + '</td>' +
+          '<td class="num">' + fmt(s.median, 2) + '</td><td class="num">' + fmt(s.p90, 2) + '</td>' +
+          '<td class="num">' + fmt(s.spearman_de, 2) + '</td></tr>';
+      });
+      tbl.innerHTML = h + '</tbody>';
+
+      wrap.innerHTML = CAND.map(function (c, i) {
+        return '<div class="panel"><h4>' + esc(c.label) + '</h4>' +
+          '<p class="cap" id="chEffCap' + i + '"></p>' +
+          '<div class="chart" id="chEff' + i + '" style="min-height:250px;"></div></div>';
+      }).join('');
+      function quant(vs, q) {
+        if (!vs.length) return null;
+        var s2 = vs.slice().sort(function (a, b) { return a - b; });
+        return s2[Math.min(s2.length - 1, Math.floor(q * s2.length))];
+      }
+      CAND.forEach(function (c, i) {
+        var el = document.getElementById('chEff' + i);
+        var sub = pts.filter(function (p2) { return p2[c.key] != null && p2.de != null; });
+        if (!sub.length) { el.innerHTML = '<p class="cap">Nincs adat.</p>'; return; }
+        var ys = sub.map(function (p2) { return p2[c.key]; });
+        var yhi = quant(ys, 0.99), ylo = Math.min.apply(null, ys);
+        var clipped = ys.filter(function (v) { return v > yhi; }).length;
+        var lay = baseLayout({ showlegend: true, margin: { l: 50, r: 10, t: 8, b: 38 },
+          xaxis: { title: { text: 'végső ΔE', font: { size: 10 } }, rangemode: 'tozero' },
+          yaxis: { title: { text: c.unit ? 'érték (' + c.unit + ')' : 'érték', font: { size: 10 } } } });
+        if (yhi != null && yhi > ylo) {
+          var pad = 0.06 * (yhi - ylo);
+          lay.yaxis.range = [Math.min(0, ylo) - pad, yhi + pad];
+        }
+        lay.legend = { orientation: 'h', y: 1.18, font: { size: 9 } };
+        function tr2(sel, color, name) {
+          var s2 = sub.filter(sel);
+          return { type: 'scatter', mode: 'markers', name: name + ' (n=' + s2.length + ')',
+            x: s2.map(function (p2) { return p2.de; }), y: s2.map(function (p2) { return p2[c.key]; }),
+            marker: { size: 5, color: color, opacity: 0.45 },
+            hovertemplate: name + '<br>ΔE %{x:.2f} · érték %{y:.2f}<extra></extra>' };
+        }
+        Plotly.react(el, [
+          tr2(function (p2) { return !p2.g; }, T.ok, 'teljesítve'),
+          tr2(function (p2) { return p2.g; }, T.danger, 'feladva')
+        ], lay, CFG);
+        var cap = document.getElementById('chEffCap' + i);
+        if (cap) {
+          cap.textContent = clipped
+            ? 'A függőleges tengely a 99. percentilisnél vágva; ' + clipped + ' pont esik a skála fölé.'
+            : '';
+        }
+      });
+      var sW = sm.w || {};
+      document.getElementById('effNote').innerHTML =
+        '<strong>Olvasat.</strong> ' + fmt(eff.n_attempts) + ' elemzett keverésen a W-jelölt a keverések ' +
+        (sW.opt_share == null ? '—' : pct(sW.opt_share, 0)) + '-ában pontosan nulla (telitalálat a minimális ' +
+        'receptre), a többi érték nemnegatív és jobbra ferde – ez az a sok-nullás szerkezet, amelyre a 8.2 a ' +
+        'kétrészes (hurdle) modellt tervezi. A táblázat Spearman-oszlopa azt mutatja, mennyire mozog együtt egy ' +
+        'jelölt a ΔE-vel: ahol |ρ| jóval 1 alatt marad, ott a jelölt a pontosság mellé <em>új</em> információt ' +
+        'hordoz. A ΔE = 0-nál függőlegesen szóródó pontok ugyanezt képileg mutatják: azonos (tökéletes) ' +
+        'színtalálat mögött nagyon különböző anyagfelhasználás állhat.';
+
+      // ---- 8.6 stratified ΔE link + perfect-save spread ------------------
+      var st2 = '<thead><tr><th>Jelölt</th><th class="num">ρ (teljes minta)</th>' +
+        '<th class="num">ρ (csak ΔE&gt;0)</th></tr></thead><tbody>';
+      CAND.forEach(function (c) {
+        var s = sm[c.key] || {};
+        st2 += '<tr><td>' + esc(c.label) + '</td>' +
+          '<td class="num">' + fmt(s.spearman_de, 2) + '</td>' +
+          '<td class="num">' + fmt(s.spearman_de_pos, 2) + '</td></tr>';
+      });
+      document.getElementById('effStrataTable').innerHTML = st2 + '</tbody>';
+      var sWo = (sm.w || {}).spearman_de, sWp = (sm.w || {}).spearman_de_pos;
+      document.getElementById('effStrataNote').innerHTML =
+        'A W-jelölt példáján: a teljes mintán ρ = <strong>' + fmt(sWo, 2) + '</strong>, de a nem ' +
+        'tökéletes keveréseken belül már csak <strong>' + fmt(sWp, 2) + '</strong>. Az együttmozgást tehát ' +
+        'nem az adja, hogy a pazarlás „ugyanaz” volna, mint a pontatlanság, hanem hogy a teljesített és a ' +
+        'feladott keverések csoportja <em>mindkettőben</em> különbözik: aki jó, az átlagosan pontosabb és ' +
+        'takarékosabb is.';
+      var pw = eff.perfect_w || {};
+      document.getElementById('effPerfectCap').textContent =
+        'A W eloszlása a tökéletes (ΔE = 0) keveréseken: azonos pontosság mellett az anyagfelhasználás ' +
+        'széles sávban szór – ez a bizonyíték, hogy a takarékosság nem a pontosság átcímkézése.';
+      (function () {
+        var vs = pts.filter(function (p2) { return p2.de <= 0.01 && p2.w != null; })
+          .map(function (p2) { return p2.w; });
+        var el = document.getElementById('chEffPerfect');
+        if (!vs.length) { el.innerHTML = '<p class="cap">Nincs adat.</p>'; return; }
+        var lay = baseLayout({ margin: { l: 46, r: 10, t: 8, b: 38 },
+          xaxis: { title: { text: 'W a tökéletes keveréseknél (csepp)', font: { size: 10 } } },
+          yaxis: { title: { text: 'keverés', font: { size: 10 } } } });
+        Plotly.react(el, [{ type: 'histogram', x: vs, marker: { color: T.ok }, nbinsx: 40,
+          hovertemplate: 'W≈%{x}: %{y} keverés<extra></extra>' }], lay, CFG);
+      })();
+      var rc = eff.resid_check || {};
+      document.getElementById('residSentence').innerHTML =
+        'Ki is próbáltuk: a ΔE-re rang-reziduált W a teljes mintán korrelálatlanná „javul” (ρ = ' +
+        fmt(rc.overall, 2) + '), de a ΔE&gt;0 rétegen belül <strong>ρ = ' + fmt(rc.de_pos, 2) +
+        '</strong>-ös műtermék-összefüggést gyárt – az őszinte szerkezetet megölné, egy hamisat teremtene.';
+
+      // ---- 8.7 circularity probe -----------------------------------------
+      var tj = eff.trajectory || {};
+      (function () {
+        var cv = tj.curve || [];
+        var el = document.getElementById('chTrajCurve');
+        if (!cv.length) { el.innerHTML = '<p class="cap">Nincs adat.</p>'; return; }
+        var lay = baseLayout({ showlegend: true, margin: { l: 46, r: 10, t: 8, b: 52 },
+          xaxis: { title: { text: 'kumulált hozzáadott csepp a keverés közben', font: { size: 10 } }, type: 'category' },
+          yaxis: { title: { text: 'medián pillanatnyi ΔE', font: { size: 10 } }, rangemode: 'tozero' } });
+        lay.legend = { orientation: 'h', y: 1.14, font: { size: 9 } };
+        function trc(grp, color, name) {
+          return { type: 'scatter', mode: 'lines+markers', name: name,
+            x: cv.map(function (r) { return r.bin; }),
+            y: cv.map(function (r) { return (r[grp] || {}).med; }),
+            customdata: cv.map(function (r) { return (r[grp] || {}).n; }),
+            line: { color: color, width: 2 }, marker: { size: 6, color: color },
+            hovertemplate: name + '<br>%{x} csepp: medián ΔE %{y:.2f} (n=%{customdata} lépés)<extra></extra>' };
+        }
+        Plotly.react(el, [trc('completed', T.ok, 'végül teljesítve'),
+                          trc('gaveup', T.danger, 'végül feladva')], lay, CFG);
+      })();
+      (function () {
+        var el = document.getElementById('chTrajRho');
+        var rcm = tj.rho_completed || [], rgv = tj.rho_gaveup || [];
+        if (!rcm.length && !rgv.length) { el.innerHTML = '<p class="cap">Nincs adat.</p>'; return; }
+        var lay = baseLayout({ showlegend: true, margin: { l: 46, r: 10, t: 8, b: 42 },
+          xaxis: { title: { text: 'keverésen belüli Spearman ρ (kum. csepp ↔ ΔE)', font: { size: 10 } }, range: [-1.05, 1.05] },
+          yaxis: { title: { text: 'keverés', font: { size: 10 } } } });
+        lay.barmode = 'overlay';
+        lay.legend = { orientation: 'h', y: 1.14, font: { size: 9 } };
+        Plotly.react(el, [
+          { type: 'histogram', x: rcm, name: 'teljesítve', marker: { color: T.ok }, opacity: 0.65,
+            xbins: { start: -1, end: 1, size: 0.1 }, hovertemplate: 'ρ≈%{x}: %{y}<extra></extra>' },
+          { type: 'histogram', x: rgv, name: 'feladva', marker: { color: T.danger }, opacity: 0.55,
+            xbins: { start: -1, end: 1, size: 0.1 }, hovertemplate: 'ρ≈%{x}: %{y}<extra></extra>' }
+        ], lay, CFG);
+      })();
+      (function () {
+        function med(a) { if (!a || !a.length) return null; var s2 = a.slice().sort(function (x, y) { return x - y; }); var m2 = Math.floor(s2.length / 2); return s2.length % 2 ? s2[m2] : (s2[m2 - 1] + s2[m2]) / 2; }
+        var ab = tj.after_best || {};
+        document.getElementById('trajNote').innerHTML =
+          '<strong>A mechanizmus valós, de nem determinál.</strong> A keveréseken belül az anyag valóban ' +
+          'pontosságot vesz: a kumulált cseppszám és a pillanatnyi ΔE rangkorrelációjának mediánja ' +
+          '<strong>' + fmt(med(tj.rho_completed), 2) + '</strong> (teljesített) és <strong>' +
+          fmt(med(tj.rho_gaveup), 2) + '</strong> (feladott) – az arány a csöpögtetés közben finomodik. ' +
+          'A cseppek jellemzően a legjobb elért színig fogynak el (az utána adagolt hányad mediánja ' +
+          pct(ab.median, 0) + ', felső kvartilise ' + pct(ab.p75, 0) + ') – a pazarlás tehát főleg a ' +
+          '<em>keresés útiköltsége</em>, nem utólagos céltalan adagolás. A végeredményt mégsem determinálja ' +
+          'az anyag: azonos, tökéletes pontosságot nulla és több száz csepp pazarlással is elérnek (8.6). ' +
+          'Következmény a 8.2-re: a kör kimenete kovariánsként a modellben kezelendő.';
+      })();
+
+      // ---- 8.8 practice trend + families ---------------------------------
+      var pr = (eff.practice || {}).bins || [];
+      var pt2 = '<thead><tr><th>Keverés sorszáma</th><th class="num">n</th><th class="num">Medián W</th>' +
+        '<th class="num">P(W=0)</th><th class="num">Medián A/M</th><th class="num">Medián ΔE</th></tr></thead><tbody>';
+      pr.forEach(function (r) {
+        pt2 += '<tr><td>' + esc(r.bin) + '</td><td class="num">' + fmt(r.n) + '</td>' +
+          '<td class="num">' + fmt(r.med_w, 1) + '</td><td class="num">' + pct(r.share_w0, 0) + '</td>' +
+          '<td class="num">' + fmt(r.med_ratio, 2) + '</td><td class="num">' + fmt(r.med_de, 2) + '</td></tr>';
+      });
+      document.getElementById('effPracticeTable').innerHTML = pt2 + '</tbody>';
+      var fm = (eff.families || {}).rows || [];
+      var ft = '<thead><tr><th>Család</th><th class="num">n</th><th class="num">Medián ΔE</th>' +
+        '<th class="num">Medián W</th><th class="num">P(W=0)</th><th class="num">Medián A/M</th></tr></thead><tbody>';
+      fm.forEach(function (r) {
+        var sw2 = r.swatch ? '<span class="swatch" style="background:rgb(' + r.swatch.join(',') + ')"></span> ' : '';
+        ft += '<tr><td>' + sw2 + esc(r.name) + '</td><td class="num">' + fmt(r.n) + '</td>' +
+          '<td class="num">' + fmt(r.med_de, 2) + '</td><td class="num">' + fmt(r.med_w, 1) + '</td>' +
+          '<td class="num">' + pct(r.share_w0, 0) + '</td><td class="num">' + fmt(r.med_ratio, 2) + '</td></tr>';
+      });
+      document.getElementById('effFamTable').innerHTML = ft + '</tbody>';
+      (function () {
+        var wu = (eff.practice || {}).within_user || [];
+        var byKey = {}; wu.forEach(function (r) { byKey[r.key] = r; });
+        var wU = byKey.w || {}, rU = byKey.ratio || {};
+        var fr = (eff.families || {}).rho || {};
+        document.getElementById('effPracticeNote').innerHTML =
+          '<strong>Gyakorlás:</strong> a játékoson belüli trend gyakorlatilag nulla – a keverés-sorszám és a ' +
+          'W rangkorrelációjának mediánja <strong>' + fmt(wU.median_rho, 2) + '</strong> (' + fmt(wU.n_users) +
+          ' játékos, javuló irány ' + fmt(wU.improving) + ' főnél), az A/M-é <strong>' + fmt(rU.median_rho, 2) +
+          '</strong>. A takarékosság tehát visszajelzés nélkül nem javul magától – összhangban azzal, hogy a ' +
+          'felület ma csak a ΔE-t mutatja. <strong>Színcsaládok:</strong> a családszintű takarékosság együtt ' +
+          'jár a megfigyelt nehézséggel (medián ΔE ↔ medián W: ρ = ' + fmt(fr.de_vs_w, 2) + '; ↔ P(W=0): ρ = ' +
+          fmt(fr.de_vs_w0, 2) + '; ' + fmt(fr.n_families) + ' családon), de nem determinisztikusan: a ' +
+          'táblázatban látszanak a szétválások – ahol a szín pontos, de az anyag sok (és fordítva), ott a két ' +
+          'dimenzió külön él. Feltáró megfigyelések, kis elemszámokkal.';
+      })();
+    })();
 
     // 6.7 k-means: PCA-projection scatter (coloured by cluster) + centroid table
     var CLUSTER_COL = ['#4A90D9', '#5CB85C', '#F0AD4E', '#D9534F', '#8b5cf6', '#6B6B6B'];

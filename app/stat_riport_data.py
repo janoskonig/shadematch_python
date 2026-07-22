@@ -116,6 +116,30 @@ def _pearson(xs: List[float], ys: List[float]):
     return sxy / math.sqrt(sxx * syy)
 
 
+def _ranks(v: List[float]) -> List[float]:
+    """Average ranks (ties shared), 1-based."""
+    order = sorted(range(len(v)), key=lambda i: v[i])
+    rk = [0.0] * len(v)
+    i = 0
+    while i < len(order):
+        j = i
+        while j + 1 < len(order) and v[order[j + 1]] == v[order[i]]:
+            j += 1
+        avg = (i + j) / 2.0 + 1.0
+        for t in range(i, j + 1):
+            rk[order[t]] = avg
+        i = j + 1
+    return rk
+
+
+def _spearman(xs: List[float], ys: List[float]):
+    """Spearman rank correlation (average ranks for ties) via _pearson."""
+    pairs = [(x, y) for x, y in zip(xs, ys) if x is not None and y is not None]
+    if len(pairs) < 5:
+        return None
+    return _pearson(_ranks([p[0] for p in pairs]), _ranks([p[1] for p in pairs]))
+
+
 # ========================================================================== #
 # BUNDLE 1: overview + trend, recruitment, catalog + difficulty, performance
 # ========================================================================== #
@@ -390,82 +414,6 @@ def build_report(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
         FROM per_target
         """, **p)
 
-    # per-color difficulty: structural (sum_drop_count) vs observed (ΔE / giveup / steps)
-    per_color = _rows(
-        f"""
-        WITH ga AS ({_GA_ANALYSIS}),
-        per AS (
-          SELECT target_color_id AS id, COUNT(*)::bigint AS n_plays,
-            percentile_cont(0.50) WITHIN GROUP (ORDER BY final_delta_e)
-              FILTER (WHERE final_delta_e IS NOT NULL)::double precision AS med_de,
-            AVG(CASE WHEN end_reason IN ('skipped','abandoned') THEN 1.0 ELSE 0.0 END)::double precision AS giveup_rate,
-            percentile_cont(0.50) WITHIN GROUP (ORDER BY num_steps)
-              FILTER (WHERE num_steps IS NOT NULL)::double precision AS med_steps
-          FROM ga GROUP BY target_color_id)
-        SELECT tc.id, tc.name, tc.name_hu, tc.classification,
-               (tc.drop_white+tc.drop_black+tc.drop_red+tc.drop_yellow+tc.drop_blue) AS sum_drops,
-               ((tc.drop_white>0)::int + (tc.drop_black>0)::int + (tc.drop_red>0)::int
-                + (tc.drop_yellow>0)::int + (tc.drop_blue>0)::int) AS n_pigments,
-               tc.r, tc.g, tc.b,
-               per.n_plays, per.med_de, per.giveup_rate, per.med_steps
-        FROM per JOIN target_colors tc ON tc.id = per.id
-        ORDER BY per.med_de DESC NULLS LAST
-        """, **p)
-    for r in per_color:
-        for kk in ('med_de', 'giveup_rate', 'med_steps'):
-            r[kk] = _f(r[kk])
-        r['n_plays'] = int(r['n_plays']) if r['n_plays'] is not None else 0
-        r['sum_drops'] = int(r['sum_drops']) if r['sum_drops'] is not None else None
-        r['n_pigments'] = int(r['n_pigments']) if r['n_pigments'] is not None else None
-    # correlation structural vs observed (colours with >= 3 plays)
-    solid = [r for r in per_color if (r['n_plays'] or 0) >= 3
-             and r['sum_drops'] is not None]
-    corr_drops_de = _pearson([float(r['sum_drops']) for r in solid],
-                             [r['med_de'] for r in solid])
-    corr_drops_giveup = _pearson([float(r['sum_drops']) for r in solid],
-                                 [r['giveup_rate'] for r in solid])
-
-    # ---- 4.2 Difficulty as a multivariate composite (PCA) ---------------- #
-    # Per-colour features: structural (drops, #pigments) + observed (median ΔE,
-    # give-up rate, median steps). Standardise, then PCA (SVD). PC1 = a single
-    # "difficulty" axis; PC1 is oriented so higher = harder (aligned to ΔE).
-    PCA_FEATURES = [('sum_drops', 'cseppszám'), ('n_pigments', 'pigmentszám'),
-                    ('med_de', 'medián ΔE'), ('giveup_rate', 'feladási arány'),
-                    ('med_steps', 'medián lépésszám')]
-    pca_rows = [r for r in per_color
-                if (r['n_plays'] or 0) >= 3
-                and all(r[k] is not None for k, _ in PCA_FEATURES)]
-    difficulty_pca: Dict[str, Any] = {'points': [], 'loadings': [], 'explained': [],
-                                      'features': [lbl for _, lbl in PCA_FEATURES]}
-    if len(pca_rows) >= 6:
-        X = np.array([[float(r[k]) for k, _ in PCA_FEATURES] for r in pca_rows])
-        mu, sd = X.mean(0), X.std(0)
-        sd[sd == 0] = 1.0
-        Z = (X - mu) / sd
-        U, S, Vt = np.linalg.svd(Z, full_matrices=False)
-        evr = (S ** 2) / (S ** 2).sum()
-        scores = U * S
-        de_idx = [i for i, (k, _) in enumerate(PCA_FEATURES) if k == 'med_de'][0]
-        if np.corrcoef(scores[:, 0], X[:, de_idx])[0, 1] < 0:  # PC1: higher = harder
-            scores[:, 0] *= -1
-            Vt[0] *= -1
-        # PC2 sign is arbitrary; fix it so the drop-count loading is positive →
-        # PC2 up = structurally long recipe RELATIVE to its observed accuracy.
-        drops_idx = [i for i, (k, _) in enumerate(PCA_FEATURES) if k == 'sum_drops'][0]
-        if Vt.shape[0] > 1 and scores.shape[1] > 1 and Vt[1][drops_idx] < 0:
-            scores[:, 1] *= -1
-            Vt[1] *= -1
-        difficulty_pca = {
-            'features': [lbl for _, lbl in PCA_FEATURES],
-            'explained': [float(x) for x in evr[:len(PCA_FEATURES)]],
-            'loadings': [[float(v) for v in Vt[i]] for i in range(min(2, Vt.shape[0]))],
-            'points': [{'pc1': float(scores[i, 0]),
-                        'pc2': float(scores[i, 1]) if scores.shape[1] > 1 else 0.0,
-                        'name': r['name_hu'] or r['name'], 'r': r['r'], 'g': r['g'], 'blue': r['b'],
-                        'sum_drops': r['sum_drops'], 'med_de': r['med_de']}
-                       for i, r in enumerate(pca_rows)],
-        }
-
     # ---- 5) Region-based learning ---------------------------------------- #
     # A single colour is mixed at most ~twice, but neighbouring colours (which
     # share a region yet have different recipes) are mixed more often. So
@@ -563,6 +511,111 @@ def build_report(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
             'n_played': len(region_played.get(reg, ())),
         })
     regions_payload.sort(key=lambda x: -x['n_mixes'])
+
+    # ---- 4.2/4.3/4.4) Difficulty at FAMILY level ------------------------- #
+    # The unit of analysis is the colour family (the ten frozen design
+    # blocks), not the individual colour: one colour collects only a handful
+    # of analysed mixes, so per-colour effect estimates are noise, while a
+    # family pools dozens. Structural side = catalog features averaged over
+    # the family's member colours; observed side = attempt-level outcomes
+    # pooled within the family.
+    fam_struct = _rows(
+        f"SELECT id, (drop_white+drop_black+drop_red+drop_yellow+drop_blue) AS sum_drops, "
+        f"((drop_white>0)::int + (drop_black>0)::int + (drop_red>0)::int "
+        f" + (drop_yellow>0)::int + (drop_blue>0)::int) AS n_pigments "
+        f"FROM target_colors tc WHERE {_SERVED_COND} AND tc.drop_white IS NOT NULL")
+    fam_att = _rows(
+        f"SELECT target_color_id, final_delta_e, end_reason, num_steps "
+        f"FROM ({_GA_ANALYSIS}) s", **p)
+    fam_stats: Dict[str, Dict[str, list]] = defaultdict(
+        lambda: {'de': [], 'steps': [], 'giveup': [], 'drops': [], 'pigs': []})
+    for r in fam_struct:
+        reg = region_by_target.get(r['id'])
+        if reg is None:
+            continue
+        fam_stats[reg]['drops'].append(float(r['sum_drops']))
+        fam_stats[reg]['pigs'].append(float(r['n_pigments']))
+    fam_plays: Dict[str, int] = defaultdict(int)
+    for r in fam_att:
+        reg = region_by_target.get(r['target_color_id'])
+        if reg is None:
+            continue
+        fam_plays[reg] += 1
+        if r['final_delta_e'] is not None:
+            fam_stats[reg]['de'].append(float(r['final_delta_e']))
+        if r['num_steps'] is not None and r['num_steps'] > 0:
+            fam_stats[reg]['steps'].append(float(r['num_steps']))
+        fam_stats[reg]['giveup'].append(1.0 if r['end_reason'] == 'skipped' else 0.0)
+    reg_meta = {x['id']: x for x in regions_payload}
+    per_family: List[Dict[str, Any]] = []
+    for reg in MACRO_ORDER:
+        meta = reg_meta.get(reg)
+        st = fam_stats.get(reg)
+        if not meta or st is None:
+            continue
+        gv = st['giveup']
+        per_family.append({
+            'id': reg, 'name': meta['name'],
+            'r': meta['r'], 'g': meta['g'], 'blue': meta['blue'],
+            'n_targets': meta['n_targets'], 'n_played': meta['n_played'],
+            'n_plays': fam_plays.get(reg, 0),
+            'mean_drops': (sum(st['drops']) / len(st['drops'])) if st['drops'] else None,
+            'mean_pigments': (sum(st['pigs']) / len(st['pigs'])) if st['pigs'] else None,
+            'med_de': _median(st['de']),
+            'giveup_rate': (sum(gv) / len(gv)) if gv else None,
+            'med_steps': _median(st['steps']),
+        })
+    per_family.sort(key=lambda x: (x['med_de'] is None, -(x['med_de'] or 0)))
+    # structural ↔ observed correlation over the (max 10) family points
+    solid_f = [x for x in per_family
+               if (x['n_plays'] or 0) >= 5 and x['mean_drops'] is not None
+               and x['med_de'] is not None and x['giveup_rate'] is not None]
+    corr_drops_de = _pearson([x['mean_drops'] for x in solid_f],
+                             [x['med_de'] for x in solid_f])
+    corr_drops_giveup = _pearson([x['mean_drops'] for x in solid_f],
+                                 [x['giveup_rate'] for x in solid_f])
+
+    # ---- 4.3 Difficulty as a multivariate composite (PCA), family level -- #
+    # Per-family features: structural (mean drops, mean #pigments) + observed
+    # (median ΔE, give-up rate, median steps). Standardise, then PCA (SVD).
+    # PC1 is oriented so higher = harder (aligned to ΔE); PC2 so the drop-
+    # count loading is positive (up = recipe side dominates).
+    PCA_FEATURES = [('mean_drops', 'cseppszám (családátlag)'),
+                    ('mean_pigments', 'pigmentszám (családátlag)'),
+                    ('med_de', 'medián ΔE'), ('giveup_rate', 'feladási arány'),
+                    ('med_steps', 'medián lépésszám')]
+    pca_rows = [x for x in per_family
+                if (x['n_plays'] or 0) >= 5
+                and all(x[k] is not None for k, _ in PCA_FEATURES)]
+    difficulty_pca: Dict[str, Any] = {'points': [], 'loadings': [], 'explained': [],
+                                      'features': [lbl for _, lbl in PCA_FEATURES]}
+    if len(pca_rows) >= 5:
+        X = np.array([[float(x[k]) for k, _ in PCA_FEATURES] for x in pca_rows])
+        mu, sd = X.mean(0), X.std(0)
+        sd[sd == 0] = 1.0
+        Z = (X - mu) / sd
+        U, S, Vt = np.linalg.svd(Z, full_matrices=False)
+        evr = (S ** 2) / (S ** 2).sum()
+        scores = U * S
+        de_idx = [i for i, (k, _) in enumerate(PCA_FEATURES) if k == 'med_de'][0]
+        if np.corrcoef(scores[:, 0], X[:, de_idx])[0, 1] < 0:  # PC1: higher = harder
+            scores[:, 0] *= -1
+            Vt[0] *= -1
+        drops_idx = [i for i, (k, _) in enumerate(PCA_FEATURES) if k == 'mean_drops'][0]
+        if Vt.shape[0] > 1 and scores.shape[1] > 1 and Vt[1][drops_idx] < 0:
+            scores[:, 1] *= -1
+            Vt[1] *= -1
+        difficulty_pca = {
+            'features': [lbl for _, lbl in PCA_FEATURES],
+            'explained': [float(x) for x in evr[:len(PCA_FEATURES)]],
+            'loadings': [[float(v) for v in Vt[i]] for i in range(min(2, Vt.shape[0]))],
+            'points': [{'pc1': float(scores[i, 0]),
+                        'pc2': float(scores[i, 1]) if scores.shape[1] > 1 else 0.0,
+                        'name': x['name'], 'r': x['r'], 'g': x['g'], 'blue': x['blue'],
+                        'mean_drops': round(x['mean_drops'], 1), 'med_de': x['med_de'],
+                        'n_plays': x['n_plays']}
+                       for i, x in enumerate(pca_rows)],
+        }
 
     # Learning curves for ALL five families (whole-space coverage).
     region_curves: List[Dict[str, Any]] = []
@@ -691,8 +744,9 @@ def build_report(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
         'drop_dist': [{'drops': int(r['drops']), 'n_colors': int(r['n_colors'])} for r in drop_dist],
         'coverage_buckets': coverage,
         'coverage_stats': cover_stats,
-        'per_color': per_color,
-        'difficulty_corr': {'drops_vs_de': corr_drops_de, 'drops_vs_giveup': corr_drops_giveup},
+        'per_family': per_family,
+        'difficulty_corr': {'drops_vs_de': corr_drops_de, 'drops_vs_giveup': corr_drops_giveup,
+                            'n_families': len(solid_f)},
         'difficulty_pca': difficulty_pca,
         # performance
         'de_hist': de_hist,
@@ -945,6 +999,329 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
     steps_vs_outcome = [{'bucket': b, 'n': len(ab[b]), 'median_de': _median(ab[b])}
                         for b in order_ab]
 
+    # ---- 8.5) Candidate efficiency metrics vs ΔE ------------------------- #
+    # The thesis-plan candidates (section 8.4) computed on the analysis set:
+    # d_i = the user's FINAL drop composition (mixing_sessions, present for
+    # saves and rated give-ups alike), m_i = the target's MINIMAL recipe (the
+    # stored recipe gcd-reduced — 15 catalog recipes are reducible, see
+    # BACKFILL_TARGET_COLOR_DROPS.md), A = total drops ADDED along the path
+    # (event log), ΔE0 = ΔE before the first drop action. Every candidate is
+    # returned per-attempt so the page can draw its joint empirical
+    # distribution with the final ΔE.
+    eff_rows = _rows(
+        f"""
+        WITH ga AS ({_GA_ANALYSIS}),
+        ev AS (
+          SELECT e.attempt_uuid,
+            SUM(COALESCE(e.amount,1)) FILTER (WHERE e.action_type='add')::int AS added
+          FROM mixing_attempt_events e JOIN ga ON ga.attempt_uuid = e.attempt_uuid
+          GROUP BY e.attempt_uuid),
+        e0 AS (
+          SELECT DISTINCT ON (e.attempt_uuid) e.attempt_uuid, e.delta_e_before AS de0
+          FROM mixing_attempt_events e JOIN ga ON ga.attempt_uuid = e.attempt_uuid
+          WHERE e.delta_e_before IS NOT NULL
+          ORDER BY e.attempt_uuid, e.seq)
+        SELECT ga.final_delta_e, ga.end_reason,
+          ga.user_id, ga.target_color_id, ga.attempt_uuid,
+          ms.drop_white AS d0, ms.drop_black AS d1, ms.drop_red AS d2,
+          ms.drop_yellow AS d3, ms.drop_blue AS d4,
+          tc.drop_white AS m0, tc.drop_black AS m1, tc.drop_red AS m2,
+          tc.drop_yellow AS m3, tc.drop_blue AS m4,
+          ev.added, e0.de0
+        FROM ga
+        JOIN target_colors tc ON tc.id = ga.target_color_id
+        JOIN mixing_sessions ms ON ms.attempt_uuid = ga.attempt_uuid
+        LEFT JOIN ev ON ev.attempt_uuid = ga.attempt_uuid
+        LEFT JOIN e0 ON e0.attempt_uuid = ga.attempt_uuid
+        WHERE tc.drop_white IS NOT NULL
+        ORDER BY ga.user_id, ga.attempt_started_server_ts
+        """, **p)
+
+    def _gcd_reduce(m):
+        g = 0
+        for v in m:
+            g = math.gcd(g, int(v))
+        g = g or 1
+        return [int(v) // g for v in m]
+
+    eff_points: List[Dict[str, Any]] = []
+    eff_meta: List[Dict[str, Any]] = []   # server-side only, aligned with eff_points
+    for r in eff_rows:
+        if r['final_delta_e'] is None:
+            continue
+        d = [int(r['d%d' % i] or 0) for i in range(5)]
+        m_raw = [int(r['m%d' % i] or 0) for i in range(5)]
+        if sum(m_raw) <= 0:
+            continue
+        m = _gcd_reduce(m_raw)
+        M = sum(m)
+        D = sum(d)
+        de = float(r['final_delta_e'])
+        W = sum(abs(di - mi) for di, mi in zip(d, m))
+        # nearest integer multiple of the minimal recipe (k >= 1); the sum is
+        # piecewise linear in k, a bounded scan is enough
+        kmax = max(2, (max(d) // max(1, min(v for v in m if v > 0))) + 2)
+        Wk = min(sum(abs(di - k * mi) for di, mi in zip(d, m))
+                 for k in range(1, kmax + 1))
+        dcos = None
+        if D > 0:
+            num = sum(di * mi for di, mi in zip(d, m))
+            den = math.sqrt(sum(di * di for di in d)) * math.sqrt(sum(mi * mi for mi in m))
+            dcos = 1.0 - (num / den) if den > 0 else None
+        # Aitchison distance on 0.5-pseudo-count compositions
+        dp = [di + 0.5 for di in d]
+        mp = [mi + 0.5 for mi in m]
+        sp_, sm = sum(dp), sum(mp)
+        lp = [math.log(v / sp_) for v in dp]
+        lq = [math.log(v / sm) for v in mp]
+        clr_p = [v - sum(lp) / 5.0 for v in lp]
+        clr_q = [v - sum(lq) / 5.0 for v in lq]
+        dait = math.sqrt(sum((a2 - b2) ** 2 for a2, b2 in zip(clr_p, clr_q)))
+        added = int(r['added']) if r['added'] is not None else None
+        lost = max(added - D, 0) if added is not None else None
+        de0 = _f(r['de0'])
+        pt = {
+            'de': round(de, 2),
+            'g': 1 if r['end_reason'] == 'skipped' else 0,
+            'w': W,
+            'wk': Wk,
+            'dcos': round(dcos, 4) if dcos is not None else None,
+            'dait': round(dait, 3),
+            'wrel': round(W / M, 3),
+            'eff': round(M / (M + W), 3),
+            'wpath': (W + lost) if lost is not None else None,
+            'ratio': round(added / M, 3) if added else None,
+            'yield': (round((de0 - de) / added, 3)
+                      if de0 is not None and added else None),
+        }
+        eff_points.append(pt)
+        eff_meta.append({'user': r['user_id'], 'tid': r['target_color_id']})
+
+    EFF_KEYS = ['w', 'wk', 'dcos', 'dait', 'wrel', 'eff', 'wpath', 'ratio', 'yield']
+    # per-candidate optimum: the value a perfectly economical mix takes
+    # (eff peaks at 1, ratio at 1 (A = M), the distance-type candidates at 0;
+    # yield has no point-mass optimum)
+    EFF_OPT = {'eff': 1.0, 'ratio': 1.0, 'yield': None}
+    eff_summary: List[Dict[str, Any]] = []
+    for key in EFF_KEYS:
+        vals = [p2[key] for p2 in eff_points if p2[key] is not None]
+        des = [p2['de'] for p2 in eff_points if p2[key] is not None]
+        if not vals:
+            eff_summary.append({'key': key, 'n': 0})
+            continue
+        opt = EFF_OPT.get(key, 0.0)
+        eff_summary.append({
+            'key': key,
+            'n': len(vals),
+            'opt_share': (sum(1 for v in vals if abs(v - opt) < 1e-9) / len(vals)
+                          if opt is not None else None),
+            'median': _median(vals),
+            'p90': sorted(vals)[max(0, int(math.ceil(0.9 * len(vals))) - 1)],
+            'spearman_de': _spearman(vals, des),
+        })
+    # ---- 8.6) Stratified ΔE link + the case against forced independence -- #
+    # The marginal candidate↔ΔE correlation is largely COMPOSITION (perfect
+    # saves vs give-ups differ as groups); within the non-perfect stratum the
+    # link mostly vanishes. Also computed: the spread of W at fixed (perfect)
+    # accuracy, and what forced orthogonalization (rank-residualizing W on ΔE)
+    # does within the stratum — an artifact, shown as a cautionary number.
+    for s in eff_summary:
+        pos_pairs = [(p2[s['key']], p2['de']) for p2 in eff_points
+                     if p2.get(s['key']) is not None and p2['de'] > 0.01]
+        s['spearman_de_pos'] = _spearman([a for a, _ in pos_pairs],
+                                         [b for _, b in pos_pairs])
+    perfect_w = sorted(p2['w'] for p2 in eff_points if p2['de'] <= 0.01)
+    eff_perfect = {
+        'n': len(perfect_w),
+        'share_zero': (sum(1 for v in perfect_w if v == 0) / len(perfect_w)
+                       if perfect_w else None),
+        'median': _median(perfect_w),
+        'p90': (perfect_w[max(0, int(math.ceil(0.9 * len(perfect_w))) - 1)]
+                if perfect_w else None),
+    }
+    resid_check = {'overall': None, 'de_pos': None}
+    if len(eff_points) >= 20:
+        rw = _ranks([p2['w'] for p2 in eff_points])
+        rde = _ranks([p2['de'] for p2 in eff_points])
+        mx = sum(rde) / len(rde)
+        my = sum(rw) / len(rw)
+        sxx = sum((x - mx) ** 2 for x in rde)
+        beta = (sum((x - mx) * (y - my) for x, y in zip(rde, rw)) / sxx) if sxx else 0.0
+        resid = [y - (my + beta * (x - mx)) for x, y in zip(rde, rw)]
+        resid_check = {
+            'overall': _spearman(resid, [p2['de'] for p2 in eff_points]),
+            'de_pos': _spearman(
+                [rv for rv, p2 in zip(resid, eff_points) if p2['de'] > 0.01],
+                [p2['de'] for p2 in eff_points if p2['de'] > 0.01]),
+        }
+
+    # ---- 8.7) Circularity probe: does material buy accuracy in-path? ------ #
+    # Per attempt: the (cumulative added drops, instantaneous ΔE) trajectory
+    # from the event log → pooled binned curve by final outcome + per-attempt
+    # rank correlation + the share of drops added AFTER the best ΔE was first
+    # reached (material spent past any colour function).
+    outcome_of = {r['attempt_uuid']: r.get('end_reason') for r in feats}
+    ev_traj = _rows(
+        f"""WITH ga AS ({_GA_ANALYSIS})
+            SELECT e.attempt_uuid, e.action_type,
+                   COALESCE(e.amount,1) AS amount, e.delta_e_after
+            FROM mixing_attempt_events e JOIN ga ON ga.attempt_uuid = e.attempt_uuid
+            ORDER BY e.attempt_uuid, e.seq""", **p)
+    _cum: Dict[str, int] = defaultdict(int)
+    _traj: Dict[str, List[tuple]] = defaultdict(list)
+    for e in ev_traj:
+        u = e['attempt_uuid']
+        if e['action_type'] == 'add':
+            _cum[u] += int(e['amount'])
+        if e['delta_e_after'] is not None and _cum[u] > 0:
+            _traj[u].append((_cum[u], float(e['delta_e_after'])))
+    TRAJ_BINS = [(1, 5, '1–5'), (6, 10, '6–10'), (11, 20, '11–20'),
+                 (21, 40, '21–40'), (41, 80, '41–80'), (81, 160, '81–160'),
+                 (161, 10 ** 9, '161+')]
+    _binned: Dict[tuple, List[float]] = defaultdict(list)
+    rho_completed: List[float] = []
+    rho_gaveup: List[float] = []
+    after_best: List[float] = []
+    for u, tr in _traj.items():
+        er = outcome_of.get(u)
+        grp = ('completed' if er in ('saved_match', 'saved_stop')
+               else 'gaveup' if er == 'skipped' else None)
+        if grp is None:
+            continue
+        for c, dev in tr:
+            for bi, (lo, hi, _lab) in enumerate(TRAJ_BINS):
+                if lo <= c <= hi:
+                    _binned[(grp, bi)].append(dev)
+                    break
+        if len(tr) >= 5:
+            rho = _spearman([t[0] for t in tr], [t[1] for t in tr])
+            if rho is not None:
+                (rho_completed if grp == 'completed' else rho_gaveup).append(round(rho, 2))
+            best = min(t[1] for t in tr)
+            first_best = next(t[0] for t in tr if t[1] <= best + 1e-9)
+            total = tr[-1][0]
+            if total > 0:
+                after_best.append(max(total - first_best, 0) / total)
+    after_best.sort()
+    trajectory = {
+        'curve': [{'bin': lab,
+                   'completed': {'med': _median(_binned.get(('completed', bi), [])),
+                                 'n': len(_binned.get(('completed', bi), []))},
+                   'gaveup': {'med': _median(_binned.get(('gaveup', bi), [])),
+                              'n': len(_binned.get(('gaveup', bi), []))}}
+                  for bi, (_lo, _hi, lab) in enumerate(TRAJ_BINS)],
+        'rho_completed': rho_completed,
+        'rho_gaveup': rho_gaveup,
+        'after_best': {
+            'n': len(after_best),
+            'median': _median(after_best),
+            'p75': (after_best[max(0, int(math.ceil(0.75 * len(after_best))) - 1)]
+                    if after_best else None),
+        },
+    }
+
+    # ---- 8.8) Practice trend + family placement of the candidates -------- #
+    # eff_rows arrive ordered by (user, start ts), so the within-user attempt
+    # index is positional. Between-bin differences are selection-loaded (only
+    # the most active reach high indices); the clean signal is the within-user
+    # rank trend, reported separately.
+    by_user: Dict[Any, List[Dict[str, Any]]] = defaultdict(list)
+    for meta, p2 in zip(eff_meta, eff_points):
+        by_user[meta['user']].append(p2)
+    PRACTICE_BINS = [(1, 1, '1.'), (2, 3, '2–3.'), (4, 6, '4–6.'),
+                     (7, 10, '7–10.'), (11, 15, '11–15.'), (16, 10 ** 9, '16.+')]
+    practice_bins = []
+    for lo, hi, lab in PRACTICE_BINS:
+        sub = [p2 for plist in by_user.values()
+               for k, p2 in enumerate(plist, 1) if lo <= k <= hi]
+        if not sub:
+            continue
+        ws = [p2['w'] for p2 in sub]
+        rats = [p2['ratio'] for p2 in sub if p2['ratio'] is not None]
+        practice_bins.append({
+            'bin': lab, 'n': len(sub),
+            'med_w': _median(ws),
+            'share_w0': sum(1 for v in ws if v == 0) / len(ws),
+            'med_ratio': _median(rats),
+            'med_de': _median([p2['de'] for p2 in sub]),
+        })
+    practice_within = []
+    for key in ('w', 'ratio', 'de'):
+        rhos = []
+        for plist in by_user.values():
+            pairs = [(k, p2[key]) for k, p2 in enumerate(plist, 1)
+                     if p2.get(key) is not None]
+            if len(pairs) < 6:
+                continue
+            rho = _spearman([a for a, _ in pairs], [b for _, b in pairs])
+            if rho is not None:
+                rhos.append(rho)
+        if rhos:
+            practice_within.append({
+                'key': key, 'n_users': len(rhos), 'median_rho': _median(rhos),
+                'improving': sum(1 for v in rhos if v < 0),
+            })
+
+    from .clusters import (
+        MATCH_CLUSTERS_VERSION as _MCV,
+        MATCH_CLUSTER_ORDER as _MCO,
+        match_cluster_assignments as _mca,
+        match_cluster_names as _mcn,
+    )
+    from .gamut_lab import _lab_to_srgb as _l2s
+    fam_of = _mca()
+    fam_names = _mcn()
+    fam_swatch: Dict[str, List[int]] = {}
+    try:
+        import json as _json
+        from pathlib import Path as _Path
+        _ff = _json.loads((_Path(__file__).resolve().parents[1] / 'data'
+                           / ('match_clusters_%s.json' % _MCV)).read_text())
+        for code, lab in _ff.get('centroids', {}).items():
+            rr, gg, bb = _l2s(*lab)
+            fam_swatch[code] = [rr, gg, bb]
+    except Exception:
+        pass
+    fam_pts: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for meta, p2 in zip(eff_meta, eff_points):
+        code = fam_of.get(meta['tid'])
+        if code is not None:
+            fam_pts[code].append(p2)
+    eff_family_rows = []
+    for code in _MCO:
+        sub = fam_pts.get(code, [])
+        if not sub:
+            continue
+        ws = [p2['w'] for p2 in sub]
+        eff_family_rows.append({
+            'id': code, 'name': fam_names.get(code, code),
+            'swatch': fam_swatch.get(code),
+            'n': len(sub),
+            'med_de': _median([p2['de'] for p2 in sub]),
+            'med_w': _median(ws),
+            'share_w0': sum(1 for v in ws if v == 0) / len(ws),
+            'med_ratio': _median([p2['ratio'] for p2 in sub
+                                  if p2['ratio'] is not None]),
+        })
+    eff_family_rows.sort(key=lambda x: -(x['med_de'] or 0))
+    family_rho = {
+        'de_vs_w': _spearman([x['med_de'] for x in eff_family_rows],
+                             [x['med_w'] for x in eff_family_rows]),
+        'de_vs_w0': _spearman([x['med_de'] for x in eff_family_rows],
+                              [x['share_w0'] for x in eff_family_rows]),
+        'de_vs_ratio': _spearman([x['med_de'] for x in eff_family_rows],
+                                 [x['med_ratio'] for x in eff_family_rows]),
+        'n_families': len(eff_family_rows),
+    }
+
+    efficiency = {'n_attempts': len(eff_points), 'points': eff_points,
+                  'summary': eff_summary,
+                  'perfect_w': eff_perfect,
+                  'resid_check': resid_check,
+                  'trajectory': trajectory,
+                  'practice': {'bins': practice_bins, 'within_user': practice_within},
+                  'families': {'rows': eff_family_rows, 'rho': family_rho}}
+
     # ---- rule-based strategy phenotypes ---------------------------------- #
     # Features per attempt: length, improve-rate, remove-rate. Exploratory,
     # deterministic rules (not a clustering model).
@@ -1097,6 +1474,7 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
         'giveup_worsen': grp_stats,
         'steps_vs_outcome': steps_vs_outcome,
         'scatter_steps': scatter_steps,
+        'efficiency': efficiency,
         'phenotypes': phenotypes,
         'clusters': clusters,
         'cluster_k': cluster_k,
