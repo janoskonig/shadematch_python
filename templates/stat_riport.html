@@ -747,9 +747,13 @@
           <dt>m<sub>i</sub></dt>
           <dd>a célszín <em>minimális</em> (tovább már nem egyszerűsíthető) receptje;
             M = Σ<sub>i</sub> m<sub>i</sub> a minimális cseppszám</dd>
-          <dt>A</dt>
-          <dd>a lépésnapló szerint összesen <em>hozzáadott</em> csepp;
-            lost = max(A − D, 0) az útközben kivett/eldobott cseppek száma</dd>
+          <dt>A, A<sub>i</sub></dt>
+          <dd>a lépésnapló szerint összesen, illetve az <i>i</i>-edik pigmentből
+            <em>hozzáadott</em> csepp; lost = max(A − D, 0) az útközben kivett/eldobott
+            cseppek száma</dd>
+          <dt>ár<sub>i</sub></dt>
+          <dd>az <i>i</i>-edik pigment egységára cseppenként; amíg valós árlista nincs
+            rögzítve, ár<sub>i</sub> = 1 (a 8. jelölt így cseppben mér)</dd>
           <dt>ΔE₀, ΔE<sub>vég</sub></dt>
           <dd>színeltérés az első cseppművelet előtt, illetve a mentéskor/feladáskor</dd>
         </dl>
@@ -815,6 +819,15 @@
                 <td>Mekkora színjavulást ért el egy hozzáadott cseppel. Iránya fordított: a nagyobb
                   a jobb; a többivel szemben nincs pont-tömege az optimumnál.</td>
               </tr>
+              <tr>
+                <td><strong>8. C</strong> – elpazarolt érték<br>(útvonal, árazott)</td>
+                <td class="f">C = Σ<sub>i</sub> ár<sub>i</sub> · max(A<sub>i</sub> − m<sub>i</sub>, 0)</td>
+                <td>Pigmentenkénti valódi anyagköltség: az <i>i</i>-edik pigmentből a teljes úton
+                  adagolt cseppek többlete a minimális recepthez képest, egységárral súlyozva —
+                  pénzre váltható. A hiányzó csepp nem pazarlás (az pontatlanság: azt a ΔE méri).
+                  Érzékenységi próbában a rangsor gyakorlatilag érzéketlen az árvektorra (200
+                  véletlen árazással ρ ≥ 0,97), ezért amíg valós árlista nincs, ár<sub>i</sub> = 1.</td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -828,10 +841,14 @@
         <p class="intro" id="effIntro">
           A fenti jelölteket kiszámoltam a tényleges adaton. Minden elemzett keveréshez ismert a
           végső cseppösszetétel (d<sub>i</sub>), a cél-szín minimális receptje (m<sub>i</sub> – a
-          tárolt recept legnagyobb közös osztóval leosztva), a lépésnaplóból az összes hozzáadott
-          csepp (A) és az első cseppművelet előtti ΔE₀. Az alábbi táblázat és pontfelhők a jelöltek
-          <strong>együttes empirikus eloszlását</strong> mutatják a végső ΔE-vel: minden pont egy
-          keverés, vízszintesen a végső ΔE, függőlegesen a jelölt értéke.
+          tárolt recept legnagyobb közös osztóval leosztva), a lépésnaplóból a hozzáadott cseppek
+          összesen és pigmentenként (A, A<sub>i</sub>), valamint az első cseppművelet előtti ΔE₀.
+          Az alábbi táblázat és pontfelhők a jelöltek <strong>együttes empirikus eloszlását</strong>
+          mutatják a végső ΔE-vel: minden pont egy keverés, vízszintesen a végső ΔE, függőlegesen a
+          jelölt értéke. A pontfelhők szélein a <strong>peremeloszlások</strong> (hisztogramok)
+          láthatók – ezek teszik láthatóvá a pont-tömegeket (a ΔE = 0-nál tornyosuló tökéletes
+          mentéseket és a jelölt-optimumnál ülő keveréseket), amelyeket az egymásra rajzolódó
+          pontok önmagukban elrejtenének.
         </p>
         <p class="intro">
           Két dolgot érdemes bennük keresni. <strong>Az eloszlás alakját:</strong> a 8.2 jóslata
@@ -877,29 +894,7 @@
           már maguktól is közel korrelálatlanok a ΔE-vel (táblázat, jobb oszlop).
         </p>
 
-        <h3>8.7 Körkörösségi próba: vesz-e az anyag pontosságot?</h3>
-        <p class="intro">
-          A kézenfekvő ellenvetés a jelöltekkel szemben: a keverés közben hozzáadott csepp finomítja
-          az arányt (nagy össz-cseppszám mellett egy csepp kisebbet mozdít rajta), tehát a több anyag
-          önmagában is kisebb ΔE-t okozhat. Ha ez determinálná a végeredményt, a „pazarlás” nem önálló
-          dimenzió volna, hanem a pontosság ára. A lépésnaplóból ez eldönthető: minden mérhető
-          lépésnél ismert a kumulált hozzáadott cseppszám és a pillanatnyi ΔE.
-        </p>
-        <div class="grid2">
-          <div class="panel"><h4>A keverési pálya: kumulált csepp ↔ pillanatnyi ΔE</h4>
-            <p class="cap">A mérhető lépések medián ΔE-je a kumulált hozzáadott cseppszám sávjaiban,
-              a keverés végkimenete szerint bontva. Poolozott, leíró kép — a tiszta, keverésen belüli
-              bizonyíték a jobb oldali panel.</p>
-            <div class="chart" id="chTrajCurve"></div></div>
-          <div class="panel"><h4>Keverésen belüli irány</h4>
-            <p class="cap">Keverésenként a kumulált cseppszám és a pillanatnyi ΔE rangkorrelációja
-              (legalább 5 mérhető lépésű keverések). A −1 közeli érték azt jelenti: a keverés folyamán
-              az anyag következetesen pontosságot vett.</p>
-            <div class="chart" id="chTrajRho"></div></div>
-        </div>
-        <div class="note key" id="trajNote"></div>
-
-        <h3>8.8 Változik-e a takarékosság gyakorlással — és hol ül a színtérben?</h3>
+        <h3>8.7 Változik-e a takarékosság gyakorlással — és hol ül a színtérben?</h3>
         <p class="intro">
           A játékos a ΔE-t folyamatosan látja a képernyőn; az anyagfelhasználásáról viszont soha,
           semmilyen visszajelzést nem kap. Ha a takarékosság visszajelzés nélkül nem javul, az
@@ -1840,7 +1835,8 @@
         { key: 'eff', label: '4b. Hatásfok (M/(M+W))', unit: '' },
         { key: 'wpath', label: '5. W_path – valódi anyagköltség', unit: 'csepp' },
         { key: 'ratio', label: '6. Többszörözési hányados (A/M)', unit: '×' },
-        { key: 'yield', label: '7. Cseppenkénti hozam', unit: 'ΔE/csepp' }
+        { key: 'yield', label: '7. Cseppenkénti hozam', unit: 'ΔE/csepp' },
+        { key: 'cost', label: '8. C – elpazarolt érték (egyenárakkal)', unit: 'csepp' }
       ];
       var sm = {};
       (eff.summary || []).forEach(function (s) { sm[s.key] = s; });
@@ -1858,28 +1854,41 @@
       wrap.innerHTML = CAND.map(function (c, i) {
         return '<div class="panel"><h4>' + esc(c.label) + '</h4>' +
           '<p class="cap" id="chEffCap' + i + '"></p>' +
-          '<div class="chart" id="chEff' + i + '" style="min-height:250px;"></div></div>';
+          '<div class="chart" id="chEff' + i + '" style="min-height:290px;"></div></div>';
       }).join('');
       function quant(vs, q) {
         if (!vs.length) return null;
         var s2 = vs.slice().sort(function (a, b) { return a - b; });
         return s2[Math.min(s2.length - 1, Math.floor(q * s2.length))];
       }
+      // Scatter + MARGINAL HISTOGRAMS: the top marginal shows the ΔE point
+      // mass (perfect saves), the right one the candidate's own zero-mass —
+      // overplotted dots alone would hide both.
       CAND.forEach(function (c, i) {
         var el = document.getElementById('chEff' + i);
         var sub = pts.filter(function (p2) { return p2[c.key] != null && p2.de != null; });
         if (!sub.length) { el.innerHTML = '<p class="cap">Nincs adat.</p>'; return; }
         var ys = sub.map(function (p2) { return p2[c.key]; });
+        var xs = sub.map(function (p2) { return p2.de; });
         var yhi = quant(ys, 0.99), ylo = Math.min.apply(null, ys);
         var clipped = ys.filter(function (v) { return v > yhi; }).length;
-        var lay = baseLayout({ showlegend: true, margin: { l: 50, r: 10, t: 8, b: 38 },
-          xaxis: { title: { text: 'végső ΔE', font: { size: 10 } }, rangemode: 'tozero' },
-          yaxis: { title: { text: c.unit ? 'érték (' + c.unit + ')' : 'érték', font: { size: 10 } } } });
+        var lay = baseLayout({ showlegend: true, margin: { l: 50, r: 6, t: 6, b: 38 } });
+        lay.xaxis = Object.assign(lay.xaxis, {
+          domain: [0, 0.8], rangemode: 'tozero',
+          title: { text: 'végső ΔE', font: { size: 10 } } });
+        lay.yaxis = Object.assign(lay.yaxis, {
+          domain: [0, 0.78],
+          title: { text: c.unit ? 'érték (' + c.unit + ')' : 'érték', font: { size: 10 } } });
         if (yhi != null && yhi > ylo) {
           var pad = 0.06 * (yhi - ylo);
           lay.yaxis.range = [Math.min(0, ylo) - pad, yhi + pad];
         }
-        lay.legend = { orientation: 'h', y: 1.18, font: { size: 9 } };
+        lay.xaxis2 = { domain: [0.82, 1], showticklabels: false, gridcolor: T.border,
+                       zeroline: false, fixedrange: true };
+        lay.yaxis2 = { domain: [0.8, 1], showticklabels: false, gridcolor: T.border,
+                       zeroline: false, fixedrange: true };
+        lay.legend = { orientation: 'h', y: 1.24, font: { size: 9 } };
+        lay.bargap = 0.05;
         function tr2(sel, color, name) {
           var s2 = sub.filter(sel);
           return { type: 'scatter', mode: 'markers', name: name + ' (n=' + s2.length + ')',
@@ -1889,7 +1898,11 @@
         }
         Plotly.react(el, [
           tr2(function (p2) { return !p2.g; }, T.ok, 'teljesítve'),
-          tr2(function (p2) { return p2.g; }, T.danger, 'feladva')
+          tr2(function (p2) { return p2.g; }, T.danger, 'feladva'),
+          { type: 'histogram', x: xs, yaxis: 'y2', marker: { color: '#9ca3af' },
+            showlegend: false, hovertemplate: 'ΔE≈%{x}: %{y} keverés<extra></extra>' },
+          { type: 'histogram', y: ys, xaxis: 'x2', marker: { color: '#9ca3af' },
+            showlegend: false, hovertemplate: '%{x} keverés<extra></extra>' }
         ], lay, CFG);
         var cap = document.getElementById('chEffCap' + i);
         if (cap) {
@@ -1946,59 +1959,7 @@
         fmt(rc.overall, 2) + '), de a ΔE&gt;0 rétegen belül <strong>ρ = ' + fmt(rc.de_pos, 2) +
         '</strong>-ös műtermék-összefüggést gyárt – az őszinte szerkezetet megölné, egy hamisat teremtene.';
 
-      // ---- 8.7 circularity probe -----------------------------------------
-      var tj = eff.trajectory || {};
-      (function () {
-        var cv = tj.curve || [];
-        var el = document.getElementById('chTrajCurve');
-        if (!cv.length) { el.innerHTML = '<p class="cap">Nincs adat.</p>'; return; }
-        var lay = baseLayout({ showlegend: true, margin: { l: 46, r: 10, t: 8, b: 52 },
-          xaxis: { title: { text: 'kumulált hozzáadott csepp a keverés közben', font: { size: 10 } }, type: 'category' },
-          yaxis: { title: { text: 'medián pillanatnyi ΔE', font: { size: 10 } }, rangemode: 'tozero' } });
-        lay.legend = { orientation: 'h', y: 1.14, font: { size: 9 } };
-        function trc(grp, color, name) {
-          return { type: 'scatter', mode: 'lines+markers', name: name,
-            x: cv.map(function (r) { return r.bin; }),
-            y: cv.map(function (r) { return (r[grp] || {}).med; }),
-            customdata: cv.map(function (r) { return (r[grp] || {}).n; }),
-            line: { color: color, width: 2 }, marker: { size: 6, color: color },
-            hovertemplate: name + '<br>%{x} csepp: medián ΔE %{y:.2f} (n=%{customdata} lépés)<extra></extra>' };
-        }
-        Plotly.react(el, [trc('completed', T.ok, 'végül teljesítve'),
-                          trc('gaveup', T.danger, 'végül feladva')], lay, CFG);
-      })();
-      (function () {
-        var el = document.getElementById('chTrajRho');
-        var rcm = tj.rho_completed || [], rgv = tj.rho_gaveup || [];
-        if (!rcm.length && !rgv.length) { el.innerHTML = '<p class="cap">Nincs adat.</p>'; return; }
-        var lay = baseLayout({ showlegend: true, margin: { l: 46, r: 10, t: 8, b: 42 },
-          xaxis: { title: { text: 'keverésen belüli Spearman ρ (kum. csepp ↔ ΔE)', font: { size: 10 } }, range: [-1.05, 1.05] },
-          yaxis: { title: { text: 'keverés', font: { size: 10 } } } });
-        lay.barmode = 'overlay';
-        lay.legend = { orientation: 'h', y: 1.14, font: { size: 9 } };
-        Plotly.react(el, [
-          { type: 'histogram', x: rcm, name: 'teljesítve', marker: { color: T.ok }, opacity: 0.65,
-            xbins: { start: -1, end: 1, size: 0.1 }, hovertemplate: 'ρ≈%{x}: %{y}<extra></extra>' },
-          { type: 'histogram', x: rgv, name: 'feladva', marker: { color: T.danger }, opacity: 0.55,
-            xbins: { start: -1, end: 1, size: 0.1 }, hovertemplate: 'ρ≈%{x}: %{y}<extra></extra>' }
-        ], lay, CFG);
-      })();
-      (function () {
-        function med(a) { if (!a || !a.length) return null; var s2 = a.slice().sort(function (x, y) { return x - y; }); var m2 = Math.floor(s2.length / 2); return s2.length % 2 ? s2[m2] : (s2[m2 - 1] + s2[m2]) / 2; }
-        var ab = tj.after_best || {};
-        document.getElementById('trajNote').innerHTML =
-          '<strong>A mechanizmus valós, de nem determinál.</strong> A keveréseken belül az anyag valóban ' +
-          'pontosságot vesz: a kumulált cseppszám és a pillanatnyi ΔE rangkorrelációjának mediánja ' +
-          '<strong>' + fmt(med(tj.rho_completed), 2) + '</strong> (teljesített) és <strong>' +
-          fmt(med(tj.rho_gaveup), 2) + '</strong> (feladott) – az arány a csöpögtetés közben finomodik. ' +
-          'A cseppek jellemzően a legjobb elért színig fogynak el (az utána adagolt hányad mediánja ' +
-          pct(ab.median, 0) + ', felső kvartilise ' + pct(ab.p75, 0) + ') – a pazarlás tehát főleg a ' +
-          '<em>keresés útiköltsége</em>, nem utólagos céltalan adagolás. A végeredményt mégsem determinálja ' +
-          'az anyag: azonos, tökéletes pontosságot nulla és több száz csepp pazarlással is elérnek (8.6). ' +
-          'Következmény a 8.2-re: a kör kimenete kovariánsként a modellben kezelendő.';
-      })();
-
-      // ---- 8.8 practice trend + families ---------------------------------
+      // ---- 8.7 practice trend + families ---------------------------------
       var pr = (eff.practice || {}).bins || [];
       var pt2 = '<thead><tr><th>Keverés sorszáma</th><th class="num">n</th><th class="num">Medián W</th>' +
         '<th class="num">P(W=0)</th><th class="num">Medián A/M</th><th class="num">Medián ΔE</th></tr></thead><tbody>';

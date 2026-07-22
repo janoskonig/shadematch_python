@@ -1013,7 +1013,12 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
         WITH ga AS ({_GA_ANALYSIS}),
         ev AS (
           SELECT e.attempt_uuid,
-            SUM(COALESCE(e.amount,1)) FILTER (WHERE e.action_type='add')::int AS added
+            SUM(COALESCE(e.amount,1)) FILTER (WHERE e.action_type='add')::int AS added,
+            SUM(COALESCE(e.amount,1)) FILTER (WHERE e.action_type='add' AND e.action_color='white')::int AS a0,
+            SUM(COALESCE(e.amount,1)) FILTER (WHERE e.action_type='add' AND e.action_color='black')::int AS a1,
+            SUM(COALESCE(e.amount,1)) FILTER (WHERE e.action_type='add' AND e.action_color='red')::int AS a2,
+            SUM(COALESCE(e.amount,1)) FILTER (WHERE e.action_type='add' AND e.action_color='yellow')::int AS a3,
+            SUM(COALESCE(e.amount,1)) FILTER (WHERE e.action_type='add' AND e.action_color='blue')::int AS a4
           FROM mixing_attempt_events e JOIN ga ON ga.attempt_uuid = e.attempt_uuid
           GROUP BY e.attempt_uuid),
         e0 AS (
@@ -1027,7 +1032,7 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
           ms.drop_yellow AS d3, ms.drop_blue AS d4,
           tc.drop_white AS m0, tc.drop_black AS m1, tc.drop_red AS m2,
           tc.drop_yellow AS m3, tc.drop_blue AS m4,
-          ev.added, e0.de0
+          ev.added, ev.a0, ev.a1, ev.a2, ev.a3, ev.a4, e0.de0
         FROM ga
         JOIN target_colors tc ON tc.id = ga.target_color_id
         JOIN mixing_sessions ms ON ms.attempt_uuid = ga.attempt_uuid
@@ -1080,6 +1085,14 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
         added = int(r['added']) if r['added'] is not None else None
         lost = max(added - D, 0) if added is not None else None
         de0 = _f(r['de0'])
+        # Candidate 8: priced per-pigment path overuse. Until a real price
+        # list is fixed, unit prices are used (the RANKING is insensitive to
+        # the price vector — sensitivity sweep with 200 random price vectors
+        # gave rank agreement rho >= 0.97), so C is reported in drops.
+        cost = None
+        if added is not None:
+            Ai = [int(r['a%d' % i] or 0) for i in range(5)]
+            cost = sum(max(av - mv, 0) for av, mv in zip(Ai, m))
         pt = {
             'de': round(de, 2),
             'g': 1 if r['end_reason'] == 'skipped' else 0,
@@ -1093,11 +1106,12 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
             'ratio': round(added / M, 3) if added else None,
             'yield': (round((de0 - de) / added, 3)
                       if de0 is not None and added else None),
+            'cost': cost,
         }
         eff_points.append(pt)
         eff_meta.append({'user': r['user_id'], 'tid': r['target_color_id']})
 
-    EFF_KEYS = ['w', 'wk', 'dcos', 'dait', 'wrel', 'eff', 'wpath', 'ratio', 'yield']
+    EFF_KEYS = ['w', 'wk', 'dcos', 'dait', 'wrel', 'eff', 'wpath', 'ratio', 'yield', 'cost']
     # per-candidate optimum: the value a perfectly economical mix takes
     # (eff peaks at 1, ratio at 1 (A = M), the distance-type candidates at 0;
     # yield has no point-mass optimum)
@@ -1155,72 +1169,7 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
                 [p2['de'] for p2 in eff_points if p2['de'] > 0.01]),
         }
 
-    # ---- 8.7) Circularity probe: does material buy accuracy in-path? ------ #
-    # Per attempt: the (cumulative added drops, instantaneous ΔE) trajectory
-    # from the event log → pooled binned curve by final outcome + per-attempt
-    # rank correlation + the share of drops added AFTER the best ΔE was first
-    # reached (material spent past any colour function).
-    outcome_of = {r['attempt_uuid']: r.get('end_reason') for r in feats}
-    ev_traj = _rows(
-        f"""WITH ga AS ({_GA_ANALYSIS})
-            SELECT e.attempt_uuid, e.action_type,
-                   COALESCE(e.amount,1) AS amount, e.delta_e_after
-            FROM mixing_attempt_events e JOIN ga ON ga.attempt_uuid = e.attempt_uuid
-            ORDER BY e.attempt_uuid, e.seq""", **p)
-    _cum: Dict[str, int] = defaultdict(int)
-    _traj: Dict[str, List[tuple]] = defaultdict(list)
-    for e in ev_traj:
-        u = e['attempt_uuid']
-        if e['action_type'] == 'add':
-            _cum[u] += int(e['amount'])
-        if e['delta_e_after'] is not None and _cum[u] > 0:
-            _traj[u].append((_cum[u], float(e['delta_e_after'])))
-    TRAJ_BINS = [(1, 5, '1–5'), (6, 10, '6–10'), (11, 20, '11–20'),
-                 (21, 40, '21–40'), (41, 80, '41–80'), (81, 160, '81–160'),
-                 (161, 10 ** 9, '161+')]
-    _binned: Dict[tuple, List[float]] = defaultdict(list)
-    rho_completed: List[float] = []
-    rho_gaveup: List[float] = []
-    after_best: List[float] = []
-    for u, tr in _traj.items():
-        er = outcome_of.get(u)
-        grp = ('completed' if er in ('saved_match', 'saved_stop')
-               else 'gaveup' if er == 'skipped' else None)
-        if grp is None:
-            continue
-        for c, dev in tr:
-            for bi, (lo, hi, _lab) in enumerate(TRAJ_BINS):
-                if lo <= c <= hi:
-                    _binned[(grp, bi)].append(dev)
-                    break
-        if len(tr) >= 5:
-            rho = _spearman([t[0] for t in tr], [t[1] for t in tr])
-            if rho is not None:
-                (rho_completed if grp == 'completed' else rho_gaveup).append(round(rho, 2))
-            best = min(t[1] for t in tr)
-            first_best = next(t[0] for t in tr if t[1] <= best + 1e-9)
-            total = tr[-1][0]
-            if total > 0:
-                after_best.append(max(total - first_best, 0) / total)
-    after_best.sort()
-    trajectory = {
-        'curve': [{'bin': lab,
-                   'completed': {'med': _median(_binned.get(('completed', bi), [])),
-                                 'n': len(_binned.get(('completed', bi), []))},
-                   'gaveup': {'med': _median(_binned.get(('gaveup', bi), [])),
-                              'n': len(_binned.get(('gaveup', bi), []))}}
-                  for bi, (_lo, _hi, lab) in enumerate(TRAJ_BINS)],
-        'rho_completed': rho_completed,
-        'rho_gaveup': rho_gaveup,
-        'after_best': {
-            'n': len(after_best),
-            'median': _median(after_best),
-            'p75': (after_best[max(0, int(math.ceil(0.75 * len(after_best))) - 1)]
-                    if after_best else None),
-        },
-    }
-
-    # ---- 8.8) Practice trend + family placement of the candidates -------- #
+    # ---- 8.7) Practice trend + family placement of the candidates -------- #
     # eff_rows arrive ordered by (user, start ts), so the within-user attempt
     # index is positional. Between-bin differences are selection-loaded (only
     # the most active reach high indices); the clean signal is the within-user
@@ -1318,7 +1267,6 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
                   'summary': eff_summary,
                   'perfect_w': eff_perfect,
                   'resid_check': resid_check,
-                  'trajectory': trajectory,
                   'practice': {'bins': practice_bins, 'within_user': practice_within},
                   'families': {'rows': eff_family_rows, 'rho': family_rho}}
 
