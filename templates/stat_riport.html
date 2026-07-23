@@ -850,14 +850,43 @@
                   anyagot, az színhiba, és azt a ΔE már megméri. Valós árlistát igényel; csak a
                   ΔE-vel párban értelmes.</td>
               </tr>
+              <tr>
+                <td><strong>9. W_stop</strong> – túlfutás<br>(útvonal)</td>
+                <td class="f">W_stop = A − A<sub>legjobb</sub></td>
+                <td>A legjobb elért ΔE első elérése <em>után</em> adagolt cseppek
+                  (A<sub>legjobb</sub> = az addig adagolt csepp). Anyag, aminek már semmilyen
+                  színfunkciója nem volt.</td>
+                <td>Új dimenzió: mikor kell megállni. A feladóknál gyakori, hogy volt jobb
+                  keverékük, és tovább adagolva elrontották. Erősen kimenetfüggő.</td>
+              </tr>
+              <tr>
+                <td><strong>10. Pálya-AUC</strong><br>(útvonal)</td>
+                <td class="f">AUC = Σ ΔE<sub>lépés</sub>·csepp / (ΔE₀ · A)</td>
+                <td>Anyaggal súlyozott átlagos maradék hiba a teljes keverési pálya mentén:
+                  kicsi, ha a leszállás korán meredek.</td>
+                <td>A 7. finomítása a teljes pályára. Nincs pont-tömege (nem kell hurdle), a
+                  végső ΔE-től majdnem független; cserébe absztraktabb.</td>
+              </tr>
+              <tr>
+                <td><strong>11. Irányváltás</strong><br>(útvonal)</td>
+                <td class="f">n<sub>vált</sub> = Σ<sub>i</sub> add↔remove váltások az
+                  <i>i</i>-edik pigmenten</td>
+                <td>Hányszor fordult a keverő ugyanazon a pigmenten (tett–kivett–újra tett):
+                  a tétovázás mértéke.</td>
+                <td>A lost darabszám-párja döntésekben mérve; az anyagköltséggel közepesen, a
+                  pontossággal alig függ össze.</td>
+              </tr>
             </tbody>
           </table>
         </div>
         <p class="intro">
           A lánc két tiszta végpontra fut ki: az <strong>arány-dimenziót</strong> a 3b, a
           <strong>mennyiség/érték-dimenziót</strong> a 6. és a 8. méri a legtisztábban – a többi
-          jelölt e kettő különböző arányú keveréke. A kritérium-alapú választás így lényegében
-          arról dönt, mennyit szabad a takarékosság-mutatónak átfednie a ΔE-vel mért pontossággal.
+          jelölt e kettő különböző arányú keveréke. A 9–11. útvonal-jelölt három további önálló
+          dimenziót ad: <strong>fegyelem</strong> (mikor áll meg), <strong>keresési
+          hatékonyság</strong> és <strong>döntésstabilitás</strong>. A kritérium-alapú választás
+          így lényegében arról dönt, mennyit szabad a takarékosság-mutatónak átfednie a ΔE-vel
+          mért pontossággal.
         </p>
         <p class="intro">
           Egy kritérium szándékosan hiányzik a listáról: az, hogy „melyik mutatja legszebben a
@@ -1846,7 +1875,10 @@
         { key: 'wpath', label: '5. W_path – valódi anyagköltség', unit: 'csepp' },
         { key: 'ratio', label: '6. Többszörözési hányados (A/M)', unit: '×' },
         { key: 'yield', label: '7. Cseppenkénti hozam', unit: 'ΔE/csepp' },
-        { key: 'cost', label: '8. C – elpazarolt érték (egyenárakkal)', unit: 'csepp' }
+        { key: 'cost', label: '8. C – elpazarolt érték (egyenárakkal)', unit: 'csepp' },
+        { key: 'wstop', label: '9. W_stop – túlfutás', unit: 'csepp' },
+        { key: 'auc', label: '10. Pálya-AUC', unit: '' },
+        { key: 'ndirsw', label: '11. Irányváltások', unit: 'db' }
       ];
       var sm = {};
       (eff.summary || []).forEach(function (s) { sm[s.key] = s; });

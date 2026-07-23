@@ -1042,6 +1042,18 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
         ORDER BY ga.user_id, ga.attempt_started_server_ts
         """, **p)
 
+    # ordered add/remove sequence per attempt for the path candidates (9-11)
+    eff_seq_rows = _rows(
+        f"""WITH ga AS ({_GA_ANALYSIS})
+        SELECT e.attempt_uuid, e.action_type, e.action_color,
+               COALESCE(e.amount,1) AS amount, e.delta_e_before, e.delta_e_after
+        FROM mixing_attempt_events e JOIN ga ON ga.attempt_uuid = e.attempt_uuid
+        WHERE e.action_type IN ('add','remove')
+        ORDER BY e.attempt_uuid, e.seq""", **p)
+    _seq_by: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for e in eff_seq_rows:
+        _seq_by[e['attempt_uuid']].append(e)
+
     def _gcd_reduce(m):
         g = 0
         for v in m:
@@ -1093,6 +1105,43 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
         if added is not None:
             Ai = [int(r['a%d' % i] or 0) for i in range(5)]
             cost = sum(max(av - mv, 0) for av, mv in zip(Ai, m))
+        # Path candidates 9-11 from the ordered step sequence:
+        #   wstop  - drops added AFTER the attempt's best dE was first reached
+        #   auc    - material-weighted mean remaining error / (dE0 * A)
+        #   ndirsw - per-pigment add<->remove direction switches (thrashing)
+        wstop = auc = ndirsw = None
+        es = _seq_by.get(r['attempt_uuid'], [])
+        if len(es) >= 3:
+            cum = 0
+            a_ev = 0
+            auc_num = 0.0
+            de0s = None
+            tr = []
+            last_dir: Dict[str, str] = {}
+            sw = 0
+            for e in es:
+                if de0s is None and e['delta_e_before'] is not None:
+                    de0s = float(e['delta_e_before'])
+                amt = int(e['amount'])
+                if e['action_type'] == 'add':
+                    cum += amt
+                    a_ev += amt
+                    if e['delta_e_after'] is not None:
+                        auc_num += float(e['delta_e_after']) * amt
+                col = e['action_color']
+                if col is not None:
+                    if col in last_dir and last_dir[col] != e['action_type']:
+                        sw += 1
+                    last_dir[col] = e['action_type']
+                if e['delta_e_after'] is not None and cum > 0:
+                    tr.append((cum, float(e['delta_e_after'])))
+            if tr and a_ev > 0:
+                best = min(t[1] for t in tr)
+                first_best = next(t[0] for t in tr if t[1] <= best + 1e-9)
+                wstop = max(a_ev - first_best, 0)
+                ndirsw = sw
+                if de0s and de0s > 0:
+                    auc = round(auc_num / (de0s * a_ev), 3)
         pt = {
             'de': round(de, 2),
             'g': 1 if r['end_reason'] == 'skipped' else 0,
@@ -1107,15 +1156,19 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
             'yield': (round((de0 - de) / added, 3)
                       if de0 is not None and added else None),
             'cost': cost,
+            'wstop': wstop,
+            'auc': auc,
+            'ndirsw': ndirsw,
         }
         eff_points.append(pt)
         eff_meta.append({'user': r['user_id'], 'tid': r['target_color_id']})
 
-    EFF_KEYS = ['w', 'wk', 'dcos', 'dait', 'wrel', 'eff', 'wpath', 'ratio', 'yield', 'cost']
+    EFF_KEYS = ['w', 'wk', 'dcos', 'dait', 'wrel', 'eff', 'wpath', 'ratio', 'yield',
+                'cost', 'wstop', 'auc', 'ndirsw']
     # per-candidate optimum: the value a perfectly economical mix takes
     # (eff peaks at 1, ratio at 1 (A = M), the distance-type candidates at 0;
-    # yield has no point-mass optimum)
-    EFF_OPT = {'eff': 1.0, 'ratio': 1.0, 'yield': None}
+    # yield and auc have no point-mass optimum)
+    EFF_OPT = {'eff': 1.0, 'ratio': 1.0, 'yield': None, 'auc': None}
     eff_summary: List[Dict[str, Any]] = []
     for key in EFF_KEYS:
         vals = [p2[key] for p2 in eff_points if p2[key] is not None]
