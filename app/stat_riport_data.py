@@ -1085,15 +1085,6 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
             num = sum(di * mi for di, mi in zip(d, m))
             den = math.sqrt(sum(di * di for di in d)) * math.sqrt(sum(mi * mi for mi in m))
             dcos = 1.0 - (num / den) if den > 0 else None
-        # Aitchison distance on 0.5-pseudo-count compositions
-        dp = [di + 0.5 for di in d]
-        mp = [mi + 0.5 for mi in m]
-        sp_, sm = sum(dp), sum(mp)
-        lp = [math.log(v / sp_) for v in dp]
-        lq = [math.log(v / sm) for v in mp]
-        clr_p = [v - sum(lp) / 5.0 for v in lp]
-        clr_q = [v - sum(lq) / 5.0 for v in lq]
-        dait = math.sqrt(sum((a2 - b2) ** 2 for a2, b2 in zip(clr_p, clr_q)))
         added = int(r['added']) if r['added'] is not None else None
         lost = max(added - D, 0) if added is not None else None
         de0 = _f(r['de0'])
@@ -1148,7 +1139,6 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
             'w': W,
             'wk': Wk,
             'dcos': round(dcos, 4) if dcos is not None else None,
-            'dait': round(dait, 3),
             'wrel': round(W / M, 3),
             'eff': round(M / (M + W), 3),
             'wpath': (W + lost) if lost is not None else None,
@@ -1163,7 +1153,7 @@ def build_steps(era: str = MATCH_ERA_START_UTC) -> Dict[str, Any]:
         eff_points.append(pt)
         eff_meta.append({'user': r['user_id'], 'tid': r['target_color_id']})
 
-    EFF_KEYS = ['w', 'wk', 'dcos', 'dait', 'wrel', 'eff', 'wpath', 'ratio', 'yield',
+    EFF_KEYS = ['w', 'wk', 'dcos', 'wrel', 'eff', 'wpath', 'ratio', 'yield',
                 'cost', 'wstop', 'auc', 'ndirsw']
     # per-candidate optimum: the value a perfectly economical mix takes
     # (eff peaks at 1, ratio at 1 (A = M), the distance-type candidates at 0;

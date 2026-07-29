@@ -821,22 +821,13 @@ assert np.array_equal(rgb_int_from_counts(c), g)</pre>
                   az ötszörös adag W<sub>k</sub>-ja nulla.</td>
               </tr>
               <tr>
-                <td><strong>3a. Arány-távolság</strong> (koszinusz)<br>(végállapot)</td>
+                <td><strong>3. Arány-távolság</strong> (koszinusz)<br>(végállapot)</td>
                 <td class="f">d<sub>cos</sub> = 1 − Σ<sub>i</sub> d<sub>i</sub>m<sub>i</sub> /
                   (√(Σ<sub>i</sub> d<sub>i</sub>²) · √(Σ<sub>i</sub> m<sub>i</sub>²))</td>
                 <td>Tisztán az arányhiba, a mennyiségtől függetlenül: a recept bármely többszörösére
                   nulla. Üres keverésre (D = 0) nem értelmezett.</td>
-                <td>Tisztán az arányhiba, mennyiségtől függetlenül. De euklideszi szemmel néz:
-                  1→2 csepp (duplázás) és 10→11 nála hasonló súlyú.</td>
-              </tr>
-              <tr>
-                <td><strong>3b. Arány-távolság</strong> (Aitchison)<br>(végállapot)</td>
-                <td class="f">d<sub>Ait</sub> = √( Σ<sub>i</sub> ( ln(p<sub>i</sub>/g(p)) − ln(q<sub>i</sub>/g(q)) )² )</td>
-                <td>Összetétel-statisztikai távolság a csepparányok között; p és q a 0,5
-                  pszeudo-cseppel kiegészített arányok (a nulla cseppek miatt), g(·) a mértani
-                  közép. Szintén skálafüggetlen.</td>
-                <td>A 3a szabályos (log-arány) geometriával: a relatív eltérés számít. Közös áruk:
-                  a mennyiség-dimenzió elvész, és pszeudo-cseppre szorul.</td>
+                <td>Tisztán az arányhiba, mennyiségtől függetlenül. Cserébe a mennyiség-dimenziót
+                  teljesen elejti.</td>
               </tr>
               <tr>
                 <td><strong>4a. Relatív eltérés</strong><br>(végállapot)</td>
@@ -920,7 +911,7 @@ assert np.array_equal(rgb_int_from_counts(c), g)</pre>
           </table>
         </div>
         <p class="intro">
-          A lánc két tiszta végpontra fut ki: az <strong>arány-dimenziót</strong> a 3b, a
+          A lánc két tiszta végpontra fut ki: az <strong>arány-dimenziót</strong> a 3., a
           <strong>mennyiség/érték-dimenziót</strong> a 6. és a 8. méri a legtisztábban – a többi
           jelölt e kettő különböző arányú keveréke. A 9–11. útvonal-jelölt három további önálló
           dimenziót ad: <strong>fegyelem</strong> (mikor áll meg), <strong>keresési
@@ -1908,8 +1899,7 @@ assert np.array_equal(rgb_int_from_counts(c), g)</pre>
       var CAND = [
         { key: 'w', label: '1. W – eltérés a minimális recepttől', unit: 'csepp' },
         { key: 'wk', label: '2. Wₖ – eltérés a legközelebbi többszöröstől', unit: 'csepp' },
-        { key: 'dcos', label: '3a. Arány-távolság (koszinusz)', unit: '' },
-        { key: 'dait', label: '3b. Arány-távolság (Aitchison)', unit: '' },
+        { key: 'dcos', label: '3. Arány-távolság (koszinusz)', unit: '' },
         { key: 'wrel', label: '4a. Relatív eltérés (W/M)', unit: '' },
         { key: 'eff', label: '4b. Hatásfok (M/(M+W))', unit: '' },
         { key: 'wpath', label: '5. W_path – valódi anyagköltség', unit: 'csepp' },
