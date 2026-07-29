@@ -57,6 +57,7 @@
   .tech p { margin: 0 0 12px; font-size: 1.02rem; line-height: 1.75; color: var(--text-primary); }
   .tech .def { color: var(--text-primary); }
   .tech code, .intro code, .note code { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 1px 5px; font-size: 0.86em; }
+  .tech pre { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 0.76rem; line-height: 1.5; overflow-x: auto; max-width: 82ch; }
   .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
   .pill { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 0.82rem; background: var(--surface); }
   .swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15); display: inline-block; }
@@ -277,6 +278,45 @@
              csoportok, amelyeket egy algoritmus felfedezhetne; a családok a kiosztás előre
              rögzített blokkjai, nem adatelemzés termékei. A „miért pont ez a tíz család?” kérdésre
              a válasz: mert ez a design.</p>
+          <p class="def">A 2. lépés „legtávolabbi pont” szabálya két garanciát ad: bármely két
+             célszín <strong>legalább 12</strong> távolságra van egymástól, és minden kikeverhető
+             szín <strong>12-nél közelebb</strong> esik a legközelebbi célszínhez (Lab-euklideszi
+             távolságban; a mért szomszédtávolság mediánja 13,1). Kivétel a sáv-garancia néhány
+             beszúrása. A generáló kód lényege (kivonat a
+             <code>scripts/generate_gamut_targets.py</code>-ból; determinisztikus, rögzített seed):</p>
+          <pre>MAXD = 20            # max csepp / pigment
+MIN_TOTAL, MAX_TOTAL = 2, 28
+BG_SPACING = 12.0    # rácsköz a teljes gamuton (Lab-euklideszi)
+
+def achievable_pool():
+    """Minden egész cseppszámú recept (pigmentenként &lt;= 20 csepp,
+    össz 2-28) → Mixbox-szín → 8 bites sRGB; színenként a legkisebb
+    össz-cseppszámú recept marad (ez a szín minimális receptje)."""
+
+def fps_spacing(labs, spacing, init_d=None):
+    """Legtávolabbi-pont mintavétel: addig válogat, amíg a legnagyobb
+    lefedetlen távolság a rácsköz alá nem esik."""
+    d = np.full(len(labs), np.inf) if init_d is None else init_d.copy()
+    sel = []
+    while True:
+        i = int(np.argmax(d))       # a legrosszabbul fedett szín
+        if d[i] &lt; spacing:          # nincs több `spacing`-nyi lyuk → kész
+            break
+        sel.append(i)               # ez lesz a következő célszín
+        d = np.minimum(d, np.linalg.norm(labs - labs[i], axis=1))
+    return sel
+
+# (1) bőr-zóna sűrűn (6-os rács a Xiao-tartomány + 15 margó fölött)
+chosen = set(skin_ids[fps_spacing(labs[skin_ids], SKIN_SPACING)])
+# (2) a teljes gamut 12-es ráccsal; a távolságok az (1) pontjaitól
+#     öröklődnek, így a bőr-zónát nem fedi újra
+init_d = cKDTree(labs[sorted(chosen)]).query(labs)[0]
+chosen |= set(fps_spacing(labs, BG_SPACING, init_d=init_d))
+# (3) sáv-garancia: minden 2-28 cseppes recepthosszhoz legalább egy
+#     célszín (ahol hiányzik, a sáv legközépső színe kerül be)
+# (4) záró ellenőrzés: minden recept újrakeverve pontosan a tárolt
+#     RGB-t adja (ΔE = 0 garancia)
+assert np.array_equal(rgb_int_from_counts(c), g)</pre>
         </div>
 
       </section>
