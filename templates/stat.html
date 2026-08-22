@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}ShadeStudy - Stats Dashboard{% endblock %}
+{% block title %}ShadeMatch – statisztikai eredmények{% endblock %}
 
 {% block extra_head %}
 <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
@@ -165,22 +165,200 @@
   }
   .tab-panel { display: none; }
   .tab-panel.is-active { display: block; }
+  .tab-panel[data-tab="analysis"],
+  .tab-panel[data-tab="strategy"],
+  .tab-panel[data-tab="legacy"] { display: none !important; }
+  .result-hero {
+    padding: 22px;
+    border: 1px solid #bfdbfe;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #eff6ff 0%, #ffffff 70%);
+    margin-bottom: 14px;
+  }
+  .result-hero .eyebrow {
+    margin: 0 0 8px;
+    color: #1d4ed8;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .result-hero h2 { margin: 0 0 10px; font-size: 1.45rem; line-height: 1.25; }
+  .result-hero p { max-width: 82ch; line-height: 1.6; }
+  .result-callout {
+    margin: 12px 0;
+    padding: 12px 14px;
+    border-left: 4px solid #2563eb;
+    border-radius: 0 8px 8px 0;
+    background: #eff6ff;
+    line-height: 1.55;
+  }
+  .result-callout.caution { border-left-color: #d97706; background: #fffbeb; }
+  .result-section h3 { margin: 18px 0 8px; font-size: 1rem; }
+  .result-section p, .result-section li { line-height: 1.55; }
+  .result-section ul { padding-left: 1.2rem; }
+  .result-table td:first-child { font-weight: 650; }
+  .result-table .primary-row { background: #eff6ff; }
+  .result-table .uncertain { color: #92400e; font-weight: 700; }
+  .result-table .supported { color: #166534; font-weight: 700; }
+  .result-meta { color: var(--text-secondary); font-size: 0.8rem; margin-top: 8px; }
+  .source-list { margin: 8px 0 0; padding-left: 1.2rem; font-size: 0.86rem; }
+  .source-list a { color: #1d4ed8; }
+  @media (max-width: 700px) {
+    .result-hero { padding: 16px; }
+    .result-hero h2 { font-size: 1.2rem; }
+    .result-table th, .result-table td { white-space: normal; min-width: 7rem; }
+  }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="stats-wrap">
   <div class="stats-head">
-    <h1>Stats dashboard</h1>
-    <p>Focused telemetry view with attempt-controlled color metrics.</p>
+    <h1>ShadeMatch – statisztikai eredmények</h1>
+    <p>Végleges fő eredmények, valamint az élő baseline-, leíró és adatminőségi mutatók.</p>
   </div>
   <div class="tab-controls">
-    <button type="button" class="tab-btn is-active" data-tab-target="core">Core</button>
-    <button type="button" class="tab-btn" data-tab-target="quality">Quality</button>
-    <button type="button" class="tab-btn" data-tab-target="analysis">Deep analysis</button>
-    <button type="button" class="tab-btn" data-tab-target="strategy">Strategy</button>
+    <button type="button" class="tab-btn is-active" data-tab-target="results">Fő eredmények</button>
+    <button type="button" class="tab-btn" data-tab-target="core">Baseline és leíró adatok</button>
+    <button type="button" class="tab-btn" data-tab-target="quality">Adatminőség</button>
     <span id="tabLoadStatus"></span>
   </div>
+
+  <section class="tab-panel is-active result-section" data-tab="results" id="stat-final-results">
+    <div class="result-hero">
+      <p class="eyebrow">Fő üzenet · teljes történeti adat · 2026. augusztus 22.</p>
+      <h2>A résztvevők nem lesznek kimutathatóan pontosabbak, de ugyanazt a pontosságot egyre gyorsabban érik el.</h2>
+      <p>
+        A legalább tíz érvényes keverést teljesítő <strong>77 user mind a 6113 körét</strong>
+        elemeztük, játékmód-korlátozás nélkül, 344 különböző célszínen. A pontosság és
+        a hatékonyság szétválik: a folytonos ΔE00 nem javul monoton, miközben az idő és
+        kisebb mértékben a lépésszám csökken.
+      </p>
+    </div>
+
+    <section class="section">
+      <h2>1) Sebesség–pontosság szétválás</h2>
+      <div class="cards">
+        <div class="card"><div class="k">Elemzett kör</div><div class="v">6113</div></div>
+        <div class="card"><div class="k">User</div><div class="v">77</div></div>
+        <div class="card"><div class="k">Célszín</div><div class="v">344</div></div>
+        <div class="card"><div class="k">Medián köridő</div><div class="v">13,5 s</div></div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="result-table">
+          <thead><tr><th>Kimenet</th><th>Arány rutinszám-duplázódásonként</th><th>95%-os CI</th><th>p*</th><th>Értelmezés</th></tr></thead>
+          <tbody>
+            <tr class="primary-row"><td>Legjobb ΔE00</td><td>1,027</td><td>0,932–1,132</td><td>0,588</td><td class="uncertain">nincs kimutatható javulás</td></tr>
+            <tr><td>Idő – minden kör</td><td>0,917</td><td>0,885–0,950</td><td>&lt;0,001</td><td class="supported">8,3%-kal rövidebb</td></tr>
+            <tr><td>Idő – azonos pontosság mellett</td><td>0,911</td><td>0,881–0,942</td><td>&lt;0,001</td><td class="supported">8,9%-kal rövidebb</td></tr>
+            <tr><td>Lépésszám – azonos pontosság mellett</td><td>0,954</td><td>0,925–0,984</td><td>0,018</td><td class="supported">4,6%-kal kevesebb</td></tr>
+            <tr><td>Cseppszám – azonos pontosság mellett</td><td>0,976</td><td>0,947–1,006</td><td>0,236</td><td class="uncertain">nem biztos a csökkenés</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="result-callout">
+        A gyorsulás nem pusztán gyorsabb feladás: megmarad az elért pontosság figyelembevétele
+        után, a nulla hibájú és a pozitív hibájú körökben, valamint mind az öt előre rögzített
+        pontossági sávban. Azonos idő, lépésszám vagy cseppszám mellett sincs rejtett
+        pontosságjavulás.
+      </div>
+      <div class="result-callout caution">
+        A „nincs pontosságjavulás” nem bizonyított ekvivalencia. A fő pontossági modell
+        intervalluma kisebb javulást és romlást is megenged; a védhető állítás az, hogy
+        <strong>populációs monoton pontosságjavulás nem mutatható ki</strong>.
+      </div>
+      <p class="result-meta">
+        Vegyes modellek játékos-, target- és játékosonként eltérő tapasztalati hatással;
+        korrekció receptminimumra, pigmentszámra, L*, C*, színezetre, színtípusra és játékmódra.
+        Minden fő modell konvergált; az eredmény a robusztussági futásokban megmaradt.
+        * A pontossági főteszt p-értéke nyers; a hatékonysági soroké Holm-korrigált.
+      </p>
+    </section>
+
+    <section class="section">
+      <h2>2) Emberi próbálgatás a gépi színkeverési mezőnyben</h2>
+      <p>
+        A közvetlenül releváns, bőrtónus-jellegű ShadeMatch-célokon 687 kör áll rendelkezésre
+        13 usertől és 29 célszínen. Az emberi eredményt a publikációk végső kimenetéhez a
+        <strong>kör végén mért</strong> hibával hasonlítjuk; a pálya legjobb korábbi állapota csak
+        kiegészítő mutató.
+      </p>
+      <div class="cards">
+        <div class="card"><div class="k">Végső ΔE00</div><div class="v">0,86 ± 1,49</div></div>
+        <div class="card"><div class="k">Végső ΔE76</div><div class="v">1,33 ± 2,54</div></div>
+        <div class="card"><div class="k">Technikailag exact</div><div class="v">34,6%</div></div>
+        <div class="card"><div class="k">Medián idő</div><div class="v">36,6 s</div></div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="result-table">
+          <thead><tr><th>Módszer</th><th>Feladat</th><th>Mutató</th><th>Eredmény</th><th>Validáció</th></tr></thead>
+          <tbody>
+            <tr class="primary-row"><td>ShadeMatch – ember</td><td>iteratív digitális bőrtónus-keverés</td><td>ΔE00, végső</td><td>0,86 ± 1,49</td><td>687 kör / 13 user</td></tr>
+            <tr><td>ShadeMatch – ember</td><td>ugyanaz, CIE76-ra újraszámolva</td><td>ΔE76, végső</td><td>1,33 ± 2,54</td><td>próbánként súlyozva</td></tr>
+            <tr><td>Nakamura et al. (2021)</td><td>genetikus receptkeresés optikai modellben</td><td>ΔE76</td><td>1,46 ± 1,39</td><td>192 szimuláció</td></tr>
+            <tr><td>Mine et al. (2020) – deep ANN</td><td>valódi bőrszín → fizikai szilikon</td><td>ΔE00</td><td>3,45 ± 0,87</td><td>5 legyártott minta</td></tr>
+            <tr><td>Mine et al. (2020) – random forest</td><td>valódi bőrszín → fizikai szilikon</td><td>ΔE00</td><td>5,54 ± 1,41</td><td>5 legyártott minta</td></tr>
+            <tr><td>Mulcare &amp; Coward (2019)</td><td>telefonos colorimeter validálása</td><td>mérési hiba</td><td>nem keverési benchmark</td><td>10 szilikonminta</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Mit lehet ebből állítani?</h3>
+      <div class="result-callout">
+        <strong>Zárt visszacsatolású digitális keverésben az emberi próbálgatás a közölt
+        algoritmikus színformulázási eredményekkel versenyképes, és a nyers DeltaE alapján
+        akár jobb is lehet.</strong> Ez erős emberi baseline, nem általános ember–gép győzelem.
+      </div>
+      <ul>
+        <li>A ShadeMatch-célok ugyanabból az öt pigmentes, diszkrét Mixbox-rendszerből származnak; az exact recept garantáltan létezik.</li>
+        <li>A résztvevő minden lépés után numerikus ΔE-visszajelzést kap. Ez ember + mérőszám + zárt szabályozási hurok.</li>
+        <li>Mine egy-lövéses receptből fizikai szilikonmintát gyártott, ezért az anyag- és gyártási hiba is megjelenik.</li>
+        <li>Nakamura optikai szimulációja közelebb áll a digitális feladathoz, de más célkészletet és keverési modellt használ.</li>
+        <li>A CIE76-rangsor súlyozásfüggő: userenként azonos súllyal a ShadeMatch végső átlaga 1,99, ezért Nakamurához képest az „azonos teljesítménysáv” a korrekt minősítés.</li>
+      </ul>
+
+      <h3>Klinikai küszöbök csak kontextusként</h3>
+      <p>
+        A ShadeMatch bőrtónus-körök 91,8%-a ΔE00 ≤ 2,1, 96,9%-a ΔE00 ≤ 3,1.
+        Ezek a Paravina et al. által világos és sötét szilikon-bőrszínekre közölt
+        elfogadhatósági küszöbök. Ez szemléletes pozicionálás, <strong>nem klinikai
+        validáció</strong>, mert a ShadeMatch nem fizikai szilikont és nem valódi bőrt mér.
+      </p>
+
+      <h3>Hatékonyság</h3>
+      <p>
+        Pontosságban az ember versenyképes; online automatizálhatóságban és ismételhetőségben
+        várhatóan a gép vezet. End-to-end sebességi rangsor nem készíthető: a ShadeMatch csak
+        digitális köridőt mér, míg a fizikai tanulmányok előzetes adatbázist, kalibrációt,
+        mintagyártást és kötési időt is igényelnek.
+      </p>
+
+      <ul class="source-list">
+        <li><a href="https://www.jstage.jst.go.jp/article/jpr/64/3/64_296/_pdf" target="_blank" rel="noopener">Mine et al. (2020), teljes cikk</a></li>
+        <li><a href="https://doi.org/10.1016/j.dyepig.2021.109820" target="_blank" rel="noopener">Nakamura et al. (2021), DOI</a></li>
+        <li><a href="https://pubmed.ncbi.nlm.nih.gov/30028062/" target="_blank" rel="noopener">Mulcare &amp; Coward (2019), PubMed</a></li>
+        <li><a href="https://pubmed.ncbi.nlm.nih.gov/19432759/" target="_blank" rel="noopener">Paravina et al. (2009), küszöbértékek</a></li>
+      </ul>
+      <p class="result-meta">
+        Bibliográfiai korrekció: Mulcare és Coward tanulmánya 2019-es. A releváns 2009-es
+        észlelhetőségi és elfogadhatósági küszöböket Paravina et al. közölte.
+      </p>
+    </section>
+
+    <section class="section">
+      <h2>3) Érvényességi határ</h2>
+      <p>
+        A történeti adat megfigyeléses; a nagy rutinszámot csak a kitartó játékosok érik el,
+        a targetkínálat és a felület időben változott. A sebesség–pontosság szétválás ezért
+        robusztus asszociáció, nem randomizált gyakorlási hatás. Valódi ember–gép teszthez
+        azonos célkészlet, pigmentmotor, visszajelzés és kiértékelési keret szükséges.
+      </p>
+    </section>
+  </section>
 
   <section class="section tab-panel is-active" data-tab="core" id="stat-overview">
     <h2>Overview</h2>
@@ -271,20 +449,16 @@
   </section>
 
   <section class="section tab-panel is-active" data-tab="core" id="stat-distributions">
-    <h2>Distributions &amp; learning curves</h2>
+    <h2>Eloszlások és aktivitás</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
-      Interactive charts — hover for values, drag to zoom, double-click to reset.
+      Interaktív leíró ábrák — az értékek megjelenítéséhez vidd föléjük a kurzort; nagyításhoz húzd ki a tartományt, visszaállításhoz kattints duplán.
     </p>
     <div class="chart-grid">
-      <div class="chart-card"><p class="chart-title">Histogram: final ΔE</p><div class="plotly-chart" id="plot-fw_hist_final_de"></div></div>
-      <div class="chart-card"><p class="chart-title">Histogram: attempt duration</p><div class="plotly-chart" id="plot-fw_hist_duration"></div></div>
-      <div class="chart-card"><p class="chart-title">Daily attempt volume (UTC)</p><div class="plotly-chart" id="plot-daily_volume"></div></div>
-      <div class="chart-card"><p class="chart-title">User activity buckets</p><div class="plotly-chart" id="plot-user_bucket"></div></div>
-      <div class="chart-card"><p class="chart-title">Learning: median final ΔE by trial</p><div class="plotly-chart" id="plot-fw_trial_median_de"></div></div>
-      <div class="chart-card"><p class="chart-title">Success rate by trial</p><div class="plotly-chart" id="plot-fw_trial_success"></div></div>
-      <div class="chart-card"><p class="chart-title">Median duration by trial</p><div class="plotly-chart" id="plot-fw_trial_dur"></div></div>
-      <div class="chart-card"><p class="chart-title">Avg steps to completion by trial</p><div class="plotly-chart" id="plot-h1_steps"></div></div>
-      <div class="chart-card"><p class="chart-title">Typical trajectory shape</p><div class="plotly-chart" id="plot-fw_trajectory"></div></div>
+      <div class="chart-card"><p class="chart-title">A végső ΔE eloszlása</p><div class="plotly-chart" id="plot-fw_hist_final_de"></div></div>
+      <div class="chart-card"><p class="chart-title">A köridő eloszlása</p><div class="plotly-chart" id="plot-fw_hist_duration"></div></div>
+      <div class="chart-card"><p class="chart-title">Napi körszám (UTC)</p><div class="plotly-chart" id="plot-daily_volume"></div></div>
+      <div class="chart-card"><p class="chart-title">Userek aktivitási csoportjai</p><div class="plotly-chart" id="plot-user_bucket"></div></div>
+      <div class="chart-card"><p class="chart-title">Tipikus körön belüli pálya</p><div class="plotly-chart" id="plot-fw_trajectory"></div></div>
     </div>
   </section>
 
@@ -389,7 +563,7 @@
     </div>
   </section>
 
-  <section class="section tab-panel is-active" data-tab="core" id="stat-controlled">
+  <section class="section tab-panel" data-tab="legacy" id="stat-controlled">
     <h2>6) Attempt-controlled metrics</h2>
     <div class="chart-grid">
       <div class="chart-card">
@@ -448,7 +622,7 @@
     </div>
   </section>
 
-  <section class="section tab-panel is-active" data-tab="core" id="stat-recipe-sim">
+  <section class="section tab-panel" data-tab="legacy" id="stat-recipe-sim">
     <h2>6c) Recipe-ratio similarity (perfect vs deviant)</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Similarity compares normalized drop ratios, so scaled recipes are treated as equivalent. Perfect means ratio-identical; deviant means any ratio difference.
@@ -457,7 +631,7 @@
     <details class="table-collapse"><summary>Show data table</summary><div class="table-wrap" style="margin-top:10px;"><table id="recipeSimilaritySampleTable"></table></div></details>
   </section>
 
-  <section class="section tab-panel is-active" data-tab="core" id="stat-models">
+  <section class="section tab-panel" data-tab="legacy" id="stat-models">
     <h2>6d) Attempt models (stable spec, HC3)</h2>
     <p style="margin:0 0 10px;color:var(--text-secondary);font-size:0.88rem;">
       Outcomes: <code>log₁p(final&nbsp;ΔE)</code>, <code>logit(similarity)</code>, and binary <code>perfect_ratio</code> (exact recipe match).
@@ -2113,7 +2287,7 @@
   });
 
   var tabLoadStatus = document.getElementById('tabLoadStatus');
-  var activeTab = 'core';
+  var activeTab = 'results';
   var qualityLoaded = false;
   var advancedLoaded = false;
   var advancedLoadPromise = null;
@@ -2186,14 +2360,10 @@
     });
   });
 
-  loadStatsBasic().then(function() {
-    // Promote the key results (mixed models, recipe similarity, archetypes) to
-    // the default view: load them progressively after the light overview paints.
-    ensureAdvancedLoaded().catch(function() {});
-  }).catch(function(err) {
+  loadStatsBasic().catch(function(err) {
     document.getElementById('overviewCards').innerHTML =
       '<div class="card"><div class="k">Error</div><div class="v" style="font-size:0.95rem;">' + err.message + '</div></div>';
   });
-  setActiveTab('core');
+  setActiveTab('results');
 </script>
 {% endblock %}
