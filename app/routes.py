@@ -4137,6 +4137,12 @@ _stat_summary_cache_entries = {}
 _stat_quality_cache_lock = threading.Lock()
 _stat_quality_cache_ts = 0.0
 _stat_quality_cache_payload = None
+# The inference payload bootstraps every interval it reports, so it is the most
+# expensive of the /stat endpoints and gets the longest TTL.
+_STAT_INFERENCE_CACHE_TTL_SEC = int(os.environ.get('STAT_INFERENCE_CACHE_SECONDS', '900'))
+_stat_inference_cache_lock = threading.Lock()
+_stat_inference_cache_ts = 0.0
+_stat_inference_cache_payload = None
 
 
 def _get_cached_stat_summary_payload(cache_key='full'):
@@ -4638,6 +4644,34 @@ def stat_summary():
         if 'matplotlib.pyplot' in sys.modules:
             sys.modules['matplotlib.pyplot'].close('all')
         gc.collect()
+
+
+@main.route('/api/stat/inference', methods=['GET'])
+def stat_inference_summary():
+    """Interval estimates, effect sizes and clustered summaries for /stat.
+
+    Separate from ``/api/stat/summary`` on purpose: that endpoint answers "what
+    is in the database", this one answers "what can be claimed from it", and the
+    two have very different costs (this one bootstraps) and cache lifetimes.
+    """
+    global _stat_inference_cache_ts, _stat_inference_cache_payload
+    now = time.time()
+    with _stat_inference_cache_lock:
+        if (_stat_inference_cache_payload is not None
+                and (now - _stat_inference_cache_ts) <= _STAT_INFERENCE_CACHE_TTL_SEC):
+            return jsonify(_stat_inference_cache_payload)
+    try:
+        from .stat_inference import build_inference_summary  # lazy: pulls pandas
+        payload = build_inference_summary()
+    except Exception as e:
+        print(f'stat_inference error: {e}')
+        if not refresh_db_connection():
+            pass
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+    with _stat_inference_cache_lock:
+        _stat_inference_cache_payload = payload
+        _stat_inference_cache_ts = time.time()
+    return jsonify(payload)
 
 
 @main.route('/api/stat/quality-summary', methods=['GET'])
