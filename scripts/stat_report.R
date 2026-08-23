@@ -56,6 +56,11 @@ AT_LIGHT <- 2.1; AT_DARK <- 3.1
 PERFECT_DE <- 0.01
 # Az első átlépés küszöbe (a /stat régóta ezt a mérföldkövet mutatja).
 CROSS_DE <- 2.0
+# A modell együtthatója a körszám MEGKÉTSZEREZŐDÉSÉRE vonatkozik (log2-skála).
+# Ez pontos, de absztrakt, ezért minden becslés mellé kiszámoljuk a konkrét
+# kontrasztot is: mennyivel más a CONTRAST_TO. kör az CONTRAST_FROM.-hoz képest.
+CONTRAST_FROM <- 1
+CONTRAST_TO <- 64
 
 OUT_DIR <- "artifacts/stat_r"
 dir.create(OUT_DIR, recursive = TRUE, showWarnings = FALSE)
@@ -145,7 +150,22 @@ fixed_effect <- function(model, term) {
        ci_low = unname(ci[1, 1]), ci_high = unname(ci[1, 2]),
        ratio = exp(unname(co[term, "Estimate"])),
        ratio_ci_low = exp(unname(ci[1, 1])),
-       ratio_ci_high = exp(unname(ci[1, 2])))
+       ratio_ci_high = exp(unname(ci[1, 2])),
+       # Ugyanaz a hatás konkrétan: az együttható a körszám kétszereződésére
+       # szól, itt viszont a CONTRAST_FROM. → CONTRAST_TO. kör teljes változása.
+       contrast_from = CONTRAST_FROM, contrast_to = CONTRAST_TO,
+       contrast_ratio = exp(unname(co[term, "Estimate"]) * log2(CONTRAST_TO / CONTRAST_FROM)),
+       contrast_ci_low = exp(unname(ci[1, 1]) * log2(CONTRAST_TO / CONTRAST_FROM)),
+       contrast_ci_high = exp(unname(ci[1, 2]) * log2(CONTRAST_TO / CONTRAST_FROM)))
+}
+
+# Egy hatás emberi mondatban: konkrét kontraszt elöl, együttható mögötte.
+effect_sentence <- function(fe, mit) {
+  sprintf("%s: az %d. körről a %d.-ra %+.1f%% (95%% CI %+.1f%% … %+.1f%%); a körszám minden megkétszereződésekor %+.1f%%, p = %s",
+          mit, fe$contrast_from, fe$contrast_to,
+          100 * (fe$contrast_ratio - 1), 100 * (fe$contrast_ci_low - 1),
+          100 * (fe$contrast_ci_high - 1), 100 * (fe$ratio - 1),
+          format.pval(fe$p, digits = 3, eps = 1e-16))
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -171,8 +191,9 @@ sa_out <- c(
   header("1) SEBESSÉG–PONTOSSÁG SZÉTVÁLÁS — pontosság",
          "lmer(log1p(final_delta_e) ~ log2(trial_index) + (1|user_id) + (1|target_color_id))",
          nrow(att),
-         extra = c("", "A log1p-skálán a meredekség exponenciálva (1+ΔE) szorzótényező",
-                   "a rutin megduplázódására.")),
+         extra = c("", "A rutin log2-n van, ezért a log2_trial együtthatója arra vonatkozik,",
+                   "hogy a lejátszott körök száma MEGKÉTSZEREZŐDIK (4->8, 8->16, ...).",
+                   "A log1p-skálán exponenciálva (1+ΔE) szorzótényezőt ad.")),
   capture.output(summary(m_acc)),
   "", "-- 95% Wald-konfidenciaintervallum a fixhatásra --",
   capture.output(print(suppressMessages(confint(m_acc, parm = "log2_trial", method = "Wald")))),
@@ -217,12 +238,9 @@ p_sa <- ggplot(sa_points, aes(trial_index, ertek)) +
                       guide = "none") +
   labs(x = "Hányadik köre a játékosnak (log2-skála)", y = NULL,
        title = "Minden kör, a kevert modell populációs illesztésével",
-       subtitle = sprintf(
-         "ΔE₀₀: %+.1f%% / rutinduplázódás (95%% CI %+.1f%% … %+.1f%%, p = %.3f)   |   köridő: %+.1f%% (95%% CI %+.1f%% … %+.1f%%, p = %.3g)",
-         100 * (fe_acc$ratio - 1), 100 * (fe_acc$ratio_ci_low - 1),
-         100 * (fe_acc$ratio_ci_high - 1), fe_acc$p,
-         100 * (fe_dur$ratio - 1), 100 * (fe_dur$ratio_ci_low - 1),
-         100 * (fe_dur$ratio_ci_high - 1), fe_dur$p))
+       subtitle = paste(effect_sentence(fe_acc, "Végső ΔE₀₀"),
+                        effect_sentence(fe_dur, "Köridő"), sep = "\n")) +
+  theme(plot.subtitle = element_text(size = 9, lineheight = 1.25))
 
 write_block("sebesseg_pontossag", p_sa, sa_out,
             list(n_attempts = nrow(att), n_timed = nrow(timed),

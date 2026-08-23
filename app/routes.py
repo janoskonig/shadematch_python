@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, jsonify, send_from_directory, Response, current_app, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, send_from_directory, Response, current_app, redirect, url_for, send_file
 from datetime import datetime, date, timedelta, timezone
 import colorsys
 import copy
@@ -4137,12 +4137,6 @@ _stat_summary_cache_entries = {}
 _stat_quality_cache_lock = threading.Lock()
 _stat_quality_cache_ts = 0.0
 _stat_quality_cache_payload = None
-# The inference payload bootstraps every interval it reports, so it is the most
-# expensive of the /stat endpoints and gets the longest TTL.
-_STAT_INFERENCE_CACHE_TTL_SEC = int(os.environ.get('STAT_INFERENCE_CACHE_SECONDS', '900'))
-_stat_inference_cache_lock = threading.Lock()
-_stat_inference_cache_ts = 0.0
-_stat_inference_cache_payload = None
 
 
 def _get_cached_stat_summary_payload(cache_key='full'):
@@ -4646,32 +4640,100 @@ def stat_summary():
         gc.collect()
 
 
-@main.route('/api/stat/inference', methods=['GET'])
-def stat_inference_summary():
-    """Interval estimates, effect sizes and clustered summaries for /stat.
+# --- /stat inference: the R report ----------------------------------------- #
+# The statistics live in scripts/stat_report.R, not here. Render runs Python
+# only, so the R script runs on a machine with the data (see its header) and
+# commits its artifacts; this endpoint just hands them to the page. That keeps
+# one implementation of every model instead of a Python one and an R one that
+# can disagree.
+_STAT_R_REPORT_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'artifacts', 'stat_r')
 
-    Separate from ``/api/stat/summary`` on purpose: that endpoint answers "what
-    is in the database", this one answers "what can be claimed from it", and the
-    two have very different costs (this one bootstraps) and cache lifetimes.
+# Fixed order so the page reads the same way every time; blocks the script adds
+# later still show up, appended.
+_STAT_R_BLOCK_ORDER = (
+    'sebesseg_pontossag',
+    'kuszob_eleres',
+    'elso_atlepes',
+    'eszlelesi_kuszob',
+)
+_STAT_R_BLOCK_RE = re.compile(r'^[a-z0-9_]+$')
+
+
+def _stat_r_block_path(block: str, suffix: str):
+    """Path inside the artifact dir, or None if the name is not a plain block key."""
+    if not _STAT_R_BLOCK_RE.match(block or ''):
+        return None
+    path = os.path.join(_STAT_R_REPORT_DIR, f'{block}{suffix}')
+    # Belt and braces: the regex already excludes separators, but resolve anyway.
+    if os.path.commonpath([os.path.realpath(path), os.path.realpath(_STAT_R_REPORT_DIR)]) \
+            != os.path.realpath(_STAT_R_REPORT_DIR):
+        return None
+    return path
+
+
+@main.route('/api/stat/r-report', methods=['GET'])
+def stat_r_report():
+    """The blocks written by scripts/stat_report.R: key numbers + raw R output.
+
+    Figures are served separately (they are PNGs); everything else is small
+    enough to inline, including the verbatim ``summary()`` text — the page shows
+    it as-is, so a model that failed to fit is visible rather than silently
+    missing.
     """
-    global _stat_inference_cache_ts, _stat_inference_cache_payload
-    now = time.time()
-    with _stat_inference_cache_lock:
-        if (_stat_inference_cache_payload is not None
-                and (now - _stat_inference_cache_ts) <= _STAT_INFERENCE_CACHE_TTL_SEC):
-            return jsonify(_stat_inference_cache_payload)
+    if not os.path.isdir(_STAT_R_REPORT_DIR):
+        return jsonify({
+            'status': 'error', 'error': 'no_artifacts',
+            'message': ('Nincs R-riport. Futtasd a repo gyökeréből: '
+                        'SHADE_DATA=data/shadematch_v2 Rscript scripts/stat_report.R'),
+        }), 404
     try:
-        from .stat_inference import build_inference_summary  # lazy: pulls pandas
-        payload = build_inference_summary()
+        meta = {}
+        meta_path = os.path.join(_STAT_R_REPORT_DIR, 'meta.json')
+        if os.path.exists(meta_path):
+            with open(meta_path, encoding='utf-8') as fh:
+                meta = json.load(fh)
+
+        found = sorted(
+            os.path.splitext(f)[0] for f in os.listdir(_STAT_R_REPORT_DIR)
+            if f.endswith('.json') and f != 'meta.json'
+        )
+        ordered = [b for b in _STAT_R_BLOCK_ORDER if b in found]
+        ordered += [b for b in found if b not in _STAT_R_BLOCK_ORDER]
+
+        blocks = []
+        for key in ordered:
+            json_path = _stat_r_block_path(key, '.json')
+            if not json_path or not os.path.exists(json_path):
+                continue
+            with open(json_path, encoding='utf-8') as fh:
+                values = json.load(fh)
+            output = ''
+            out_path = _stat_r_block_path(key, '_output.txt')
+            if out_path and os.path.exists(out_path):
+                with open(out_path, encoding='utf-8') as fh:
+                    output = fh.read()
+            fig_path = _stat_r_block_path(key, '.png')
+            blocks.append({
+                'key': key,
+                'values': values,
+                'output': output,
+                'has_figure': bool(fig_path and os.path.exists(fig_path)),
+            })
+        return jsonify({'status': 'success', 'meta': meta, 'blocks': blocks})
     except Exception as e:
-        print(f'stat_inference error: {e}')
-        if not refresh_db_connection():
-            pass
+        print(f'stat_r_report error: {e}')
         return jsonify({'status': 'error', 'message': str(e)}), 500
-    with _stat_inference_cache_lock:
-        _stat_inference_cache_payload = payload
-        _stat_inference_cache_ts = time.time()
-    return jsonify(payload)
+
+
+@main.route('/api/stat/r-report/figure/<string:block>.png', methods=['GET'])
+def stat_r_report_figure(block: str):
+    """One ggplot PNG from the R report."""
+    path = _stat_r_block_path(block, '.png')
+    if not path or not os.path.exists(path):
+        return jsonify({'status': 'error', 'message': 'unknown figure'}), 404
+    return send_file(path, mimetype='image/png',
+                     max_age=0, conditional=True)
 
 
 @main.route('/api/stat/quality-summary', methods=['GET'])

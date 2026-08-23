@@ -222,69 +222,7 @@
     max-width: 90ch;
   }
   .explainer.warn { border-left-color: #d97706; background: #fffbeb; }
-  /* Speed–accuracy block: the study's headline result, so it is the one
-     emphasised thing on the tab. The two series tokens are declared here and
-     nowhere else, so the KPI tiles and all three charts cannot drift apart.
-     Both hues are the validated categorical slots 1–2 (CVD ΔE 24.7 against the
-     white chart surface); the plane's path is deliberately neutral so no
-     categorical hue ever stands for two different things on one screen. */
-  .sa {
-    --series-accuracy: #2a78d6;
-    --series-duration: #eb6834;
-    --series-path: #52514e;
-    border-color: #bfdbfe;
-    background: linear-gradient(135deg, #f5f9ff 0%, var(--surface) 60%);
-  }
-  .sa .eyebrow {
-    margin: 0 0 8px;
-    color: #1d4ed8;
-    font-size: 0.72rem;
-    font-weight: 800;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-  }
-  .sa-verdict {
-    margin: 0 0 14px;
-    font-size: 1.32rem;
-    line-height: 1.35;
-    max-width: 34ch;
-    font-weight: 750;
-  }
-  .sa-kpis {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-    gap: 10px;
-    margin-bottom: 14px;
-  }
-  .sa-kpi {
-    padding: 12px 14px;
-    border: 1px solid var(--border);
-    border-left: 4px solid var(--border-strong, #d1cbc4);
-    border-radius: 10px;
-    background: var(--surface);
-  }
-  .sa-kpi.accuracy { border-left-color: var(--series-accuracy); }
-  .sa-kpi.duration { border-left-color: var(--series-duration); }
-  .sa-kpi .k {
-    color: var(--text-secondary);
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-  }
-  /* Proportional figures on the big number: tabular digits make a value like
-     −8.3% look loose at this size. */
-  .sa-kpi .v { margin: 4px 0 2px; font-size: 1.85rem; font-weight: 800; line-height: 1.1; }
-  .sa-kpi .sub { color: var(--text-secondary); font-size: 0.78rem; }
-  .sa-kpi .chip {
-    display: inline-block;
-    margin-top: 8px;
-    padding: 2px 8px;
-    border-radius: 999px;
-    border: 1px solid var(--border-strong, #d1cbc4);
-    font-size: 0.74rem;
-    font-weight: 700;
-    color: var(--text-secondary);
-  }
+  /* Az R-riport ábrakártyái. */
   .sa-card { margin-bottom: 10px; }
   .chart-note {
     margin: 6px 0 0;
@@ -292,6 +230,27 @@
     font-size: 0.78rem;
     line-height: 1.5;
   }
+  /* R-riport: az ábra a szélességhez igazodik, a nyers kimenet pedig monospace
+     és görgethető — a lmer/survfit output fix szélességű oszlopokra épül, ezért
+     nem szabad tördelni. */
+  .r-figure { width: 100%; height: auto; display: block; }
+  .r-output {
+    margin: 0;
+    padding: 12px 14px;
+    max-height: 30rem;
+    overflow: auto;
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 8px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    white-space: pre;
+    tab-size: 8;
+  }
+  .r-interpretation { max-width: 90ch; line-height: 1.6; font-size: 0.92rem; }
+  .r-interpretation ul { padding-left: 1.2rem; margin: 8px 0; }
+  .r-interpretation li { margin-bottom: 4px; }
   .explainer.good { border-left-color: #16a34a; background: #f0fdf4; }
   .explainer b { font-weight: 700; }
   .explainer .lead { display: block; margin-bottom: 4px; font-weight: 700; }
@@ -493,188 +452,27 @@
   </section>
 
   <!-- ===================== INFERENCE TAB ===================== -->
+  <!-- ===================== INFERENCE TAB (R report) ===================== -->
   <section class="tab-panel" data-tab="inference" id="stat-inference">
     <div class="section">
-      <h2>Következtetéses statisztika</h2>
+      <h2>Következtetés — R-riport</h2>
       <p class="section-lead">
-        A többi fül leíró: darabszám, átlag, medián, pontfelhő. Ez a fül arra válaszol,
-        hogy <strong>mennyire biztosak ezek a számok</strong>. Minden érték mellett ott az
-        elemszám, a szóródás és a 95%-os konfidenciaintervallum (CI), a fő mutatók pedig
-        kétszer szerepelnek: <strong>körre összevonva</strong> és
-        <strong>játékosra klaszterezve</strong>.
+        Ezt a fület nem az alkalmazás számolja: a <code>scripts/stat_report.R</code> futásának
+        kimenetét mutatja. Blokkonként <strong>egy</strong> standard modell, és mindháromszor
+        ugyanaz a szám — az <strong>ábrán</strong>, a <strong>nyers R-kimenetben</strong> és az
+        <strong>értelmezésben</strong>. Ha egy modell el sem futott, az itt nem tűnik el
+        csendben, hanem odaírva látszik.
       </p>
       <div class="explainer">
-        <span class="lead">Miért kell a két változat?</span>
-        A körök nem függetlenek egymástól: néhány játékos több száz kört visz, a többség
-        néhányat. Egy körre összevont átlag ezért elsősorban a legaktívabb játékosokról szól
-        (ez a <b>pszeudoreplikáció</b>). A klaszterezett változat előbb játékosonként számol
-        egy értéket, és csak azokat összegzi — a bootstrap is játékosokat sorsol újra, nem
-        köröket. Ha a két sor eltér, a körre összevont szám a torzabb.
+        <span class="lead">Hogyan frissül</span>
+        A Render csak Pythont futtat, ezért az elemzés nem a szerveren él. A repo gyökeréből:
+        <code>python scripts/export_db_to_csv.py</code>, majd
+        <code>SHADE_DATA=data/shadematch_v2 Rscript scripts/stat_report.R</code> —
+        ez írja az <code>artifacts/stat_r/</code> mappát, amit ez az oldal beolvas.
       </div>
-      <div class="cards" id="infSampleCards"></div>
-      <p id="infSampleNote" class="result-meta"></p>
+      <div class="cards" id="rReportMeta"></div>
     </div>
-
-    <div class="section sa">
-      <p class="eyebrow">Fő eredmény · élő adat</p>
-      <h2 class="sa-verdict" id="saVerdict">Sebesség–pontosság szétválás</h2>
-      <div class="sa-kpis" id="saKpis"></div>
-      <div class="explainer">
-        <span class="lead">Mit jelent a „rutinduplázódásonként”?</span>
-        A gyakorlás hatása a próbák számának <b>logaritmusában</b> jelentkezik, ezért a
-        természetes lépték nem a következő kör, hanem az eddigi körök <b>megduplázódása</b>
-        (4→8, 8→16, …). Minden becslés <b>játékoson belül</b> készül, a célszín mediánjára
-        igazítva, tehát nem attól jön ki, hogy a kitartó játékosok eleve jobbak, és nem is
-        attól, hogy valaki később könnyebb színt kapott.
-      </div>
-
-      <div class="chart-card sa-card">
-        <p class="chart-title">Mennyit mozdul egy kimenet, ha a játékos rutinja megduplázódik</p>
-        <div class="plotly-chart" id="plot-sa_effects" style="min-height:220px;"></div>
-        <p class="chart-note">
-          Pont = becsült arány, vonal = 95% CI. Az <b>1,0</b>-nál húzott függőleges a
-          „nincs változás”: amelyik intervallum keresztezi, ott nincs kimutatható hatás,
-          amelyik teljesen balra esik, ott valódi csökkenés van.
-        </p>
-      </div>
-
-      <div class="chart-card sa-card">
-        <p class="chart-title">Pontosság és köridő a rutin növekedésével</p>
-        <div class="plotly-chart" id="plot-sa_curves" style="min-height:360px;"></div>
-        <p class="chart-note" id="saCurvesNote"></p>
-      </div>
-
-      <div class="chart-card sa-card">
-        <p class="chart-title">Ugyanez a két görbe egymás ellen: a sebesség–pontosság sík</p>
-        <div class="plotly-chart" id="plot-sa_plane" style="min-height:340px;"></div>
-        <p class="chart-note">
-          Ugyanazok az indexált értékek egymás ellen kirajzolva, a kiindulás a jobb felső
-          sarokban. <b>Balra</b> = rövidülő idő, <b>lefelé</b> = javuló pontosság. A pálya
-          alakja a válasz: <b>vízszintes</b> pálya szétválás (gyorsul, de nem pontosabb),
-          <b>átlós lefelé</b> mindkettő javulása, <b>átlós fölfelé</b> pedig azt jelentené,
-          hogy a gyorsulás a pontosság rovására megy. A függőleges tengely mindig legalább
-          ±22 pontot mutat, hogy egy lapos pálya ne tűnjön hullámzónak a ráközelítéstől.
-        </p>
-      </div>
-
-      <details class="table-collapse">
-        <summary>Táblázatos nézet</summary>
-        <h3 class="sub">Hatás rutinduplázódásonként</h3>
-        <div class="table-wrap"><table id="infLearningTable"></table></div>
-        <h3 class="sub">Indexált görbék (a saját kezdéshez képest)</h3>
-        <div class="table-wrap"><table id="saCurveTable"></table></div>
-      </details>
-
-      <div class="explainer warn">
-        <span class="lead">Mit nem mond ez ki</span>
-        A „nincs kimutatható pontosságjavulás” <b>nem</b> bizonyított egyenlőség: a
-        konfidenciaintervallum kisebb javulást és romlást is megenged. A védhető állítás az,
-        hogy populációs szintű monoton pontosságjavulás nem mutatható ki. Az adat emellett
-        <b>megfigyeléses</b>: a nagy rutint csak a kitartó játékosok érik el, tehát ez
-        asszociáció, nem randomizált gyakorlási hatás.
-        A p-értékek a három kimenetre Holm-korrigáltak.
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>2) Pontosság, idő és lépésszám</h2>
-      <div class="explainer">
-        <span class="lead">Hogyan olvasd</span>
-        A <b>medián</b> a tipikus kör, az <b>IQR</b> (a középső 50% sávja) a szóródás.
-        Az átlag azért is szerepel, hogy látszódjon a ferdeség: a ΔE-eloszlás erősen jobbra
-        ferde és nulla-túlsúlyos, ezért az átlag jóval a tipikus kör fölött van — főcímnek
-        a medián való. A <b>ferdeség</b> &gt; 1 azt jelenti, hogy az átlag nem tipikus érték.
-      </div>
-      <div class="table-wrap"><table id="infDistributionTable"></table></div>
-    </div>
-
-    <div class="section">
-      <h2>3) Küszöbök teljesítése</h2>
-      <div class="explainer">
-        <span class="lead">Hogyan olvasd</span>
-        Paravina et al. ΔE₀₀ küszöbei: az <b>észlelhetőség</b> alatt a különbség jellemzően
-        nem látszik (0,7 világos / 1,2 sötét minta), az <b>elfogadhatóság</b> alatt a
-        különbséget elfogadják (2,1 / 3,1). Az arányok Wilson-intervallummal szerepelnek,
-        mert a Wald-intervallum 0 és 1 közelében kilóg az értelmezési tartományból.
-        A „játékosmedián” oszlop a játékosonkénti arányok mediánja: ez az, ami nem
-        billen el a legaktívabb játékosok felé.
-      </div>
-      <div class="table-wrap"><table id="infThresholdTable"></table></div>
-    </div>
-
-    <div class="section">
-      <h2>4) Honnan jön a szóródás? (ICC)</h2>
-      <div class="explainer">
-        <span class="lead">Hogyan olvasd</span>
-        Az <b>ICC</b> (intraklaszter korreláció) azt mondja meg, a ΔE ingadozásának mekkora
-        része magyarázható a csoportosítással. Ha a játékos szerinti ICC magas, a különbség
-        elsősorban arról szól, <b>ki</b> játszik; ha a célszín szerinti magas, akkor arról,
-        <b>melyik színt</b> kapta. Ami marad, az köröz belüli zaj. A skála log1p(ΔE₀₀),
-        hogy a néhány szélsőségesen rossz kör ne uralja a varianciát.
-      </div>
-      <div class="table-wrap"><table id="infVarianceTable"></table></div>
-    </div>
-
-    <div class="section">
-      <h2>5) Együttjárások</h2>
-      <div class="explainer">
-        <span class="lead">Hogyan olvasd</span>
-        A <b>Spearman ρ</b> a mérvadó: a ΔE és az idő is nehéz farkú eloszlás, néhány hosszú
-        kör önmagában elmozdítja a Pearson-féle r-t. A <b>játékoson belüli</b> oszlop a
-        játékosonként számolt korrelációk mediánja — ez arra válaszol, hogy „egy játékoson
-        belül igaz-e”, míg a összevont r arra, hogy „a gyors játékosok mások-e, mint a
-        lassúak”. A kettő ellentétes előjelű is lehet (Simpson-paradoxon).
-        A korreláció nem oksági viszony.
-      </div>
-      <div class="table-wrap"><table id="infCorrelationTable"></table></div>
-    </div>
-
-    <div class="section">
-      <h2>6) Mennyi kör kell a ΔE &lt; 2 eléréséhez?</h2>
-      <div class="explainer warn">
-        <span class="lead">Miért nem elég az átlag</span>
-        A leíró csempe csak azokat a (játékos, célszín) párokat számolja, amelyek
-        <b>valaha átlépték</b> a küszöböt — vagyis pont a legnehezebb eseteket dobja ki, és
-        ezért optimista. Ez túlélési adat: aki adott számú próbálkozásig nem lépte át,
-        az <b>cenzorált</b> megfigyelés, nem hiányzó. A Kaplan–Meier becslés mindkettőt
-        felhasználja, és megadja a tényleges <b>elérési arányt</b> is.
-      </div>
-      <div class="cards" id="infSurvivalCards"></div>
-      <div class="chart-grid" style="margin-top:10px;">
-        <div class="chart-card">
-          <p class="chart-title">Kumulált elérési arány próbálkozásszám szerint (95% CI)</p>
-          <div class="plotly-chart" id="plot-inf_survival"></div>
-        </div>
-        <div class="chart-card">
-          <p class="chart-title">Kaplan–Meier tábla</p>
-          <div class="table-wrap"><table id="infSurvivalTable"></table></div>
-        </div>
-      </div>
-    </div>
-
-    <div class="section">
-      <h2>7) Észlelési ítéletek a játékon belül</h2>
-      <div class="explainer">
-        <span class="lead">Hogyan olvasd</span>
-        Amikor a játékos kilép egy körből, minősíti az eredményt: nincs különbség /
-        elfogadható / nem elfogadható. Az eloszlások mellett itt a <b>különbség</b> is
-        szerepel: a mediánok eltolódása bootstrap-intervallummal és a <b>Cliff-féle δ</b>
-        (rangalapú, eloszlásfüggetlen elkülönülés: 0 = teljes átfedés, 1 = teljes szétválás).
-        Az utolsó blokk ugyanazzal a logisztikus illesztéssel becsül 50%-os küszöböt, mint a
-        kalibrációs mérőeszköz, így a két szám összehasonlítható.
-      </div>
-      <div class="table-wrap"><table id="infPerceptionTable"></table></div>
-      <h3 class="sub">Szomszédos ítéletek elkülönülése</h3>
-      <div class="table-wrap"><table id="infPerceptionContrastTable"></table></div>
-      <h3 class="sub">Játékon belüli 50%-os küszöb vs. referencia</h3>
-      <div class="table-wrap"><table id="infPerceptionThresholdTable"></table></div>
-      <div class="explainer warn">
-        <span class="lead">Korlát</span>
-        A játékban a játékos <b>maga választja meg</b>, milyen ΔE-nél áll meg, tehát ezek az
-        értékek nem előírt ingerek: a küszöb környéki tartomány alulmintázott, a becsült
-        küszöb eltolt lehet. Az előírt ΔE-vel dolgozó becslés a <em>Kalibráció</em> fülön van.
-      </div>
-    </div>
+    <div id="rReportBlocks"></div>
   </section>
 
   <!-- ===================== CALIBRATION TAB ===================== -->
@@ -2663,23 +2461,6 @@
   // Inference tab (/api/stat/inference): every number with an interval, and a
   // clustered-by-player version next to the attempt-pooled one.
   // -------------------------------------------------------------------------
-  function fmtCI(lo, hi, digits) {
-    if (lo === null || lo === undefined || hi === null || hi === undefined) return '—';
-    return fmtNumber(lo, digits) + ' – ' + fmtNumber(hi, digits);
-  }
-
-  function fmtPctCI(lo, hi) {
-    if (lo === null || lo === undefined || hi === null || hi === undefined) return '—';
-    return pctFmt(lo) + ' – ' + pctFmt(hi);
-  }
-
-  function fmtP(p) {
-    if (p === null || p === undefined || Number.isNaN(Number(p))) return '—';
-    var v = Number(p);
-    if (v < 0.001) return '&lt;0.001';
-    return v.toFixed(3);
-  }
-
   function cardsHtml(cards) {
     return cards.map(function(c) {
       return '<div class="card"><div class="k">' + escapeHtml(c.k) + '</div><div class="v">' +
@@ -2687,83 +2468,156 @@
     }).join('');
   }
 
-  function renderInferenceSample(data) {
-    var s = data.sample || {};
-    var el = document.getElementById('infSampleCards');
-    if (!el) return;
-    el.innerHTML = cardsHtml([
-      { k: 'Elemzett kör', v: s.analysed_attempts != null ? s.analysed_attempts : '—' },
-      { k: 'Játékos', v: s.players != null ? s.players : '—' },
-      { k: 'Célszín', v: s.targets != null ? s.targets : '—' },
-      { k: 'Effektív elemszám', v: s.effective_n != null ? Math.round(s.effective_n) : '—' },
-      { k: 'Design effect', v: fmtNumber(s.design_effect, 2) },
-      { k: 'Kör / játékos (medián)', v: fmtNumber(s.rounds_per_player_median, 1) },
-      { k: 'Legaktívabb játékos aránya', v: s.top_player_share != null ? pctFmt(s.top_player_share) : '—' },
-      { k: 'Időmérésbe bevont kör', v: s.timed_attempts != null ? s.timed_attempts : '—' }
-    ]);
-    var note = document.getElementById('infSampleNote');
-    if (note) {
-      note.innerHTML =
-        'Az <b>effektív elemszám</b> az az elemszám, amennyi független körrel ez az adat ' +
-        'ténylegesen felér: n / [1 + (átlagos kör/játékos − 1) · ICC]. A design effect ' +
-        (s.design_effect != null ? '(' + fmtNumber(s.design_effect, 2) + '×) ' : '') +
-        'azt mutatja, hányszorosára tágulnak a konfidenciaintervallumok a klaszterezettség miatt. ' +
-        'Kizárva: ' + (s.excluded_missing_delta_e || 0) + ' kör ΔE nélkül, ' +
-        (s.excluded_duration_over_cap || 0) + ' kör ' + fmtNumber(s.duration_cap_sec, 0) +
-        ' s fölötti időtartammal (ez az „elsétált a géptől” szűrő). ' +
-        'Az összes szám ugyanezen a körhalmazon készült.';
+  // -------------------------------------------------------------------------
+  // Inference tab — renders whatever scripts/stat_report.R last wrote.
+  //
+  // Deliberately dumb: the page does no statistics. Per block it shows the
+  // ggplot figure, the verbatim R output, and a Hungarian interpretation that
+  // quotes the same numbers back out of the block's JSON. That triple is the
+  // redundancy — a number you can see, check against the model output, and read
+  // in a sentence.
+  // -------------------------------------------------------------------------
+  var R_BLOCK_TITLES = {
+    sebesseg_pontossag: '1) Sebesség–pontosság szétválás',
+    kuszob_eleres: '2) Küszöb-elérés',
+    elso_atlepes: '3) Mennyi kör kell a ΔE < 2 eléréséhez?',
+    eszlelesi_kuszob: '4) Észlelési küszöb a játékon belül'
+  };
+
+  function pctChange(ratio) {
+    if (ratio === null || ratio === undefined || !Number.isFinite(Number(ratio))) return '—';
+    var v = 100 * (Number(ratio) - 1);
+    return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(1) + '%';
+  }
+
+  function effectPhrase(fe) {
+    if (!fe) return '—';
+    var crosses = fe.ratio_ci_low <= 1 && fe.ratio_ci_high >= 1;
+    return 'az ' + fe.contrast_from + '. körről a ' + fe.contrast_to + '.-ra ' +
+      pctChange(fe.contrast_ratio) + ' (95% CI ' + pctChange(fe.contrast_ci_low) +
+      ' … ' + pctChange(fe.contrast_ci_high) + ')' +
+      (crosses ? ' — a konfidenciaintervallum tartalmazza a nullát, tehát nincs kimutatható változás'
+               : '');
+  }
+
+  // Every interpretation reads its numbers out of the block JSON, so it cannot
+  // drift away from the model output printed right above it.
+  var R_INTERPRETERS = {
+    sebesseg_pontossag: function(v) {
+      return '<p>A modell két kimenetre ugyanaz: <code>lmer(… ~ log2(kör) + (1|játékos) + (1|célszín))</code>. ' +
+        'A véletlen tengelymetszetek kezelik, hogy a köröket néhány játékos és néhány célszín adja.</p>' +
+        '<ul><li><b>Végső ΔE₀₀:</b> ' + effectPhrase(v.accuracy) + '.</li>' +
+        '<li><b>Köridő:</b> ' + effectPhrase(v.duration) + '.</li></ul>' +
+        '<p>' + (v.n_attempts || 0) + ' kör, ' + (v.n_players || 0) + ' játékos, ' +
+        (v.n_targets || 0) + ' célszín; az időmérésből a ' + (v.duration_cap_sec || 300) +
+        ' s fölötti körök kizárva (' + (v.n_timed || 0) + ' kör maradt).</p>';
+    },
+    kuszob_eleres: function(v) {
+      var rows = (v.thresholds && v.thresholds.cimke) ? v.thresholds : null;
+      var items = '';
+      if (rows) {
+        for (var i = 0; i < rows.cimke.length; i++) {
+          items += '<li>' + escapeHtml(rows.cimke[i]) + ': <b>' + pctFmt(rows.arany[i]) +
+            '</b> (95% CI ' + pctFmt(rows.ci_low[i]) + ' – ' + pctFmt(rows.ci_high[i]) + ')</li>';
+        }
+      }
+      return '<p>Küszöbönként exact binomiális teszt ' + (v.n || 0) + ' körön. Az ábra ' +
+        'empirikus eloszlásfüggvény: a görbe magassága a küszöbnél maga az arány, és minden ' +
+        'kör benne van (alul a szőnyeg).</p><ul>' + items + '</ul>' +
+        '<p class="result-meta">A körök nem függetlenek egymástól, ezért ez a CI a valóságnál ' +
+        'szűkebb lehet; a klaszterezettséget az 1) blokk kevert modellje kezeli.</p>';
+    },
+    elso_atlepes: function(v) {
+      var med = (v.median_attempts === null || v.median_attempts === undefined)
+        ? 'nincs elérve (a párok kevesebb mint fele lépte át)'
+        : v.median_attempts + '. próbálkozás';
+      return '<p>Egy megfigyelés = egy (játékos, célszín) pár. Aki eddig nem lépte át a ' +
+        'ΔE < ' + (v.threshold || 2) + ' küszöböt, az <b>cenzorált</b>, nem hiányzó — ezért ' +
+        'Kaplan–Meier, nem átlag.</p>' +
+        '<ul><li>' + (v.n_pairs || 0) + ' pár, ebből <b>' + (v.n_events || 0) + '</b> átlépte, <b>' +
+        (v.n_censored || 0) + '</b> még nem.</li>' +
+        '<li>KM-medián: <b>' + med + '</b>.</li>' +
+        '<li>Összehasonlításul a komplett esetek átlaga: ' +
+        fmtNumber(v.naive_complete_case_mean, 2) + ' — ez a szám <b>optimista</b>, mert ' +
+        'pont a soha át nem lépő párokat hagyja ki.</li></ul>';
+    },
+    eszlelesi_kuszob: function(v) {
+      function line(name, b, refLight, refDark) {
+        if (!b) return '';
+        return '<li><b>' + name + ':</b> ΔE₀₀ = ' + fmtNumber(b.threshold, 2) +
+          ' (SE ' + fmtNumber(b.se, 2) + ', 95% CI ' + fmtNumber(b.ci_low, 2) + ' – ' +
+          fmtNumber(b.ci_high, 2) + '); Paravina: ' + refLight + ' / ' + refDark + '.</li>';
+      }
+      var ref = v.reference || {};
+      return '<p>Logisztikus regresszió a kilépéskori ΔE-re, a küszöb a 50%-os keresztezés ' +
+        '(<code>MASS::dose.p</code>). Az ábrán minden ítélet ott van pontként a 0/1 sávban.</p>' +
+        '<ul>' + line('Észlelhetőség (PT)', v.perceptibility, ref.pt_light, ref.pt_dark) +
+        line('Elfogadhatóság (AT)', v.acceptability, ref.at_light, ref.at_dark) +
+        '<li>n = ' + (v.n || 0) + ' ítélet.</li></ul>' +
+        '<p class="result-meta"><b>Korlát:</b> a játékban a játékos maga választja meg, milyen ' +
+        'ΔE-nél áll meg — önválasztott inger, range-restrikcióval. Előírt ΔE-vel a ' +
+        '<b>Kalibráció</b> fül dolgozik.</p>';
     }
-  }
-
-  function distributionRow(name, block, digits) {
-    var p = (block && block.pooled) || {};
-    var c = (block && block.clustered) || {};
-    return {
-      metric: name,
-      n: p.n != null ? p.n : '—',
-      median: fmtNumber(p.median, digits),
-      median_ci: fmtCI(p.median_ci_low, p.median_ci_high, digits),
-      iqr: fmtNumber(p.q1, digits) + ' – ' + fmtNumber(p.q3, digits),
-      mean_sd: fmtNumber(p.mean, digits) + ' ± ' + fmtNumber(p.sd, digits),
-      skew: fmtNumber(p.skew, 2),
-      clustered: fmtNumber(c.median_of_player_medians, digits),
-      clustered_ci: fmtCI(c.ci_low, c.ci_high, digits)
-    };
-  }
-
-  function renderInferenceDistributions(data) {
-    var rows = [
-      distributionRow('Végső ΔE₀₀', data.accuracy, 3),
-      distributionRow('Köridő (s)', data.duration, 1),
-      distributionRow('Lépésszám', data.steps, 1)
-    ];
-    buildTable(document.getElementById('infDistributionTable'), [
-      { key: 'metric', label: 'Mutató' },
-      { key: 'n', label: 'n (kör)' },
-      { key: 'median', label: 'Medián' },
-      { key: 'median_ci', label: 'Medián 95% CI' },
-      { key: 'iqr', label: 'IQR (Q1–Q3)' },
-      { key: 'mean_sd', label: 'Átlag ± SD' },
-      { key: 'skew', label: 'Ferdeség' },
-      { key: 'clustered', label: 'Játékosmediánok mediánja' },
-      { key: 'clustered_ci', label: 'Klaszterezett 95% CI' }
-    ], rows);
-  }
-
-  // Server-side category keys → display labels, so the payload stays
-  // machine-readable and the page stays in one language.
-  var THRESHOLD_LABELS = {
-    perfect: 'Pontos találat (ΔE₀₀ ≤ 0,01)',
-    pt_light: 'Észlelhetőség, világos (≤ 0,7)',
-    pt_dark: 'Észlelhetőség, sötét (≤ 1,2)',
-    at_light: 'Elfogadhatóság, világos (≤ 2,1)',
-    at_dark: 'Elfogadhatóság, sötét (≤ 3,1)'
   };
-  var PERCEPTION_LABELS = {
-    identical: 'Nincs különbség',
-    acceptable: 'Elfogadható',
-    unacceptable: 'Nem elfogadható'
-  };
+
+  function renderRReport(data) {
+    var meta = data.meta || {};
+    var metaEl = document.getElementById('rReportMeta');
+    if (metaEl) {
+      metaEl.innerHTML = cardsHtml([
+        { k: 'R-futás ideje', v: meta.generated_at || '—' },
+        { k: 'R verzió', v: meta.r_version || '—' },
+        { k: 'Elemzett kör', v: meta.n_attempts != null ? meta.n_attempts : '—' },
+        { k: 'Játékos', v: meta.n_players != null ? meta.n_players : '—' },
+        { k: 'Célszín', v: meta.n_targets != null ? meta.n_targets : '—' }
+      ]);
+    }
+    var host = document.getElementById('rReportBlocks');
+    if (!host) return;
+    var blocks = data.blocks || [];
+    if (!blocks.length) {
+      host.innerHTML = '<div class="section"><p>Nincs egyetlen blokk sem az ' +
+        '<code>artifacts/stat_r/</code> mappában.</p></div>';
+      return;
+    }
+    host.innerHTML = blocks.map(function(b) {
+      var title = R_BLOCK_TITLES[b.key] || b.key;
+      var interpret = R_INTERPRETERS[b.key];
+      var html = '<div class="section"><h2>' + escapeHtml(title) + '</h2>';
+      if (b.has_figure) {
+        html += '<div class="chart-card sa-card"><img class="r-figure" alt="' +
+          escapeHtml(title) + '" loading="lazy" src="/api/stat/r-report/figure/' +
+          encodeURIComponent(b.key) + '.png" /></div>';
+      }
+      html += '<h3 class="sub">Értelmezés</h3><div class="r-interpretation">' +
+        (interpret ? interpret(b.values || {}) : '<p>—</p>') + '</div>';
+      html += '<h3 class="sub">Nyers R-kimenet</h3><pre class="r-output">' +
+        escapeHtml(b.output || '(nincs kimenet)') + '</pre>';
+      html += '</div>';
+      return html;
+    }).join('');
+  }
+
+  async function loadInference() {
+    var resp = await fetch('/api/stat/r-report');
+    var data = await resp.json();
+    if (data.status !== 'success') {
+      var host = document.getElementById('rReportBlocks');
+      if (host) {
+        host.innerHTML = '<div class="section"><div class="explainer warn">' +
+          '<span class="lead">Nincs R-riport</span>' + escapeHtml(data.message || '') +
+          '</div></div>';
+      }
+      return;
+    }
+    renderRReport(data);
+  }
+
+  // -------------------------------------------------------------------------
+  // Calibration tab (/api/stat/calibration-summary)
+  // -------------------------------------------------------------------------
+  // A szerver a nyers kategóriakulcsot adja vissza, a megjelenítendő nevet itt
+  // képezzük — így a payload gépi marad, az oldal pedig egynyelvű.
   var CATCH_LABELS = {
     identical: 'Nulla ΔE (azonos pár)',
     obvious: 'Nyilvánvalóan eltérő pár'
@@ -2772,585 +2626,7 @@
     var raw = String(value === null || value === undefined ? '' : value);
     return escapeHtml(map[raw] || raw);
   }
-  function perceptionPair(text) {
-    // "unacceptable − acceptable" → "Nem elfogadható − Elfogadható"
-    return String(text || '').split(' − ').map(function(part) {
-      return PERCEPTION_LABELS[part.trim()] || part;
-    }).join(' − ');
-  }
 
-  function renderInferenceThresholds(data) {
-    buildTable(document.getElementById('infThresholdTable'), [
-      { key: 'label', label: 'Küszöb', formatter: function(v, row) {
-        return labelWith(THRESHOLD_LABELS, row.key || v); } },
-      { key: 'k', label: 'Teljesítő kör' },
-      { key: 'n', label: 'n' },
-      { key: 'rate', label: 'Arány (körre összevonva)', formatter: pctFmt },
-      { key: 'ci', label: '95% Wilson CI', formatter: function(v, row) {
-        return fmtPctCI(row.ci_low, row.ci_high); } },
-      { key: 'player_median_rate', label: 'Játékosmedián', formatter: pctFmt },
-      { key: 'player_ci', label: 'Játékos 95% CI', formatter: function(v, row) {
-        return fmtPctCI(row.player_ci_low, row.player_ci_high); } }
-    ], data.thresholds || []);
-  }
-
-  function renderInferenceVariance(data) {
-    var v = data.variance || {};
-    var rows = [
-      { source: 'Játékos szerint', block: v.by_player },
-      { source: 'Célszín szerint', block: v.by_target }
-    ].map(function(r) {
-      var b = r.block || {};
-      return {
-        source: r.source,
-        n_groups: b.n_groups != null ? b.n_groups : '—',
-        icc: b.icc != null ? pctFmt(b.icc) : '—',
-        var_between: fmtNumber(b.var_between, 4),
-        var_within: fmtNumber(b.var_within, 4)
-      };
-    });
-    buildTable(document.getElementById('infVarianceTable'), [
-      { key: 'source', label: 'Csoportosítás' },
-      { key: 'n_groups', label: 'Csoportszám' },
-      { key: 'icc', label: 'ICC (a szóródás hány %-a)' },
-      { key: 'var_between', label: 'Csoportok közötti variancia' },
-      { key: 'var_within', label: 'Csoporton belüli variancia' }
-    ], rows);
-  }
-
-  function renderInferenceCorrelations(data) {
-    var rows = (data.correlations || []).map(function(c) {
-      return {
-        pair: (c.x || '') + ' ↔ ' + (c.y || ''),
-        n: c.n != null ? c.n : '—',
-        pearson: fmtNumber(c.pearson, 3),
-        pearson_ci: fmtCI(c.pearson_ci_low, c.pearson_ci_high, 3),
-        spearman: fmtNumber(c.spearman, 3),
-        spearman_ci: fmtCI(c.spearman_ci_low, c.spearman_ci_high, 3),
-        spearman_p: c.spearman_p,
-        within: c.within_player_spearman_median != null
-          ? fmtNumber(c.within_player_spearman_median, 3) + ' (' +
-            fmtCI(c.within_player_ci_low, c.within_player_ci_high, 2) + ', ' +
-            (c.within_player_n || 0) + ' játékos)'
-          : '—'
-      };
-    });
-    buildTable(document.getElementById('infCorrelationTable'), [
-      { key: 'pair', label: 'Változópár', formatter: function(v) { return escapeHtml(v); } },
-      { key: 'n', label: 'n' },
-      { key: 'pearson', label: 'Pearson r' },
-      { key: 'pearson_ci', label: 'r 95% CI' },
-      { key: 'spearman', label: 'Spearman ρ' },
-      { key: 'spearman_ci', label: 'ρ 95% CI' },
-      { key: 'spearman_p', label: 'ρ p', formatter: fmtP },
-      { key: 'within', label: 'Játékoson belüli ρ (medián)' }
-    ], rows);
-  }
-
-  function renderInferenceLearning(data) {
-    var L = data.learning || {};
-    var rows = [
-      { key: 'accuracy', label: 'Végső ΔE₀₀' },
-      { key: 'duration', label: 'Köridő' },
-      { key: 'steps', label: 'Lépésszám' }
-    ].map(function(r) {
-      var b = L[r.key] || {};
-      var st = b.sign_test || {};
-      return {
-        outcome: r.label,
-        n_players: b.n_players != null ? b.n_players : '—',
-        n_rounds: b.n_rounds != null ? b.n_rounds : '—',
-        ratio: b.ratio_per_doubling != null ? fmtNumber(b.ratio_per_doubling, 3) : '—',
-        ratio_ci: fmtCI(b.ratio_ci_low, b.ratio_ci_high, 3),
-        pct: b.pct_change_per_doubling != null
-          ? (b.pct_change_per_doubling > 0 ? '+' : '') + fmtNumber(b.pct_change_per_doubling, 1) + '%'
-          : '—',
-        improving: st.share_negative != null
-          ? pctFmt(st.share_negative) + ' (' + (st.n_negative || 0) + '/' + (st.n || 0) + ')'
-          : '—',
-        p: b.p_holm
-      };
-    });
-    buildTable(document.getElementById('infLearningTable'), [
-      { key: 'outcome', label: 'Kimenet' },
-      { key: 'n_players', label: 'Játékos' },
-      { key: 'n_rounds', label: 'Kör' },
-      { key: 'ratio', label: 'Arány / rutinduplázódás' },
-      { key: 'ratio_ci', label: '95% CI' },
-      { key: 'pct', label: 'Változás' },
-      { key: 'improving', label: 'Javuló játékosok' },
-      { key: 'p', label: 'p (Holm)', formatter: fmtP }
-    ], rows);
-  }
-
-  function renderSurvivalChart(km) {
-    var el = document.getElementById('plot-inf_survival');
-    if (!el || !window.Plotly) return;
-    var curve = (km && km.curve) || [];
-    if (!curve.length) { renderEmpty(el, 'Nincs adat'); return; }
-    var x = curve.map(function(r) { return r.attempt_no; });
-    var y = curve.map(function(r) { return r.reached; });
-    var lo = curve.map(function(r) { return r.reached_ci_low; });
-    var hi = curve.map(function(r) { return r.reached_ci_high; });
-    var band = {
-      type: 'scatter', mode: 'lines', x: x.concat(x.slice().reverse()),
-      y: hi.concat(lo.slice().reverse()), fill: 'toself',
-      fillcolor: 'rgba(37,99,235,0.14)', line: { width: 0 }, hoverinfo: 'skip',
-      showlegend: false
-    };
-    var line = {
-      type: 'scatter', mode: 'lines+markers', x: x, y: y,
-      line: { shape: 'hv', color: '#2563eb', width: 2 }, marker: { size: 6 },
-      hovertemplate: '%{x}. próbálkozásig: %{y:.1%}<extra></extra>', showlegend: false
-    };
-    var layout = baseLayout({
-      title: '', x_title: 'Próbálkozás száma ugyanazon a célszínen',
-      y_title: 'ΔE < 2 elérve (kumulált)'
-    });
-    layout.yaxis.range = [0, 1];
-    layout.yaxis.tickformat = '.0%';
-    Plotly.react(el, [band, line], layout, PLOT_CONFIG);
-  }
-
-  function renderInferenceSurvival(data) {
-    var km = data.first_crossing || {};
-    var el = document.getElementById('infSurvivalCards');
-    if (el) {
-      el.innerHTML = cardsHtml([
-        { k: '(játékos, célszín) pár', v: km.n != null ? km.n : '—' },
-        { k: 'Ebből átlépte', v: km.n_events != null ? km.n_events : '—' },
-        { k: 'Cenzorált (még nem)', v: km.n_censored != null ? km.n_censored : '—' },
-        { k: 'KM elérési arány', v: km.final_reached != null ? pctFmt(km.final_reached) : '—' },
-        { k: 'KM medián próbálkozás', v: km.median_attempts_to_cross != null ? km.median_attempts_to_cross : 'nincs elérve' },
-        { k: 'Naiv átlag (torzított)', v: fmtNumber(km.naive_complete_case_mean, 2) }
-      ]);
-    }
-    renderSurvivalChart(km);
-    buildTable(document.getElementById('infSurvivalTable'), [
-      { key: 'attempt_no', label: 'Próbálkozás' },
-      { key: 'at_risk', label: 'Kockázati halmaz' },
-      { key: 'crossed', label: 'Átlépte' },
-      { key: 'censored', label: 'Cenzorált' },
-      { key: 'reached', label: 'Kumulált elérés', formatter: pctFmt },
-      { key: 'reached_ci', label: '95% CI', formatter: function(v, row) {
-        return fmtPctCI(row.reached_ci_low, row.reached_ci_high); } }
-    ], km.curve || []);
-  }
-
-  function renderInferencePerception(data) {
-    var per = data.perception || {};
-    var rows = (per.by_rating || []).map(function(b) {
-      var shares = {};
-      (b.threshold_shares || []).forEach(function(t) { shares[t.label] = t; });
-      var at21 = shares['≤ 2.1 (AT light)'] || {};
-      var at31 = shares['≤ 3.1 (AT dark)'] || {};
-      return {
-        rating: b.label,
-        n: b.n,
-        median: fmtNumber(b.median, 3),
-        median_ci: fmtCI(b.median_ci_low, b.median_ci_high, 3),
-        iqr: fmtNumber(b.q1, 2) + ' – ' + fmtNumber(b.q3, 2),
-        p90: fmtNumber(b.p90, 2),
-        at21: at21.rate != null ? pctFmt(at21.rate) + ' (' + fmtPctCI(at21.ci_low, at21.ci_high) + ')' : '—',
-        at31: at31.rate != null ? pctFmt(at31.rate) + ' (' + fmtPctCI(at31.ci_low, at31.ci_high) + ')' : '—'
-      };
-    });
-    buildTable(document.getElementById('infPerceptionTable'), [
-      { key: 'rating', label: 'Ítélet', formatter: function(v) {
-        return labelWith(PERCEPTION_LABELS, v); } },
-      { key: 'n', label: 'n' },
-      { key: 'median', label: 'Medián ΔE₀₀' },
-      { key: 'median_ci', label: 'Medián 95% CI' },
-      { key: 'iqr', label: 'IQR' },
-      { key: 'p90', label: 'P90' },
-      { key: 'at21', label: '≤ 2,1 arány' },
-      { key: 'at31', label: '≤ 3,1 arány' }
-    ], rows);
-
-    buildTable(document.getElementById('infPerceptionContrastTable'), [
-      { key: 'comparison', label: 'Összehasonlítás', formatter: function(v) {
-        return escapeHtml(perceptionPair(v)); } },
-      { key: 'n_a', label: 'n (A)' },
-      { key: 'n_b', label: 'n (B)' },
-      { key: 'median_shift', label: 'Mediánkülönbség', formatter: function(v) { return fmtNumber(v, 3); } },
-      { key: 'shift_ci', label: '95% CI', formatter: function(v, row) {
-        return fmtCI(row.shift_ci_low, row.shift_ci_high, 3); } },
-      { key: 'hodges_lehmann', label: 'Hodges–Lehmann eltolódás', formatter: function(v) { return fmtNumber(v, 3); } },
-      { key: 'cliffs_delta', label: "Cliff-féle δ", formatter: function(v) { return fmtNumber(v, 3); } }
-    ], per.contrasts || []);
-
-    var ref = per.reference || {};
-    var thr = [];
-    if (per.in_game_perceptibility) {
-      thr.push({
-        what: 'Észlelhetőség (PT) — játékon belül',
-        est: fmtNumber(per.in_game_perceptibility.threshold, 2),
-        ci: fmtCI(per.in_game_perceptibility.ci_low, per.in_game_perceptibility.ci_high, 2),
-        n: per.in_game_perceptibility.n,
-        ref: 'Paravina: ' + (ref.perceptibility_light != null ? ref.perceptibility_light : '—') +
-             ' / ' + (ref.perceptibility_dark != null ? ref.perceptibility_dark : '—')
-      });
-    }
-    if (per.in_game_acceptability) {
-      thr.push({
-        what: 'Elfogadhatóság (AT) — játékon belül',
-        est: fmtNumber(per.in_game_acceptability.threshold, 2),
-        ci: fmtCI(per.in_game_acceptability.ci_low, per.in_game_acceptability.ci_high, 2),
-        n: per.in_game_acceptability.n,
-        ref: 'Paravina: ' + (ref.acceptability_light != null ? ref.acceptability_light : '—') +
-             ' / ' + (ref.acceptability_dark != null ? ref.acceptability_dark : '—')
-      });
-    }
-    buildTable(document.getElementById('infPerceptionThresholdTable'), [
-      { key: 'what', label: 'Küszöb', formatter: function(v) { return escapeHtml(v); } },
-      { key: 'est', label: 'Becslés (ΔE₀₀)' },
-      { key: 'ci', label: '95% bootstrap CI' },
-      { key: 'n', label: 'n ítélet' },
-      { key: 'ref', label: 'Referencia (világos / sötét)', formatter: function(v) { return escapeHtml(v); } }
-    ], thr);
-  }
-
-  // -------------------------------------------------------------------------
-  // Speed–accuracy separation — the study's headline, so it gets the whole
-  // treatment: a verdict sentence, two stat tiles, and three charts that each
-  // answer a different question about the same estimate.
-  //
-  // Series colors come from CSS custom properties on .sa so the tiles and the
-  // charts cannot drift apart. Neither chart puts two measures on two y-scales:
-  // the effect plot reduces both to one ratio scale, the curves index both to
-  // the player's own baseline (=100%).
-  // -------------------------------------------------------------------------
-  var _saColors = null;
-  function saColors() {
-    if (_saColors) return _saColors;
-    var host = document.querySelector('.sa');
-    var cs = host ? getComputedStyle(host) : null;
-    function v(name, fb) {
-      var x = cs && cs.getPropertyValue(name);
-      return (x && x.trim()) || fb;
-    }
-    _saColors = {
-      accuracy: v('--series-accuracy', '#2a78d6'),
-      duration: v('--series-duration', '#eb6834'),
-      path: v('--series-path', '#52514e'),
-      context: '#8a8580'
-    };
-    return _saColors;
-  }
-
-  function ratioExcludesNull(b) {
-    return !!(b && b.ratio_ci_low != null && b.ratio_ci_high != null &&
-      (b.ratio_ci_low > 1 || b.ratio_ci_high < 1));
-  }
-
-  function signedPct(x, digits) {
-    if (x === null || x === undefined || Number.isNaN(Number(x))) return '—';
-    var v = Number(x);
-    return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(digits == null ? 1 : digits) + '%';
-  }
-
-  // Always grammatical, whatever the data turns out to say.
-  function movePhrase(b) {
-    if (!b || b.pct_change_per_doubling == null) return 'nem becsülhető';
-    if (!ratioExcludesNull(b)) return 'nem változik kimutathatóan';
-    var pct = Number(b.pct_change_per_doubling);
-    return Math.abs(pct).toFixed(1) + '%-kal ' + (pct < 0 ? 'csökken' : 'nő');
-  }
-
-  function renderSpeedAccuracyHeadline(data) {
-    var L = (data && data.learning) || {};
-    var acc = L.accuracy || {}, dur = L.duration || {};
-    var verdict = document.getElementById('saVerdict');
-    if (verdict) {
-      verdict.textContent = 'A rutin minden duplázódásával a köridő ' + movePhrase(dur) +
-        ', a végső ΔE₀₀ pedig ' + movePhrase(acc) + '.';
-    }
-    var el = document.getElementById('saKpis');
-    if (!el) return;
-    function tile(cls, label, b) {
-      var detectable = ratioExcludesNull(b);
-      var ci = (b && b.ratio_ci_low != null)
-        ? '95% CI ' + signedPct(100 * (b.ratio_ci_low - 1)) + ' … ' + signedPct(100 * (b.ratio_ci_high - 1))
-        : '95% CI —';
-      var players = (b && b.n_players != null) ? b.n_players : '—';
-      var st = (b && b.sign_test) || {};
-      return '<div class="sa-kpi ' + cls + '">' +
-        '<div class="k">' + escapeHtml(label) + '</div>' +
-        '<div class="v">' + escapeHtml(signedPct(b && b.pct_change_per_doubling)) + '</div>' +
-        '<div class="sub">' + escapeHtml(ci) + '</div>' +
-        '<div class="sub">' + players + ' játékos · ' +
-          (st.share_negative != null ? pctFmt(st.share_negative) + '-uk csökkenő' : 'n/a') + '</div>' +
-        '<span class="chip">' + (detectable ? 'kimutatható változás' : 'nincs kimutatható változás') + '</span>' +
-        '</div>';
-    }
-    el.innerHTML = tile('accuracy', 'Pontosság (végső ΔE₀₀) / rutinduplázódás', acc) +
-      tile('duration', 'Köridő / rutinduplázódás', dur);
-  }
-
-  // Chart 1 — effect plot. Both outcomes on ONE ratio scale, with the null at
-  // 1.0 drawn in: the separation is the fact that one interval crosses it and
-  // the other does not.
-  function renderSpeedAccuracyEffects(data) {
-    var el = document.getElementById('plot-sa_effects');
-    if (!el || !window.Plotly) return;
-    var L = (data && data.learning) || {};
-    var c = saColors();
-    var rows = [
-      { key: 'steps', label: 'Lépésszám', color: c.context },
-      { key: 'duration', label: 'Köridő', color: c.duration },
-      { key: 'accuracy', label: 'Pontosság (ΔE₀₀)', color: c.accuracy }
-    ].filter(function(r) { return L[r.key] && L[r.key].ratio_per_doubling != null; });
-    if (!rows.length) { renderEmpty(el, 'Nincs elég adat a becsléshez'); return; }
-    var traces = rows.map(function(r) {
-      var b = L[r.key];
-      return {
-        type: 'scatter', mode: 'markers', name: r.label,
-        x: [b.ratio_per_doubling], y: [r.label],
-        error_x: {
-          type: 'data', symmetric: false,
-          array: [b.ratio_ci_high != null ? b.ratio_ci_high - b.ratio_per_doubling : 0],
-          arrayminus: [b.ratio_ci_low != null ? b.ratio_per_doubling - b.ratio_ci_low : 0],
-          color: r.color, thickness: 2, width: 5
-        },
-        marker: { size: 11, color: r.color, line: { color: '#ffffff', width: 2 } },
-        hovertemplate: '<b>' + r.label + '</b><br>arány: %{x:.3f}<br>95% CI: ' +
-          fmtNumber(b.ratio_ci_low, 3) + ' – ' + fmtNumber(b.ratio_ci_high, 3) +
-          '<br>' + (b.n_players || 0) + ' játékos<extra></extra>',
-        showlegend: false
-      };
-    });
-    var layout = baseLayout({
-      title: '', x_title: 'Arány a rutin megduplázódásakor (1,0 = nincs változás)', y_title: ''
-    });
-    layout.margin.l = 150;
-    layout.margin.t = 30;   // room for the "nincs változás" caption above the null
-    layout.xaxis.tickformat = '.2f';
-    // Pad the range around every CI end AND the null, so 1.0 is never glued to
-    // the frame — the reader has to see which side of it each interval is on.
-    var xs = [1];
-    rows.forEach(function(r) {
-      var b = L[r.key];
-      [b.ratio_per_doubling, b.ratio_ci_low, b.ratio_ci_high].forEach(function(v) {
-        if (v != null && Number.isFinite(Number(v))) xs.push(Number(v));
-      });
-    });
-    var lo = Math.min.apply(null, xs), hi = Math.max.apply(null, xs);
-    var pad = Math.max((hi - lo) * 0.28, 0.015);
-    layout.xaxis.range = [lo - pad, hi + pad * 1.6];   // extra right room for labels
-    layout.shapes = [{
-      type: 'line', x0: 1, x1: 1, yref: 'paper', y0: 0, y1: 1,
-      line: { color: '#94a3b8', width: 1.5 }
-    }];
-    // Direct labels: the value beside its own marker, in ink not series color.
-    layout.annotations = rows.map(function(r) {
-      var b = L[r.key];
-      return {
-        x: b.ratio_ci_high != null ? b.ratio_ci_high : b.ratio_per_doubling, y: r.label,
-        xanchor: 'left', xshift: 8, yshift: 0, showarrow: false,
-        text: signedPct(b.pct_change_per_doubling) +
-          (ratioExcludesNull(b) ? '' : ' (n.s.)'),
-        font: { size: 11, color: plotlyTheme().text }
-      };
-    });
-    layout.annotations.push({
-      x: 1, y: 1, yref: 'paper', yanchor: 'bottom', xanchor: 'center', showarrow: false,
-      text: 'nincs változás', font: { size: 10, color: plotlyTheme().textSecondary }
-    });
-    Plotly.react(el, traces, layout, PLOT_CONFIG);
-  }
-
-  function saBins(data) {
-    var sa = (data && data.speed_accuracy) || {};
-    return (sa.bins || []).filter(function(b) {
-      return b.accuracy_index != null || b.duration_index != null;
-    });
-  }
-
-  // Chart 2 — both outcomes indexed to each player's own first rounds, so one
-  // y-axis carries seconds and ΔE without inventing a scale relationship.
-  function renderSpeedAccuracyCurves(data) {
-    var el = document.getElementById('plot-sa_curves');
-    if (!el || !window.Plotly) return;
-    var sa = (data && data.speed_accuracy) || {};
-    var bins = saBins(data);
-    if (bins.length < 2) { renderEmpty(el, 'Nincs elég kör a görbékhez'); return; }
-    var c = saColors();
-    var x = bins.map(function(b) { return b.label; });
-    var traces = [];
-    [
-      { key: 'accuracy', label: 'Pontosság (ΔE₀₀)', color: c.accuracy, rgba: '42,120,214' },
-      { key: 'duration', label: 'Köridő', color: c.duration, rgba: '235,104,52' }
-    ].forEach(function(sr) {
-      var y = bins.map(function(b) { return b[sr.key + '_index'] != null ? 100 * b[sr.key + '_index'] : null; });
-      var lo = bins.map(function(b) { return b[sr.key + '_ci_low'] != null ? 100 * b[sr.key + '_ci_low'] : null; });
-      var hi = bins.map(function(b) { return b[sr.key + '_ci_high'] != null ? 100 * b[sr.key + '_ci_high'] : null; });
-      traces.push({
-        type: 'scatter', mode: 'lines', x: x.concat(x.slice().reverse()),
-        y: hi.concat(lo.slice().reverse()), fill: 'toself',
-        fillcolor: 'rgba(' + sr.rgba + ',0.13)', line: { width: 0 },
-        hoverinfo: 'skip', showlegend: false
-      });
-      traces.push({
-        type: 'scatter', mode: 'lines+markers', name: sr.label, x: x, y: y,
-        line: { color: sr.color, width: 2 },
-        marker: { size: 8, color: sr.color, line: { color: '#ffffff', width: 2 } },
-        customdata: bins.map(function(b) { return [b[sr.key + '_n_players'] || 0, b[sr.key + '_n_rounds'] || 0]; }),
-        hovertemplate: '<b>' + sr.label + '</b><br>%{x}. kör: %{y:.0f}%<br>' +
-          '%{customdata[0]} játékos · %{customdata[1]} kör<extra></extra>'
-      });
-    });
-    var layout = baseLayout({
-      title: '',
-      x_title: 'Hányadik köre a játékosnak (kumulált rutin)',
-      y_title: 'A saját első ' + (sa.baseline_rounds || 4) + ' köréhez képest'
-    });
-    layout.yaxis.ticksuffix = '%';
-    layout.xaxis.type = 'category';
-    layout.showlegend = true;
-    layout.legend = { orientation: 'h', y: 1.12, x: 0 };
-    layout.margin.t = 40;
-    layout.shapes = [{
-      type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 100, y1: 100,
-      line: { color: '#94a3b8', width: 1.5 }
-    }];
-    // Direct-label the endpoints only — a number on every point is unreadable.
-    layout.annotations = [];
-    [['accuracy', c.accuracy], ['duration', c.duration]].forEach(function(pair) {
-      for (var i = bins.length - 1; i >= 0; i--) {
-        var v = bins[i][pair[0] + '_index'];
-        if (v == null) continue;
-        layout.annotations.push({
-          x: bins[i].label, y: 100 * v, xanchor: 'left', xshift: 10, showarrow: false,
-          text: Math.round(100 * v) + '%',
-          font: { size: 11, color: plotlyTheme().text }
-        });
-        break;
-      }
-    });
-    Plotly.react(el, traces, layout, PLOT_CONFIG);
-    var note = document.getElementById('saCurvesNote');
-    if (note) {
-      var last = bins[bins.length - 1] || {};
-      note.innerHTML =
-        'Minden játékos a <b>saját első ' + (sa.baseline_rounds || 4) + ' köréhez</b> van viszonyítva ' +
-        '(100% = a kiindulás), a görbe a játékosonkénti arányok mediánja, a sáv a 95% CI. ' +
-        'A ΔE-arány (1+ΔE)-n számol, hogy a hibátlan kezdés se essen ki. ' +
-        'A jobb szélen kevesebb játékos áll (' + (last.duration_n_players != null ? last.duration_n_players : '—') +
-        ' a legutolsó sávban), ezért tágul a sáv.';
-    }
-  }
-
-  // Chart 3 — the same two indices against each other. A pure leftward path is
-  // a dissociation; a diagonal one would be a trade.
-  function renderSpeedAccuracyPlane(data) {
-    var el = document.getElementById('plot-sa_plane');
-    if (!el || !window.Plotly) return;
-    var bins = saBins(data).filter(function(b) {
-      return b.accuracy_index != null && b.duration_index != null;
-    });
-    if (bins.length < 2) { renderEmpty(el, 'Nincs elég kör a pályához'); return; }
-    var c = saColors();
-    var xs = bins.map(function(b) { return 100 * b.duration_index; });
-    var ys = bins.map(function(b) { return 100 * b.accuracy_index; });
-    var trace = {
-      type: 'scatter', mode: 'lines+markers+text', x: xs, y: ys,
-      // The two end points are named by their annotations below, so they carry
-      // no inline label of their own — otherwise the label, the note and the
-      // path all land on the same few pixels.
-      text: bins.map(function(b, i) { return (i === 0 || i === bins.length - 1) ? '' : b.label; }),
-      customdata: bins.map(function(b) { return b.label; }),
-      textposition: 'top center',
-      textfont: { size: 10, color: plotlyTheme().textSecondary },
-      line: { color: c.path, width: 2 },
-      marker: {
-        size: bins.map(function(_, i) { return i === 0 || i === bins.length - 1 ? 13 : 9; }),
-        color: c.path, line: { color: '#ffffff', width: 2 }
-      },
-      hovertemplate: '%{customdata}. kör<br>köridő: %{x:.0f}%<br>ΔE₀₀: %{y:.0f}%<extra></extra>',
-      showlegend: false
-    };
-    var layout = baseLayout({
-      title: '', x_title: 'Köridő a saját kezdéshez képest', y_title: 'ΔE₀₀ a saját kezdéshez képest'
-    });
-    layout.xaxis.ticksuffix = '%';
-    layout.yaxis.ticksuffix = '%';
-    layout.margin.r = 54;   // the first bin's label sits at the right edge
-    layout.margin.t = 26;
-    // A flat vertical result must LOOK flat. Left to autoscale, a path that
-    // wanders 97–102% fills the panel and reads as violent movement — the
-    // chart would then contradict the very finding it exists to show. The
-    // y-axis therefore always spans at least ±22 points around the baseline,
-    // and only widens if the data genuinely need it.
-    var spread = 0;
-    ys.forEach(function(v) { spread = Math.max(spread, Math.abs(v - 100)); });
-    var half = Math.max(22, spread * 1.25);
-    layout.yaxis.range = [100 - half, 100 + half];
-    layout.shapes = [
-      { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 100, y1: 100,
-        line: { color: '#cbd5e1', width: 1 } },
-      { type: 'line', yref: 'paper', x0: 100, x1: 100, y0: 0, y1: 1,
-        line: { color: '#cbd5e1', width: 1 } }
-    ];
-    layout.annotations = [
-      { x: xs[0], y: ys[0], ax: 0, ay: -30, showarrow: true, arrowhead: 0, arrowcolor: '#cbd5e1',
-        text: 'kiindulás · ' + bins[0].label,
-        font: { size: 10, color: plotlyTheme().textSecondary } },
-      { x: xs[xs.length - 1], y: ys[ys.length - 1], ax: 0, ay: 32, showarrow: true, arrowhead: 0,
-        arrowcolor: '#cbd5e1', text: 'legrutinosabb · ' + bins[bins.length - 1].label,
-        font: { size: 10, color: plotlyTheme().textSecondary } }
-    ];
-    Plotly.react(el, [trace], layout, PLOT_CONFIG);
-  }
-
-  function renderSpeedAccuracyTable(data) {
-    var bins = saBins(data);
-    buildTable(document.getElementById('saCurveTable'), [
-      { key: 'label', label: 'Kör (kumulált)', formatter: function(v) { return escapeHtml(v); } },
-      { key: 'accuracy_index', label: 'ΔE₀₀ index', formatter: function(v) {
-        return v == null ? '—' : Math.round(100 * v) + '%'; } },
-      { key: 'acc_ci', label: 'ΔE₀₀ 95% CI', formatter: function(v, row) {
-        return row.accuracy_ci_low == null ? '—'
-          : Math.round(100 * row.accuracy_ci_low) + '% – ' + Math.round(100 * row.accuracy_ci_high) + '%'; } },
-      { key: 'duration_index', label: 'Köridő index', formatter: function(v) {
-        return v == null ? '—' : Math.round(100 * v) + '%'; } },
-      { key: 'dur_ci', label: 'Köridő 95% CI', formatter: function(v, row) {
-        return row.duration_ci_low == null ? '—'
-          : Math.round(100 * row.duration_ci_low) + '% – ' + Math.round(100 * row.duration_ci_high) + '%'; } },
-      { key: 'duration_n_players', label: 'Játékos' },
-      { key: 'duration_n_rounds', label: 'Kör' }
-    ], bins);
-  }
-
-  function renderSpeedAccuracy(data) {
-    renderSpeedAccuracyHeadline(data);
-    renderSpeedAccuracyEffects(data);
-    renderSpeedAccuracyCurves(data);
-    renderSpeedAccuracyPlane(data);
-    renderSpeedAccuracyTable(data);
-  }
-
-  function renderInference(data) {
-    renderSpeedAccuracy(data);
-    renderInferenceSample(data);
-    renderInferenceDistributions(data);
-    renderInferenceThresholds(data);
-    renderInferenceVariance(data);
-    renderInferenceCorrelations(data);
-    renderInferenceLearning(data);
-    renderInferenceSurvival(data);
-    renderInferencePerception(data);
-  }
-
-  async function loadInference() {
-    var resp = await fetch('/api/stat/inference');
-    var data = await resp.json();
-    if (data.status !== 'success') throw new Error(data.message || 'Failed to load inference');
-    renderInference(data);
-  }
-
-  // -------------------------------------------------------------------------
-  // Calibration tab (/api/stat/calibration-summary)
-  // -------------------------------------------------------------------------
   function renderPsychometricChart(rows, pooled) {
     var el = document.getElementById('plot-cal_psychometric');
     if (!el || !window.Plotly) return;
