@@ -73,6 +73,20 @@ DELTA_E_THRESHOLDS: Tuple[Tuple[str, str, float], ...] = (
 #: Players with fewer rounds than this cannot support a within-player slope.
 MIN_ATTEMPTS_FOR_SLOPE = 10
 
+#: Experience axis for the speed–accuracy curves. Doubling-width bins, because
+#: practice effects are logarithmic in trials: equal-width bins would spend most
+#: of the axis on a region where nothing changes.
+EXPERIENCE_BASELINE_ROUNDS = 4
+EXPERIENCE_BINS: Tuple[Tuple[int, Optional[int], str], ...] = (
+    (1, 4, '1–4'),
+    (5, 8, '5–8'),
+    (9, 16, '9–16'),
+    (17, 32, '17–32'),
+    (33, 64, '33–64'),
+    (65, 128, '65–128'),
+    (129, None, '129+'),
+)
+
 #: Bootstrap replicates. 2000 is enough for a 95% percentile interval and keeps
 #: the whole endpoint well under a second on the current data volume.
 N_BOOT = 2000
@@ -727,6 +741,78 @@ def _threshold_block(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return rows
 
 
+def _speed_accuracy_block(analysed: pd.DataFrame, timed: pd.DataFrame) -> Dict[str, Any]:
+    """Accuracy and time on ONE indexed axis, as experience accumulates.
+
+    This is the headline finding of the study, so it gets the estimator that can
+    actually carry it. Three things make it different from a plain "metric by
+    round number" chart:
+
+    * **Within player.** Each player is indexed to *their own* first
+      ``EXPERIENCE_BASELINE_ROUNDS`` rounds (= 100%), so the curve cannot be
+      produced by persistent players simply being better than one-off visitors.
+    * **One scale.** Both outcomes become percentages of their own baseline, so
+      accuracy and seconds share a single y-axis. Plotting ΔE and seconds against
+      two y-scales would invent whatever relationship the scaling implied.
+    * **Ratios of (1 + ΔE).** A player whose first rounds are exact hits has a
+      zero baseline; the shift keeps them in the sample instead of dropping the
+      strongest starters. Time uses the plain ratio.
+
+    ``n_players`` per bin is returned and shown: the far end of the experience
+    axis rests on very few players, and the chart has to admit that.
+    """
+    specs = (('accuracy', 'final_delta_e', analysed, True),
+             ('duration', 'duration_sec', timed, False))
+    bins: List[Dict[str, Any]] = [
+        {'label': label, 'from': lo, 'to': hi} for lo, hi, label in EXPERIENCE_BINS
+    ]
+    out: Dict[str, Any] = {
+        'baseline_rounds': EXPERIENCE_BASELINE_ROUNDS,
+        'bins': bins,
+        'shifted_metrics': ['accuracy'],
+    }
+    for key, col, df, shift in specs:
+        sub = df[['user_id', 'trial_index', col]].dropna()
+        sub = sub[np.isfinite(sub[col].to_numpy(dtype=float))]
+        if sub.empty:
+            continue
+        values = sub[col].to_numpy(dtype=float) + (1.0 if shift else 0.0)
+        work = pd.DataFrame({'user_id': sub['user_id'].to_numpy(),
+                             'trial_index': sub['trial_index'].to_numpy(dtype=float),
+                             'v': values})
+        base = (work[work['trial_index'] <= EXPERIENCE_BASELINE_ROUNDS]
+                .groupby('user_id')['v'].median())
+        base = base[base > 0]
+        if base.empty:
+            continue
+        for row in bins:
+            lo, hi = row['from'], row['to']
+            sel = work[work['trial_index'] >= lo]
+            if hi is not None:
+                sel = sel[sel['trial_index'] <= hi]
+            if sel.empty:
+                continue
+            per_user = sel.groupby('user_id')['v'].median()
+            per_user = per_user[per_user.index.isin(base.index)]
+            if per_user.empty:
+                continue
+            ratio = (per_user / base.reindex(per_user.index)).to_numpy(dtype=float)
+            ratio = ratio[np.isfinite(ratio) & (ratio > 0)]
+            row[f'{key}_n_players'] = int(ratio.size)
+            row[f'{key}_n_rounds'] = int(len(sel))
+            if ratio.size < 3:
+                continue
+            # Median of the log-ratios: ratios are multiplicative, so an
+            # arithmetic average of them would be pulled up by the players who
+            # got worse and could never be pulled symmetrically down.
+            med = float(np.exp(np.median(np.log(ratio))))
+            lo_ci, hi_ci = bootstrap_ci(np.log(ratio), np.median)
+            row[f'{key}_index'] = _f(med)
+            row[f'{key}_ci_low'] = _f(math.exp(lo_ci)) if lo_ci is not None else None
+            row[f'{key}_ci_high'] = _f(math.exp(hi_ci)) if hi_ci is not None else None
+    return out
+
+
 def _learning_block(df: pd.DataFrame, col: str, *, label: str,
                     log_transform: bool = True) -> Dict[str, Any]:
     """Within-player slope of an outcome against log₂(rounds played).
@@ -1002,6 +1088,7 @@ def build_inference_summary() -> Dict[str, Any]:
                         x_label='actions', y_label='duration (s)',
                         groups=timed['user_id']),
         ],
+        'speed_accuracy': _speed_accuracy_block(analysed, timed),
         'learning': {
             'accuracy': _learning_block(analysed, 'final_delta_e', label='final ΔE₀₀'),
             'duration': _learning_block(timed, 'duration_sec', label='round duration (s)'),

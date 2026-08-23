@@ -222,6 +222,76 @@
     max-width: 90ch;
   }
   .explainer.warn { border-left-color: #d97706; background: #fffbeb; }
+  /* Speed–accuracy block: the study's headline result, so it is the one
+     emphasised thing on the tab. The two series tokens are declared here and
+     nowhere else, so the KPI tiles and all three charts cannot drift apart.
+     Both hues are the validated categorical slots 1–2 (CVD ΔE 24.7 against the
+     white chart surface); the plane's path is deliberately neutral so no
+     categorical hue ever stands for two different things on one screen. */
+  .sa {
+    --series-accuracy: #2a78d6;
+    --series-duration: #eb6834;
+    --series-path: #52514e;
+    border-color: #bfdbfe;
+    background: linear-gradient(135deg, #f5f9ff 0%, var(--surface) 60%);
+  }
+  .sa .eyebrow {
+    margin: 0 0 8px;
+    color: #1d4ed8;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .sa-verdict {
+    margin: 0 0 14px;
+    font-size: 1.32rem;
+    line-height: 1.35;
+    max-width: 34ch;
+    font-weight: 750;
+  }
+  .sa-kpis {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .sa-kpi {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--border-strong, #d1cbc4);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  .sa-kpi.accuracy { border-left-color: var(--series-accuracy); }
+  .sa-kpi.duration { border-left-color: var(--series-duration); }
+  .sa-kpi .k {
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  /* Proportional figures on the big number: tabular digits make a value like
+     −8.3% look loose at this size. */
+  .sa-kpi .v { margin: 4px 0 2px; font-size: 1.85rem; font-weight: 800; line-height: 1.1; }
+  .sa-kpi .sub { color: var(--text-secondary); font-size: 0.78rem; }
+  .sa-kpi .chip {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong, #d1cbc4);
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--text-secondary);
+  }
+  .sa-card { margin-bottom: 10px; }
+  .chart-note {
+    margin: 6px 0 0;
+    color: var(--text-secondary);
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
   .explainer.good { border-left-color: #16a34a; background: #f0fdf4; }
   .explainer b { font-weight: 700; }
   .explainer .lead { display: block; margin-bottom: 4px; font-weight: 700; }
@@ -445,8 +515,69 @@
       <p id="infSampleNote" class="result-meta"></p>
     </div>
 
+    <div class="section sa">
+      <p class="eyebrow">Fő eredmény · élő adat</p>
+      <h2 class="sa-verdict" id="saVerdict">Sebesség–pontosság szétválás</h2>
+      <div class="sa-kpis" id="saKpis"></div>
+      <div class="explainer">
+        <span class="lead">Mit jelent a „rutinduplázódásonként”?</span>
+        A gyakorlás hatása a próbák számának <b>logaritmusában</b> jelentkezik, ezért a
+        természetes lépték nem a következő kör, hanem az eddigi körök <b>megduplázódása</b>
+        (4→8, 8→16, …). Minden becslés <b>játékoson belül</b> készül, a célszín mediánjára
+        igazítva, tehát nem attól jön ki, hogy a kitartó játékosok eleve jobbak, és nem is
+        attól, hogy valaki később könnyebb színt kapott.
+      </div>
+
+      <div class="chart-card sa-card">
+        <p class="chart-title">Mennyit mozdul egy kimenet, ha a játékos rutinja megduplázódik</p>
+        <div class="plotly-chart" id="plot-sa_effects" style="min-height:220px;"></div>
+        <p class="chart-note">
+          Pont = becsült arány, vonal = 95% CI. Az <b>1,0</b>-nál húzott függőleges a
+          „nincs változás”: amelyik intervallum keresztezi, ott nincs kimutatható hatás,
+          amelyik teljesen balra esik, ott valódi csökkenés van.
+        </p>
+      </div>
+
+      <div class="chart-card sa-card">
+        <p class="chart-title">Pontosság és köridő a rutin növekedésével</p>
+        <div class="plotly-chart" id="plot-sa_curves" style="min-height:360px;"></div>
+        <p class="chart-note" id="saCurvesNote"></p>
+      </div>
+
+      <div class="chart-card sa-card">
+        <p class="chart-title">Ugyanez a két görbe egymás ellen: a sebesség–pontosság sík</p>
+        <div class="plotly-chart" id="plot-sa_plane" style="min-height:340px;"></div>
+        <p class="chart-note">
+          Ugyanazok az indexált értékek egymás ellen kirajzolva, a kiindulás a jobb felső
+          sarokban. <b>Balra</b> = rövidülő idő, <b>lefelé</b> = javuló pontosság. A pálya
+          alakja a válasz: <b>vízszintes</b> pálya szétválás (gyorsul, de nem pontosabb),
+          <b>átlós lefelé</b> mindkettő javulása, <b>átlós fölfelé</b> pedig azt jelentené,
+          hogy a gyorsulás a pontosság rovására megy. A függőleges tengely mindig legalább
+          ±22 pontot mutat, hogy egy lapos pálya ne tűnjön hullámzónak a ráközelítéstől.
+        </p>
+      </div>
+
+      <details class="table-collapse">
+        <summary>Táblázatos nézet</summary>
+        <h3 class="sub">Hatás rutinduplázódásonként</h3>
+        <div class="table-wrap"><table id="infLearningTable"></table></div>
+        <h3 class="sub">Indexált görbék (a saját kezdéshez képest)</h3>
+        <div class="table-wrap"><table id="saCurveTable"></table></div>
+      </details>
+
+      <div class="explainer warn">
+        <span class="lead">Mit nem mond ez ki</span>
+        A „nincs kimutatható pontosságjavulás” <b>nem</b> bizonyított egyenlőség: a
+        konfidenciaintervallum kisebb javulást és romlást is megenged. A védhető állítás az,
+        hogy populációs szintű monoton pontosságjavulás nem mutatható ki. Az adat emellett
+        <b>megfigyeléses</b>: a nagy rutint csak a kitartó játékosok érik el, tehát ez
+        asszociáció, nem randomizált gyakorlási hatás.
+        A p-értékek a három kimenetre Holm-korrigáltak.
+      </div>
+    </div>
+
     <div class="section">
-      <h2>1) Pontosság, idő és lépésszám</h2>
+      <h2>2) Pontosság, idő és lépésszám</h2>
       <div class="explainer">
         <span class="lead">Hogyan olvasd</span>
         A <b>medián</b> a tipikus kör, az <b>IQR</b> (a középső 50% sávja) a szóródás.
@@ -458,7 +589,7 @@
     </div>
 
     <div class="section">
-      <h2>2) Küszöbök teljesítése</h2>
+      <h2>3) Küszöbök teljesítése</h2>
       <div class="explainer">
         <span class="lead">Hogyan olvasd</span>
         Paravina et al. ΔE₀₀ küszöbei: az <b>észlelhetőség</b> alatt a különbség jellemzően
@@ -472,7 +603,7 @@
     </div>
 
     <div class="section">
-      <h2>3) Honnan jön a szóródás? (ICC)</h2>
+      <h2>4) Honnan jön a szóródás? (ICC)</h2>
       <div class="explainer">
         <span class="lead">Hogyan olvasd</span>
         Az <b>ICC</b> (intraklaszter korreláció) azt mondja meg, a ΔE ingadozásának mekkora
@@ -485,7 +616,7 @@
     </div>
 
     <div class="section">
-      <h2>4) Együttjárások</h2>
+      <h2>5) Együttjárások</h2>
       <div class="explainer">
         <span class="lead">Hogyan olvasd</span>
         A <b>Spearman ρ</b> a mérvadó: a ΔE és az idő is nehéz farkú eloszlás, néhány hosszú
@@ -496,26 +627,6 @@
         A korreláció nem oksági viszony.
       </div>
       <div class="table-wrap"><table id="infCorrelationTable"></table></div>
-    </div>
-
-    <div class="section">
-      <h2>5) Tanulás: játékoson belüli meredekség</h2>
-      <div class="explainer">
-        <span class="lead">Hogyan olvasd</span>
-        A „mutató a hányadik kör szerint” típusú ábrák keresztmetszetiek: a sokat játszók
-        egyszerűen felülreprezentáltak a magas köridőknél. Itt minden mutató
-        <b>játékoson belül</b> van illesztve, a log₂(eddig játszott körök) függvényében,
-        miután a kimenetből levontuk a <b>célszín mediánját</b> (hogy egy késői könnyű szín
-        ne látsszon javulásnak). Az összegzés a meredekségek <b>mediánja</b> és egy
-        <b>előjelteszt</b>, tehát egy szélsőséges játékos nem viheti el az eredményt.
-        Az arány a rutin duplázódására vonatkozik: 0,92 = 8%-kal kevesebb körönként.
-        A p-értékek Holm-korrigáltak a három kimenetre.
-      </div>
-      <div class="table-wrap"><table id="infLearningTable"></table></div>
-      <p class="result-meta">
-        Megfigyeléses adat: aki sokat játszik, nem véletlenszerűen választódott ki, ezért ez
-        asszociáció, nem randomizált gyakorlási hatás.
-      </p>
     </div>
 
     <div class="section">
@@ -2899,7 +3010,327 @@
     ], thr);
   }
 
+  // -------------------------------------------------------------------------
+  // Speed–accuracy separation — the study's headline, so it gets the whole
+  // treatment: a verdict sentence, two stat tiles, and three charts that each
+  // answer a different question about the same estimate.
+  //
+  // Series colors come from CSS custom properties on .sa so the tiles and the
+  // charts cannot drift apart. Neither chart puts two measures on two y-scales:
+  // the effect plot reduces both to one ratio scale, the curves index both to
+  // the player's own baseline (=100%).
+  // -------------------------------------------------------------------------
+  var _saColors = null;
+  function saColors() {
+    if (_saColors) return _saColors;
+    var host = document.querySelector('.sa');
+    var cs = host ? getComputedStyle(host) : null;
+    function v(name, fb) {
+      var x = cs && cs.getPropertyValue(name);
+      return (x && x.trim()) || fb;
+    }
+    _saColors = {
+      accuracy: v('--series-accuracy', '#2a78d6'),
+      duration: v('--series-duration', '#eb6834'),
+      path: v('--series-path', '#52514e'),
+      context: '#8a8580'
+    };
+    return _saColors;
+  }
+
+  function ratioExcludesNull(b) {
+    return !!(b && b.ratio_ci_low != null && b.ratio_ci_high != null &&
+      (b.ratio_ci_low > 1 || b.ratio_ci_high < 1));
+  }
+
+  function signedPct(x, digits) {
+    if (x === null || x === undefined || Number.isNaN(Number(x))) return '—';
+    var v = Number(x);
+    return (v > 0 ? '+' : v < 0 ? '−' : '') + Math.abs(v).toFixed(digits == null ? 1 : digits) + '%';
+  }
+
+  // Always grammatical, whatever the data turns out to say.
+  function movePhrase(b) {
+    if (!b || b.pct_change_per_doubling == null) return 'nem becsülhető';
+    if (!ratioExcludesNull(b)) return 'nem változik kimutathatóan';
+    var pct = Number(b.pct_change_per_doubling);
+    return Math.abs(pct).toFixed(1) + '%-kal ' + (pct < 0 ? 'csökken' : 'nő');
+  }
+
+  function renderSpeedAccuracyHeadline(data) {
+    var L = (data && data.learning) || {};
+    var acc = L.accuracy || {}, dur = L.duration || {};
+    var verdict = document.getElementById('saVerdict');
+    if (verdict) {
+      verdict.textContent = 'A rutin minden duplázódásával a köridő ' + movePhrase(dur) +
+        ', a végső ΔE₀₀ pedig ' + movePhrase(acc) + '.';
+    }
+    var el = document.getElementById('saKpis');
+    if (!el) return;
+    function tile(cls, label, b) {
+      var detectable = ratioExcludesNull(b);
+      var ci = (b && b.ratio_ci_low != null)
+        ? '95% CI ' + signedPct(100 * (b.ratio_ci_low - 1)) + ' … ' + signedPct(100 * (b.ratio_ci_high - 1))
+        : '95% CI —';
+      var players = (b && b.n_players != null) ? b.n_players : '—';
+      var st = (b && b.sign_test) || {};
+      return '<div class="sa-kpi ' + cls + '">' +
+        '<div class="k">' + escapeHtml(label) + '</div>' +
+        '<div class="v">' + escapeHtml(signedPct(b && b.pct_change_per_doubling)) + '</div>' +
+        '<div class="sub">' + escapeHtml(ci) + '</div>' +
+        '<div class="sub">' + players + ' játékos · ' +
+          (st.share_negative != null ? pctFmt(st.share_negative) + '-uk csökkenő' : 'n/a') + '</div>' +
+        '<span class="chip">' + (detectable ? 'kimutatható változás' : 'nincs kimutatható változás') + '</span>' +
+        '</div>';
+    }
+    el.innerHTML = tile('accuracy', 'Pontosság (végső ΔE₀₀) / rutinduplázódás', acc) +
+      tile('duration', 'Köridő / rutinduplázódás', dur);
+  }
+
+  // Chart 1 — effect plot. Both outcomes on ONE ratio scale, with the null at
+  // 1.0 drawn in: the separation is the fact that one interval crosses it and
+  // the other does not.
+  function renderSpeedAccuracyEffects(data) {
+    var el = document.getElementById('plot-sa_effects');
+    if (!el || !window.Plotly) return;
+    var L = (data && data.learning) || {};
+    var c = saColors();
+    var rows = [
+      { key: 'steps', label: 'Lépésszám', color: c.context },
+      { key: 'duration', label: 'Köridő', color: c.duration },
+      { key: 'accuracy', label: 'Pontosság (ΔE₀₀)', color: c.accuracy }
+    ].filter(function(r) { return L[r.key] && L[r.key].ratio_per_doubling != null; });
+    if (!rows.length) { renderEmpty(el, 'Nincs elég adat a becsléshez'); return; }
+    var traces = rows.map(function(r) {
+      var b = L[r.key];
+      return {
+        type: 'scatter', mode: 'markers', name: r.label,
+        x: [b.ratio_per_doubling], y: [r.label],
+        error_x: {
+          type: 'data', symmetric: false,
+          array: [b.ratio_ci_high != null ? b.ratio_ci_high - b.ratio_per_doubling : 0],
+          arrayminus: [b.ratio_ci_low != null ? b.ratio_per_doubling - b.ratio_ci_low : 0],
+          color: r.color, thickness: 2, width: 5
+        },
+        marker: { size: 11, color: r.color, line: { color: '#ffffff', width: 2 } },
+        hovertemplate: '<b>' + r.label + '</b><br>arány: %{x:.3f}<br>95% CI: ' +
+          fmtNumber(b.ratio_ci_low, 3) + ' – ' + fmtNumber(b.ratio_ci_high, 3) +
+          '<br>' + (b.n_players || 0) + ' játékos<extra></extra>',
+        showlegend: false
+      };
+    });
+    var layout = baseLayout({
+      title: '', x_title: 'Arány a rutin megduplázódásakor (1,0 = nincs változás)', y_title: ''
+    });
+    layout.margin.l = 150;
+    layout.margin.t = 30;   // room for the "nincs változás" caption above the null
+    layout.xaxis.tickformat = '.2f';
+    // Pad the range around every CI end AND the null, so 1.0 is never glued to
+    // the frame — the reader has to see which side of it each interval is on.
+    var xs = [1];
+    rows.forEach(function(r) {
+      var b = L[r.key];
+      [b.ratio_per_doubling, b.ratio_ci_low, b.ratio_ci_high].forEach(function(v) {
+        if (v != null && Number.isFinite(Number(v))) xs.push(Number(v));
+      });
+    });
+    var lo = Math.min.apply(null, xs), hi = Math.max.apply(null, xs);
+    var pad = Math.max((hi - lo) * 0.28, 0.015);
+    layout.xaxis.range = [lo - pad, hi + pad * 1.6];   // extra right room for labels
+    layout.shapes = [{
+      type: 'line', x0: 1, x1: 1, yref: 'paper', y0: 0, y1: 1,
+      line: { color: '#94a3b8', width: 1.5 }
+    }];
+    // Direct labels: the value beside its own marker, in ink not series color.
+    layout.annotations = rows.map(function(r) {
+      var b = L[r.key];
+      return {
+        x: b.ratio_ci_high != null ? b.ratio_ci_high : b.ratio_per_doubling, y: r.label,
+        xanchor: 'left', xshift: 8, yshift: 0, showarrow: false,
+        text: signedPct(b.pct_change_per_doubling) +
+          (ratioExcludesNull(b) ? '' : ' (n.s.)'),
+        font: { size: 11, color: plotlyTheme().text }
+      };
+    });
+    layout.annotations.push({
+      x: 1, y: 1, yref: 'paper', yanchor: 'bottom', xanchor: 'center', showarrow: false,
+      text: 'nincs változás', font: { size: 10, color: plotlyTheme().textSecondary }
+    });
+    Plotly.react(el, traces, layout, PLOT_CONFIG);
+  }
+
+  function saBins(data) {
+    var sa = (data && data.speed_accuracy) || {};
+    return (sa.bins || []).filter(function(b) {
+      return b.accuracy_index != null || b.duration_index != null;
+    });
+  }
+
+  // Chart 2 — both outcomes indexed to each player's own first rounds, so one
+  // y-axis carries seconds and ΔE without inventing a scale relationship.
+  function renderSpeedAccuracyCurves(data) {
+    var el = document.getElementById('plot-sa_curves');
+    if (!el || !window.Plotly) return;
+    var sa = (data && data.speed_accuracy) || {};
+    var bins = saBins(data);
+    if (bins.length < 2) { renderEmpty(el, 'Nincs elég kör a görbékhez'); return; }
+    var c = saColors();
+    var x = bins.map(function(b) { return b.label; });
+    var traces = [];
+    [
+      { key: 'accuracy', label: 'Pontosság (ΔE₀₀)', color: c.accuracy, rgba: '42,120,214' },
+      { key: 'duration', label: 'Köridő', color: c.duration, rgba: '235,104,52' }
+    ].forEach(function(sr) {
+      var y = bins.map(function(b) { return b[sr.key + '_index'] != null ? 100 * b[sr.key + '_index'] : null; });
+      var lo = bins.map(function(b) { return b[sr.key + '_ci_low'] != null ? 100 * b[sr.key + '_ci_low'] : null; });
+      var hi = bins.map(function(b) { return b[sr.key + '_ci_high'] != null ? 100 * b[sr.key + '_ci_high'] : null; });
+      traces.push({
+        type: 'scatter', mode: 'lines', x: x.concat(x.slice().reverse()),
+        y: hi.concat(lo.slice().reverse()), fill: 'toself',
+        fillcolor: 'rgba(' + sr.rgba + ',0.13)', line: { width: 0 },
+        hoverinfo: 'skip', showlegend: false
+      });
+      traces.push({
+        type: 'scatter', mode: 'lines+markers', name: sr.label, x: x, y: y,
+        line: { color: sr.color, width: 2 },
+        marker: { size: 8, color: sr.color, line: { color: '#ffffff', width: 2 } },
+        customdata: bins.map(function(b) { return [b[sr.key + '_n_players'] || 0, b[sr.key + '_n_rounds'] || 0]; }),
+        hovertemplate: '<b>' + sr.label + '</b><br>%{x}. kör: %{y:.0f}%<br>' +
+          '%{customdata[0]} játékos · %{customdata[1]} kör<extra></extra>'
+      });
+    });
+    var layout = baseLayout({
+      title: '',
+      x_title: 'Hányadik köre a játékosnak (kumulált rutin)',
+      y_title: 'A saját első ' + (sa.baseline_rounds || 4) + ' köréhez képest'
+    });
+    layout.yaxis.ticksuffix = '%';
+    layout.xaxis.type = 'category';
+    layout.showlegend = true;
+    layout.legend = { orientation: 'h', y: 1.12, x: 0 };
+    layout.margin.t = 40;
+    layout.shapes = [{
+      type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 100, y1: 100,
+      line: { color: '#94a3b8', width: 1.5 }
+    }];
+    // Direct-label the endpoints only — a number on every point is unreadable.
+    layout.annotations = [];
+    [['accuracy', c.accuracy], ['duration', c.duration]].forEach(function(pair) {
+      for (var i = bins.length - 1; i >= 0; i--) {
+        var v = bins[i][pair[0] + '_index'];
+        if (v == null) continue;
+        layout.annotations.push({
+          x: bins[i].label, y: 100 * v, xanchor: 'left', xshift: 10, showarrow: false,
+          text: Math.round(100 * v) + '%',
+          font: { size: 11, color: plotlyTheme().text }
+        });
+        break;
+      }
+    });
+    Plotly.react(el, traces, layout, PLOT_CONFIG);
+    var note = document.getElementById('saCurvesNote');
+    if (note) {
+      var last = bins[bins.length - 1] || {};
+      note.innerHTML =
+        'Minden játékos a <b>saját első ' + (sa.baseline_rounds || 4) + ' köréhez</b> van viszonyítva ' +
+        '(100% = a kiindulás), a görbe a játékosonkénti arányok mediánja, a sáv a 95% CI. ' +
+        'A ΔE-arány (1+ΔE)-n számol, hogy a hibátlan kezdés se essen ki. ' +
+        'A jobb szélen kevesebb játékos áll (' + (last.duration_n_players != null ? last.duration_n_players : '—') +
+        ' a legutolsó sávban), ezért tágul a sáv.';
+    }
+  }
+
+  // Chart 3 — the same two indices against each other. A pure leftward path is
+  // a dissociation; a diagonal one would be a trade.
+  function renderSpeedAccuracyPlane(data) {
+    var el = document.getElementById('plot-sa_plane');
+    if (!el || !window.Plotly) return;
+    var bins = saBins(data).filter(function(b) {
+      return b.accuracy_index != null && b.duration_index != null;
+    });
+    if (bins.length < 2) { renderEmpty(el, 'Nincs elég kör a pályához'); return; }
+    var c = saColors();
+    var xs = bins.map(function(b) { return 100 * b.duration_index; });
+    var ys = bins.map(function(b) { return 100 * b.accuracy_index; });
+    var trace = {
+      type: 'scatter', mode: 'lines+markers+text', x: xs, y: ys,
+      // The two end points are named by their annotations below, so they carry
+      // no inline label of their own — otherwise the label, the note and the
+      // path all land on the same few pixels.
+      text: bins.map(function(b, i) { return (i === 0 || i === bins.length - 1) ? '' : b.label; }),
+      customdata: bins.map(function(b) { return b.label; }),
+      textposition: 'top center',
+      textfont: { size: 10, color: plotlyTheme().textSecondary },
+      line: { color: c.path, width: 2 },
+      marker: {
+        size: bins.map(function(_, i) { return i === 0 || i === bins.length - 1 ? 13 : 9; }),
+        color: c.path, line: { color: '#ffffff', width: 2 }
+      },
+      hovertemplate: '%{customdata}. kör<br>köridő: %{x:.0f}%<br>ΔE₀₀: %{y:.0f}%<extra></extra>',
+      showlegend: false
+    };
+    var layout = baseLayout({
+      title: '', x_title: 'Köridő a saját kezdéshez képest', y_title: 'ΔE₀₀ a saját kezdéshez képest'
+    });
+    layout.xaxis.ticksuffix = '%';
+    layout.yaxis.ticksuffix = '%';
+    layout.margin.r = 54;   // the first bin's label sits at the right edge
+    layout.margin.t = 26;
+    // A flat vertical result must LOOK flat. Left to autoscale, a path that
+    // wanders 97–102% fills the panel and reads as violent movement — the
+    // chart would then contradict the very finding it exists to show. The
+    // y-axis therefore always spans at least ±22 points around the baseline,
+    // and only widens if the data genuinely need it.
+    var spread = 0;
+    ys.forEach(function(v) { spread = Math.max(spread, Math.abs(v - 100)); });
+    var half = Math.max(22, spread * 1.25);
+    layout.yaxis.range = [100 - half, 100 + half];
+    layout.shapes = [
+      { type: 'line', xref: 'paper', x0: 0, x1: 1, y0: 100, y1: 100,
+        line: { color: '#cbd5e1', width: 1 } },
+      { type: 'line', yref: 'paper', x0: 100, x1: 100, y0: 0, y1: 1,
+        line: { color: '#cbd5e1', width: 1 } }
+    ];
+    layout.annotations = [
+      { x: xs[0], y: ys[0], ax: 0, ay: -30, showarrow: true, arrowhead: 0, arrowcolor: '#cbd5e1',
+        text: 'kiindulás · ' + bins[0].label,
+        font: { size: 10, color: plotlyTheme().textSecondary } },
+      { x: xs[xs.length - 1], y: ys[ys.length - 1], ax: 0, ay: 32, showarrow: true, arrowhead: 0,
+        arrowcolor: '#cbd5e1', text: 'legrutinosabb · ' + bins[bins.length - 1].label,
+        font: { size: 10, color: plotlyTheme().textSecondary } }
+    ];
+    Plotly.react(el, [trace], layout, PLOT_CONFIG);
+  }
+
+  function renderSpeedAccuracyTable(data) {
+    var bins = saBins(data);
+    buildTable(document.getElementById('saCurveTable'), [
+      { key: 'label', label: 'Kör (kumulált)', formatter: function(v) { return escapeHtml(v); } },
+      { key: 'accuracy_index', label: 'ΔE₀₀ index', formatter: function(v) {
+        return v == null ? '—' : Math.round(100 * v) + '%'; } },
+      { key: 'acc_ci', label: 'ΔE₀₀ 95% CI', formatter: function(v, row) {
+        return row.accuracy_ci_low == null ? '—'
+          : Math.round(100 * row.accuracy_ci_low) + '% – ' + Math.round(100 * row.accuracy_ci_high) + '%'; } },
+      { key: 'duration_index', label: 'Köridő index', formatter: function(v) {
+        return v == null ? '—' : Math.round(100 * v) + '%'; } },
+      { key: 'dur_ci', label: 'Köridő 95% CI', formatter: function(v, row) {
+        return row.duration_ci_low == null ? '—'
+          : Math.round(100 * row.duration_ci_low) + '% – ' + Math.round(100 * row.duration_ci_high) + '%'; } },
+      { key: 'duration_n_players', label: 'Játékos' },
+      { key: 'duration_n_rounds', label: 'Kör' }
+    ], bins);
+  }
+
+  function renderSpeedAccuracy(data) {
+    renderSpeedAccuracyHeadline(data);
+    renderSpeedAccuracyEffects(data);
+    renderSpeedAccuracyCurves(data);
+    renderSpeedAccuracyPlane(data);
+    renderSpeedAccuracyTable(data);
+  }
+
   function renderInference(data) {
+    renderSpeedAccuracy(data);
     renderInferenceSample(data);
     renderInferenceDistributions(data);
     renderInferenceThresholds(data);
