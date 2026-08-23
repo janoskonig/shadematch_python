@@ -304,3 +304,77 @@ def test_holm_is_monotone_and_order_preserving():
 def test_holm_handles_missing_values():
     assert si.holm([None, 0.02]) == [None, pytest.approx(0.02)]
     assert si.holm([None, None]) == [None, None]
+
+
+# --------------------------------------------------------------------------- #
+# speed–accuracy curves
+# --------------------------------------------------------------------------- #
+def _experience_frame(accuracy_factor, duration_factor, n_players=12, n_rounds=160):
+    """Synthetic rounds where every player's outcome is a known function of
+    their own round counter, so the recovered index has a right answer."""
+    import pandas as pd
+    rows = []
+    for p in range(n_players):
+        base_de, base_dur = 2.0 + 0.1 * p, 30.0 + 2.0 * p
+        for i in range(1, n_rounds + 1):
+            doublings = math.log2(i)
+            rows.append({
+                'user_id': 'P%02d' % p,
+                'trial_index': i,
+                'final_delta_e': base_de * (accuracy_factor ** doublings),
+                'duration_sec': base_dur * (duration_factor ** doublings),
+            })
+    return pd.DataFrame(rows)
+
+
+def test_speed_accuracy_curve_is_flat_when_nothing_improves():
+    df = _experience_frame(1.0, 1.0)
+    out = si._speed_accuracy_block(df, df)
+    for row in out['bins']:
+        if row.get('accuracy_index') is None:
+            continue
+        assert row['accuracy_index'] == pytest.approx(1.0, abs=0.02)
+        assert row['duration_index'] == pytest.approx(1.0, abs=0.02)
+
+
+def test_speed_accuracy_curve_separates_a_planted_dissociation():
+    # Time falls 10% per doubling; accuracy is untouched. This is the shape the
+    # dashboard claims to show, so the estimator has to reproduce it.
+    df = _experience_frame(1.0, 0.9)
+    out = si._speed_accuracy_block(df, df)
+    last = [r for r in out['bins'] if r.get('duration_index') is not None][-1]
+    assert last['accuracy_index'] == pytest.approx(1.0, abs=0.03)
+    assert last['duration_index'] < 0.75          # ~5 doublings of −10%
+    assert last['duration_ci_high'] < 1.0         # and detectably below baseline
+    assert last['accuracy_ci_low'] <= 1.0 <= last['accuracy_ci_high']
+
+
+def test_speed_accuracy_baseline_bin_anchors_at_one():
+    out = si._speed_accuracy_block(_experience_frame(0.9, 0.9), _experience_frame(0.9, 0.9))
+    first = out['bins'][0]
+    assert first['label'] == '1–4'
+    assert first['accuracy_index'] == pytest.approx(1.0, abs=1e-9)
+    assert first['duration_index'] == pytest.approx(1.0, abs=1e-9)
+
+
+def test_speed_accuracy_survives_a_zero_delta_e_baseline():
+    # A player whose first rounds are exact hits must not be dropped — the
+    # (1 + ΔE) shift exists precisely so the best starters stay in the sample.
+    import pandas as pd
+    df = _experience_frame(0.95, 0.95, n_players=6)
+    perfect = pd.DataFrame([
+        {'user_id': 'PERFECT', 'trial_index': i, 'final_delta_e': 0.0, 'duration_sec': 20.0}
+        for i in range(1, 40)
+    ])
+    both = pd.concat([df, perfect], ignore_index=True)
+    out = si._speed_accuracy_block(both, both)
+    counted = [r['accuracy_n_players'] for r in out['bins'] if r.get('accuracy_n_players')]
+    assert max(counted) == 7          # six normal players + the perfect one
+
+
+def test_speed_accuracy_empty_input():
+    import pandas as pd
+    empty = pd.DataFrame(columns=['user_id', 'trial_index', 'final_delta_e', 'duration_sec'])
+    out = si._speed_accuracy_block(empty, empty)
+    assert out['baseline_rounds'] == si.EXPERIENCE_BASELINE_ROUNDS
+    assert all('accuracy_index' not in b for b in out['bins'])
