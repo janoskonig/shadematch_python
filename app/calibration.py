@@ -54,12 +54,18 @@ CATCH_OBVIOUS_DE = 11.0
 # is measured right at the game's operating point — thresholds vary across colour space, and
 # "would this be acceptable on your face?" only makes sense for skin tones. (All skin-centred
 # by design; a neutral/grey centre would contradict the framing and is omitted.)
+#
+# These four anchors are the fallback pool; live sessions draw their centres from the
+# catalog's densified skin zone instead (the retired even_gamut_v2_skin targets — see
+# routes._calibration_center_pool), so day-to-day sessions vary within the skin locus
+# while the acceptability framing stays valid. Per-trial center_lab is stored either way.
 CENTERS = (
     ('Caucasian · cheek', (59.6, 11.8, 14.6)),
     ('Chinese · cheek', (58.9, 11.4, 14.2)),
     ('Kurdish · forehead', (56.1, 11.3, 16.4)),
     ('Thai · cheek', (60.7, 10.5, 17.2)),
 )
+CENTERS_PER_SESSION = len(CENTERS)   # distinct centres a session rotates through
 
 # ── CIELAB (D65, 2°) ↔ sRGB, with an in-gamut test ───────────────────────────
 _WHITE = np.array([0.95047, 1.0, 1.08883])   # D65 2° reference white, Y=1
@@ -124,12 +130,25 @@ def pair_at_delta_e(center, target_de, rng, max_dir_tries=16):
     return last   # all directions clipped — accept the nearest (rare for skin centres)
 
 
-def build_block(seed):
+def build_block(seed, center_pool=None):
     """Assemble a randomised trial block: REPS_PER_LEVEL real pairs per ΔE level (rotating
     colour centres) plus identical/obvious catch trials. Each trial is a dict with the *true*
     ΔE and catch flag — the caller stores these server-side and never sends them to the client.
+
+    center_pool: optional [(name, (L, a, b)), ...] to draw this session's centres from
+    (e.g. the catalog's skin-zone targets). CENTERS_PER_SESSION distinct centres are sampled
+    with the block's own seeded rng, so the block stays reproducible from the stored seed.
+    Falls back to the static CENTERS anchors when the pool is missing or empty.
     """
     rng = np.random.default_rng(seed)
+    pool = [(str(n), tuple(float(v) for v in lab)) for n, lab in (center_pool or [])]
+    if len(pool) > CENTERS_PER_SESSION:
+        idx = rng.choice(len(pool), size=CENTERS_PER_SESSION, replace=False)
+        centers = [pool[i] for i in sorted(int(j) for j in idx)]
+    elif pool:
+        centers = pool
+    else:
+        centers = list(CENTERS)
     trials = []
     ci = 0
 
@@ -152,14 +171,14 @@ def build_block(seed):
 
     for de in DELTA_LEVELS:
         for _ in range(REPS_PER_LEVEL):
-            name, lab = CENTERS[ci % len(CENTERS)]
+            name, lab = centers[ci % len(centers)]
             ci += 1
             add(name, lab, de, False, None)
     for _ in range(CATCH_IDENTICAL):
-        name, lab = CENTERS[ci % len(CENTERS)]; ci += 1
+        name, lab = centers[ci % len(centers)]; ci += 1
         add(name, lab, 0.0, True, 'identical')
     for _ in range(CATCH_OBVIOUS):
-        name, lab = CENTERS[ci % len(CENTERS)]; ci += 1
+        name, lab = centers[ci % len(centers)]; ci += 1
         add(name, lab, CATCH_OBVIOUS_DE, True, 'obvious')
 
     order = rng.permutation(len(trials))

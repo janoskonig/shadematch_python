@@ -135,8 +135,10 @@
       </p>
     </div>
 
-    <button type="button" id="calAgainBtn" class="btn btn-primary btn-lg" style="margin-top:8px;">{{ t('Next session') }}</button>
-    <a href="/" class="btn btn-tertiary btn-lg" style="margin-top:8px;display:block;text-align:center;">{{ t('Back to the game') }}</a>
+    <!-- Daily cadence: one session per day is the protocol's rhythm, so the primary path
+         after finishing is back to the match; an immediate extra run stays possible. -->
+    <a href="/" class="btn btn-primary btn-lg" style="margin-top:8px;display:block;text-align:center;">{{ t('Back to the game') }}</a>
+    <button type="button" id="calAgainBtn" class="btn btn-secondary btn-lg" style="margin-top:8px;">{{ t('Next session') }}</button>
   </section>
 </div>
 {% endblock %}

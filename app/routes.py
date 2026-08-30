@@ -991,6 +991,49 @@ def calibration_page():
     return render_template('calibration.html')
 
 
+def _calibration_center_pool():
+    """Centre candidates for a session: the catalog's densified skin zone (the
+    even_gamut_v2_skin targets, retired from match serving by design). Drawing from here
+    randomises the pairs' colours session-to-session while staying inside the skin locus,
+    so the "acceptable on your face?" framing keeps its meaning. Empty catalog (fresh
+    install/tests) → None, and build_block falls back to its static Xiao anchors."""
+    from .regions import _srgb_to_lab
+    rows = TargetColor.query.filter_by(classification='even_gamut_v2_skin').all()
+    pool = [(row.name, _srgb_to_lab(row.r, row.g, row.b)) for row in rows]
+    return pool or None
+
+
+def _calibration_status(user_id):
+    """Light per-user standing for the boot payload (/api/user-progress): drives the daily
+    warm-up prompt and header badge without the pooled threshold fit.
+
+    Daily cadence: nothing on the registration day (the onboarding funnel is long enough);
+    from the next day on, one prompted session per day until — and beyond — the 5-session
+    protocol. Extra same-day runs from the /calibration page itself stay allowed; this only
+    governs the prompt."""
+    user = User.query.get(user_id) if user_id else None
+    if not user:
+        return {'available_today': False, 'done_today': False,
+                'completed': 0, 'target': calibration.TARGET_SESSIONS}
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    completed = (CalibrationSession.query
+                 .filter(CalibrationSession.user_id == user_id,
+                         CalibrationSession.ended_at.isnot(None))
+                 .count())
+    done_today = db.session.query(
+        CalibrationSession.query
+        .filter(CalibrationSession.user_id == user_id,
+                CalibrationSession.ended_at >= today_start)
+        .exists()).scalar()
+    registered_today = bool(user.created_at and user.created_at.date() >= date.today())
+    return {
+        'available_today': (not registered_today) and (not done_today),
+        'done_today': bool(done_today),
+        'completed': completed,
+        'target': calibration.TARGET_SESSIONS,
+    }
+
+
 def _calibration_progress(user_id):
     """A user's calibration standing: completed-session count toward the target, per-session
     history (the learning curve), and a pooled threshold over all their completed sessions."""
@@ -1016,7 +1059,9 @@ def _calibration_progress(user_id):
             'catch_kind': r.catch_kind, 'judgment': r.judgment,
         } for r in rows])
     return {'target': calibration.TARGET_SESSIONS, 'completed': len(sessions),
-            'history': history, 'pooled': pooled}
+            'history': history, 'pooled': pooled,
+            **{k: v for k, v in _calibration_status(user_id).items()
+               if k in ('available_today', 'done_today')}}
 
 
 @main.route('/calibration/progress')
@@ -1041,7 +1086,7 @@ def calibration_start():
         return jsonify({'error': 'registration_required'}), 403
     try:
         seed = int(_uuid.uuid4().int % (2 ** 63))
-        block = calibration.build_block(seed)
+        block = calibration.build_block(seed, center_pool=_calibration_center_pool())
         session_uuid = str(_uuid.uuid4())
         sess = CalibrationSession(
             session_uuid=session_uuid, user_id=user_id, seed=seed,
@@ -2963,6 +3008,7 @@ def get_user_progress_route():
             'status': 'success',
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
+            'calibration': _calibration_status(user_id),
             **build_challenge_echo(user_id),
             **build_next_action(user_id),
         })

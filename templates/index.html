@@ -681,6 +681,7 @@
             <div class="overflow-dropdown" id="overflowDropdown">
               <button id="restartBtn" class="overflow-item" type="button" disabled>{{ t('Restart all') }}</button>
               <button id="switchUserBtn" class="overflow-item" type="button">{{ t('Switch user') }}</button>
+              <a href="/calibration" class="overflow-item" style="text-decoration:none;">👁 {{ t('Eye calibration') }}</a>
               <!-- Phone-only rows: these controls live in the header on wider screens -->
               <button id="sfxToggleRow" class="overflow-item overflow-item--mobile" type="button"><span class="sfx-icon">&#128266;</span> {{ t('Sounds') }}</button>
               <button id="showGuideRow" class="overflow-item overflow-item--mobile" type="button">&#128161; {{ t('Guide') }}</button>
@@ -1442,7 +1443,7 @@
 {% block extra_js %}
   <script src="{{ url_for('static', filename='guide.js') }}?v=20260709-i18n1"></script>
   <script src="{{ url_for('static', filename='mixbox.js') }}?v=20260330"></script>
-  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260722-nobar"></script>
+  <script type="module" src="{{ url_for('static', filename='main.js') }}?v=20260830-calib"></script>
 
   <footer class="app-footer">
     <p><strong>S.H.A.D.E.</strong> — Study of Human Accuracy in Digital Experiments</p>

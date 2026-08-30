@@ -515,7 +515,8 @@ async function loadAndRenderProgress() {
       if (data.next_action) renderNextAction(data.next_action);
       if (data.daily_status) renderDailyStatusBadge(data.daily_status);
       if (data.daily_missions) renderDailyMissions(data.daily_missions);
-      // Unconditional: absent echo must clear a banner left from a prior load.
+      // Unconditional: absence must clear state left from a prior load.
+      renderCalibrationEntry(data.calibration);
       renderChallengeEcho(data.challenge_echo);
     }
   } catch { /* silent */ }
@@ -831,6 +832,99 @@ function renderDailyStatusBadge(status) {
     el.onclick = () => { if (window.__startDailyChallenge) window.__startDailyChallenge(); };
     el.style.cursor = 'pointer';
   }
+}
+
+// ── Daily eye-calibration warm-up ─────────────────────────────────────────
+// The /calibration psychophysics probe needs short sessions spread across days,
+// so the server flags one prompted session per day — none on the registration
+// day (routes._calibration_status). Day-start placement is deliberate: the
+// judgment happens on a fresh eye, before the match's mixing work, and at the
+// same point of every visit, so days stay comparable. The prompt is an offer,
+// not a gate (participation stays voluntary): "Skip today" silences it until
+// tomorrow, and the header badge remains as the same-day way back in.
+const CAL_PROMPT_SEEN_KEY = 'sm_cal_prompt_seen';   // last dismissed day, local YYYY-MM-DD
+let _calPromptOffered = false;                       // once per page load
+
+function _calTodayKey() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0')
+    + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+function renderCalibrationEntry(cal) {
+  const badge = document.getElementById('calStatusBadge');
+  if (!cal || !cal.available_today) {
+    if (badge) badge.style.display = 'none';
+    return;
+  }
+  renderCalibrationBadge();
+  maybeShowCalibrationPrompt(cal);
+}
+
+function renderCalibrationBadge() {
+  const host = document.querySelector('.header-right');
+  if (!host) return;
+  let badge = document.getElementById('calStatusBadge');
+  if (!badge) {
+    badge = document.createElement('button');
+    badge.id = 'calStatusBadge';
+    badge.type = 'button';
+    badge.className = 'daily-status-badge daily-pending';
+    badge.onclick = () => { window.location.href = '/calibration'; };
+    host.insertBefore(badge, host.firstChild);
+  }
+  badge.style.display = '';
+  badge.innerHTML = '👁<span class="daily-status-text">' + t('Calibration') + '</span><span class="daily-dot"></span>';
+  badge.title = t('Daily eye calibration — 2 minutes, tap to start');
+}
+
+function maybeShowCalibrationPrompt(cal) {
+  if (_calPromptOffered) return;
+  let dismissed = null;
+  try { dismissed = localStorage.getItem(CAL_PROMPT_SEEN_KEY); } catch (_) {}
+  const todayKey = _calTodayKey();
+  if (dismissed === todayKey) return;
+  // Don't talk over the walkthrough or an open modal (login, instructions, …) —
+  // the badge keeps today's entry point; the next load can offer again.
+  if (window.SpotlightGuide && SpotlightGuide.isActive && SpotlightGuide.isActive()) return;
+  const overlays = document.querySelectorAll('.modal-overlay, .skip-modal-overlay');
+  for (const o of overlays) {
+    const disp = o.style.display || getComputedStyle(o).display;
+    if (disp && disp !== 'none') return;
+  }
+  _calPromptOffered = true;
+  const markSeen = () => {
+    try { localStorage.setItem(CAL_PROMPT_SEEN_KEY, todayKey); } catch (_) {}
+  };
+  const progressLine = (cal.completed < cal.target)
+    ? t('Session {i} of {n} — your result unlocks at the end.')
+        .replace('{i}', String(Math.min((cal.completed || 0) + 1, cal.target)))
+        .replace('{n}', String(cal.target))
+    : t('Protocol complete — a daily run keeps your baseline fresh.');
+  const overlay = document.createElement('div');
+  overlay.id = 'calPromptModal';
+  overlay.className = 'modal-overlay';
+  overlay.style.display = 'flex';
+  overlay.innerHTML = `
+    <div class="modal-card">
+      <div style="text-align:center;margin-bottom:var(--space-md);">
+        <div style="font-size:2.5rem;margin-bottom:12px;">👁</div>
+        <h2 class="modal-title">${t('Daily eye calibration')}</h2>
+        <p class="modal-subtitle">${t("Two minutes before you mix: judge pairs of close skin tones, and we'll map how fine a colour difference your eyes catch today.")}</p>
+        <p class="modal-subtitle" style="opacity:.75;">${progressLine}</p>
+      </div>
+      <button id="calPromptStartBtn" class="btn btn-primary btn-full btn-lg">${t('Start')}</button>
+      <button id="calPromptSkipBtn" class="btn btn-secondary btn-full" style="margin-top:8px;">${t('Skip today')}</button>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#calPromptStartBtn').onclick = () => {
+    markSeen();                       // abandoning mid-run must not re-nag today
+    window.location.href = '/calibration';
+  };
+  overlay.querySelector('#calPromptSkipBtn').onclick = () => {
+    markSeen();
+    overlay.remove();
+  };
 }
 
 function renderDailyMissions(dm) {
