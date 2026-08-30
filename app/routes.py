@@ -992,14 +992,25 @@ def calibration_page():
 
 
 def _calibration_center_pool():
-    """Centre candidates for a session: the catalog's densified skin zone (the
-    even_gamut_v2_skin targets, retired from match serving by design). Drawing from here
-    randomises the pairs' colours session-to-session while staying inside the skin locus,
-    so the "acceptable on your face?" framing keeps its meaning. Empty catalog (fresh
-    install/tests) → None, and build_block falls back to its static Xiao anchors."""
+    """Centre candidates per colour family, {family: [(name, (L,a,b)), ...]}:
+    - 'c0'..'c9': the frozen match clusters over the background gamut — the same families
+      the match rotates through, so the per-family PT/AT lands exactly on the palette the
+      game's own judgments come from.
+    - 'skin': the densified even_gamut_v2_skin zone (retired from match serving), kept as
+      an 11th family — it anchors the clinical skin estimate and keeps the measurement
+      continuous with the skin-only pilot sessions at the same locus.
+    Empty catalog (fresh install/tests) → None, and build_block falls back to its static
+    Xiao skin anchors."""
     from .regions import _srgb_to_lab
-    rows = TargetColor.query.filter_by(classification='even_gamut_v2_skin').all()
-    pool = [(row.name, _srgb_to_lab(row.r, row.g, row.b)) for row in rows]
+    from .clusters import match_cluster_assignments
+    assign = match_cluster_assignments()
+    pool = {}
+    for tc in TargetColor.query.filter_by(color_type='gamut').all():
+        group = ('skin' if tc.classification == 'even_gamut_v2_skin'
+                 else assign.get(tc.id))
+        if group is None:
+            continue   # not in the frozen cluster set (catalog drift) — leave it out
+        pool.setdefault(group, []).append((tc.name, _srgb_to_lab(tc.r, tc.g, tc.b)))
     return pool or None
 
 
@@ -1086,17 +1097,23 @@ def calibration_start():
         return jsonify({'error': 'registration_required'}), 403
     try:
         seed = int(_uuid.uuid4().int % (2 ** 63))
-        block = calibration.build_block(seed, center_pool=_calibration_center_pool())
+        pool = _calibration_center_pool()
+        block = calibration.build_block(seed, center_pool=pool)
         session_uuid = str(_uuid.uuid4())
+        # Protocol version lives in `mode`: 'constant_stimuli_gamut' = full-palette
+        # families + the match-referent acceptability question; the skin-only pilot's
+        # face-referent sessions stay separable as 'constant_stimuli'.
         sess = CalibrationSession(
             session_uuid=session_uuid, user_id=user_id, seed=seed,
-            mode='constant_stimuli', illuminant='D65', n_trials=len(block),
+            mode='constant_stimuli_gamut' if pool else 'constant_stimuli',
+            illuminant='D65', n_trials=len(block),
             client_env_json=data.get('env') if isinstance(data.get('env'), dict) else None,
         )
         db.session.add(sess)
         for i, t in enumerate(block):
             db.session.add(CalibrationTrial(
                 session_uuid=session_uuid, seq=i,
+                center_group=t['center_group'],
                 center_name=t['center_name'], center_lab_json=t['center_lab'],
                 lab2_json=t['lab2'], target_de=t['target_de'], actual_de=t['actual_de'],
                 rgb1_json=t['rgb1'], rgb2_json=t['rgb2'], in_gamut=t['in_gamut'],

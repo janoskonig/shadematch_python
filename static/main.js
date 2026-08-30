@@ -910,7 +910,7 @@ function maybeShowCalibrationPrompt(cal) {
       <div style="text-align:center;margin-bottom:var(--space-md);">
         <div style="font-size:2.5rem;margin-bottom:12px;">👁</div>
         <h2 class="modal-title">${t('Daily eye calibration')}</h2>
-        <p class="modal-subtitle">${t("Two minutes before you mix: judge pairs of close skin tones, and we'll map how fine a colour difference your eyes catch today.")}</p>
+        <p class="modal-subtitle">${t("Two minutes before you mix: judge pairs of close colours, and we'll map how fine a colour difference your eyes catch today.")}</p>
         <p class="modal-subtitle" style="opacity:.75;">${progressLine}</p>
       </div>
       <button id="calPromptStartBtn" class="btn btn-primary btn-full btn-lg">${t('Start')}</button>
