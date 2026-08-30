@@ -73,11 +73,11 @@
   }
 
   function renderTrial() {
-    const t = session.trials[idx];
+    const trial = session.trials[idx];
     // Randomise which colour sits on the left so side never cues the answer.
     const swap = Math.random() < 0.5;
-    patchA.style.backgroundColor = rgb(swap ? t.b : t.a);
-    patchB.style.backgroundColor = rgb(swap ? t.a : t.b);
+    patchA.style.backgroundColor = rgb(swap ? trial.b : trial.a);
+    patchB.style.backgroundColor = rgb(swap ? trial.a : trial.b);
     const n = session.trials.length;
     progressFill.style.width = (100 * idx / n).toFixed(1) + '%';
     countLine.textContent = t('Pair {i} of {n}').replace('{i}', String(idx + 1)).replace('{n}', String(n));
