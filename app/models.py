@@ -457,6 +457,9 @@ class CalibrationTrial(db.Model):
         nullable=False,
     )
     seq = db.Column(db.Integer, nullable=False)              # presentation order (0-based)
+    # Colour family of the centre, snapshotted at generation time: 'c0'..'c9' (the frozen
+    # match clusters) or 'skin' (even_gamut_v2_skin zone). Null = pre-family pilot trials.
+    center_group = db.Column(db.String(16), nullable=True)
     center_name = db.Column(db.String(48), nullable=True)
     center_lab_json = db.Column(db.JSON, nullable=True)      # [L, a, b] of colour 1
     lab2_json = db.Column(db.JSON, nullable=True)            # [L, a, b] of colour 2

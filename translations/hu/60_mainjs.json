@@ -114,5 +114,12 @@
   "Guest result — leave now and it is lost to you. Register and it stays yours, in your challenge history.": "Vendég-eredmény — ha most kilépsz, számodra elvész. Regisztrálj, és a tiéd marad a kihívás-történetedben.",
   "✅ Your challenge result now lives in your account": "✅ A kihívás-eredményed mostantól a fiókodban él",
   "Challenge a friend with your best colour": "Hívj ki egy barátot a legjobb színeddel",
-  "⚔️ I finished a ShadeMatch match — beat my best colour:": "⚔️ Végigjátszottam egy ShadeMatch meccset — verd meg a legjobb színemet:"
+  "⚔️ I finished a ShadeMatch match — beat my best colour:": "⚔️ Végigjátszottam egy ShadeMatch meccset — verd meg a legjobb színemet:",
+  "Calibration": "Kalibráció",
+  "Daily eye calibration": "Napi szemkalibráció",
+  "Daily eye calibration — 2 minutes, tap to start": "Napi szemkalibráció — 2 perc, koppints az indításhoz",
+  "Two minutes before you mix: judge pairs of close colours, and we'll map how fine a colour difference your eyes catch today.": "Két perc a keverés előtt: közeli színpárokról döntesz, mi pedig feltérképezzük, ma milyen finom színkülönbséget vesz észre a szemed.",
+  "Session {i} of {n} — your result unlocks at the end.": "{i}. ülés a(z) {n}-ből — az eredményed a végén oldódik fel.",
+  "Protocol complete — a daily run keeps your baseline fresh.": "A protokoll kész — egy napi kör frissen tartja az alapszintedet.",
+  "Skip today": "Ma kihagyom"
 }

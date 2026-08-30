@@ -82,7 +82,7 @@
   <section class="cal-card cal-hidden" id="calIntro">
     <h2>{{ t('How sharp are your eyes today?') }}</h2>
     <p>
-      {{ t("You'll see <strong>pairs of skin colours</strong>, one after another. For each pair you answer up to two quick questions: first <strong>“Are they identical?”</strong> — and if not, <strong>“Would that difference be acceptable on your face?”</strong> Some pairs are identical, some are obvious; most are subtle. There are no right answers and no feedback — just judge what you see.")|safe }}
+      {{ t("You'll see <strong>pairs of colours</strong> from every family of the game's palette, one after another. For each pair you answer up to two quick questions: first <strong>“Are they identical?”</strong> — and if not, <strong>“If this were your mix, would you accept it as a match?”</strong> Some pairs are identical, some are obvious; most are subtle. There are no right answers and no feedback — just judge what you see.")|safe }}
     </p>
     <p>
       {{ t("It takes under <strong>2 minutes</strong>. Best on a non-dimmed screen in even lighting. Do it across a few short sessions on different days — that's by design, and the picture of your eyes gets sharper each time.")|safe }} <span id="calUserLine" style="opacity:.7;"></span>
@@ -131,16 +131,18 @@
       <div class="cal-history" id="calHistory"></div>
       <div class="cal-history-cap" id="calHistoryCap"></div>
       <p class="cal-note" id="calResultNote">
-        {{ t("Pooled across all your sessions. The smaller the perceptibility figure, the finer the colour differences you can tell apart; acceptability is how far a match can drift before you'd call it too different on a face.") }}
+        {{ t("Pooled across all your sessions. The smaller the perceptibility figure, the finer the colour differences you can tell apart; acceptability is how far a match can drift before you'd no longer accept it.") }}
       </p>
     </div>
 
-    <button type="button" id="calAgainBtn" class="btn btn-primary btn-lg" style="margin-top:8px;">{{ t('Next session') }}</button>
-    <a href="/" class="btn btn-tertiary btn-lg" style="margin-top:8px;display:block;text-align:center;">{{ t('Back to the game') }}</a>
+    <!-- Daily cadence: one session per day is the protocol's rhythm, so the primary path
+         after finishing is back to the match; an immediate extra run stays possible. -->
+    <a href="/" class="btn btn-primary btn-lg" style="margin-top:8px;display:block;text-align:center;">{{ t('Back to the game') }}</a>
+    <button type="button" id="calAgainBtn" class="btn btn-secondary btn-lg" style="margin-top:8px;">{{ t('Next session') }}</button>
   </section>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='calibration.js') }}?v=20260709-i18n1"></script>
+<script src="{{ url_for('static', filename='calibration.js') }}?v=20260830-gamut"></script>
 {% endblock %}

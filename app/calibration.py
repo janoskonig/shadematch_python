@@ -9,15 +9,26 @@ Why this exists (see the design discussion): the main game lets players self-sel
 perceptibility (PT) and acceptability (AT) thresholds live. Here the ΔE is *imposed* via a
 method-of-constant-stimuli ladder spanning the transition zone, so the judgment data can
 actually reproduce the 50:50 thresholds (cf. Paravina et al. 2015: PT ΔE₀₀≈0.8, AT≈1.8 —
-for tooth colour; ours are skin-centred and use a sharp split field, so values may differ,
-which is itself the finding).
+for tooth colour; ours use a sharp split field, so values may differ, which is itself the
+finding).
+
+Centres span the game's whole palette (mode 'constant_stimuli_gamut'): each session cycles
+a seeded permutation of the 11 colour families — the frozen match clusters c0..c9 plus the
+densified skin zone — so pooled data supports population-level per-family PT/AT fits, a
+direct test of ΔE₀₀'s perceptual uniformity right on the palette the game operates on, and
+a per-family calibration of the main game's self-selected judgments. Per-user, per-family
+fits are NOT powered at this trial budget (≈7 trials/family over 5 sessions); the personal
+end-screen number stays the family-pooled threshold. The skin family keeps the measurement
+continuous with the skin-only face-referent pilot (mode 'constant_stimuli'), whose AT used
+a different referent and is analysed separately.
 
 The trichotomy yields *both* thresholds from one ordinal judgment. The acceptability
-referent is concrete, not abstract ("good enough for what?"): *on a face, is this an
-acceptable match?* — the clinical question for a facial prosthesis match, which keeps the
-acceptability judgment stable and meaningful.
+referent is concrete, not abstract ("good enough for what?"), and family-neutral: *if this
+were your mix, would you accept it as a match?* — the game's own operating judgment, which
+keeps the acceptability criterion stable and lets it apply to a green pair as much as a
+skin pair. (The pilot's face referent only made sense for skin tones.)
   - perceptibility: identical            vs {acceptable, unacceptable}   (saw a difference?)
-  - acceptability:  {identical, acceptable} vs unacceptable              (acceptable match on a face?)
+  - acceptability:  {identical, acceptable} vs unacceptable              (acceptable as a match?)
 
 This module is pure colour science + trial generation; persistence + HTTP live in routes.
 """
@@ -50,10 +61,11 @@ CATCH_IDENTICAL = 2
 CATCH_OBVIOUS = 2
 CATCH_OBVIOUS_DE = 11.0
 
-# Colour centres the pairs are built around: skin means (Xiao et al. 2017), so the threshold
-# is measured right at the game's operating point — thresholds vary across colour space, and
-# "would this be acceptable on your face?" only makes sense for skin tones. (All skin-centred
-# by design; a neutral/grey centre would contradict the framing and is omitted.)
+# Fallback colour centres: skin means (Xiao et al. 2017) — the pilot protocol's anchors,
+# used only when no centre pool is passed (empty catalog: fresh installs, tests). Live
+# sessions draw their centres per colour family from the catalog instead (frozen match
+# clusters + skin zone — see routes._calibration_center_pool); per-trial center_lab and
+# center_group are stored either way, so analysis never depends on these constants.
 CENTERS = (
     ('Caucasian · cheek', (59.6, 11.8, 14.6)),
     ('Chinese · cheek', (58.9, 11.4, 14.2)),
@@ -124,23 +136,64 @@ def pair_at_delta_e(center, target_de, rng, max_dir_tries=16):
     return last   # all directions clipped — accept the nearest (rare for skin centres)
 
 
-def build_block(seed):
-    """Assemble a randomised trial block: REPS_PER_LEVEL real pairs per ΔE level (rotating
-    colour centres) plus identical/obvious catch trials. Each trial is a dict with the *true*
-    ΔE and catch flag — the caller stores these server-side and never sends them to the client.
+def build_block(seed, center_pool=None):
+    """Assemble a randomised trial block: REPS_PER_LEVEL real pairs per ΔE level plus
+    identical/obvious catch trials. Each trial is a dict with the *true* ΔE and catch
+    flag — the caller stores these server-side and never sends them to the client.
+
+    center_pool: optional {family: [(name, (L, a, b)), ...]} of centre candidates — the
+    frozen match clusters 'c0'..'c9' plus 'skin' (routes._calibration_center_pool). A
+    seeded permutation of the families is cycled over the trial slots (real trials in
+    level-major order, then catches), so every family gets at least one real trial per
+    session, while which families double up — and which ΔE levels each family meets —
+    re-randomises every session. A 20-trial session cannot cross 11 families with the
+    8-level ladder, so family×level balances only ACROSS sessions; the per-session
+    permutation is what keeps a frozen pairing from confounding the pooled per-family
+    fits. The concrete centre is re-drawn per trial from the family's candidates, and a
+    draw whose pair clips out of sRGB is retried on other centres (dark/saturated corners
+    at the ΔE≈11 catch); if none fits, the last draw is kept with in_gamut=False.
+    Falls back to the static skin CENTERS when the pool is missing or empty; either way
+    the block is reproducible from the stored seed (given the same pool).
     """
     rng = np.random.default_rng(seed)
-    trials = []
-    ci = 0
+    groups = {}
+    for g, cands in (center_pool or {}).items():
+        cands = [(str(n), tuple(float(v) for v in lab)) for n, lab in cands]
+        if cands:
+            groups[str(g)] = cands
+    if groups:
+        order = sorted(groups)
+        fam_cycle = [order[int(i)] for i in rng.permutation(len(order))]
+    else:
+        fam_cycle = None   # → static skin anchors
 
-    def add(center_name, center_lab, target_de, is_catch, catch_kind):
-        nonlocal ci
-        lab2, rgb2, ig = pair_at_delta_e(center_lab, target_de, rng)
-        rgb1, _ = lab_to_srgb(center_lab)
-        actual = _delta_e(center_lab, lab2)
+    def draw_pair(slot, target_de):
+        """(family, name, lab, lab2, rgb2, in_gamut) for trial slot `slot`."""
+        if fam_cycle is None:
+            name, lab = CENTERS[slot % len(CENTERS)]
+            lab2, rgb2, ig = pair_at_delta_e(lab, target_de, rng)
+            return 'skin', name, lab, lab2, rgb2, ig
+        fam = fam_cycle[slot % len(fam_cycle)]
+        cands = groups[fam]
+        pick = None
+        for _ in range(min(6, len(cands))):
+            name, lab = cands[int(rng.integers(len(cands)))]
+            lab2, rgb2, ig = pair_at_delta_e(lab, target_de, rng)
+            pick = (fam, name, lab, lab2, rgb2, ig)
+            if ig:
+                break
+        return pick
+
+    trials = []
+
+    def add(slot, target_de, is_catch, catch_kind):
+        fam, name, lab, lab2, rgb2, ig = draw_pair(slot, target_de)
+        rgb1, _ = lab_to_srgb(lab)
+        actual = _delta_e(lab, lab2)
         trials.append({
-            'center_name': center_name,
-            'center_lab': [round(float(x), 3) for x in center_lab],
+            'center_group': fam,
+            'center_name': name,
+            'center_lab': [round(float(x), 3) for x in lab],
             'lab2': [round(float(x), 3) for x in lab2],
             'target_de': round(float(target_de), 3),
             'actual_de': round(float(actual), 4),
@@ -150,17 +203,14 @@ def build_block(seed):
             'catch_kind': catch_kind,
         })
 
+    slot = 0
     for de in DELTA_LEVELS:
         for _ in range(REPS_PER_LEVEL):
-            name, lab = CENTERS[ci % len(CENTERS)]
-            ci += 1
-            add(name, lab, de, False, None)
+            add(slot, de, False, None); slot += 1
     for _ in range(CATCH_IDENTICAL):
-        name, lab = CENTERS[ci % len(CENTERS)]; ci += 1
-        add(name, lab, 0.0, True, 'identical')
+        add(slot, 0.0, True, 'identical'); slot += 1
     for _ in range(CATCH_OBVIOUS):
-        name, lab = CENTERS[ci % len(CENTERS)]; ci += 1
-        add(name, lab, CATCH_OBVIOUS_DE, True, 'obvious')
+        add(slot, CATCH_OBVIOUS_DE, True, 'obvious'); slot += 1
 
     order = rng.permutation(len(trials))
     return [trials[i] for i in order]

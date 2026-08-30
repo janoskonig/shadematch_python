@@ -991,6 +991,60 @@ def calibration_page():
     return render_template('calibration.html')
 
 
+def _calibration_center_pool():
+    """Centre candidates per colour family, {family: [(name, (L,a,b)), ...]}:
+    - 'c0'..'c9': the frozen match clusters over the background gamut — the same families
+      the match rotates through, so the per-family PT/AT lands exactly on the palette the
+      game's own judgments come from.
+    - 'skin': the densified even_gamut_v2_skin zone (retired from match serving), kept as
+      an 11th family — it anchors the clinical skin estimate and keeps the measurement
+      continuous with the skin-only pilot sessions at the same locus.
+    Empty catalog (fresh install/tests) → None, and build_block falls back to its static
+    Xiao skin anchors."""
+    from .regions import _srgb_to_lab
+    from .clusters import match_cluster_assignments
+    assign = match_cluster_assignments()
+    pool = {}
+    for tc in TargetColor.query.filter_by(color_type='gamut').all():
+        group = ('skin' if tc.classification == 'even_gamut_v2_skin'
+                 else assign.get(tc.id))
+        if group is None:
+            continue   # not in the frozen cluster set (catalog drift) — leave it out
+        pool.setdefault(group, []).append((tc.name, _srgb_to_lab(tc.r, tc.g, tc.b)))
+    return pool or None
+
+
+def _calibration_status(user_id):
+    """Light per-user standing for the boot payload (/api/user-progress): drives the daily
+    warm-up prompt and header badge without the pooled threshold fit.
+
+    Daily cadence: nothing on the registration day (the onboarding funnel is long enough);
+    from the next day on, one prompted session per day until — and beyond — the 5-session
+    protocol. Extra same-day runs from the /calibration page itself stay allowed; this only
+    governs the prompt."""
+    user = User.query.get(user_id) if user_id else None
+    if not user:
+        return {'available_today': False, 'done_today': False,
+                'completed': 0, 'target': calibration.TARGET_SESSIONS}
+    today_start = datetime.combine(date.today(), datetime.min.time())
+    completed = (CalibrationSession.query
+                 .filter(CalibrationSession.user_id == user_id,
+                         CalibrationSession.ended_at.isnot(None))
+                 .count())
+    done_today = db.session.query(
+        CalibrationSession.query
+        .filter(CalibrationSession.user_id == user_id,
+                CalibrationSession.ended_at >= today_start)
+        .exists()).scalar()
+    registered_today = bool(user.created_at and user.created_at.date() >= date.today())
+    return {
+        'available_today': (not registered_today) and (not done_today),
+        'done_today': bool(done_today),
+        'completed': completed,
+        'target': calibration.TARGET_SESSIONS,
+    }
+
+
 def _calibration_progress(user_id):
     """A user's calibration standing: completed-session count toward the target, per-session
     history (the learning curve), and a pooled threshold over all their completed sessions."""
@@ -1016,7 +1070,9 @@ def _calibration_progress(user_id):
             'catch_kind': r.catch_kind, 'judgment': r.judgment,
         } for r in rows])
     return {'target': calibration.TARGET_SESSIONS, 'completed': len(sessions),
-            'history': history, 'pooled': pooled}
+            'history': history, 'pooled': pooled,
+            **{k: v for k, v in _calibration_status(user_id).items()
+               if k in ('available_today', 'done_today')}}
 
 
 @main.route('/calibration/progress')
@@ -1041,17 +1097,23 @@ def calibration_start():
         return jsonify({'error': 'registration_required'}), 403
     try:
         seed = int(_uuid.uuid4().int % (2 ** 63))
-        block = calibration.build_block(seed)
+        pool = _calibration_center_pool()
+        block = calibration.build_block(seed, center_pool=pool)
         session_uuid = str(_uuid.uuid4())
+        # Protocol version lives in `mode`: 'constant_stimuli_gamut' = full-palette
+        # families + the match-referent acceptability question; the skin-only pilot's
+        # face-referent sessions stay separable as 'constant_stimuli'.
         sess = CalibrationSession(
             session_uuid=session_uuid, user_id=user_id, seed=seed,
-            mode='constant_stimuli', illuminant='D65', n_trials=len(block),
+            mode='constant_stimuli_gamut' if pool else 'constant_stimuli',
+            illuminant='D65', n_trials=len(block),
             client_env_json=data.get('env') if isinstance(data.get('env'), dict) else None,
         )
         db.session.add(sess)
         for i, t in enumerate(block):
             db.session.add(CalibrationTrial(
                 session_uuid=session_uuid, seq=i,
+                center_group=t['center_group'],
                 center_name=t['center_name'], center_lab_json=t['center_lab'],
                 lab2_json=t['lab2'], target_de=t['target_de'], actual_de=t['actual_de'],
                 rgb1_json=t['rgb1'], rgb2_json=t['rgb2'], in_gamut=t['in_gamut'],
@@ -2963,6 +3025,7 @@ def get_user_progress_route():
             'status': 'success',
             'progress': build_progress_response(user_id, up),
             'daily_missions': build_daily_missions(user_id),
+            'calibration': _calibration_status(user_id),
             **build_challenge_echo(user_id),
             **build_next_action(user_id),
         })

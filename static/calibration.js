@@ -66,7 +66,7 @@
       btnYes.innerHTML = '<span class="cal-kbd">1</span>' + t('Yes — identical');
       btnNo.innerHTML = '<span class="cal-kbd">2</span>' + t('No — different');
     } else {
-      prompt.textContent = t('Would this difference be acceptable on your face?');
+      prompt.textContent = t('If this were your mix, would you accept it as a match?');
       btnYes.innerHTML = '<span class="cal-kbd">1</span>' + t('Yes — acceptable');
       btnNo.innerHTML = '<span class="cal-kbd">2</span>' + t('No — too different');
     }
@@ -88,7 +88,7 @@
   }
 
   // Two-stage elicitation: Q1 "are they identical?" (perceptibility); only if NOT identical,
-  // Q2 "acceptable on your face?" (acceptability). An imperceptible pair is trivially
+  // Q2 "accept it as a match?" (acceptability, match referent). An imperceptible pair is trivially
   // acceptable, so Q2 is skipped — that maps to the same identical/acceptable/unacceptable
   // categories the analysis expects.
   function respond(ans) {            // ans: 'yes' | 'no'
