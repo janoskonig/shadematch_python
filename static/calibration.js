@@ -73,11 +73,12 @@
   }
 
   function renderTrial() {
-    const t = session.trials[idx];
+    // NB: never name a local `t` here — it would shadow the i18n t() below.
+    const tr = session.trials[idx];
     // Randomise which colour sits on the left so side never cues the answer.
     const swap = Math.random() < 0.5;
-    patchA.style.backgroundColor = rgb(swap ? t.b : t.a);
-    patchB.style.backgroundColor = rgb(swap ? t.a : t.b);
+    patchA.style.backgroundColor = rgb(swap ? tr.b : tr.a);
+    patchB.style.backgroundColor = rgb(swap ? tr.a : tr.b);
     const n = session.trials.length;
     progressFill.style.width = (100 * idx / n).toFixed(1) + '%';
     countLine.textContent = t('Pair {i} of {n}').replace('{i}', String(idx + 1)).replace('{n}', String(n));
@@ -103,12 +104,12 @@
 
   function commit(judgment) {
     locked = true;
-    const t = session.trials[idx];
+    const tr = session.trials[idx];
     const reaction_ms = Math.round(performance.now() - shownAt);
     // Fire-and-forget: each response carries its own trial_id, so order doesn't matter.
     fetch('/calibration/respond', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: session.session_id, trial_id: t.trial_id, judgment, reaction_ms }),
+      body: JSON.stringify({ session_id: session.session_id, trial_id: tr.trial_id, judgment, reaction_ms }),
     }).catch(() => { /* transient — the trial row just stays unjudged */ });
 
     idx += 1;

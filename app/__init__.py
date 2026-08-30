@@ -6,6 +6,39 @@ import os
 
 db = SQLAlchemy()
 
+
+def _ensure_additive_columns(app):
+    """Self-heal late-added nullable columns at boot.
+
+    The deploy runs no migration step (Render free tier: no shell either), so a
+    schema-touching release can only rely on what the app does itself. This covers the
+    additive case only: nullable columns the ORM already maps but an existing database
+    may lack — exactly what migrate_add_calibration_group.py does by hand. Idempotent
+    (introspects first), dialect-agnostic, and never blocks boot: an unreachable
+    database just logs and the request-time error handling takes over as before.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    wanted = {
+        'calibration_trials': [('center_group', 'VARCHAR(16)')],
+    }
+    with app.app_context():
+        try:
+            insp = sa_inspect(db.engine)
+            for table, columns in wanted.items():
+                if not insp.has_table(table):
+                    continue   # db.create_all / the table migration owns fresh installs
+                have = {c['name'] for c in insp.get_columns(table)}
+                for name, ddl_type in columns:
+                    if name not in have:
+                        db.session.execute(db.text(
+                            'ALTER TABLE %s ADD COLUMN %s %s' % (table, name, ddl_type)))
+                        db.session.commit()
+                        app.logger.info('ensured column %s.%s', table, name)
+        except Exception:
+            db.session.rollback()
+            app.logger.exception('additive column ensure failed (continuing boot)')
+
+
 def create_app():
     load_dotenv()
     # Full local config (SMTP, push keys, APP_BASE_URL, etc.) lives in
@@ -31,6 +64,7 @@ def create_app():
     app.config.from_object('config.Config')
 
     db.init_app(app)
+    _ensure_additive_columns(app)
 
     @app.errorhandler(OperationalError)
     def handle_database_operational_error(_error):
