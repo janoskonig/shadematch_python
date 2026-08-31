@@ -51,7 +51,7 @@ def tr_factory(locale):
 
 BRAND_NAME = 'ShadeMatch'
 DEFAULT_FROM_DISPLAY = 'ShadeMatch'
-DEFAULT_BASE_URL = 'https://shadematch.app'
+DEFAULT_BASE_URL = 'https://app.shadestudy.com'
 
 # itsdangerous salt + lifetime for one-click unsubscribe links. We don't expire
 # them aggressively so people can act on an old reminder without trouble.

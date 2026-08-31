@@ -4,7 +4,7 @@
 // time — never the recipe) and shares it through the native share sheet where
 // available, falling back to a text share, then to download + clipboard copy.
 
-const APP_URL = 'https://shadematch.app';
+const APP_URL = 'https://app.shadestudy.com';
 
 // Nearest colour-family emoji for the text fallback (chat apps show no image).
 function hueEmoji(rgb) {
@@ -137,7 +137,7 @@ function renderCard({ kind, targetRgb, mixedRgb, deltaE, drops, timeSec, date })
   // Footer.
   ctx.font = '700 36px Nunito, system-ui, sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.fillText(t('Can you beat me?  ·  shadematch.app'), S / 2, 1010);
+  ctx.fillText(t('Can you beat me?  ·  app.shadestudy.com'), S / 2, 1010);
 
   return new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
 }

@@ -3,7 +3,7 @@
 import { startTimer, stopTimer, resetTimerDisplay } from './timer.js';
 import { captureEnv } from './env_capture.js?v=20260508-qc2';
 import { sfx } from './sfx.js?v=20260710';
-import { shareCard } from './share-card.js?v=20260709-share1';
+import { shareCard } from './share-card.js?v=20260831-domain1';
 
 console.log('✅ main.js loaded');
 let sessionLogs = [];

@@ -2,5 +2,19 @@
   "⚔️ {name} challenges you: {color}": "⚔️ {name} kihívott: {color}",
   "a secret colour": "egy titkos szín",
   "Can you beat it? Play in your browser — no install, no sign-up.": "Meg tudod verni? Játssz a böngészőben — telepítés és regisztráció nélkül.",
-  "Can you beat it?": "Meg tudod verni?"
+  "Can you beat it?": "Meg tudod verni?",
+  "Share ShadeMatch": "ShadeMatch megosztása",
+  "Share ShadeMatch — scan to play": "ShadeMatch megosztása — szkenneld be a játékhoz",
+  "A colour-mixing game and colour-vision research project from Semmelweis University.": "Színkeverő játék és színlátás-kutatás a Semmelweis Egyetemtől.",
+  "Scan. Mix. Match.": "Szkenneld. Keverd. Találd el.",
+  "Point your phone's camera at the QR code": "Irányítsd a telefonod kameráját a QR-kódra",
+  "ShadeMatch opens in your browser — there is nothing to install.": "A ShadeMatch a böngészőben nyílik meg — semmit sem kell telepítened.",
+  "QR code that opens ShadeMatch": "A ShadeMatch alkalmazást megnyitó QR-kód",
+  "Open ShadeMatch": "ShadeMatch megnyitása",
+  "Share": "Megosztás",
+  "Copy link": "Link másolása",
+  "Link copied.": "Link kimásolva.",
+  "Could not copy the link. Select and copy it manually.": "Nem sikerült kimásolni a linket. Jelöld ki és másold ki kézzel.",
+  "Try to match real paint colours by mixing five pigments. Play instantly in your browser.": "Próbálj öt pigment keverésével valódi festékszíneket eltalálni. Játssz azonnal a böngészőben.",
+  "Back to ShadeMatch": "Vissza a ShadeMatchhez"
 }

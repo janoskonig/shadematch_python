@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('Share ShadeMatch — scan to play') }}{% endblock %}
+
+{% block og %}
+<meta name="description" content="{{ t('A colour-mixing game and colour-vision research project from Semmelweis University.') }}">
+<meta property="og:site_name" content="ShadeMatch">
+<meta property="og:title" content="{{ t('Share ShadeMatch — scan to play') }}">
+<meta property="og:description" content="{{ t('A colour-mixing game and colour-vision research project from Semmelweis University.') }}">
+<meta property="og:type" content="website">
+<meta property="og:url" content="{{ url_for('main.share_page', _external=True) }}">
+<meta property="og:image" content="{{ url_for('static', filename='icons/icon-512.png', _external=True) }}">
+<meta name="twitter:card" content="summary">
+{% endblock %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/share.css') }}?v=20260831a">
+{% endblock %}
+
+{% block content %}
+<main class="share-page">
+  <div class="share-orb share-orb--red" aria-hidden="true"></div>
+  <div class="share-orb share-orb--yellow" aria-hidden="true"></div>
+  <div class="share-orb share-orb--blue" aria-hidden="true"></div>
+
+  <a class="share-back" href="/" aria-label="{{ t('Back to ShadeMatch') }}">← {{ t('Back to ShadeMatch') }}</a>
+
+  <section class="share-card" aria-labelledby="share-title">
+    <div class="share-brand">
+      <img src="{{ url_for('static', filename='icons/icon-192.png') }}" alt="" width="64" height="64">
+      <span>ShadeMatch</span>
+    </div>
+
+    <p class="share-kicker">{{ t('Scan. Mix. Match.') }}</p>
+    <h1 id="share-title">{{ t("Point your phone's camera at the QR code") }}</h1>
+    <p class="share-lead">{{ t('ShadeMatch opens in your browser — there is nothing to install.') }}</p>
+
+    <a class="share-qr" href="{{ app_url }}" aria-label="{{ t('Open ShadeMatch') }}">
+      <img src="{{ url_for('main.share_qr_code') }}"
+           width="280" height="280"
+           alt="{{ t('QR code that opens ShadeMatch') }}">
+    </a>
+
+    <div class="share-url-row">
+      <a class="share-url" href="{{ app_url }}">app.shadestudy.com</a>
+      <button class="share-copy" type="button" id="copyShareLink" aria-label="{{ t('Copy link') }}" title="{{ t('Copy link') }}">
+        <svg aria-hidden="true" viewBox="0 0 24 24" width="20" height="20"><path d="M8 7V5a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2M5 8h9a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+
+    <div class="share-actions">
+      <a class="btn btn-primary btn-lg" href="{{ app_url }}">{{ t('Open ShadeMatch') }} <span aria-hidden="true">→</span></a>
+      <button class="btn btn-secondary btn-lg" type="button" id="nativeShareButton">{{ t('Share') }}</button>
+    </div>
+
+    <p class="share-status" id="shareStatus" role="status" aria-live="polite"></p>
+  </section>
+
+  <p class="share-footnote">S.H.A.D.E. · Semmelweis University · SE RKEB 167/2025</p>
+</main>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+window.SHARE_PAGE = {
+  url: {{ app_url|tojson }},
+  title: 'ShadeMatch',
+  text: {{ t('Try to match real paint colours by mixing five pigments. Play instantly in your browser.')|tojson }},
+  copied: {{ t('Link copied.')|tojson }},
+  copyFailed: {{ t('Could not copy the link. Select and copy it manually.')|tojson }}
+};
+</script>
+<script src="{{ url_for('static', filename='share-page.js') }}?v=20260831a"></script>
+{% endblock %}

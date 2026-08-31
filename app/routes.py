@@ -5930,6 +5930,40 @@ def research_page():
     return render_template('research.html', stats=_public_research_stats())
 
 
+SHADEMATCH_APP_URL = 'https://app.shadestudy.com/'
+
+
+@main.route('/share')
+def share_page():
+    """Public landing page for sharing ShadeMatch in person or online."""
+    return render_template('share.html', app_url=SHADEMATCH_APP_URL)
+
+
+@main.route('/share/qr.svg')
+def share_qr_code():
+    """Serve a crisp, printable QR code without relying on a third party."""
+    from io import BytesIO
+    import qrcode
+    import qrcode.image.svg
+
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_Q,
+        box_size=10,
+        border=4,
+    )
+    qr.add_data(SHADEMATCH_APP_URL)
+    qr.make(fit=True)
+    image = qr.make_image(image_factory=qrcode.image.svg.SvgPathImage)
+    output = BytesIO()
+    image.save(output)
+    return Response(
+        output.getvalue(),
+        mimetype='image/svg+xml',
+        headers={'Cache-Control': 'public, max-age=86400'},
+    )
+
+
 @main.route('/ishihara-test')
 def ishihara_test():
     from flask import make_response
