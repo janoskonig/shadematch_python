@@ -480,6 +480,66 @@ def test_empty_cohort(app):
 
 
 # --------------------------------------------------------------------------- #
+# /live: everyone active recently, whatever day they registered
+# --------------------------------------------------------------------------- #
+def test_hours_are_clamped():
+    assert hetfo.resolve_hours(None) == 24
+    assert hetfo.resolve_hours('x') == 24
+    assert hetfo.resolve_hours('0') == 1
+    assert hetfo.resolve_hours('999') == 168
+    assert hetfo.resolve_hours(6) == 6
+    ctx = hetfo.live_page_context('6', '10')
+    assert ctx['kind'] == 'live' and ctx['page'] == 'live' and ctx['hours'] == 6
+    assert ctx['api_url'] == '/api/live?hours=6' and ctx['refresh_seconds'] == 10
+    assert ctx['title_key'] == 'Live — everyone playing now'
+    assert hetfo.page_context(COHORT_DAY)['api_url'] == '/api/hetfo/live?date=2026-08-31'
+
+
+def test_global_payload_covers_everyone_active_in_the_window(app):
+    from app import db
+    with app.app_context():
+        data = hetfo.build_global_payload(24, now=NOW)
+        db.session.remove()
+    assert data['scope'] == {'kind': 'live', 'hours': 24, 'since': '2026-09-06T10:00:00Z'}
+    # AAAAA1 (rounds today), FFFFF6 (calibrating), EEEEE5 (opened the app);
+    # GGGGG7 last played five days ago and CCCCC3 never — both out.
+    assert [r['user_id'] for r in data['users']] == ['AAAAA1', 'FFFFF6', 'EEEEE5']
+    s = data['summary']
+    assert s['registered'] == 3 and s['online_now'] == 2
+    assert s['new_today'] == 0 and s['returning'] == 3
+    a = _row(data, 'AAAAA1')
+    assert a['registered_day'] == '2026-08-31' and a['new_today'] is False
+    assert a['came_back'] is True            # registered 08-31, played today
+    assert a['rounds'] == 6                  # totals stay all-time, not window-bound
+    assert a['activity']['kind'] == 'mixing'
+    hrs = data['timeline']['hours']
+    assert hrs['hours'] == 24 and len(hrs['points']) == 24
+    assert hrs['points'][0] == {'t': '2026-09-06T11:00:00Z', 'label': '13:00', 'rounds': 0, 'perfect': 0, 'players': 0}
+    assert hrs['points'][-1]['t'] == '2026-09-07T10:00:00Z' and hrs['points'][-1]['label'] == '12:00'
+    assert [(p['label'], p['rounds'], p['perfect']) for p in hrs['points'] if p['rounds']] == [('11:00', 2, 1)]
+    assert 'window_utc' not in data['cohort'] and data['cohort']['tz'] == 'Europe/Budapest'
+    assert data['live']['feed'][0]['kind'] == 'calibration_started'
+
+
+def test_global_payload_widens_with_the_window(app):
+    from app import db
+    with app.app_context():
+        week = hetfo.build_global_payload(168, now=NOW)
+        hour = hetfo.build_global_payload(1, now=NOW)
+        db.session.remove()
+    # A week back (since 08-31 10:00 UTC) reaches the Wednesday player's only
+    # round (09-02) and DDDDD4's registration (08-31 22:00 UTC) — registering
+    # counts as being heard from — but not BBBBB2, who registered just before.
+    assert {r['user_id'] for r in week['users']} == {'AAAAA1', 'FFFFF6', 'EEEEE5', 'GGGGG7', 'DDDDD4'}
+    assert _row(week, 'GGGGG7')['came_back'] is False
+    assert _row(week, 'DDDDD4')['activity'] == {'kind': 'never'}
+    assert len(week['timeline']['hours']['points']) == 168
+    # One hour back: everything that made these three "active" is within it.
+    assert [r['user_id'] for r in hour['users']] == ['AAAAA1', 'FFFFF6', 'EEEEE5']
+    assert len(hour['timeline']['hours']['points']) == 1
+
+
+# --------------------------------------------------------------------------- #
 # HTTP routes
 # --------------------------------------------------------------------------- #
 @pytest.fixture()
@@ -582,6 +642,32 @@ def test_mid_round_flush_lands_in_the_live_trajectory(client, app):
     assert g['activity']['initial_delta_e'] == 38.0
     assert g['activity']['steps'] == 3
     assert data['summary']['online_mixing'] == 1
+
+    # Leave the shared database as we found it (other tests reason about
+    # who was active when).
+    from app.models import MixingAttempt, MixingAttemptEvent
+    with app.app_context():
+        MixingAttemptEvent.query.filter_by(attempt_uuid='att-live-g').delete()
+        MixingAttempt.query.filter_by(attempt_uuid='att-live-g').delete()
+        db.session.commit()
+        db.session.remove()
+
+
+def test_live_page_and_api(client):
+    html = client.get('/live').get_data(as_text=True)
+    assert '"page": "live"' in html and '"kind": "live"' in html and '"hours": 24' in html
+    assert '"api_url": "/api/live?hours=24"' in html
+    assert 'Live — everyone playing now' in html
+    assert 'id="hfHours"' in html and 'id="hfChartHours"' in html and 'id="hfChartDay"' not in html
+    assert '"hours": 168' in client.get('/live?hours=999').get_data(as_text=True)
+    assert 'Élő — mindenki, aki most játszik' in client.get('/live?lang=hu&hours=6').get_data(as_text=True)
+
+    data = client.get('/api/live').get_json()
+    assert data['status'] == 'success'
+    assert data['scope']['kind'] == 'live' and data['scope']['hours'] == 24
+    assert data['timeline']['hours']['hours'] == 24 and len(data['timeline']['hours']['points']) == 24
+    assert client.get('/api/live?hours=3').get_json()['scope']['hours'] == 3
+    assert client.get('/api/live?hours=abc').get_json()['scope']['hours'] == 24
 
 
 def test_szerda_page_follows_the_wednesday_session(client):
