@@ -134,7 +134,7 @@
   "email verified": "e-mail megerősítve",
   "{n} awards": "{n} kitüntetés",
   "round {r}/{n}": "{r}/{n}. kör",
-  "{n} done": "{n} kész",
+  "{n} matches done": "{n} kész meccs",
   "mixing {color}": "{color} keverése",
   "a colour": "egy szín",
   "calibrating": "kalibrál",
