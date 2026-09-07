@@ -326,6 +326,12 @@ async function flushTelemetry({ finalize = false, endReason = null, terminalBoun
     return;
   }
 
+  // Let a mid-round (live) flush land first so the two never race on the same
+  // seq range. The unload beacon cannot wait — it just sends what is left.
+  if (!useBeacon && telemetryLiveFlushPromise) {
+    try { await telemetryLiveFlushPromise; } catch { /* the live flush keeps its own buffer */ }
+  }
+
   if (finalize && !telemetryAttempt.end_reason) {
     telemetryAttempt.end_reason = endReason || 'abandoned';
     telemetryAttempt.attempt_ended_client_ts_ms = nowClientTsMs();
@@ -380,6 +386,59 @@ async function flushTelemetry({ finalize = false, endReason = null, terminalBoun
     // Keep buffer for next flush retry.
   }
 }
+
+// ── Mid-round telemetry flush (feeds the live dashboards) ─────────────────
+// Steps used to leave the device only when the round ended, so a live view
+// could never see the ΔE a player is at right now. Every few seconds, ship the
+// settled prefix of the buffer. An action's ΔE arrives asynchronously from
+// /calculate, so a fresh action waits a moment before it is sent — the ingest
+// endpoint rejects a later re-send of the same seq with different content.
+// The end-of-round flush and the unload beacon work as before; they simply
+// have less left to send.
+const TELEMETRY_LIVE_FLUSH_MS = 8000;
+const TELEMETRY_SETTLE_MS = 4000;
+let telemetryLiveFlushPromise = null;
+
+function settledTelemetryPrefix(nowMs) {
+  let n = 0;
+  for (const ev of telemetryEventBuffer) {
+    const awaitingDelta = ev.action_type != null && ev.delta_e_after == null
+      && (nowMs - ev.client_ts_ms) < TELEMETRY_SETTLE_MS;
+    if (awaitingDelta) break;
+    n += 1;
+  }
+  return n;
+}
+
+function flushTelemetryLive() {
+  if (!telemetryAttempt || telemetryAttempt.end_reason || telemetryLiveFlushPromise) return;
+  if (document.visibilityState === 'hidden') return;   // the hidden handler beacons everything
+  if (!getAuthenticatedUserId()) return;
+  const n = settledTelemetryPrefix(nowClientTsMs());
+  if (n === 0) return;
+  const attempt = telemetryAttempt;
+  const events = telemetryEventBuffer.slice(0, n);
+  const payload = { attempt: serializeAttemptHeader(attempt), events };
+  telemetryLiveFlushPromise = (async () => {
+    try {
+      const res = await fetch(MIXING_TELEMETRY_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (res.ok && telemetryAttempt === attempt) {
+        // Drop exactly what was sent; anything enqueued meanwhile stays.
+        telemetryEventBuffer = telemetryEventBuffer.filter((ev) => !events.includes(ev));
+      }
+    } catch {
+      // Keep the buffer; the next flush retries (ingest is idempotent).
+    } finally {
+      telemetryLiveFlushPromise = null;
+    }
+  })();
+}
+
+setInterval(flushTelemetryLive, TELEMETRY_LIVE_FLUSH_MS);
 
 // ── Analytics ─────────────────────────────────────────────────────────────
 const ALLOWED_EVENTS = new Set([

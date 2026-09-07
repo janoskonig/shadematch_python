@@ -74,9 +74,16 @@ RECENT_WINDOW_SEC = 3600         # "active in the last hour"
 OPEN_ATTEMPT_MAX_AGE_SEC = 1800  # an unfinished attempt older than this is a closed tab, not play
 DAY_BUCKET_MIN = 15              # registration-day activity resolution
 SESSION_TIME_CAP_SEC = 1800.0    # per-round cap on play time, as on the leaderboard
-REFRESH_SECONDS_DEFAULT = 15
-REFRESH_SECONDS_MIN = 5
+REFRESH_SECONDS_DEFAULT = 5
+REFRESH_SECONDS_MIN = 3
 REFRESH_SECONDS_MAX = 120
+
+# The live layer: what happened in the last little while, at minute resolution.
+LIVE_LOOKBACK_SEC = 2 * 3600     # the event feed and per-player "last round" look back this far
+LIVE_FEED_MAX = 80               # newest events kept in the feed
+LIVE_MINUTES = 60                # rounds-per-minute series length
+LIVE_WINDOWS_MIN = (5, 15, 60)   # rolling "rounds in the last N minutes" tiles
+TRAJECTORY_MAX = 24              # ΔE steps kept per open attempt (the card sparkline)
 
 
 # ── Time zone & cohort day ───────────────────────────────────────────────────
@@ -226,6 +233,10 @@ class _LastSeen:
     def get(self, user_id):
         return self._best.get(user_id, (None, None))
 
+    def latest(self):
+        """The most recent sighting across the whole cohort, or None."""
+        return max((dt for dt, _src in self._best.values()), default=None)
+
 
 # ── Queries (all restricted to the cohort's ids) ─────────────────────────────
 
@@ -358,23 +369,60 @@ def _recent_step_stamps(ids, now):
     return {r.uid: r.last_step for r in rows}
 
 
-def _last_event_per_attempt(attempt_uuids):
-    """Latest step (highest seq) carrying a post-action ΔE, per open attempt."""
+def _trajectories(attempt_uuids):
+    """Post-action ΔE per step, in seq order, per open attempt (the last
+    TRAJECTORY_MAX of them). The game client flushes steps mid-round every few
+    seconds, so this is what the player sees on screen, give or take a flush."""
     if not attempt_uuids:
         return {}
     rows = (
-        MixingAttemptEvent.query
+        db.session.query(MixingAttemptEvent.attempt_uuid, MixingAttemptEvent.delta_e_after)
         .filter(
             MixingAttemptEvent.attempt_uuid.in_(attempt_uuids),
             MixingAttemptEvent.delta_e_after.isnot(None),
         )
-        .order_by(MixingAttemptEvent.attempt_uuid.asc(), MixingAttemptEvent.seq.desc())
+        .order_by(MixingAttemptEvent.attempt_uuid.asc(), MixingAttemptEvent.seq.asc())
         .all()
     )
-    latest = {}
-    for r in rows:
-        latest.setdefault(r.attempt_uuid, r)
-    return latest
+    out = {}
+    for uuid, de in rows:
+        out.setdefault(uuid, []).append(round(float(de), 2))
+    return {uuid: vals[-TRAJECTORY_MAX:] for uuid, vals in out.items()}
+
+
+def _recent_app_opens(ids, since):
+    rows = (
+        db.session.query(
+            AnalyticsEvent.user_id,
+            func.coalesce(AnalyticsEvent.received_at, AnalyticsEvent.ts).label('t'),
+        )
+        .filter(
+            AnalyticsEvent.user_id.in_(ids),
+            AnalyticsEvent.event == 'app_opened',
+            AnalyticsEvent.ts >= since,
+        )
+        .all()
+    )
+    return [(uid, t) for uid, t in rows if t is not None]
+
+
+def _recent_calibration_sessions(ids, since):
+    return (
+        CalibrationSession.query
+        .filter(
+            CalibrationSession.user_id.in_(ids),
+            (CalibrationSession.started_at >= since) | (CalibrationSession.ended_at >= since),
+        )
+        .all()
+    )
+
+
+def _recent_completed_matches(ids, since):
+    return (
+        db.session.query(Match.user_id, Match.completed_at)
+        .filter(Match.user_id.in_(ids), Match.status == 'completed', Match.completed_at >= since)
+        .all()
+    )
 
 
 def _analytics_stamps(ids, start):
@@ -462,9 +510,17 @@ def _calibration_by_user(ids, now):
 
 
 def _timeline_rows(ids, start):
+    """Every saved round of the cohort since its registration day: feeds the
+    two history charts, the rolling live windows and each player's last round."""
     return (
-        db.session.query(MixingSession.user_id, MixingSession.timestamp, MixingSession.match_category)
+        db.session.query(
+            MixingSession.user_id, MixingSession.timestamp, MixingSession.match_category,
+            MixingSession.delta_e, MixingSession.time_sec, MixingSession.skipped,
+            MixingSession.target_color_id,
+            MixingSession.target_r, MixingSession.target_g, MixingSession.target_b,
+        )
         .filter(MixingSession.user_id.in_(ids), MixingSession.timestamp >= start)
+        .order_by(MixingSession.timestamp.asc())
         .all()
     )
 
@@ -484,7 +540,8 @@ def _day_series(rows, start, end, tz):
     n_buckets = max(1, int((end - start) / bucket))
     rounds = [0] * n_buckets
     players = [set() for _ in range(n_buckets)]
-    for uid, ts, _category in rows:
+    for row in rows:
+        uid, ts = row[0], row[1]
         if ts is None or ts < start or ts >= end:
             continue
         i = min(n_buckets - 1, int((ts - start) / bucket))
@@ -506,7 +563,8 @@ def _daily_series(rows, day, today_local, tz):
     """Rounds, completed rounds and distinct players per local calendar day from
     the cohort day through today (zero-filled), for the retention view."""
     per_day = {}
-    for uid, ts, category in rows:
+    for row in rows:
+        uid, ts, category = row[0], row[1], row[2]
         if ts is None:
             continue
         d = utc_to_local(ts, tz).date()
@@ -530,6 +588,115 @@ def _daily_series(rows, day, today_local, tz):
     return {'points': points}
 
 
+# ── The live layer ───────────────────────────────────────────────────────────
+
+def _round_dict(row, now, target_names):
+    """A saved round as the feed / card shows it."""
+    name, name_hu = target_names.get(row.target_color_id, (None, None))
+    return {
+        't': _iso(row.timestamp),
+        'sec_ago': _seconds_since(now, row.timestamp),
+        'category': row.match_category,
+        'delta_e': _round(row.delta_e),
+        'time_sec': _round(row.time_sec, 1),
+        'skipped': bool(row.skipped),
+        'target': name,
+        'target_hu': name_hu,
+        'target_rgb': ([row.target_r, row.target_g, row.target_b]
+                       if row.target_r is not None else None),
+    }
+
+
+def _live_windows(recent_rounds, seen, ids, now):
+    """Rolling 'last N minutes' tallies: rounds finished, who finished them,
+    and who was active at all (any sighting) in the window."""
+    out = []
+    for minutes in LIVE_WINDOWS_MIN:
+        since = now - timedelta(minutes=minutes)
+        rows = [r for r in recent_rounds if r.timestamp is not None and r.timestamp >= since]
+        des = [float(r.delta_e) for r in rows if r.delta_e is not None]
+        active = 0
+        for uid in ids:
+            stamp, _source = seen.get(uid)
+            if stamp is not None and stamp >= since:
+                active += 1
+        out.append({
+            'minutes': minutes,
+            'rounds': len(rows),
+            'completed': sum(1 for r in rows if r.match_category in COMPLETED_MATCH_CATEGORIES),
+            'perfect': sum(1 for r in rows if r.match_category == 'perfect'),
+            'players': len({r.user_id for r in rows}),
+            'active_players': active,
+            'mean_delta_e': round(sum(des) / len(des), 2) if des else None,
+        })
+    return out
+
+
+def _minute_series(recent_rounds, now, tz):
+    """Rounds finished per minute over the last LIVE_MINUTES minutes, ending
+    with the current (still running) minute."""
+    end_minute = now.replace(second=0, microsecond=0)
+    first = end_minute - timedelta(minutes=LIVE_MINUTES - 1)
+    rounds = [0] * LIVE_MINUTES
+    perfect = [0] * LIVE_MINUTES
+    players = [set() for _ in range(LIVE_MINUTES)]
+    for r in recent_rounds:
+        if r.timestamp is None or r.timestamp < first:
+            continue
+        i = int((r.timestamp - first).total_seconds() // 60)
+        if i < 0 or i >= LIVE_MINUTES:
+            continue
+        rounds[i] += 1
+        if r.match_category == 'perfect':
+            perfect[i] += 1
+        players[i].add(r.user_id)
+    points = []
+    for i in range(LIVE_MINUTES):
+        t0 = first + timedelta(minutes=i)
+        points.append({
+            't': _iso(t0),
+            'label': utc_to_local(t0, tz).strftime('%H:%M'),
+            'rounds': rounds[i],
+            'perfect': perfect[i],
+            'players': len(players[i]),
+        })
+    return {'points': points}
+
+
+def _live_feed(users, recent_rounds, app_opens, calib_sessions, completed_matches,
+               target_names, now, since):
+    """Newest-first log of what the cohort did in the last LIVE_LOOKBACK_SEC:
+    rounds finished (with the result), app opens, calibration blocks started
+    and finished, matches completed, and registrations (live on the day)."""
+    names = {u.id: u.nickname for u in users}
+    items = []
+
+    def add(t, uid, kind, **detail):
+        if t is None or t < since or t > now:
+            return
+        item = {'t': _iso(t), 'sec_ago': _seconds_since(now, t), 'user_id': uid,
+                'nickname': names.get(uid), 'kind': kind}
+        item.update(detail)
+        items.append((t, item))
+
+    for r in recent_rounds:
+        add(r.timestamp, r.user_id, 'round', round=_round_dict(r, now, target_names))
+    for uid, t in app_opens:
+        add(t, uid, 'app_opened')
+    for s in calib_sessions:
+        add(s.started_at, s.user_id, 'calibration_started')
+        if s.ended_at is not None:
+            add(s.ended_at, s.user_id, 'calibration_finished',
+                pt=_round(s.perceptibility_de), at=_round(s.acceptability_de))
+    for uid, t in completed_matches:
+        add(t, uid, 'match_completed')
+    for u in users:
+        add(u.created_at, u.id, 'registered')
+
+    items.sort(key=lambda pair: pair[0], reverse=True)
+    return [item for _t, item in items[:LIVE_FEED_MAX]]
+
+
 # ── Payload ──────────────────────────────────────────────────────────────────
 
 def build_live_payload(day: date, now: datetime | None = None) -> dict:
@@ -542,6 +709,7 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
 
     users = _cohort_users(start, end)
     ids = [u.id for u in users]
+    live_since = now - timedelta(seconds=LIVE_LOOKBACK_SEC)
 
     if ids:
         progress = _progress_by_user(ids)
@@ -551,19 +719,32 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
         attempts = _attempts_by_user(ids)
         open_attempts = _open_attempts(ids, now)
         step_stamps = _recent_step_stamps(ids, now)
-        last_events = _last_event_per_attempt([a.attempt_uuid for a in open_attempts.values()])
+        trajectories = _trajectories([a.attempt_uuid for a in open_attempts.values()])
         analytics = _analytics_stamps(ids, start)
         (calib, calib_last_trial, calib_thresholds,
          calib_open, calib_open_progress) = _calibration_by_user(ids, now)
         timeline_rows = _timeline_rows(ids, start)
-        target_names = _target_names({a.target_color_id for a in open_attempts.values()
-                                      if a.target_color_id is not None})
+        recent_rounds = [r for r in timeline_rows
+                         if r.timestamp is not None and r.timestamp >= live_since]
+        app_opens = _recent_app_opens(ids, live_since)
+        calib_recent = _recent_calibration_sessions(ids, live_since)
+        matches_recent = _recent_completed_matches(ids, live_since)
+        target_ids = {a.target_color_id for a in open_attempts.values()
+                      if a.target_color_id is not None}
+        target_ids |= {r.target_color_id for r in recent_rounds if r.target_color_id is not None}
+        target_names = _target_names(target_ids)
     else:
         progress = sessions = matches = awards = attempts = {}
-        open_attempts = step_stamps = last_events = analytics = {}
+        open_attempts = step_stamps = trajectories = analytics = {}
         calib = calib_last_trial = calib_thresholds = calib_open = calib_open_progress = {}
-        timeline_rows = []
+        timeline_rows = recent_rounds = app_opens = calib_recent = matches_recent = []
         target_names = {}
+
+    recent_by_user = {}
+    for r in recent_rounds:
+        recent_by_user.setdefault(r.user_id, []).append(r)
+    since_15 = now - timedelta(minutes=15)
+    since_60 = now - timedelta(minutes=60)
 
     seen = _LastSeen()
     for uid, stamp in step_stamps.items():
@@ -583,7 +764,8 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
     for uid, up in progress.items():
         seen.bump(uid, up.updated_at, 'round')
 
-    came_back_ids = {uid for uid, ts, _c in timeline_rows if ts is not None and ts >= end}
+    came_back_ids = {r.user_id for r in timeline_rows
+                     if r.timestamp is not None and r.timestamp >= end}
 
     rows = []
     genders = {}
@@ -610,8 +792,15 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
             last_step = step_stamps.get(u.id) or open_attempt.attempt_started_server_ts
             step_ago = _seconds_since(now, last_step)
             if step_ago is not None and step_ago <= ONLINE_WINDOW_SEC:
-                ev = last_events.get(open_attempt.attempt_uuid)
                 name, name_hu = target_names.get(open_attempt.target_color_id, (None, None))
+                trajectory = trajectories.get(open_attempt.attempt_uuid, [])
+                initial_de = _round(open_attempt.initial_delta_e)
+                # Current ΔE: the last flushed step; else the header's running
+                # value (the client re-posts it with every mid-round flush);
+                # else the untouched starting distance.
+                header_de = _round(open_attempt.final_delta_e)
+                current_de = trajectory[-1] if trajectory else (
+                    header_de if header_de is not None else initial_de)
                 activity = {
                     'kind': 'mixing',
                     'target': name,
@@ -620,7 +809,9 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
                         [open_attempt.target_r, open_attempt.target_g, open_attempt.target_b]
                         if open_attempt.target_r is not None else None
                     ),
-                    'delta_e': _round(ev.delta_e_after if ev is not None else open_attempt.initial_delta_e),
+                    'delta_e': current_de,
+                    'initial_delta_e': initial_de,
+                    'trajectory': trajectory,
                     'steps': int(open_attempt.num_steps or 0),
                     'since_sec': _seconds_since(now, open_attempt.attempt_started_server_ts),
                 }
@@ -639,6 +830,7 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
             activity = {'kind': 'online'}
 
         threshold = calib_thresholds.get(u.id)
+        mine = recent_by_user.get(u.id, [])
         rows.append({
             'user_id': u.id,
             'nickname': u.nickname,
@@ -666,6 +858,9 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
             'calibration_pt': _round(threshold.perceptibility_de) if threshold else None,
             'calibration_at': _round(threshold.acceptability_de) if threshold else None,
             'came_back': u.id in came_back_ids,
+            'last_round': _round_dict(mine[-1], now, target_names) if mine else None,
+            'rounds_last_15m': sum(1 for r in mine if r.timestamp >= since_15),
+            'rounds_last_60m': sum(1 for r in mine if r.timestamp >= since_60),
             'last_seen': _iso(last_seen),
             'last_seen_sec_ago': ago,
             'last_seen_source': source,
@@ -695,6 +890,9 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
         'played': len(played),
         'online_now': sum(1 for r in rows if r['online']),
         'active_last_hour': sum(1 for r in rows if r['recent']),
+        'online_mixing': sum(1 for r in rows if r['activity']['kind'] == 'mixing'),
+        'online_calibrating': sum(1 for r in rows if r['activity']['kind'] == 'calibrating'),
+        'online_in_app': sum(1 for r in rows if r['activity']['kind'] == 'online'),
         'came_back': sum(1 for r in rows if r['came_back']),
         'rounds': sum(r['rounds'] for r in rows),
         'completed': sum(r['completed'] for r in rows),
@@ -728,6 +926,15 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
             'recent_window_sec': RECENT_WINDOW_SEC,
         },
         'summary': summary,
+        'live': {
+            'lookback_sec': LIVE_LOOKBACK_SEC,
+            'last_activity': _iso(seen.latest()),
+            'last_activity_sec_ago': _seconds_since(now, seen.latest()),
+            'windows': _live_windows(recent_rounds, seen, ids, now),
+            'minutes': _minute_series(recent_rounds, now, tz),
+            'feed': _live_feed(users, recent_rounds, app_opens, calib_recent, matches_recent,
+                               target_names, now, live_since),
+        },
         'users': rows,
         'timeline': {
             'day': _day_series(timeline_rows, start, end, tz),
@@ -738,7 +945,7 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
 
 # ── Short-lived cache (several admins polling at once share one query set) ──
 
-_CACHE_TTL_SEC = float(os.environ.get('HETFO_CACHE_SECONDS', '5') or 5)
+_CACHE_TTL_SEC = float(os.environ.get('HETFO_CACHE_SECONDS', '3') or 3)
 _cache_lock = threading.Lock()
 _cache = {}  # date iso -> (monotonic ts, payload)
 

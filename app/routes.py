@@ -2719,6 +2719,25 @@ def mixing_attempt_start_or_update():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+def _commit_ingest_with_retry(work):
+    """Run ``work()`` (header upsert and/or event ingest) and commit.
+
+    The game client now flushes steps mid-round as well as at the end of the
+    round, and the two can overlap on a slow connection: both carry the same
+    seq range, the first to commit wins and the second trips the unique
+    (attempt_uuid, seq) constraint at commit time. Roll back and run once
+    more — the rows now exist, so the ingest treats them as duplicates."""
+    try:
+        result = work()
+        db.session.commit()
+        return result
+    except IntegrityError:
+        db.session.rollback()
+        result = work()
+        db.session.commit()
+        return result
+
+
 @main.route('/api/mixing-attempt/events', methods=['POST'])
 def mixing_attempt_events():
     try:
@@ -2734,18 +2753,22 @@ def mixing_attempt_events():
         existing = MixingAttempt.query.get(attempt_uuid)
         if not existing:
             return jsonify({'status': 'error', 'message': 'unknown attempt_uuid'}), 404
-        if existing.user_id is None:
-            existing.user_id = user_id
-        elif existing.user_id != user_id:
+        if existing.user_id is not None and existing.user_id != user_id:
             return jsonify({
                 'status': 'error',
                 'code': 'AUTH_FORBIDDEN',
                 'message': 'attempt_uuid does not belong to the authenticated user',
             }), 403
 
-        result = _ingest_mixing_events(attempt_uuid, data.get('events'))
-        _refresh_mixing_attempt_num_steps(attempt_uuid)
-        db.session.commit()
+        def work():
+            row = MixingAttempt.query.get(attempt_uuid)
+            if row is not None and row.user_id is None:
+                row.user_id = user_id
+            ingested = _ingest_mixing_events(attempt_uuid, data.get('events'))
+            _refresh_mixing_attempt_num_steps(attempt_uuid)
+            return ingested
+
+        result = _commit_ingest_with_retry(work)
         return jsonify({'status': 'success', **result})
     except ValueError as ve:
         db.session.rollback()
@@ -2775,10 +2798,14 @@ def mixing_attempt_ingest():
             return jsonify({'status': 'error', 'message': 'attempt_uuid required'}), 400
 
         header['attempt_uuid'] = attempt_uuid
-        _upsert_attempt_header(header, authenticated_user_id=user_id)
-        result = _ingest_mixing_events(attempt_uuid, events)
-        _refresh_mixing_attempt_num_steps(attempt_uuid)
-        db.session.commit()
+
+        def work():
+            _upsert_attempt_header(header, authenticated_user_id=user_id)
+            ingested = _ingest_mixing_events(attempt_uuid, events)
+            _refresh_mixing_attempt_num_steps(attempt_uuid)
+            return ingested
+
+        result = _commit_ingest_with_retry(work)
         return jsonify({'status': 'success', **result})
     except PermissionError as pe:
         db.session.rollback()
