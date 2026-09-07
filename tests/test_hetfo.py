@@ -79,12 +79,42 @@ def test_refresh_seconds_are_clamped():
 def test_page_context_steps_a_week(monkeypatch):
     monkeypatch.delenv('HETFO_COHORT_DATE', raising=False)
     ctx = hetfo.page_context(COHORT_DAY, '20')
+    assert ctx['page'] == 'hetfo'
     assert ctx['prev'] == '2026-08-24'
     assert ctx['next'] == '2026-09-07'
     assert ctx['is_default'] is True
     assert ctx['refresh_seconds'] == 20
     assert ctx['tz'] == 'Europe/Budapest'
+    assert ctx['title_key'] == 'Monday cohort — live'
     assert hetfo.page_context(date(2026, 9, 7))['is_default'] is False
+
+
+def test_each_page_has_its_own_session_day(monkeypatch):
+    monkeypatch.delenv('HETFO_COHORT_DATE', raising=False)
+    monkeypatch.delenv('SZERDA_COHORT_DATE', raising=False)
+    assert hetfo.default_cohort_date('hetfo') == date(2026, 8, 31)
+    assert hetfo.default_cohort_date('szerda') == date(2026, 9, 2)
+    assert hetfo.normalize_page(' SZERDA ') == 'szerda'
+    assert hetfo.normalize_page('csutortok') == 'hetfo'
+    assert hetfo.normalize_page(None) == 'hetfo'
+    assert hetfo.default_cohort_date('csutortok') == date(2026, 8, 31)
+    monkeypatch.setenv('SZERDA_COHORT_DATE', '2026-09-09')
+    assert hetfo.default_cohort_date('szerda') == date(2026, 9, 9)
+    assert hetfo.default_cohort_date('hetfo') == date(2026, 8, 31)
+    assert hetfo.resolve_cohort_date(None, page='szerda') == date(2026, 9, 9)
+    assert hetfo.resolve_cohort_date('2026-09-02', page='szerda') == date(2026, 9, 2)
+
+
+def test_labels_follow_the_weekday_on_screen():
+    ctx = hetfo.page_context(date(2026, 9, 2), page='szerda')
+    assert ctx['page'] == 'szerda'
+    assert ctx['prev'] == '2026-08-26' and ctx['next'] == '2026-09-09'
+    assert (ctx['title_key'], ctx['prev_key'], ctx['next_key']) == (
+        'Wednesday cohort — live', 'Previous Wednesday', 'Next Wednesday')
+    # A Monday viewed on the Wednesday page is still labelled as a Monday.
+    assert hetfo.page_context(date(2026, 8, 31), page='szerda')['title_key'] == 'Monday cohort — live'
+    assert hetfo.page_context(date(2026, 9, 6))['title_key'] == 'Sunday cohort — live'
+    assert hetfo.page_context(date(2026, 9, 6))['prev_key'] == 'Previous Sunday'
 
 
 # --------------------------------------------------------------------------- #
@@ -111,6 +141,9 @@ def _seed(db):
     # Outside the cohort:
     user('BBBBB2', WINDOW_START - timedelta(seconds=1), 'male', date(1995, 1, 1))
     user('DDDDD4', WINDOW_END, 'female', date(1995, 1, 1))              # end is exclusive
+    # The Wednesday session (/szerda), two days later:
+    user('GGGGG7', datetime(2026, 9, 2, 10, 0), 'female', date(2001, 2, 3),
+         nickname='Szerda', locale='hu')
 
     db.session.add(TargetColor(id=1, name='Merlot', name_hu='bordó', color_type='gamut',
                                r=120, g=30, b=50, catalog_order=1))
@@ -131,6 +164,8 @@ def _seed(db):
             'big_difference')
     session('AAAAA1', datetime(2026, 9, 2, 10, 0), 0.9, 60.0, True, 'identical',
             'no_perceivable_difference')
+    # GGGGG7 (Wednesday cohort): one perfect round half an hour after signing up.
+    session('GGGGG7', datetime(2026, 9, 2, 10, 30), 0.0, 90.0, category='perfect')
     db.session.add(UserProgress(user_id='AAAAA1', xp=500, level=2, current_streak=2,
                                 longest_streak=2, updated_at=datetime(2026, 9, 2, 10, 0)))
     db.session.add(Match(user_id='AAAAA1', status='completed', current_round=10,
@@ -331,6 +366,25 @@ def test_daily_timeline_runs_from_the_cohort_day_to_today(payload):
     assert all(p['rounds'] == 0 and p['players'] == 0 for i, p in enumerate(days) if i not in (0, 2))
 
 
+def test_wednesday_cohort_is_a_separate_day(app):
+    from app import db
+    with app.app_context():
+        data = hetfo.build_live_payload(date(2026, 9, 2), now=NOW)
+        db.session.remove()
+    assert data['cohort']['window_utc'] == {
+        'start': '2026-09-01T22:00:00Z', 'end': '2026-09-02T22:00:00Z'}
+    assert [r['user_id'] for r in data['users']] == ['GGGGG7']
+    g = data['users'][0]
+    assert g['nickname'] == 'Szerda'
+    assert g['rounds'] == 1 and g['perfect'] == 1 and g['completed'] == 1
+    assert g['came_back'] is False
+    assert data['summary']['registered'] == 1 and data['summary']['played'] == 1
+    days = data['timeline']['days']['points']
+    assert [p['day'] for p in days] == [
+        (date(2026, 9, 2) + timedelta(days=i)).isoformat() for i in range(6)]
+    assert days[0] == {'day': '2026-09-02', 'rounds': 1, 'completed': 1, 'players': 1}
+
+
 def test_empty_cohort(app):
     from app import db
     with app.app_context():
@@ -396,3 +450,23 @@ def test_page_is_translated_for_hungarian_viewers(client):
     html = client.get('/hetfo?lang=hu').get_data(as_text=True)
     assert 'Hétfői kohorsz — élőben' in html
     assert 'Játékosok' in html
+
+
+def test_szerda_page_follows_the_wednesday_session(client):
+    html = client.get('/szerda').get_data(as_text=True)
+    assert '"page": "szerda"' in html
+    assert '"date": "2026-09-02"' in html
+    assert 'Wednesday cohort — live' in html
+    assert '/szerda?date=2026-08-26' in html and '/szerda?date=2026-09-09' in html
+    assert 'Szerdai kohorsz — élőben' in client.get('/szerda?lang=hu').get_data(as_text=True)
+
+    data = client.get('/api/hetfo/live?page=szerda').get_json()
+    assert data['status'] == 'success'
+    assert data['cohort']['date'] == '2026-09-02'
+    assert [r['user_id'] for r in data['users']] == ['GGGGG7']
+    # An explicit date always wins over the page's default day.
+    data = client.get('/api/hetfo/live?page=szerda&date=2026-08-31').get_json()
+    assert data['cohort']['date'] == '2026-08-31'
+    assert data['summary']['registered'] == 4
+    # Unknown page slugs fall back to the Monday session instead of erroring.
+    assert client.get('/api/hetfo/live?page=nope').get_json()['cohort']['date'] == '2026-08-31'

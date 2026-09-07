@@ -5082,35 +5082,49 @@ def stat_riport_visits():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-# ── /hetfo: live dashboard for one registration-day cohort ────────────────
-# "hétfő" = Monday. Built for the Monday recruitment session (2026-08-31, the
-# day the QR share page went live): who registered that day, who is playing
-# right now, and whether they came back. Cohort logic lives in app/hetfo.py.
+# ── /hetfo, /szerda: a live dashboard per registration-day cohort ─────────
+# "hétfő" = Monday, "szerda" = Wednesday: the two recruitment sessions
+# (2026-08-31, when the QR share page went live, and 2026-09-02). Each page
+# shows who registered that day, who is playing right now, and whether they
+# came back. Cohort logic lives in app/hetfo.py; the pages share one template
+# and one API.
 
-@main.route('/hetfo')
-def hetfo_page():
+def _cohort_page(slug):
     from . import hetfo
     date_error = False
     try:
-        day = hetfo.resolve_cohort_date(request.args.get('date'))
+        day = hetfo.resolve_cohort_date(request.args.get('date'), page=slug)
     except ValueError:
-        day = hetfo.default_cohort_date()
+        day = hetfo.default_cohort_date(slug)
         date_error = True
     return render_template(
         'hetfo.html',
-        cohort=hetfo.page_context(day, request.args.get('refresh'), date_error=date_error),
+        cohort=hetfo.page_context(day, request.args.get('refresh'),
+                                  date_error=date_error, page=slug),
     )
+
+
+@main.route('/hetfo')
+def hetfo_page():
+    return _cohort_page('hetfo')
+
+
+@main.route('/szerda')
+def szerda_page():
+    return _cohort_page('szerda')
 
 
 @main.route('/api/hetfo/live', methods=['GET'])
 def hetfo_live():
     """One JSON document per poll: cohort summary, one row per player with
     their live status, and the two activity timelines. ?date=YYYY-MM-DD picks
-    the cohort day (default: the Monday session). Cached for a few seconds so
-    several open dashboards share one query set."""
+    the cohort day; without it, ?page=hetfo|szerda picks that page's session
+    day (default: the Monday session). Cached for a few seconds so several
+    open dashboards share one query set."""
     from . import hetfo
+    page = hetfo.normalize_page(request.args.get('page'))
     try:
-        day = hetfo.resolve_cohort_date(request.args.get('date'))
+        day = hetfo.resolve_cohort_date(request.args.get('date'), page=page)
     except ValueError:
         return jsonify({'status': 'error', 'message': 'date must be YYYY-MM-DD'}), 400
     try:
