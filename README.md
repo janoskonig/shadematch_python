@@ -37,10 +37,11 @@ FLASK_ENV=development
 
 ## Live cohort dashboards (`/hetfo`, `/szerda`)
 
-`/hetfo` ("hétfő" = Monday) and `/szerda` ("szerda" = Wednesday) are live dashboards for the players who registered on one calendar day (Europe/Budapest): who is playing right now and what they are mixing, rounds/XP/level per player, whether they came back on later days, plus two activity charts. Both poll `/api/hetfo/live` every 15 s.
+`/hetfo` ("hétfő" = Monday) and `/szerda` ("szerda" = Wednesday) are live dashboards for the players who registered on one calendar day (Europe/Budapest). The page leads with the live play: who is online, a card per active player (the colour being mixed, its current ΔE and step-by-step ΔE path, calibration progress, last round), a newest-first event feed (rounds finished with their result, app opens, calibration blocks, matches, registrations), rolling "rounds in the last 5 / 15 / 60 min" tiles and a rounds-per-minute chart. Per-player totals sit in the table below; cohort totals, profile and history charts are collapsed at the bottom. Both pages poll `/api/hetfo/live` every 5 s.
 
+- The game client flushes mixing steps every ~8 s while a round is open (`flushTelemetryLive` in `static/main.js`), which is what makes the in-round ΔE visible; before, steps only left the device when the round ended.
 - Default cohort days: the two recruitment sessions, **2026-08-31** (`/hetfo`) and **2026-09-02** (`/szerda`). Override per deployment with `HETFO_COHORT_DATE` / `SZERDA_COHORT_DATE` (`YYYY-MM-DD`), or per visit with `?date=YYYY-MM-DD` (each page also steps a week at a time; the heading follows the weekday shown).
-- `?refresh=<seconds>` (5–120) changes the polling interval; `HETFO_CACHE_SECONDS` (default 5) is the server-side cache shared by everyone watching.
+- `?refresh=<seconds>` (3–120) changes the polling interval; `HETFO_CACHE_SECONDS` (default 3) is the server-side cache shared by everyone watching.
 - Like `/stat`, the pages have no login: they show player IDs, nicknames and gameplay figures, never emails or birthdates.
 
 ## Deployment on Render

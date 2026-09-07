@@ -164,6 +164,10 @@ def _seed(db):
             'big_difference')
     session('AAAAA1', datetime(2026, 9, 2, 10, 0), 0.9, 60.0, True, 'identical',
             'no_perceivable_difference')
+    # ... and two today: a skip 40 minutes ago, a perfect round 3 minutes ago.
+    session('AAAAA1', NOW - timedelta(minutes=40), 1.2, 80.0, True, 'acceptable',
+            'acceptable_difference')
+    session('AAAAA1', NOW - timedelta(minutes=3), 0.0, 45.0, category='perfect')
     # GGGGG7 (Wednesday cohort): one perfect round half an hour after signing up.
     session('GGGGG7', datetime(2026, 9, 2, 10, 30), 0.0, 90.0, category='perfect')
     db.session.add(UserProgress(user_id='AAAAA1', xp=500, level=2, current_streak=2,
@@ -266,13 +270,19 @@ def test_player_who_is_mixing_right_now(payload):
     assert a['registered_at'] == '2026-08-31T08:00:00Z'
     assert a['email_verified'] is True
     assert a['locale'] == 'hu'
-    assert a['rounds'] == 4
-    assert a['completed'] == 3          # perfect + acceptable + identical skips
-    assert a['perfect'] == 1
-    assert a['skipped'] == 3
+    assert a['rounds'] == 6
+    assert a['completed'] == 5          # 2 perfect + 2 acceptable + 1 identical skip
+    assert a['perfect'] == 2
+    assert a['skipped'] == 4
     assert a['best_delta_e'] == 0.0
-    assert a['mean_delta_e'] == pytest.approx(2.1)
-    assert a['play_time_sec'] == pytest.approx(120 + 200 + 1800 + 60)   # 3000 s capped to 30 min
+    assert a['mean_delta_e'] == pytest.approx(1.6)
+    assert a['play_time_sec'] == pytest.approx(120 + 200 + 1800 + 60 + 80 + 45)   # 3000 s capped
+    assert a['rounds_last_15m'] == 1 and a['rounds_last_60m'] == 2
+    assert a['last_round'] == {
+        't': '2026-09-07T09:57:00Z', 'sec_ago': 180, 'category': 'perfect', 'delta_e': 0.0,
+        'time_sec': 45.0, 'skipped': False, 'target': 'Merlot', 'target_hu': 'bordó',
+        'target_rgb': [120, 30, 50],
+    }
     assert a['xp'] == 500
     assert a['level'] == 3               # XP-derived (500 >= 400), above the stale stored 2
     assert a['current_streak'] == 2
@@ -287,7 +297,8 @@ def test_player_who_is_mixing_right_now(payload):
     assert a['last_seen_source'] == 'step'
     assert a['activity'] == {
         'kind': 'mixing', 'target': 'Merlot', 'target_hu': 'bordó',
-        'target_rgb': [120, 30, 50], 'delta_e': 3.2, 'steps': 7, 'since_sec': 60,
+        'target_rgb': [120, 30, 50], 'delta_e': 3.2, 'initial_delta_e': 40.0,
+        'trajectory': [3.2], 'steps': 7, 'since_sec': 60,
     }
 
 
@@ -302,6 +313,8 @@ def test_player_who_never_played(payload):
     assert c['online'] is False and c['recent'] is False
     assert c['activity'] == {'kind': 'never'}
     assert c['came_back'] is False
+    assert c['last_round'] is None
+    assert c['rounds_last_15m'] == 0 and c['rounds_last_60m'] == 0
 
 
 def test_player_seen_recently_via_analytics_with_a_finished_calibration(payload):
@@ -330,14 +343,15 @@ def test_summary(payload):
     assert s['email_verified'] == 1
     assert s['played'] == 1
     assert s['online_now'] == 2
+    assert s['online_mixing'] == 1 and s['online_calibrating'] == 1 and s['online_in_app'] == 0
     assert s['active_last_hour'] == 3
     assert s['came_back'] == 1
-    assert s['rounds'] == 4
-    assert s['completed'] == 3
-    assert s['perfect'] == 1
-    assert s['skipped'] == 3
-    assert s['play_time_sec'] == pytest.approx(2180.0)
-    assert s['median_rounds_per_player'] == 4
+    assert s['rounds'] == 6
+    assert s['completed'] == 5
+    assert s['perfect'] == 2
+    assert s['skipped'] == 4
+    assert s['play_time_sec'] == pytest.approx(2305.0)
+    assert s['median_rounds_per_player'] == 6
     assert s['matches_completed'] == 1
     assert s['matches_active'] == 1
     assert s['calibration_sessions'] == 1
@@ -363,7 +377,70 @@ def test_daily_timeline_runs_from_the_cohort_day_to_today(payload):
         (COHORT_DAY + timedelta(days=i)).isoformat() for i in range(8)]
     assert days[0] == {'day': '2026-08-31', 'rounds': 3, 'completed': 2, 'players': 1}
     assert days[2] == {'day': '2026-09-02', 'rounds': 1, 'completed': 1, 'players': 1}
-    assert all(p['rounds'] == 0 and p['players'] == 0 for i, p in enumerate(days) if i not in (0, 2))
+    assert days[7] == {'day': '2026-09-07', 'rounds': 2, 'completed': 2, 'players': 1}
+    assert all(p['rounds'] == 0 and p['players'] == 0 for i, p in enumerate(days) if i not in (0, 2, 7))
+
+
+# --------------------------------------------------------------------------- #
+# the live layer
+# --------------------------------------------------------------------------- #
+def test_rolling_windows_count_recent_rounds_and_active_players(payload):
+    windows = {w['minutes']: w for w in payload['live']['windows']}
+    assert list(windows) == [5, 15, 60]
+    assert windows[5] == {'minutes': 5, 'rounds': 1, 'completed': 1, 'perfect': 1, 'players': 1,
+                          'active_players': 2, 'mean_delta_e': 0.0}
+    assert windows[15]['rounds'] == 1 and windows[15]['active_players'] == 2
+    assert windows[60] == {'minutes': 60, 'rounds': 2, 'completed': 2, 'perfect': 1, 'players': 1,
+                           'active_players': 3, 'mean_delta_e': 0.6}
+
+
+def test_minute_series_covers_the_last_hour_ending_now(payload):
+    points = payload['live']['minutes']['points']
+    assert len(points) == 60
+    assert points[0]['t'] == '2026-09-07T09:01:00Z' and points[0]['label'] == '11:01'
+    assert points[-1]['t'] == '2026-09-07T10:00:00Z' and points[-1]['label'] == '12:00'
+    busy = [(p['label'], p['rounds'], p['players'], p['perfect']) for p in points if p['rounds']]
+    assert busy == [('11:20', 1, 1, 0), ('11:57', 1, 1, 1)]
+
+
+def test_feed_lists_the_last_two_hours_newest_first(payload):
+    feed = payload['live']['feed']
+    assert [(f['kind'], f['user_id'], f['sec_ago']) for f in feed] == [
+        ('calibration_started', 'FFFFF6', 100),
+        ('round', 'AAAAA1', 180),
+        ('app_opened', 'EEEEE5', 1800),
+        ('round', 'AAAAA1', 2400),
+    ]
+    assert feed[0]['nickname'] is None and feed[1]['nickname'] == 'Zsófi'
+    assert feed[1]['round']['category'] == 'perfect' and feed[1]['round']['target'] == 'Merlot'
+    assert feed[3]['round']['category'] == 'acceptable_difference'
+    assert feed[3]['round']['delta_e'] == 1.2
+    assert payload['live']['lookback_sec'] == 7200
+    assert payload['live']['last_activity'] == '2026-09-07T09:59:40Z'
+    assert payload['live']['last_activity_sec_ago'] == 20
+
+
+def test_registration_and_match_completion_show_up_in_the_feed(app):
+    # On the registration day itself the feed is where new sign-ups appear.
+    # Replayed at two moments of that morning: only what had happened by then.
+    from app import db
+
+    def feed_at(now):
+        with app.app_context():
+            data = hetfo.build_live_payload(COHORT_DAY, now=now)
+            db.session.remove()
+        return [(f['kind'], f['user_id']) for f in data['live']['feed']]
+
+    assert feed_at(datetime(2026, 8, 31, 9, 45)) == [
+        ('round', 'AAAAA1'),                # 09:40
+        ('round', 'AAAAA1'),                # 09:20
+        ('round', 'AAAAA1'),                # 09:10
+        ('registered', 'AAAAA1'),           # 08:00
+    ]
+    assert feed_at(datetime(2026, 8, 31, 11, 30)) == [
+        ('match_completed', 'AAAAA1'),      # 11:00
+        ('round', 'AAAAA1'),                # 09:40 (the rest is older than 2 h)
+    ]
 
 
 def test_wednesday_cohort_is_a_separate_day(app):
@@ -396,6 +473,10 @@ def test_empty_cohort(app):
     assert data['summary']['age'] == {'n': 0, 'median': None, 'min': None, 'max': None}
     assert len(data['timeline']['day']['points']) == 96
     assert len(data['timeline']['days']['points']) == 15    # 08-24 .. 09-07
+    assert data['live']['feed'] == []
+    assert data['live']['last_activity'] is None
+    assert [w['rounds'] for w in data['live']['windows']] == [0, 0, 0]
+    assert len(data['live']['minutes']['points']) == 60
 
 
 # --------------------------------------------------------------------------- #
@@ -450,6 +531,57 @@ def test_page_is_translated_for_hungarian_viewers(client):
     html = client.get('/hetfo?lang=hu').get_data(as_text=True)
     assert 'Hétfői kohorsz — élőben' in html
     assert 'Játékosok' in html
+
+
+def test_mid_round_flush_lands_in_the_live_trajectory(client, app):
+    """The game client posts mixing steps every few seconds while a round is
+    open (static/main.js flushTelemetryLive). The ingest must accept partial
+    batches, treat a re-sent prefix as duplicates, and the dashboard must then
+    show the ΔE path of the open round."""
+    def snap(de):
+        return {'drops': {'white': 1, 'black': 0, 'red': 1, 'yellow': 0, 'blue': 0},
+                'mixed_rgb': [200, 120, 110], 'delta_e': de, 'timer_sec': 12.5}
+
+    def ev(seq, de_before, de_after):
+        # Shaped like static/main.js enqueueTelemetryEvent: the client stamps
+        # step_index / time_since_prev_step_ms itself, so a re-send is identical.
+        return {'seq': seq, 'event_type': 'action_add', 'action_color': 'red',
+                'client_ts_ms': 1_700_000_000_000 + seq * 1000,
+                'state_before_json': snap(de_before), 'state_after_json': snap(de_after),
+                'metadata_json': {'step_id': seq}, 'step_index': seq,
+                'time_since_prev_step_ms': None if seq == 1 else 1000,
+                'action_type': 'add', 'amount': 1,
+                'delta_e_before': de_before, 'delta_e_after': de_after}
+
+    header = {'attempt_uuid': 'att-live-g', 'user_id': 'GGGGG7', 'target_color_id': 1,
+              'target_r': 120, 'target_g': 30, 'target_b': 50, 'initial_delta_e': 38.0,
+              'final_delta_e': 12.5, 'num_steps': 2}
+    batch = [ev(1, 38.0, 20.0), ev(2, 20.0, 12.5)]
+    first = client.post('/api/mixing-attempt/ingest', json={'attempt': header, 'events': batch})
+    assert first.status_code == 200, first.get_json()
+    assert first.get_json()['inserted'] == 2
+    # A retried flush re-sends the same prefix: idempotent, nothing conflicts.
+    again = client.post('/api/mixing-attempt/ingest', json={'attempt': header, 'events': batch})
+    assert again.status_code == 200
+    assert again.get_json() == {'status': 'success', 'inserted': 0, 'duplicates': 2}
+    header.update(final_delta_e=4.1, num_steps=3)
+    more = client.post('/api/mixing-attempt/ingest',
+                       json={'attempt': header, 'events': [ev(3, 12.5, 4.1)]})
+    assert more.status_code == 200 and more.get_json()['inserted'] == 1
+
+    from app import db
+    with app.app_context():
+        data = hetfo.build_live_payload(date(2026, 9, 2), now=datetime.utcnow())
+        db.session.remove()
+    g = _row(data, 'GGGGG7')
+    assert g['online'] is True and g['last_seen_source'] == 'step'
+    assert g['activity']['kind'] == 'mixing'
+    assert g['activity']['target'] == 'Merlot'
+    assert g['activity']['trajectory'] == [20.0, 12.5, 4.1]
+    assert g['activity']['delta_e'] == 4.1
+    assert g['activity']['initial_delta_e'] == 38.0
+    assert g['activity']['steps'] == 3
+    assert data['summary']['online_mixing'] == 1
 
 
 def test_szerda_page_follows_the_wednesday_session(client):
