@@ -617,8 +617,8 @@ window.HETFO = {{ cohort|tojson }};
     head.appendChild(el('span', { class: 'hf-dot' + (r.online ? ' online' : ' recent') }));
     head.appendChild(el('span', { class: 'hf-name', text: r.nickname || r.user_id }));
     if (r.nickname) head.appendChild(el('span', { class: 'hf-id', text: r.user_id }));
-    if (r.active_match_round != null) {
-      head.appendChild(el('span', { class: 'hf-chip', text: fill(t('round {r}/{n}'), { r: r.active_match_round + 1, n: r.active_match_rounds || 10 }) }));
+    if (r.matches_completed || r.active_match_round != null) {
+      head.appendChild(el('span', { class: 'hf-chip', text: matchText(r) }));
     }
     head.appendChild(agoEl('span', r.last_seen_sec_ago, 'hf-pcard-time'));
     article.appendChild(head);
@@ -939,10 +939,13 @@ window.HETFO = {{ cohort|tojson }};
     if (flags.length) td.appendChild(el('span', { class: 'hf-sub', text: flags.join(' · ') }));
     return td;
   }
-  function matchCell(r) {
-    if (r.active_match_round != null) return fill(t('round {r}/{n}'), { r: r.active_match_round + 1, n: r.active_match_rounds || 10 });
-    if (r.matches_completed) return fill(t('{n} done'), { n: r.matches_completed });
-    return '—';
+  // Completed (10-round) matches first, then where the running match stands —
+  // "round 1/10" on its own read as "no match finished yet".
+  function matchText(r) {
+    var parts = [];
+    if (r.matches_completed || r.active_match_round != null) parts.push(fill(t('{n} matches done'), { n: fmtInt(r.matches_completed) }));
+    if (r.active_match_round != null) parts.push(fill(t('round {r}/{n}'), { r: r.active_match_round + 1, n: r.active_match_rounds || 10 }));
+    return parts.length ? parts.join(' · ') : '—';
   }
   function calibrationCell(r) {
     var s = r.calibration_completed + '/5';
@@ -1013,8 +1016,9 @@ window.HETFO = {{ cohort|tojson }};
     { key: 'mean_delta_e', label: t('Mean ΔE'), num: true, val: function (r) { return r.mean_delta_e == null ? Infinity : r.mean_delta_e; }, cell: numCell(function (r) { return fmtDe(r.mean_delta_e); }) },
     { key: 'play_time_sec', label: t('Play time'), num: true, val: function (r) { return r.play_time_sec || 0; }, cell: numCell(function (r) { return fmtDuration(r.play_time_sec); }) },
     { key: 'current_streak', label: t('Streak'), num: true, val: function (r) { return r.current_streak; }, cell: numCell(function (r) { return fmtInt(r.current_streak); }) },
-    { key: 'match', label: t('Match'), val: function (r) { return r.active_match_round == null ? -1 : r.active_match_round; },
-      cell: function (r) { return el('td', { text: matchCell(r) }); } },
+    { key: 'match', label: t('Match'), num: true,
+      val: function (r) { return r.matches_completed + (r.active_match_round == null ? 0 : (r.active_match_round + 1) / 100); },
+      cell: function (r) { return el('td', { class: 'num', text: matchText(r) }); } },
     { key: 'calibration', label: t('Calibration'), num: true, val: function (r) { return r.calibration_completed; }, cell: numCell(calibrationCell) },
   ];
   function sortedRows(rows) {
