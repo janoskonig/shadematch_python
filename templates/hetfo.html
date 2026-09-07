@@ -1,0 +1,697 @@
+{% extends "base.html" %}
+
+{% block title %}{{ t('Monday cohort — live') }} · {{ cohort.date }}{% endblock %}
+
+{% block og %}
+<meta name="robots" content="noindex, nofollow">
+{% endblock %}
+
+{% block extra_css %}
+<style>
+  .hf-wrap {
+    --hf-surface: #fcfcfb;
+    --hf-series: #2a78d6;
+    --hf-series-hover: #5598e7;
+    --hf-grid: #e1e0d9;
+    --hf-axis: #c3c2b7;
+    --hf-muted: #898781;
+    --hf-good: #0ca30c;
+    --hf-warning: #fab219;
+    --hf-critical: #d03b3b;
+    max-width: 1240px; margin: 0 auto; padding: 20px 16px 64px;
+  }
+  .hf-wrap [hidden] { display: none !important; }
+  .hf-back {
+    display: inline-flex; align-items: center; gap: var(--space-sm);
+    text-decoration: none; color: var(--accent-primary); font-weight: 700;
+    margin-bottom: var(--space-md); font-size: var(--font-size-sm);
+  }
+  .hf-back:hover { text-decoration: underline; }
+  .hf-head { display: flex; flex-wrap: wrap; gap: 12px 24px; align-items: flex-start; justify-content: space-between; }
+  .hf-head h1 { margin: 0 0 4px; font-size: 1.6rem; }
+  .hf-lead { margin: 0; color: var(--text-secondary); font-size: 0.92rem; max-width: 64ch; }
+  .hf-status { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; color: var(--text-secondary); flex-wrap: wrap; }
+  .hf-pulse {
+    width: 10px; height: 10px; border-radius: 50%; background: var(--hf-good); flex: none;
+    box-shadow: 0 0 0 0 rgba(12,163,12,0.45); animation: hfPulse 2s infinite;
+  }
+  .hf-pulse.is-paused { background: var(--border-strong); animation: none; box-shadow: none; }
+  .hf-pulse.is-error { background: var(--hf-critical); animation: none; box-shadow: none; }
+  @keyframes hfPulse {
+    0% { box-shadow: 0 0 0 0 rgba(12,163,12,0.45); }
+    70% { box-shadow: 0 0 0 8px rgba(12,163,12,0); }
+    100% { box-shadow: 0 0 0 0 rgba(12,163,12,0); }
+  }
+  .hf-btn {
+    display: inline-flex; align-items: center; min-height: 36px; padding: 4px 12px;
+    border-radius: var(--radius-full); border: 1px solid var(--border-strong);
+    background: var(--surface); color: var(--text-primary); font-weight: 700;
+    font-size: 0.85rem; cursor: pointer; text-decoration: none; touch-action: manipulation;
+  }
+  .hf-btn:hover { border-color: var(--accent-primary); }
+  .hf-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+  .hf-controls input[type=date] {
+    min-height: 36px; padding: 4px 8px; border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary);
+  }
+  .hf-when { font-weight: 800; padding: 0 4px; }
+  .hf-notice {
+    background: #FFF4E5; border: 1px solid var(--accent-warning); color: #6b4a00;
+    padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.85rem; margin: 8px 0;
+  }
+  .hf-error {
+    background: #FFEBEE; border: 1px solid var(--accent-danger); color: #7a1f1b;
+    padding: 8px 12px; border-radius: var(--radius-sm); font-size: 0.85rem; margin: 8px 0;
+  }
+  .hf-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 0 0 12px; }
+  .hf-card { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: 11px 13px; min-width: 0; }
+  .hf-card .k { color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .hf-card .v { margin-top: 5px; font-size: 1.45rem; font-weight: 800; line-height: 1.1; }
+  .hf-card .s { margin-top: 4px; color: var(--text-secondary); font-size: 0.76rem; }
+  .hf-card.hero { grid-column: span 2; border-color: var(--hf-good); }
+  .hf-card.hero .v { font-size: 3rem; display: flex; align-items: center; gap: 12px; }
+  .hf-card.hero .v .hf-dot { width: 14px; height: 14px; margin: 0; }
+  .hf-profile { color: var(--text-secondary); font-size: 0.85rem; margin: 0 0 16px; }
+  .hf-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .hf-chart { position: relative; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--hf-surface); padding: 10px 12px 8px; min-width: 0; }
+  .hf-chart h2 { margin: 0 0 2px; font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.03em; font-weight: 700; }
+  .hf-chart .sub { margin: 0 0 8px; color: var(--hf-muted); font-size: 0.78rem; }
+  .hf-chart svg { display: block; width: 100%; height: auto; overflow: visible; }
+  .hf-chart .bar { fill: var(--hf-series); }
+  .hf-chart .bar.is-hot { fill: var(--hf-series-hover); }
+  .hf-chart .hit { fill: transparent; cursor: crosshair; }
+  .hf-chart .grid { stroke: var(--hf-grid); stroke-width: 1; shape-rendering: crispEdges; }
+  .hf-chart .axis { stroke: var(--hf-axis); stroke-width: 1; shape-rendering: crispEdges; }
+  .hf-chart text { font-family: var(--font-family); font-size: 11px; fill: var(--hf-muted); font-variant-numeric: tabular-nums; }
+  .hf-chart .now { stroke: var(--hf-good); stroke-width: 1.5; }
+  .hf-tip {
+    position: absolute; pointer-events: none; background: var(--text-primary); color: #fff;
+    padding: 6px 9px; border-radius: 8px; font-size: 0.76rem; line-height: 1.35; white-space: nowrap;
+    transform: translate(-50%, calc(-100% - 10px)); opacity: 0; transition: opacity 0.12s; z-index: 2;
+  }
+  .hf-tip strong { font-size: 0.95rem; }
+  .hf-tip.is-on { opacity: 1; }
+  details.hf-table > summary { cursor: pointer; color: var(--text-secondary); font-size: 0.78rem; margin-top: 6px; user-select: none; }
+  details.hf-table table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-top: 6px; }
+  details.hf-table th, details.hf-table td { border-bottom: 1px solid var(--border); padding: 4px 6px; text-align: left; white-space: nowrap; }
+  details.hf-table th { color: var(--text-secondary); font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  details.hf-table td.num, details.hf-table th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .hf-panel { border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); padding: 12px 14px; }
+  .hf-panel h2 { margin: 0 0 8px; font-size: 1.05rem; }
+  .hf-table-wrap { overflow-x: auto; }
+  table.hf-players { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  .hf-players th, .hf-players td { border-bottom: 1px solid var(--border); padding: 7px 8px; text-align: left; white-space: nowrap; vertical-align: middle; }
+  .hf-players th { color: var(--text-secondary); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer; user-select: none; }
+  .hf-players th:hover { color: var(--text-primary); }
+  .hf-players th[aria-sort] { color: var(--accent-primary); }
+  .hf-players td.num, .hf-players th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .hf-players tr.is-online { background: rgba(12,163,12,0.06); }
+  .hf-players tr.hf-changed td { animation: hfFlash 1.6s ease-out; }
+  @keyframes hfFlash { from { background: rgba(74,144,217,0.28); } to { background: transparent; } }
+  .hf-name { font-weight: 800; }
+  .hf-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.76rem; color: var(--text-secondary); }
+  .hf-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 1px; background: var(--border-strong); }
+  .hf-dot.online { background: var(--hf-good); }
+  .hf-dot.recent { background: var(--hf-warning); }
+  .hf-swatch { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; border: 1px solid rgba(0,0,0,0.12); }
+  .hf-sub { display: block; color: var(--text-secondary); font-size: 0.74rem; }
+  .hf-muted { color: var(--text-secondary); }
+  .hf-empty { padding: 28px; text-align: center; color: var(--text-secondary); }
+  .hf-foot { color: var(--text-secondary); font-size: 0.78rem; margin-top: 14px; max-width: 92ch; }
+  .is-refreshing .hf-cards, .is-refreshing .hf-charts, .is-refreshing .hf-panel { opacity: 0.7; transition: opacity 0.2s; }
+  @media (max-width: 600px) {
+    .hf-wrap { padding: 12px 10px 48px; }
+    .hf-card.hero .v { font-size: 2.4rem; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<main class="hf-wrap" id="hfRoot">
+  <a href="/" class="hf-back">{{ t('← Back to Color Mixing') }}</a>
+
+  <header class="hf-head">
+    <div>
+      <h1>{{ t('Monday cohort — live') }}</h1>
+      <p class="hf-lead">{{ t('Everyone who registered on the cohort day, and what they are doing right now. Times are shown in {tz}; the page refreshes itself every {n} seconds.', tz=cohort.tz, n=cohort.refresh_seconds) }}</p>
+    </div>
+    <div class="hf-status" role="status" aria-live="polite">
+      <span class="hf-pulse" id="hfPulse"></span>
+      <span id="hfUpdated">{{ t('Loading…') }}</span>
+      <button type="button" class="hf-btn" id="hfPause">{{ t('Pause') }}</button>
+      <button type="button" class="hf-btn" id="hfNow">{{ t('Refresh now') }}</button>
+    </div>
+  </header>
+
+  {% if cohort.date_error %}
+  <p class="hf-notice">{{ t('That date was not understood — showing the default cohort day instead.') }}</p>
+  {% endif %}
+  <p class="hf-error" id="hfError" hidden></p>
+
+  <nav class="hf-controls" aria-label="{{ t('Cohort day') }}">
+    <a class="hf-btn" href="/hetfo?date={{ cohort.prev }}">‹ {{ t('Previous Monday') }}</a>
+    <span class="hf-when" id="hfWhen">{{ cohort.date }}</span>
+    <a class="hf-btn" href="/hetfo?date={{ cohort.next }}">{{ t('Next Monday') }} ›</a>
+    <label class="hf-muted" for="hfDate">{{ t('Any day:') }}</label>
+    <input type="date" id="hfDate" value="{{ cohort.date }}">
+  </nav>
+
+  <section class="hf-cards" id="hfCards" aria-label="{{ t('Cohort summary') }}"></section>
+  <p class="hf-profile" id="hfProfile"></p>
+
+  <section class="hf-charts">
+    <div class="hf-chart" id="hfChartDay">
+      <h2>{{ t('Registration day — rounds per quarter hour') }}</h2>
+      <p class="sub" data-sub></p>
+      <svg role="img" aria-label="{{ t('Registration day — rounds per quarter hour') }}"></svg>
+      <div class="hf-tip"></div>
+      <details class="hf-table">
+        <summary>{{ t('Show as table') }}</summary>
+        <div class="hf-table-wrap"><table></table></div>
+      </details>
+    </div>
+    <div class="hf-chart" id="hfChartDays">
+      <h2>{{ t('Since registration — players active per day') }}</h2>
+      <p class="sub" data-sub></p>
+      <svg role="img" aria-label="{{ t('Since registration — players active per day') }}"></svg>
+      <div class="hf-tip"></div>
+      <details class="hf-table">
+        <summary>{{ t('Show as table') }}</summary>
+        <div class="hf-table-wrap"><table></table></div>
+      </details>
+    </div>
+  </section>
+
+  <section class="hf-panel" aria-labelledby="hfPlayersHeading">
+    <h2 id="hfPlayersHeading">{{ t('Players') }}</h2>
+    <div class="hf-table-wrap"><table class="hf-players" id="hfPlayers"></table></div>
+    <div class="hf-empty" id="hfEmpty" hidden>{{ t('Nobody registered on this day.') }}</div>
+  </section>
+
+  <p class="hf-foot">{{ t('Online = the server heard from the player in the last {n} minutes (a mixing step, a saved round, an app open or visibility event, or a calibration trial). Levels are XP-derived. Play time caps each round at 30 minutes, like the leaderboard. Rounds are saved at the end of a round, so a player who is mixing right now shows up in the activity column before their round count moves.', n=cohort.online_window_min) }}</p>
+</main>
+
+<script>
+window.HETFO = {{ cohort|tojson }};
+</script>
+<script>
+(function () {
+  'use strict';
+  var CFG = window.HETFO;
+  var LANG = window.LANG === 'hu' ? 'hu-HU' : 'en-GB';
+  var TZ = CFG.tz;
+  var root = document.getElementById('hfRoot');
+  var els = {
+    pulse: document.getElementById('hfPulse'),
+    updated: document.getElementById('hfUpdated'),
+    pause: document.getElementById('hfPause'),
+    now: document.getElementById('hfNow'),
+    error: document.getElementById('hfError'),
+    when: document.getElementById('hfWhen'),
+    date: document.getElementById('hfDate'),
+    cards: document.getElementById('hfCards'),
+    profile: document.getElementById('hfProfile'),
+    chartDay: document.getElementById('hfChartDay'),
+    chartDays: document.getElementById('hfChartDays'),
+    players: document.getElementById('hfPlayers'),
+    empty: document.getElementById('hfEmpty'),
+  };
+  var state = {
+    data: null, fetchedAt: 0, inflight: false, paused: false, timer: null,
+    error: null, sortKey: null, sortDir: 1, signatures: {}, hasRendered: false,
+  };
+
+  // ── tiny DOM + formatting helpers (user data always goes through textContent) ──
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) {
+      if (k === 'class') node.className = attrs[k];
+      else if (k === 'text') node.textContent = attrs[k];
+      else node.setAttribute(k, attrs[k]);
+    });
+    (children || []).forEach(function (c) {
+      if (c == null) return;
+      node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    });
+    return node;
+  }
+  function svgEl(tag, attrs) {
+    var node = document.createElementNS('http://www.w3.org/2000/svg', tag);
+    if (attrs) Object.keys(attrs).forEach(function (k) { node.setAttribute(k, attrs[k]); });
+    return node;
+  }
+  function fill(s, vars) {
+    return Object.keys(vars).reduce(function (acc, k) {
+      return acc.split('{' + k + '}').join(String(vars[k]));
+    }, s);
+  }
+  function fmtInt(n) { return (typeof n === 'number' && isFinite(n)) ? n.toLocaleString(LANG) : '0'; }
+  function fmtPct(part, whole) { return whole ? Math.round(100 * part / whole) + '%' : '0%'; }
+  function fmtDe(x) { return (typeof x === 'number' && isFinite(x)) ? x.toFixed(2) : '—'; }
+  function fmtDuration(sec) {
+    if (typeof sec !== 'number' || !isFinite(sec) || sec <= 0) return '—';
+    if (sec < 60) return Math.round(sec) + ' s';
+    if (sec < 3600) { var m = Math.floor(sec / 60); var s = Math.round(sec - m * 60); return s ? m + ' m ' + s + ' s' : m + ' m'; }
+    var h = Math.floor(sec / 3600); var mm = Math.floor((sec - h * 3600) / 60);
+    return mm ? h + ' h ' + mm + ' m' : h + ' h';
+  }
+  function fmtTime(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleTimeString(LANG, { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+  }
+  function fmtDayLong(isoDate) {
+    return new Date(isoDate + 'T12:00:00Z').toLocaleDateString(LANG, { timeZone: 'UTC', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  }
+  function fmtDayShort(isoDate) {
+    return new Date(isoDate + 'T12:00:00Z').toLocaleDateString(LANG, { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' });
+  }
+  function ago(sec) {
+    if (sec == null) return t('never');
+    if (sec < 10) return t('just now');
+    if (sec < 60) return fill(t('{n} s ago'), { n: sec });
+    if (sec < 3600) return fill(t('{n} min ago'), { n: Math.floor(sec / 60) });
+    if (sec < 86400) return fill(t('{n} h ago'), { n: Math.floor(sec / 3600) });
+    return fill(t('{n} d ago'), { n: Math.floor(sec / 86400) });
+  }
+  function sinceFetchSec() { return Math.max(0, Math.floor((Date.now() - state.fetchedAt) / 1000)); }
+  function colorName(activity) {
+    var name = activity.target || t('a colour');
+    if (window.LANG === 'hu' && activity.target_hu) name = activity.target + ' — ' + activity.target_hu;
+    return name;
+  }
+
+  // ── status line / polling ───────────────────────────────────────────────
+  function updateStatus() {
+    els.pulse.className = 'hf-pulse' + (state.paused ? ' is-paused' : (state.error ? ' is-error' : ''));
+    if (state.inflight && !state.hasRendered) { els.updated.textContent = t('Loading…'); return; }
+    var parts = [];
+    if (state.fetchedAt) parts.push(fill(t('Updated {s} s ago'), { s: sinceFetchSec() }));
+    if (state.paused) parts.push(t('Paused'));
+    else if (state.inflight) parts.push(t('Updating…'));
+    els.updated.textContent = parts.join(' · ');
+    if (state.error) {
+      els.error.textContent = t('Could not reach the server — showing the last good data.') + ' (' + state.error + ')';
+      els.error.hidden = false;
+    } else {
+      els.error.hidden = true;
+    }
+  }
+  function schedule() {
+    clearTimeout(state.timer);
+    if (state.paused || document.hidden) return;
+    state.timer = setTimeout(load, CFG.refresh_seconds * 1000);
+  }
+  function load() {
+    if (state.inflight) return;
+    state.inflight = true;
+    clearTimeout(state.timer);
+    if (state.hasRendered) root.classList.add('is-refreshing');
+    updateStatus();
+    fetch('/api/hetfo/live?date=' + encodeURIComponent(CFG.date), { cache: 'no-store' })
+      .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.d || res.d.status !== 'success') throw new Error((res.d && res.d.message) || 'HTTP error');
+        state.data = res.d;
+        state.fetchedAt = Date.now();
+        state.error = null;
+        render();
+      })
+      .catch(function (err) { state.error = (err && err.message) || String(err); })
+      .then(function () {
+        state.inflight = false;
+        root.classList.remove('is-refreshing');
+        updateStatus();
+        schedule();
+      });
+  }
+  els.pause.addEventListener('click', function () {
+    state.paused = !state.paused;
+    els.pause.textContent = state.paused ? t('Resume') : t('Pause');
+    if (state.paused) clearTimeout(state.timer); else load();
+    updateStatus();
+  });
+  els.now.addEventListener('click', function () { load(); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) clearTimeout(state.timer);
+    else if (!state.paused) load();
+  });
+  setInterval(function () {
+    updateStatus();
+    var offset = sinceFetchSec();
+    Array.prototype.forEach.call(root.querySelectorAll('[data-ago]'), function (cell) {
+      var base = cell.getAttribute('data-ago');
+      cell.textContent = ago(base === '' ? null : Number(base) + offset);
+    });
+  }, 1000);
+
+  // ── cohort day controls ─────────────────────────────────────────────────
+  els.when.textContent = fmtDayLong(CFG.date);
+  els.date.addEventListener('change', function () {
+    if (!els.date.value) return;
+    var q = new URLSearchParams(location.search);
+    q.set('date', els.date.value);
+    location.href = '/hetfo?' + q.toString();
+  });
+
+  // ── summary cards ───────────────────────────────────────────────────────
+  function card(k, v, s, cls) {
+    return el('div', { class: 'hf-card' + (cls ? ' ' + cls : '') }, [
+      el('div', { class: 'k', text: k }),
+      el('div', { class: 'v' }, typeof v === 'string' ? [v] : v),
+      s ? el('div', { class: 's', text: s }) : null,
+    ]);
+  }
+  function renderCards(sum) {
+    els.cards.textContent = '';
+    var hero = [el('span', { class: 'hf-dot' + (sum.online_now ? ' online' : '') }), fmtInt(sum.online_now)];
+    els.cards.appendChild(card(t('Playing now'), hero, fill(t('activity in the last {n} min'), { n: CFG.online_window_min }), 'hero'));
+    els.cards.appendChild(card(t('Registered'), fmtInt(sum.registered), fill(t('{n} with verified email'), { n: fmtInt(sum.email_verified) })));
+    els.cards.appendChild(card(t('Played at least one round'), fmtInt(sum.played), fill(t('{pct} of registered'), { pct: fmtPct(sum.played, sum.registered) })));
+    els.cards.appendChild(card(t('Active in the last hour'), fmtInt(sum.active_last_hour), null));
+    els.cards.appendChild(card(t('Came back on a later day'), fmtInt(sum.came_back), fill(t('{pct} of players'), { pct: fmtPct(sum.came_back, sum.played) })));
+    els.cards.appendChild(card(t('Rounds'), fmtInt(sum.rounds), fill(t('{c} completed · {p} perfect'), { c: fmtInt(sum.completed), p: fmtInt(sum.perfect) })));
+    els.cards.appendChild(card(t('Median rounds per player'), sum.median_rounds_per_player == null ? '—' : fmtInt(sum.median_rounds_per_player), t('among players with a round')));
+    els.cards.appendChild(card(t('Play time'), fmtDuration(sum.play_time_sec), t('capped at 30 min per round')));
+    els.cards.appendChild(card(t('Matches completed'), fmtInt(sum.matches_completed), fill(t('{n} in progress'), { n: fmtInt(sum.matches_active) })));
+    els.cards.appendChild(card(t('Calibration sessions'), fmtInt(sum.calibration_sessions), fill(t('by {n} players'), { n: fmtInt(sum.calibration_players) })));
+
+    var bits = [];
+    var g = sum.gender || {};
+    var gbits = [];
+    if (g.female) gbits.push(fmtInt(g.female) + ' ' + t('female'));
+    if (g.male) gbits.push(fmtInt(g.male) + ' ' + t('male'));
+    Object.keys(g).forEach(function (k) { if (k !== 'female' && k !== 'male' && g[k]) gbits.push(fmtInt(g[k]) + ' ' + k); });
+    if (gbits.length) bits.push(t('Gender') + ': ' + gbits.join(', '));
+    if (sum.age && sum.age.n) bits.push(t('Age') + ': ' + fill(t('median {m} (range {lo}–{hi})'), { m: sum.age.median, lo: sum.age.min, hi: sum.age.max }));
+    var loc = sum.locale || {};
+    var lbits = Object.keys(loc).sort().map(function (k) { return fmtInt(loc[k]) + ' ' + (k === 'unset' ? t('browser default') : k); });
+    if (lbits.length) bits.push(t('Language') + ': ' + lbits.join(', '));
+    els.profile.textContent = bits.join('  ·  ');
+  }
+
+  // ── bar charts (single series, sequential blue, hover tooltip + table twin) ──
+  function niceStep(maxV) {
+    var target = 4;
+    var raw = Math.max(1, maxV) / target;
+    var pow = Math.pow(10, Math.floor(Math.log10(raw)));
+    var norm = raw / pow;
+    var step = norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10;
+    return Math.max(1, step * pow);
+  }
+  function renderBarChart(host, points, cfg) {
+    var svg = host.querySelector('svg');
+    var tip = host.querySelector('.hf-tip');
+    var table = host.querySelector('details table');
+    svg.textContent = '';
+    tip.classList.remove('is-on');
+    var n = points.length;
+    var W = Math.max(280, Math.floor(host.clientWidth - 24)) || 600;
+    var H = 190, padL = 34, padR = 10, padT = 12, padB = 26;
+    var plotW = W - padL - padR, plotH = H - padT - padB;
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H);
+    svg.setAttribute('width', W);
+    svg.setAttribute('height', H);
+    var maxV = 0;
+    points.forEach(function (p) { if (p.value > maxV) maxV = p.value; });
+    var step = niceStep(maxV);
+    var top = Math.max(step, Math.ceil(maxV / step) * step);
+    function y(v) { return padT + plotH - (v / top) * plotH; }
+
+    for (var tv = 0; tv <= top + 1e-9; tv += step) {
+      var gy = y(tv);
+      svg.appendChild(svgEl('line', { x1: padL, x2: W - padR, y1: gy, y2: gy, class: tv === 0 ? 'axis' : 'grid' }));
+      var lbl = svgEl('text', { x: padL - 6, y: gy + 4, 'text-anchor': 'end' });
+      lbl.textContent = fmtInt(tv);
+      svg.appendChild(lbl);
+    }
+    if (!n) return;
+    var band = plotW / n;
+    var barW = Math.max(1.5, Math.min(24, band - 2));
+    var every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(plotW / 54))));
+    points.forEach(function (p, i) {
+      var x0 = padL + i * band;
+      var bx = x0 + (band - barW) / 2;
+      var by = y(p.value);
+      var bh = padT + plotH - by;
+      if (p.value > 0) {
+        var r = Math.min(4, barW / 2, bh);
+        var d = 'M' + bx + ',' + (by + r) +
+          ' a' + r + ',' + r + ' 0 0 1 ' + r + ',' + (-r) +
+          ' h' + (barW - 2 * r) +
+          ' a' + r + ',' + r + ' 0 0 1 ' + r + ',' + r +
+          ' V' + (padT + plotH) + ' H' + bx + ' Z';
+        var bar = svgEl('path', { d: d, class: 'bar' + (p.hot ? ' is-hot' : '') });
+        svg.appendChild(bar);
+        p._bar = bar;
+      }
+      if (i % every === 0) {
+        var xl = svgEl('text', { x: x0 + band / 2, y: H - 8, 'text-anchor': 'middle' });
+        xl.textContent = p.label;
+        svg.appendChild(xl);
+      }
+      var hit = svgEl('rect', { x: x0, y: padT, width: band, height: plotH, class: 'hit' });
+      hit.addEventListener('pointerenter', function () { showTip(p, hit, by); });
+      hit.addEventListener('pointermove', function () { showTip(p, hit, by); });
+      hit.addEventListener('pointerleave', hideTip);
+      svg.appendChild(hit);
+    });
+    if (cfg.nowIndex != null && cfg.nowIndex >= 0 && cfg.nowIndex < n) {
+      var nx = padL + (cfg.nowIndex + 1) * band;
+      svg.appendChild(svgEl('line', { x1: nx, x2: nx, y1: padT, y2: padT + plotH, class: 'now' }));
+    }
+
+    function showTip(p, hit, by) {
+      var hostRect = host.getBoundingClientRect();
+      var hitRect = hit.getBoundingClientRect();
+      var svgRect = svg.getBoundingClientRect();
+      tip.textContent = '';
+      tip.appendChild(el('strong', { text: p.tipTitle }));
+      p.tipRows.forEach(function (row) { tip.appendChild(el('div', { text: row })); });
+      tip.style.left = (hitRect.left + hitRect.width / 2 - hostRect.left) + 'px';
+      tip.style.top = (svgRect.top - hostRect.top + (by / H) * svgRect.height) + 'px';
+      tip.classList.add('is-on');
+      if (p._bar) p._bar.classList.add('is-hot');
+    }
+    function hideTip() {
+      tip.classList.remove('is-on');
+      points.forEach(function (q) { if (q._bar && !q.hot) q._bar.classList.remove('is-hot'); });
+    }
+
+    // table twin: every value reachable without hovering
+    table.textContent = '';
+    var thead = el('thead', null, [el('tr', null, cfg.columns.map(function (c, i) {
+      return el('th', { class: i ? 'num' : '', text: c });
+    }))]);
+    table.appendChild(thead);
+    var tbody = el('tbody');
+    var shown = 0;
+    points.forEach(function (p) {
+      if (cfg.tableSkipZero && p.value === 0 && !p.rows.some(function (v) { return v; })) return;
+      shown++;
+      tbody.appendChild(el('tr', null, [el('td', { text: p.label })].concat(p.rows.map(function (v) {
+        return el('td', { class: 'num', text: fmtInt(v) });
+      }))));
+    });
+    if (!shown) tbody.appendChild(el('tr', null, [el('td', { colspan: cfg.columns.length, text: t('No rounds yet.') })]));
+    table.appendChild(tbody);
+  }
+  function renderCharts() {
+    var d = state.data;
+    if (!d) return;
+    var sum = d.summary;
+    var dayPts = d.timeline.day.points;
+    // "Now" marker only while the cohort day is still running.
+    var nowMs = state.fetchedAt || Date.now();
+    var nowIndex = null;
+    if (nowMs < new Date(d.cohort.window_utc.end).getTime()) {
+      dayPts.forEach(function (p, i) { if (new Date(p.t).getTime() <= nowMs) nowIndex = i; });
+    }
+    var dayRounds = 0, dayPlayers = 0;
+    dayPts.forEach(function (p) { dayRounds += p.rounds; if (p.players > dayPlayers) dayPlayers = p.players; });
+    els.chartDay.querySelector('[data-sub]').textContent = fill(t('{n} rounds on the cohort day · peak {p} players in one quarter hour'), { n: fmtInt(dayRounds), p: fmtInt(dayPlayers) });
+    renderBarChart(els.chartDay, dayPts.map(function (p, i) {
+      return {
+        label: p.label, value: p.rounds, hot: false,
+        rows: [p.rounds, p.players],
+        tipTitle: p.label + ' · ' + fill(t('{n} rounds'), { n: fmtInt(p.rounds) }),
+        tipRows: [fill(t('{n} players'), { n: fmtInt(p.players) })],
+      };
+    }), { columns: [t('Time'), t('Rounds'), t('Players')], tableSkipZero: true, nowIndex: nowIndex });
+
+    var dayPtsAll = d.timeline.days.points;
+    els.chartDays.querySelector('[data-sub]').textContent = fill(t('{n} of {m} players came back on a later day'), { n: fmtInt(sum.came_back), m: fmtInt(sum.played) });
+    renderBarChart(els.chartDays, dayPtsAll.map(function (p) {
+      return {
+        label: fmtDayShort(p.day), value: p.players, hot: false,
+        rows: [p.players, p.rounds, p.completed],
+        tipTitle: fmtDayShort(p.day) + ' · ' + fill(t('{n} players'), { n: fmtInt(p.players) }),
+        tipRows: [fill(t('{n} rounds'), { n: fmtInt(p.rounds) }), fill(t('{n} completed'), { n: fmtInt(p.completed) })],
+      };
+    }), { columns: [t('Day'), t('Players'), t('Rounds'), t('Completed')], tableSkipZero: false });
+  }
+  var resizeTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderCharts, 150);
+  });
+
+  // ── players table ───────────────────────────────────────────────────────
+  function statusRank(r) { return r.online ? 0 : r.recent ? 1 : (r.rounds === 0 && !r.last_seen) ? 3 : 2; }
+  function statusText(r) {
+    if (r.online) return t('online');
+    if (r.recent) return t('recent');
+    if (r.rounds === 0 && !r.last_seen) return t('never played');
+    return t('away');
+  }
+  function numCell(fn) { return function (r) { return el('td', { class: 'num', text: fn(r) }); }; }
+  function statusCell(r) {
+    var td = el('td');
+    td.appendChild(el('span', { class: 'hf-dot' + (r.online ? ' online' : r.recent ? ' recent' : '') }));
+    td.appendChild(document.createTextNode(statusText(r)));
+    return td;
+  }
+  function lastSeenCell(r) {
+    var td = el('td', {
+      'data-ago': r.last_seen_sec_ago == null ? '' : String(r.last_seen_sec_ago),
+      text: ago(r.last_seen_sec_ago == null ? null : r.last_seen_sec_ago + sinceFetchSec()),
+    });
+    if (r.last_seen) td.title = new Date(r.last_seen).toLocaleString(LANG, { timeZone: TZ });
+    return td;
+  }
+  // Column order = what matters live first (who, doing what, when), then the tallies.
+  var COLS = [
+    { key: 'status', label: t('Status'), val: statusRank, cell: statusCell },
+    { key: 'player', label: t('Player'), val: function (r) { return (r.nickname || r.user_id).toLowerCase(); }, cell: playerCell },
+    { key: 'activity', label: t('Now'), val: function (r) { return r.activity.kind; }, cell: activityCell },
+    { key: 'last_seen', label: t('Last seen'), val: function (r) { return r.last_seen_sec_ago == null ? Infinity : r.last_seen_sec_ago; }, cell: lastSeenCell },
+    { key: 'registered_at', label: t('Registered'), val: function (r) { return r.registered_at || ''; },
+      cell: function (r) { return el('td', { text: fmtTime(r.registered_at), title: r.registered_at || '' }); } },
+    { key: 'level', label: t('Level'), num: true, val: function (r) { return r.level; }, cell: numCell(function (r) { return 'L' + r.level; }) },
+    { key: 'xp', label: 'XP', num: true, val: function (r) { return r.xp; }, cell: numCell(function (r) { return fmtInt(r.xp); }) },
+    { key: 'rounds', label: t('Rounds'), num: true, val: function (r) { return r.rounds; }, cell: numCell(function (r) { return fmtInt(r.rounds); }) },
+    { key: 'completed', label: t('Completed'), num: true, val: function (r) { return r.completed; }, cell: numCell(function (r) { return fmtInt(r.completed); }) },
+    { key: 'perfect', label: t('Perfect'), num: true, val: function (r) { return r.perfect; }, cell: numCell(function (r) { return fmtInt(r.perfect); }) },
+    { key: 'best_delta_e', label: t('Best ΔE'), num: true, val: function (r) { return r.best_delta_e == null ? Infinity : r.best_delta_e; }, cell: numCell(function (r) { return fmtDe(r.best_delta_e); }) },
+    { key: 'mean_delta_e', label: t('Mean ΔE'), num: true, val: function (r) { return r.mean_delta_e == null ? Infinity : r.mean_delta_e; }, cell: numCell(function (r) { return fmtDe(r.mean_delta_e); }) },
+    { key: 'play_time_sec', label: t('Play time'), num: true, val: function (r) { return r.play_time_sec || 0; }, cell: numCell(function (r) { return fmtDuration(r.play_time_sec); }) },
+    { key: 'current_streak', label: t('Streak'), num: true, val: function (r) { return r.current_streak; }, cell: numCell(function (r) { return fmtInt(r.current_streak); }) },
+    { key: 'match', label: t('Match'), val: function (r) { return r.active_match_round == null ? -1 : r.active_match_round; },
+      cell: function (r) { return el('td', { text: matchCell(r) }); } },
+    { key: 'calibration', label: t('Calibration'), num: true, val: function (r) { return r.calibration_completed; }, cell: numCell(calibrationCell) },
+  ];
+  function sortedRows(rows) {
+    if (!state.sortKey) return rows.slice();
+    var col = COLS.filter(function (c) { return c.key === state.sortKey; })[0];
+    if (!col) return rows.slice();
+    return rows.slice().sort(function (a, b) {
+      var va = col.val(a), vb = col.val(b);
+      if (va === vb) return 0;
+      if (typeof va === 'string' || typeof vb === 'string') return String(va).localeCompare(String(vb), LANG) * state.sortDir;
+      return (va < vb ? -1 : 1) * state.sortDir;
+    });
+  }
+  function playerCell(r) {
+    var td = el('td');
+    if (r.nickname) {
+      td.appendChild(el('span', { class: 'hf-name', text: r.nickname }));
+      td.appendChild(document.createTextNode(' '));
+      td.appendChild(el('span', { class: 'hf-id', text: r.user_id }));
+    } else {
+      td.appendChild(el('span', { class: 'hf-name hf-id', text: r.user_id }));
+    }
+    var flags = [];
+    if (r.email_verified) flags.push(t('email verified'));
+    if (r.locale) flags.push(r.locale);
+    if (r.awards) flags.push(fill(t('{n} awards'), { n: r.awards }));
+    if (flags.length) td.appendChild(el('span', { class: 'hf-sub', text: flags.join(' · ') }));
+    return td;
+  }
+  function matchCell(r) {
+    if (r.active_match_round != null) return fill(t('round {r}/{n}'), { r: r.active_match_round + 1, n: r.active_match_rounds || 10 });
+    if (r.matches_completed) return fill(t('{n} done'), { n: r.matches_completed });
+    return '—';
+  }
+  function calibrationCell(r) {
+    var s = r.calibration_completed + '/5';
+    if (r.calibration_pt != null) s += ' · PT ' + fmtDe(r.calibration_pt);
+    return s;
+  }
+  function activityCell(r) {
+    var td = el('td');
+    var a = r.activity || {};
+    if (a.kind === 'mixing') {
+      if (a.target_rgb) {
+        var sw = el('span', { class: 'hf-swatch' });
+        sw.style.background = 'rgb(' + a.target_rgb.join(',') + ')';
+        td.appendChild(sw);
+      }
+      td.appendChild(document.createTextNode(fill(t('mixing {color}'), { color: colorName(a) })));
+      var detail = [];
+      if (a.delta_e != null) detail.push('ΔE ' + fmtDe(a.delta_e));
+      detail.push(fill(t('{n} steps'), { n: a.steps || 0 }));
+      if (a.since_sec != null) detail.push(fmtDuration(a.since_sec));
+      td.appendChild(el('span', { class: 'hf-sub', text: detail.join(' · ') }));
+    } else if (a.kind === 'calibrating') {
+      td.appendChild(document.createTextNode(t('calibrating') + ' ' + (a.answered || 0) + '/' + (a.total || 0)));
+    } else if (a.kind === 'online') {
+      td.appendChild(document.createTextNode(t('in the app')));
+    } else {
+      td.appendChild(el('span', { class: 'hf-muted', text: '—' }));
+    }
+    return td;
+  }
+  function signature(r) {
+    return [r.rounds, r.completed, r.perfect, r.xp, r.level, r.last_seen, r.online, r.recent,
+      r.activity.kind, r.activity.delta_e, r.activity.steps, r.activity.answered,
+      r.active_match_round, r.calibration_completed].join('|');
+  }
+  function renderPlayers(rows) {
+    var table = els.players;
+    table.textContent = '';
+    els.empty.hidden = rows.length > 0;
+    if (!rows.length) return;
+    var thead = el('thead');
+    var trh = el('tr');
+    COLS.forEach(function (c) {
+      var th = el('th', { class: c.num ? 'num' : '', text: c.label, scope: 'col' });
+      if (state.sortKey === c.key) th.setAttribute('aria-sort', state.sortDir > 0 ? 'ascending' : 'descending');
+      th.addEventListener('click', function () {
+        // Numeric columns open descending (biggest first); the rest ascending —
+        // for "last seen" and "status" that already means the most recent first.
+        if (state.sortKey === c.key) state.sortDir = -state.sortDir;
+        else { state.sortKey = c.key; state.sortDir = c.num ? -1 : 1; }
+        renderPlayers(state.data.users);
+      });
+      trh.appendChild(th);
+    });
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    var tbody = el('tbody');
+    var nextSignatures = {};
+    sortedRows(rows).forEach(function (r) {
+      var sig = signature(r);
+      nextSignatures[r.user_id] = sig;
+      var changed = state.hasRendered && state.signatures[r.user_id] !== undefined && state.signatures[r.user_id] !== sig;
+      var tr = el('tr', { class: (r.online ? 'is-online' : '') + (changed ? ' hf-changed' : '') });
+      tr.setAttribute('data-user', r.user_id);
+      COLS.forEach(function (c) { tr.appendChild(c.cell(r)); });
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    state.signatures = nextSignatures;
+  }
+
+  function render() {
+    var d = state.data;
+    renderCards(d.summary);
+    renderCharts();
+    renderPlayers(d.users);
+    state.hasRendered = true;
+    var title = document.title.replace(/^\(\d+\) /, '');
+    document.title = (d.summary.online_now ? '(' + d.summary.online_now + ') ' : '') + title;
+  }
+
+  load();
+})();
+</script>
+{% endblock %}

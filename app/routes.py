@@ -5082,6 +5082,46 @@ def stat_riport_visits():
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
+# ── /hetfo: live dashboard for one registration-day cohort ────────────────
+# "hétfő" = Monday. Built for the Monday recruitment session (2026-08-31, the
+# day the QR share page went live): who registered that day, who is playing
+# right now, and whether they came back. Cohort logic lives in app/hetfo.py.
+
+@main.route('/hetfo')
+def hetfo_page():
+    from . import hetfo
+    date_error = False
+    try:
+        day = hetfo.resolve_cohort_date(request.args.get('date'))
+    except ValueError:
+        day = hetfo.default_cohort_date()
+        date_error = True
+    return render_template(
+        'hetfo.html',
+        cohort=hetfo.page_context(day, request.args.get('refresh'), date_error=date_error),
+    )
+
+
+@main.route('/api/hetfo/live', methods=['GET'])
+def hetfo_live():
+    """One JSON document per poll: cohort summary, one row per player with
+    their live status, and the two activity timelines. ?date=YYYY-MM-DD picks
+    the cohort day (default: the Monday session). Cached for a few seconds so
+    several open dashboards share one query set."""
+    from . import hetfo
+    try:
+        day = hetfo.resolve_cohort_date(request.args.get('date'))
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'date must be YYYY-MM-DD'}), 400
+    try:
+        return jsonify(hetfo.live_payload_cached(day))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @main.route('/api/stat/calibration-summary', methods=['GET'])
 def stat_calibration_summary():
     """Aggregations over the /calibration psychophysics game (calibration_sessions /
