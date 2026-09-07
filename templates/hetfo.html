@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ t('Monday cohort — live') }} · {{ cohort.date }}{% endblock %}
+{% block title %}{{ t(cohort.title_key) }} · {{ cohort.date }}{% endblock %}
 
 {% block og %}
 <meta name="robots" content="noindex, nofollow">
@@ -132,7 +132,7 @@
 
   <header class="hf-head">
     <div>
-      <h1>{{ t('Monday cohort — live') }}</h1>
+      <h1>{{ t(cohort.title_key) }}</h1>
       <p class="hf-lead">{{ t('Everyone who registered on the cohort day, and what they are doing right now. Times are shown in {tz}; the page refreshes itself every {n} seconds.', tz=cohort.tz, n=cohort.refresh_seconds) }}</p>
     </div>
     <div class="hf-status" role="status" aria-live="polite">
@@ -149,9 +149,9 @@
   <p class="hf-error" id="hfError" hidden></p>
 
   <nav class="hf-controls" aria-label="{{ t('Cohort day') }}">
-    <a class="hf-btn" href="/hetfo?date={{ cohort.prev }}">‹ {{ t('Previous Monday') }}</a>
+    <a class="hf-btn" href="/{{ cohort.page }}?date={{ cohort.prev }}">‹ {{ t(cohort.prev_key) }}</a>
     <span class="hf-when" id="hfWhen">{{ cohort.date }}</span>
-    <a class="hf-btn" href="/hetfo?date={{ cohort.next }}">{{ t('Next Monday') }} ›</a>
+    <a class="hf-btn" href="/{{ cohort.page }}?date={{ cohort.next }}">{{ t(cohort.next_key) }} ›</a>
     <label class="hf-muted" for="hfDate">{{ t('Any day:') }}</label>
     <input type="date" id="hfDate" value="{{ cohort.date }}">
   </nav>
@@ -350,7 +350,7 @@ window.HETFO = {{ cohort|tojson }};
     if (!els.date.value) return;
     var q = new URLSearchParams(location.search);
     q.set('date', els.date.value);
-    location.href = '/hetfo?' + q.toString();
+    location.href = '/' + CFG.page + '?' + q.toString();
   });
 
   // ── summary cards ───────────────────────────────────────────────────────

@@ -1,14 +1,17 @@
 """Live dashboard for one registration-day cohort (the /hetfo page).
 
-*Hétfő* is Hungarian for Monday. The QR share page went live for the Monday
-recruitment session on 2026-08-31, and this page follows the people who
-registered that day: how many are playing right now, what they are mixing,
-how far they got, and whether they came back on later days.
+*Hétfő* is Hungarian for Monday, *szerda* for Wednesday. The QR share page
+went live for the Monday recruitment session on 2026-08-31, with a second
+session the Wednesday after (2026-09-02); each session has its own page
+(``/hetfo``, ``/szerda``) following the people who registered that day: how
+many are playing right now, what they are mixing, how far they got, and
+whether they came back on later days.
 
 The cohort day is a Europe/Budapest calendar day. ``User.created_at`` is
 naive UTC, so the day is converted to a half-open UTC window before it is
-compared. The day defaults to ``HETFO_COHORT_DATE`` (env) or the 2026-08-31
-session, and any day can be viewed with ``?date=YYYY-MM-DD``.
+compared. Each page's day defaults to its session date, overridable per
+deployment (``HETFO_COHORT_DATE`` / ``SZERDA_COHORT_DATE``), and any day can
+be viewed with ``?date=YYYY-MM-DD``.
 
 Everything here is read-only, portable SQL (no PostgreSQL-only functions), so
 it also runs against the SQLite fallback used by the tests. A cohort is tens
@@ -43,7 +46,28 @@ from .models import (
 )
 
 COHORT_TZ_NAME = 'Europe/Budapest'
-DEFAULT_COHORT_DATE = date(2026, 8, 31)      # the Monday recruitment session
+
+# Named cohort pages: URL slug -> the session day it follows, and the env var
+# that re-points it without a deploy. One template + one API serve them all.
+COHORT_PAGES = {
+    'hetfo': {'date': date(2026, 8, 31), 'env': 'HETFO_COHORT_DATE'},    # Monday session
+    'szerda': {'date': date(2026, 9, 2), 'env': 'SZERDA_COHORT_DATE'},   # Wednesday session
+}
+DEFAULT_PAGE = 'hetfo'
+DEFAULT_COHORT_DATE = COHORT_PAGES[DEFAULT_PAGE]['date']
+
+# Heading / week-step labels follow the weekday of the day on screen (the
+# Hungarian adjective forms differ per day, so these are whole t() keys).
+# Index = date.weekday().
+WEEKDAY_LABEL_KEYS = (
+    ('Monday cohort — live', 'Previous Monday', 'Next Monday'),
+    ('Tuesday cohort — live', 'Previous Tuesday', 'Next Tuesday'),
+    ('Wednesday cohort — live', 'Previous Wednesday', 'Next Wednesday'),
+    ('Thursday cohort — live', 'Previous Thursday', 'Next Thursday'),
+    ('Friday cohort — live', 'Previous Friday', 'Next Friday'),
+    ('Saturday cohort — live', 'Previous Saturday', 'Next Saturday'),
+    ('Sunday cohort — live', 'Previous Sunday', 'Next Sunday'),
+)
 
 ONLINE_WINDOW_SEC = 180          # "playing now": the server heard from them in the last 3 min
 RECENT_WINDOW_SEC = 3600         # "active in the last hour"
@@ -100,18 +124,25 @@ def parse_cohort_date(raw):
     return date.fromisoformat(raw)
 
 
-def default_cohort_date() -> date:
-    """HETFO_COHORT_DATE from the environment, else the 2026-08-31 session."""
+def normalize_page(slug) -> str:
+    """A known page slug, else the default page (unknown slugs never 404 the API)."""
+    slug = str(slug or '').strip().lower()
+    return slug if slug in COHORT_PAGES else DEFAULT_PAGE
+
+
+def default_cohort_date(page: str = DEFAULT_PAGE) -> date:
+    """The page's env override (e.g. HETFO_COHORT_DATE), else its session day."""
+    spec = COHORT_PAGES[normalize_page(page)]
     try:
-        configured = parse_cohort_date(os.environ.get('HETFO_COHORT_DATE'))
+        configured = parse_cohort_date(os.environ.get(spec['env']))
     except ValueError:
         configured = None
-    return configured or DEFAULT_COHORT_DATE
+    return configured or spec['date']
 
 
-def resolve_cohort_date(raw) -> date:
-    """The requested day (?date=) or the deployment default; ValueError on garbage."""
-    return parse_cohort_date(raw) or default_cohort_date()
+def resolve_cohort_date(raw, page: str = DEFAULT_PAGE) -> date:
+    """The requested day (?date=) or the page's default; ValueError on garbage."""
+    return parse_cohort_date(raw) or default_cohort_date(page)
 
 
 def resolve_refresh_seconds(raw) -> int:
@@ -122,13 +153,20 @@ def resolve_refresh_seconds(raw) -> int:
     return max(REFRESH_SECONDS_MIN, min(seconds, REFRESH_SECONDS_MAX))
 
 
-def page_context(day: date, refresh_raw=None, date_error=False) -> dict:
+def page_context(day: date, refresh_raw=None, date_error=False,
+                 page: str = DEFAULT_PAGE) -> dict:
     """Everything the template needs to boot the poller."""
+    page = normalize_page(page)
+    title_key, prev_key, next_key = WEEKDAY_LABEL_KEYS[day.weekday()]
     return {
+        'page': page,
         'date': day.isoformat(),
         'prev': (day - timedelta(days=7)).isoformat(),
         'next': (day + timedelta(days=7)).isoformat(),
-        'is_default': day == default_cohort_date(),
+        'is_default': day == default_cohort_date(page),
+        'title_key': title_key,
+        'prev_key': prev_key,
+        'next_key': next_key,
         'tz': COHORT_TZ_NAME,
         'refresh_seconds': resolve_refresh_seconds(refresh_raw),
         'online_window_min': ONLINE_WINDOW_SEC // 60,
