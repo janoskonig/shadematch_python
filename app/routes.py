@@ -5141,6 +5141,29 @@ def szerda_page():
     return _cohort_page('szerda')
 
 
+@main.route('/live')
+def live_page():
+    """The same live dashboard for everyone the server heard from in the last
+    ?hours= (default 24), whatever day they registered."""
+    from . import hetfo
+    return render_template(
+        'hetfo.html',
+        cohort=hetfo.live_page_context(request.args.get('hours'), request.args.get('refresh')),
+    )
+
+
+@main.route('/api/live', methods=['GET'])
+def live_api():
+    from . import hetfo
+    try:
+        return jsonify(hetfo.global_payload_cached(request.args.get('hours')))
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        db.session.rollback()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
 @main.route('/api/hetfo/live', methods=['GET'])
 def hetfo_live():
     """One JSON document per poll: cohort summary, one row per player with

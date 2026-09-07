@@ -85,6 +85,10 @@ LIVE_MINUTES = 60                # rounds-per-minute series length
 LIVE_WINDOWS_MIN = (5, 15, 60)   # rolling "rounds in the last N minutes" tiles
 TRAJECTORY_MAX = 24              # ΔE steps kept per open attempt (the card sparkline)
 
+# /live: everyone the server heard from in the last N hours, any cohort.
+LIVE_DEFAULT_HOURS = 24
+LIVE_MAX_HOURS = 168
+
 
 # ── Time zone & cohort day ───────────────────────────────────────────────────
 
@@ -162,10 +166,11 @@ def resolve_refresh_seconds(raw) -> int:
 
 def page_context(day: date, refresh_raw=None, date_error=False,
                  page: str = DEFAULT_PAGE) -> dict:
-    """Everything the template needs to boot the poller."""
+    """Everything the template needs to boot the poller on a cohort page."""
     page = normalize_page(page)
     title_key, prev_key, next_key = WEEKDAY_LABEL_KEYS[day.weekday()]
     return {
+        'kind': 'cohort',
         'page': page,
         'date': day.isoformat(),
         'prev': (day - timedelta(days=7)).isoformat(),
@@ -174,10 +179,43 @@ def page_context(day: date, refresh_raw=None, date_error=False,
         'title_key': title_key,
         'prev_key': prev_key,
         'next_key': next_key,
+        'hours': None,
+        'api_url': '/api/hetfo/live?date=' + day.isoformat(),
         'tz': COHORT_TZ_NAME,
         'refresh_seconds': resolve_refresh_seconds(refresh_raw),
         'online_window_min': ONLINE_WINDOW_SEC // 60,
         'date_error': bool(date_error),
+    }
+
+
+def resolve_hours(raw) -> int:
+    """?hours= for /live: an int clamped to 1..LIVE_MAX_HOURS, default 24."""
+    try:
+        hours = int(raw)
+    except (TypeError, ValueError):
+        return LIVE_DEFAULT_HOURS
+    return max(1, min(hours, LIVE_MAX_HOURS))
+
+
+def live_page_context(hours_raw=None, refresh_raw=None) -> dict:
+    """Everything the template needs to boot the poller on /live."""
+    hours = resolve_hours(hours_raw)
+    return {
+        'kind': 'live',
+        'page': 'live',
+        'date': None,
+        'prev': None,
+        'next': None,
+        'is_default': hours == LIVE_DEFAULT_HOURS,
+        'title_key': 'Live — everyone playing now',
+        'prev_key': None,
+        'next_key': None,
+        'hours': hours,
+        'api_url': '/api/live?hours=%d' % hours,
+        'tz': COHORT_TZ_NAME,
+        'refresh_seconds': resolve_refresh_seconds(refresh_raw),
+        'online_window_min': ONLINE_WINDOW_SEC // 60,
+        'date_error': False,
     }
 
 
@@ -244,6 +282,37 @@ def _cohort_users(start, end):
     return (
         User.query
         .filter(User.created_at.isnot(None), User.created_at >= start, User.created_at < end)
+        .order_by(User.created_at.asc(), User.id.asc())
+        .all()
+    )
+
+
+def _active_user_ids(since):
+    """Everyone the server heard from since ``since``: a saved round, a round
+    started, an app event, a calibration block, or a registration."""
+    ids = set()
+    for column, stamp in (
+        (MixingSession.user_id, MixingSession.timestamp),
+        (MixingAttempt.user_id, MixingAttempt.attempt_started_server_ts),
+        (AnalyticsEvent.user_id, AnalyticsEvent.ts),
+        (CalibrationSession.user_id, CalibrationSession.started_at),
+        (User.id, User.created_at),
+    ):
+        rows = (db.session.query(column)
+                .filter(stamp >= since, column.isnot(None))
+                .distinct()
+                .all())
+        ids.update(r[0] for r in rows)
+    return ids
+
+
+def _active_users(since):
+    ids = _active_user_ids(since)
+    if not ids:
+        return []
+    return (
+        User.query
+        .filter(User.id.in_(list(ids)))
         .order_by(User.created_at.asc(), User.id.asc())
         .all()
     )
@@ -663,6 +732,37 @@ def _minute_series(recent_rounds, now, tz):
     return {'points': points}
 
 
+def _hour_series(rows, now, tz, hours):
+    """Rounds finished per hour over the last ``hours`` hours, ending with the
+    current (still running) hour — the /live history chart."""
+    end_hour = now.replace(minute=0, second=0, microsecond=0)
+    first = end_hour - timedelta(hours=hours - 1)
+    rounds = [0] * hours
+    perfect = [0] * hours
+    players = [set() for _ in range(hours)]
+    for r in rows:
+        if r.timestamp is None or r.timestamp < first:
+            continue
+        i = int((r.timestamp - first).total_seconds() // 3600)
+        if i < 0 or i >= hours:
+            continue
+        rounds[i] += 1
+        if r.match_category == 'perfect':
+            perfect[i] += 1
+        players[i].add(r.user_id)
+    points = []
+    for i in range(hours):
+        t0 = first + timedelta(hours=i)
+        points.append({
+            't': _iso(t0),
+            'label': utc_to_local(t0, tz).strftime('%H:%M'),
+            'rounds': rounds[i],
+            'perfect': perfect[i],
+            'players': len(players[i]),
+        })
+    return {'hours': hours, 'points': points}
+
+
 def _live_feed(users, recent_rounds, app_opens, calib_sessions, completed_matches,
                target_names, now, since):
     """Newest-first log of what the cohort did in the last LIVE_LOOKBACK_SEC:
@@ -699,17 +799,16 @@ def _live_feed(users, recent_rounds, app_opens, calib_sessions, completed_matche
 
 # ── Payload ──────────────────────────────────────────────────────────────────
 
-def build_live_payload(day: date, now: datetime | None = None) -> dict:
-    """The whole dashboard in one JSON document: cohort summary, one row per
-    player with their live status, and the two activity timelines."""
-    now = now or datetime.utcnow()
-    tz = cohort_tz()
-    start, end = cohort_window_utc(day, tz)
+def _assemble(users, now, tz, rows_since):
+    """The shared body of every dashboard payload: one row per player with
+    their live status, the summary tallies and the live layer. Returns
+    ``(payload, timeline_rows)``; the caller adds its scope and history
+    charts. ``rows_since`` bounds the individual rounds fetched — the cohort
+    day for a cohort page, the lookback window for /live."""
     today_local = utc_to_local(now, tz).date()
-
-    users = _cohort_users(start, end)
     ids = [u.id for u in users]
     live_since = now - timedelta(seconds=LIVE_LOOKBACK_SEC)
+    start = rows_since
 
     if ids:
         progress = _progress_by_user(ids)
@@ -764,8 +863,14 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
     for uid, up in progress.items():
         seen.bump(uid, up.updated_at, 'round')
 
-    came_back_ids = {r.user_id for r in timeline_rows
-                     if r.timestamp is not None and r.timestamp >= end}
+    # "Came back": a round on a later local day than the player's registration
+    # day (for a cohort page that is any round after the cohort day).
+    reg_day = {u.id: utc_to_local(u.created_at, tz).date() for u in users if u.created_at}
+    came_back_ids = {
+        r.user_id for r in timeline_rows
+        if r.timestamp is not None and r.user_id in reg_day
+        and utc_to_local(r.timestamp, tz).date() > reg_day[r.user_id]
+    }
 
     rows = []
     genders = {}
@@ -835,6 +940,8 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
             'user_id': u.id,
             'nickname': u.nickname,
             'registered_at': _iso(u.created_at),
+            'registered_day': reg_day[u.id].isoformat() if u.id in reg_day else None,
+            'new_today': reg_day.get(u.id) == today_local,
             'locale': u.locale,
             'email_verified': u.email_verified_at is not None,
             'xp': xp,
@@ -894,6 +1001,8 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
         'online_calibrating': sum(1 for r in rows if r['activity']['kind'] == 'calibrating'),
         'online_in_app': sum(1 for r in rows if r['activity']['kind'] == 'online'),
         'came_back': sum(1 for r in rows if r['came_back']),
+        'new_today': sum(1 for r in rows if r['new_today']),
+        'returning': sum(1 for r in rows if not r['new_today']),
         'rounds': sum(r['rounds'] for r in rows),
         'completed': sum(r['completed'] for r in rows),
         'perfect': sum(r['perfect'] for r in rows),
@@ -915,16 +1024,9 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
         'locale': locales,
     }
 
-    return {
+    payload = {
         'status': 'success',
         'generated_at': _iso(now),
-        'cohort': {
-            'date': day.isoformat(),
-            'tz': COHORT_TZ_NAME,
-            'window_utc': {'start': _iso(start), 'end': _iso(end)},
-            'online_window_sec': ONLINE_WINDOW_SEC,
-            'recent_window_sec': RECENT_WINDOW_SEC,
-        },
         'summary': summary,
         'live': {
             'lookback_sec': LIVE_LOOKBACK_SEC,
@@ -936,31 +1038,78 @@ def build_live_payload(day: date, now: datetime | None = None) -> dict:
                                target_names, now, live_since),
         },
         'users': rows,
-        'timeline': {
-            'day': _day_series(timeline_rows, start, end, tz),
-            'days': _daily_series(timeline_rows, day, today_local, tz),
-        },
     }
+    return payload, timeline_rows
+
+
+def build_live_payload(day: date, now: datetime | None = None) -> dict:
+    """A cohort page (/hetfo, /szerda): everyone registered on ``day``, with
+    the registration-day and day-by-day history charts."""
+    now = now or datetime.utcnow()
+    tz = cohort_tz()
+    start, end = cohort_window_utc(day, tz)
+    users = _cohort_users(start, end)
+    payload, timeline_rows = _assemble(users, now, tz, rows_since=start)
+    payload['scope'] = {'kind': 'cohort', 'date': day.isoformat()}
+    payload['cohort'] = {
+        'date': day.isoformat(),
+        'tz': COHORT_TZ_NAME,
+        'window_utc': {'start': _iso(start), 'end': _iso(end)},
+        'online_window_sec': ONLINE_WINDOW_SEC,
+        'recent_window_sec': RECENT_WINDOW_SEC,
+    }
+    payload['timeline'] = {
+        'day': _day_series(timeline_rows, start, end, tz),
+        'days': _daily_series(timeline_rows, day, utc_to_local(now, tz).date(), tz),
+    }
+    return payload
+
+
+def build_global_payload(hours=LIVE_DEFAULT_HOURS, now: datetime | None = None) -> dict:
+    """The /live page: everyone the server heard from in the last ``hours``,
+    whatever day they registered, with a rounds-per-hour history chart."""
+    now = now or datetime.utcnow()
+    tz = cohort_tz()
+    hours = resolve_hours(hours)
+    since = now - timedelta(hours=hours)
+    users = _active_users(since)
+    payload, timeline_rows = _assemble(users, now, tz, rows_since=since)
+    payload['scope'] = {'kind': 'live', 'hours': hours, 'since': _iso(since)}
+    payload['cohort'] = {
+        'tz': COHORT_TZ_NAME,
+        'online_window_sec': ONLINE_WINDOW_SEC,
+        'recent_window_sec': RECENT_WINDOW_SEC,
+    }
+    payload['timeline'] = {'hours': _hour_series(timeline_rows, now, tz, hours)}
+    return payload
 
 
 # ── Short-lived cache (several admins polling at once share one query set) ──
 
 _CACHE_TTL_SEC = float(os.environ.get('HETFO_CACHE_SECONDS', '3') or 3)
 _cache_lock = threading.Lock()
-_cache = {}  # date iso -> (monotonic ts, payload)
+_cache = {}  # scope key -> (monotonic ts, payload)
 
 
-def live_payload_cached(day: date) -> dict:
-    key = day.isoformat()
+def _cached(key, build):
     now = time.monotonic()
     with _cache_lock:
         entry = _cache.get(key)
         if entry is not None and (now - entry[0]) <= _CACHE_TTL_SEC:
             return entry[1]
-    payload = build_live_payload(day)
+    payload = build()
     with _cache_lock:
         _cache[key] = (time.monotonic(), payload)
         if len(_cache) > 32:
             for stale in [k for k, v in list(_cache.items()) if (now - v[0]) > _CACHE_TTL_SEC]:
                 _cache.pop(stale, None)
     return payload
+
+
+def live_payload_cached(day: date) -> dict:
+    return _cached('cohort:' + day.isoformat(), lambda: build_live_payload(day))
+
+
+def global_payload_cached(hours) -> dict:
+    hours = resolve_hours(hours)
+    return _cached('live:%d' % hours, lambda: build_global_payload(hours))

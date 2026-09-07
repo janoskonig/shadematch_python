@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}{{ t(cohort.title_key) }} · {{ cohort.date }}{% endblock %}
+{% block title %}{{ t(cohort.title_key) }}{% if cohort.date %} · {{ cohort.date }}{% endif %}{% endblock %}
 
 {% block og %}
 <meta name="robots" content="noindex, nofollow">
@@ -52,7 +52,7 @@
   }
   .hf-btn:hover { border-color: var(--accent-primary); }
   .hf-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
-  .hf-controls input[type=date] {
+  .hf-controls input[type=date], .hf-controls select {
     min-height: 36px; padding: 4px 8px; border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm); background: var(--surface); color: var(--text-primary);
   }
@@ -188,7 +188,11 @@
   <header class="hf-head">
     <div>
       <h1>{{ t(cohort.title_key) }}</h1>
+      {% if cohort.kind == 'live' %}
+      <p class="hf-lead">{{ t('Everyone the server heard from in the last {h} hours, whatever day they registered, and what they are doing right now. Times are shown in {tz}; the page refreshes itself every {n} seconds.', h=cohort.hours, tz=cohort.tz, n=cohort.refresh_seconds) }}</p>
+      {% else %}
       <p class="hf-lead">{{ t('Everyone who registered on the cohort day, and what they are doing right now. Times are shown in {tz}; the page refreshes itself every {n} seconds.', tz=cohort.tz, n=cohort.refresh_seconds) }}</p>
+      {% endif %}
     </div>
     <div class="hf-status" role="status" aria-live="polite">
       <span class="hf-pulse" id="hfPulse"></span>
@@ -203,13 +207,26 @@
   {% endif %}
   <p class="hf-error" id="hfError" hidden></p>
 
+  {% if cohort.kind == 'live' %}
+  <nav class="hf-controls" aria-label="{{ t('Show the last:') }}">
+    <label class="hf-muted" for="hfHours">{{ t('Show the last:') }}</label>
+    <select id="hfHours">
+      {% for h in [1, 3, 6, 12, 24, 48, 168] %}
+      <option value="{{ h }}"{% if h == cohort.hours %} selected{% endif %}>{% if h >= 48 %}{{ t('{d} days', d=h // 24) }}{% else %}{{ t('{h} h', h=h) }}{% endif %}</option>
+      {% endfor %}
+    </select>
+    <a class="hf-btn" href="/hetfo">{{ t('Cohort pages') }} ›</a>
+  </nav>
+  {% else %}
   <nav class="hf-controls" aria-label="{{ t('Cohort day') }}">
     <a class="hf-btn" href="/{{ cohort.page }}?date={{ cohort.prev }}">‹ {{ t(cohort.prev_key) }}</a>
     <span class="hf-when" id="hfWhen">{{ cohort.date }}</span>
     <a class="hf-btn" href="/{{ cohort.page }}?date={{ cohort.next }}">{{ t(cohort.next_key) }} ›</a>
     <label class="hf-muted" for="hfDate">{{ t('Any day:') }}</label>
     <input type="date" id="hfDate" value="{{ cohort.date }}">
+    <a class="hf-btn" href="/live">{{ t('Everyone live') }} ›</a>
   </nav>
+  {% endif %}
 
   <section class="hf-cards" id="hfLiveStrip" aria-label="{{ t('Right now') }}"></section>
 
@@ -248,9 +265,23 @@
   </section>
 
   <details class="hf-totals" id="hfTotals">
-    <summary>{{ t('Cohort totals, profile and history') }}</summary>
+    <summary>{% if cohort.kind == 'live' %}{{ t('Totals for the active players, profile and history') }}{% else %}{{ t('Cohort totals, profile and history') }}{% endif %}</summary>
     <section class="hf-cards" id="hfCards" aria-label="{{ t('Cohort summary') }}"></section>
     <p class="hf-profile" id="hfProfile"></p>
+    {% if cohort.kind == 'live' %}
+    <section class="hf-charts">
+      <div class="hf-chart" id="hfChartHours">
+        <h2>{{ t('Rounds per hour, last {h} hours', h=cohort.hours) }}</h2>
+        <p class="sub" data-sub></p>
+        <svg role="img" aria-label="{{ t('Rounds per hour, last {h} hours', h=cohort.hours) }}"></svg>
+        <div class="hf-tip"></div>
+        <details class="hf-table">
+          <summary>{{ t('Show as table') }}</summary>
+          <div class="hf-table-wrap"><table></table></div>
+        </details>
+      </div>
+    </section>
+    {% else %}
     <section class="hf-charts">
       <div class="hf-chart" id="hfChartDay">
         <h2>{{ t('Registration day — rounds per quarter hour') }}</h2>
@@ -273,6 +304,7 @@
         </details>
       </div>
     </section>
+    {% endif %}
   </details>
 
   <p class="hf-foot">{{ t('Online = the server heard from the player in the last {n} minutes (a mixing step, a saved round, an app open or visibility event, or a calibration trial). The game sends mixing steps every few seconds while a round is in progress, so the ΔE on a card trails the screen by a few seconds. Levels are XP-derived. Play time caps each round at 30 minutes, like the leaderboard.', n=cohort.online_window_min) }}</p>
@@ -306,6 +338,8 @@ window.HETFO = {{ cohort|tojson }};
     profile: document.getElementById('hfProfile'),
     chartDay: document.getElementById('hfChartDay'),
     chartDays: document.getElementById('hfChartDays'),
+    chartHours: document.getElementById('hfChartHours'),
+    hours: document.getElementById('hfHours'),
     players: document.getElementById('hfPlayers'),
     empty: document.getElementById('hfEmpty'),
     totals: document.getElementById('hfTotals'),
@@ -353,6 +387,15 @@ window.HETFO = {{ cohort|tojson }};
   function fmtTime(iso) {
     if (!iso) return '—';
     return new Date(iso).toLocaleTimeString(LANG, { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+  }
+  // Time of day for today, date + time for any other day (all in the cohort zone).
+  function fmtWhen(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    var dayOpts = { timeZone: TZ, month: 'short', day: 'numeric' };
+    var day = d.toLocaleDateString(LANG, dayOpts);
+    var time = d.toLocaleTimeString(LANG, { timeZone: TZ, hour: '2-digit', minute: '2-digit' });
+    return day === new Date().toLocaleDateString(LANG, dayOpts) ? time : day + ' ' + time;
   }
   function fmtDayLong(isoDate) {
     return new Date(isoDate + 'T12:00:00Z').toLocaleDateString(LANG, { timeZone: 'UTC', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -436,7 +479,7 @@ window.HETFO = {{ cohort|tojson }};
     clearTimeout(state.timer);
     if (state.hasRendered) root.classList.add('is-refreshing');
     updateStatus();
-    fetch('/api/hetfo/live?date=' + encodeURIComponent(CFG.date), { cache: 'no-store' })
+    fetch(CFG.api_url, { cache: 'no-store' })
       .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
       .then(function (res) {
         if (!res.ok || !res.d || res.d.status !== 'success') throw new Error((res.d && res.d.message) || 'HTTP error');
@@ -474,12 +517,17 @@ window.HETFO = {{ cohort|tojson }};
   }, 1000);
 
   // ── cohort day controls ─────────────────────────────────────────────────
-  els.when.textContent = fmtDayLong(CFG.date);
-  els.date.addEventListener('change', function () {
+  if (els.when && CFG.date) els.when.textContent = fmtDayLong(CFG.date);
+  if (els.date) els.date.addEventListener('change', function () {
     if (!els.date.value) return;
     var q = new URLSearchParams(location.search);
     q.set('date', els.date.value);
     location.href = '/' + CFG.page + '?' + q.toString();
+  });
+  if (els.hours) els.hours.addEventListener('change', function () {
+    var q = new URLSearchParams(location.search);
+    q.set('hours', els.hours.value);
+    location.href = '/live?' + q.toString();
   });
 
   // ── stat tiles ──────────────────────────────────────────────────────────
@@ -506,10 +554,17 @@ window.HETFO = {{ cohort|tojson }};
   }
   function renderCards(sum) {
     els.cards.textContent = '';
-    els.cards.appendChild(card(t('Registered'), fmtInt(sum.registered), fill(t('{n} with verified email'), { n: fmtInt(sum.email_verified) })));
-    els.cards.appendChild(card(t('Played at least one round'), fmtInt(sum.played), fill(t('{pct} of registered'), { pct: fmtPct(sum.played, sum.registered) })));
-    els.cards.appendChild(card(t('Active in the last hour'), fmtInt(sum.active_last_hour), null));
-    els.cards.appendChild(card(t('Came back on a later day'), fmtInt(sum.came_back), fill(t('{pct} of players'), { pct: fmtPct(sum.came_back, sum.played) })));
+    if (CFG.kind === 'live') {
+      els.cards.appendChild(card(fill(t('Active players, last {h} h'), { h: CFG.hours }), fmtInt(sum.registered), fill(t('{n} new today'), { n: fmtInt(sum.new_today) })));
+      els.cards.appendChild(card(t('Played at least one round'), fmtInt(sum.played), fill(t('{pct} of them'), { pct: fmtPct(sum.played, sum.registered) })));
+      els.cards.appendChild(card(t('Active in the last hour'), fmtInt(sum.active_last_hour), null));
+      els.cards.appendChild(card(t('Returning players'), fmtInt(sum.returning), t('registered before today')));
+    } else {
+      els.cards.appendChild(card(t('Registered'), fmtInt(sum.registered), fill(t('{n} with verified email'), { n: fmtInt(sum.email_verified) })));
+      els.cards.appendChild(card(t('Played at least one round'), fmtInt(sum.played), fill(t('{pct} of registered'), { pct: fmtPct(sum.played, sum.registered) })));
+      els.cards.appendChild(card(t('Active in the last hour'), fmtInt(sum.active_last_hour), null));
+      els.cards.appendChild(card(t('Came back on a later day'), fmtInt(sum.came_back), fill(t('{pct} of players'), { pct: fmtPct(sum.came_back, sum.played) })));
+    }
     els.cards.appendChild(card(t('Rounds'), fmtInt(sum.rounds), fill(t('{c} completed · {p} perfect'), { c: fmtInt(sum.completed), p: fmtInt(sum.perfect) })));
     els.cards.appendChild(card(t('Median rounds per player'), sum.median_rounds_per_player == null ? '—' : fmtInt(sum.median_rounds_per_player), t('among players with a round')));
     els.cards.appendChild(card(t('Play time'), fmtDuration(sum.play_time_sec), t('capped at 30 min per round')));
@@ -803,6 +858,26 @@ window.HETFO = {{ cohort|tojson }};
       };
     }), { columns: [t('Minute'), t('Rounds'), t('Players'), t('Perfect')], tableSkipZero: true, nowIndex: mins.length - 1 });
 
+    if (CFG.kind === 'live') {
+      var hrs = d.timeline.hours.points;
+      var span = d.timeline.hours.hours;
+      var spanRounds = 0;
+      hrs.forEach(function (p) { spanRounds += p.rounds; });
+      els.chartHours.querySelector('[data-sub]').textContent = fill(t('{n} rounds in the last {h} hours'), { n: fmtInt(spanRounds), h: span });
+      renderBarChart(els.chartHours, hrs.map(function (p) {
+        var label = span > 48
+          ? new Date(p.t).toLocaleDateString(LANG, { timeZone: TZ, weekday: 'short' }) + ' ' + p.label
+          : p.label;
+        return {
+          label: label, value: p.rounds,
+          rows: [p.rounds, p.players, p.perfect],
+          tipTitle: label + ' · ' + fill(t('{n} rounds'), { n: fmtInt(p.rounds) }),
+          tipRows: [fill(t('{n} players'), { n: fmtInt(p.players) }), fill(t('{n} perfect'), { n: fmtInt(p.perfect) })],
+        };
+      }), { columns: [t('Hour'), t('Rounds'), t('Players'), t('Perfect')], tableSkipZero: true, nowIndex: hrs.length - 1 });
+      return;
+    }
+
     var dayPts = d.timeline.day.points;
     // "Now" marker only while the cohort day is still running.
     var nowMs = state.fetchedAt || Date.now();
@@ -928,7 +1003,7 @@ window.HETFO = {{ cohort|tojson }};
     { key: 'rounds_last_60m', label: t('1 h'), num: true, val: function (r) { return r.rounds_last_60m; }, cell: numCell(function (r) { return fmtInt(r.rounds_last_60m); }) },
     { key: 'last_seen', label: t('Last seen'), val: function (r) { return r.last_seen_sec_ago == null ? Infinity : r.last_seen_sec_ago; }, cell: lastSeenCell },
     { key: 'registered_at', label: t('Registered'), val: function (r) { return r.registered_at || ''; },
-      cell: function (r) { return el('td', { text: fmtTime(r.registered_at), title: r.registered_at || '' }); } },
+      cell: function (r) { return el('td', { text: fmtWhen(r.registered_at), title: r.registered_at || '' }); } },
     { key: 'level', label: t('Level'), num: true, val: function (r) { return r.level; }, cell: numCell(function (r) { return 'L' + r.level; }) },
     { key: 'xp', label: 'XP', num: true, val: function (r) { return r.xp; }, cell: numCell(function (r) { return fmtInt(r.xp); }) },
     { key: 'rounds', label: t('Rounds'), num: true, val: function (r) { return r.rounds; }, cell: numCell(function (r) { return fmtInt(r.rounds); }) },
