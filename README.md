@@ -35,6 +35,14 @@ FLASK_ENV=development
 3. **Existing PostgreSQL (e.g. production):** After pulling model changes, run `npm install` then `npm run db:migrate`. The script loads **`DATABASE_URL` from the repo-root `.env`** (same as Flask’s `load_dotenv`) or from your shell if already exported. It adds `skip_perception` and **`match_category`** when missing.
 4. **Gamification level recompute (Option C, 30-level mapping):** After deploying the tier-driven leveling rewrite, run `python scripts/recompute_levels.py` once to recompute every user’s `level` and `max_sum_drop_unlocked` under the new mapping. Use `--dry-run` first to inspect the planned changes. Idempotent and safe to re-run.
 
+## Live cohort dashboard (`/hetfo`)
+
+`/hetfo` ("hétfő" = Monday) is a live dashboard for the players who registered on one calendar day (Europe/Budapest): who is playing right now and what they are mixing, rounds/XP/level per player, whether they came back on later days, plus two activity charts. It polls `/api/hetfo/live` every 15 s.
+
+- Default cohort day: the Monday recruitment session, **2026-08-31**. Override per deployment with `HETFO_COHORT_DATE=YYYY-MM-DD`, or per visit with `/hetfo?date=YYYY-MM-DD` (the page also steps a week at a time).
+- `?refresh=<seconds>` (5–120) changes the polling interval; `HETFO_CACHE_SECONDS` (default 5) is the server-side cache shared by everyone watching.
+- Like `/stat`, the page has no login: it shows player IDs, nicknames and gameplay figures, never emails or birthdates.
+
 ## Deployment on Render
 
 ### Prerequisites
