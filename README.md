@@ -43,6 +43,7 @@ FLASK_ENV=development
 - Default cohort days: the two recruitment sessions, **2026-08-31** (`/hetfo`) and **2026-09-02** (`/szerda`). Override per deployment with `HETFO_COHORT_DATE` / `SZERDA_COHORT_DATE` (`YYYY-MM-DD`), or per visit with `?date=YYYY-MM-DD` (each page also steps a week at a time; the heading follows the weekday shown).
 - `?refresh=<seconds>` (3–120) changes the polling interval; `HETFO_CACHE_SECONDS` (default 3) is the server-side cache shared by everyone watching.
 - Like `/stat`, the pages have no login: they show player IDs, nicknames and gameplay figures, never emails or birthdates.
+- Monday/Wednesday cohort members (including `T0BS6V`) complete **10 calibration colour pairs before their full 10-round mixing match** on each Budapest calendar day they play. The calibration has eight ladder pairs and two attention checks; all ten answers must be saved before the match unlocks. This applies on the registration day and continues after five completed sessions. Completed legacy 20-pair runs still count for their original completion day. Other players keep the optional 20-pair calibration. Cohort match play does not auto-insert the separate daily challenge.
 
 ## Deployment on Render
 

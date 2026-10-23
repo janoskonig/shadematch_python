@@ -1,8 +1,9 @@
 """
 Next-action policy: single server-authoritative CTA envelope.
 
-Policy version: v3  (match-first)
-Policy order:
+Policy version: v4 (cohort calibration, then a full match)
+The Monday/Wednesday study cohorts first complete today's 10-pair calibration,
+then start or resume a 10-round match. For other players the policy order is:
   1. daily_unfinished  — final run for today not yet submitted
   2. streak_at_risk    — active streak may lapse today
   3. continue_match    — an active match is waiting (round i of n)
@@ -19,11 +20,12 @@ Streak-at-risk predicates (ALL must hold):
 Guest (no user_id): returns {'next_action': None}
 """
 from datetime import date, datetime, timedelta, timezone
-from .models import UserProgress, DailyChallengeRun, Match
+from .models import User, UserProgress, DailyChallengeRun, Match
+from . import db, cohort_calibration
 from .gamification import compute_coverage_progress, _matches_completed
 from .i18n import t
 
-POLICY_VERSION = 'v3'
+POLICY_VERSION = 'v4'
 
 
 # ---------------------------------------------------------------------------
@@ -86,7 +88,16 @@ def build_next_action(user_id: str, today: date = None, quota=None):
         'payload': {'route': 'free_play'},
     }
 
+    user = db.session.get(User, user_id)
+    cohort_member = cohort_calibration.is_study_cohort_member(user)
     primary = None
+    if cohort_member and not cohort_calibration.has_full_calibration_today(user_id):
+        primary = {
+            'id': 'calibration_required', 'type': 'navigate',
+            'label': t('Start today\'s calibration'),
+            'reason': t('10 colour pairs, then your full 10-round match'),
+            'payload': {'route': 'calibration', 'url': cohort_calibration.CALIBRATION_URL},
+        }
 
     # ── 1. Daily unfinished ───────────────────────────────────────────────
     final_today = (
@@ -94,7 +105,7 @@ def build_next_action(user_id: str, today: date = None, quota=None):
         .filter_by(user_id=user_id, challenge_date=today, is_final=True)
         .first()
     )
-    if not final_today:
+    if primary is None and not cohort_member and not final_today:
         primary = {
             'id': 'daily_unfinished',
             'type': 'daily_challenge',
@@ -104,7 +115,7 @@ def build_next_action(user_id: str, today: date = None, quota=None):
         }
 
     # ── 2. Streak at risk ─────────────────────────────────────────────────
-    if primary is None and _streak_at_risk(up, today):
+    if primary is None and not cohort_member and _streak_at_risk(up, today):
         primary = {
             'id': 'streak_at_risk',
             'type': 'practice',

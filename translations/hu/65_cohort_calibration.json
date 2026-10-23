@@ -1,0 +1,17 @@
+{
+  "Complete all 10 calibration pairs before today's 10-round match.": "A mai 10 körös meccs előtt válaszolj mind a 10 kalibrációs színpárra.",
+  "Start today's calibration": "Mai kalibráció indítása",
+  "10 colour pairs, then your full 10-round match": "10 kalibrációs színpár, majd egy teljes, 10 körös keverési meccs",
+  "Start calibration": "Kalibráció indítása",
+  "Your answer was not saved. Please try answering this pair again.": "A válasz mentése nem sikerült. Kérjük, válaszolj újra erre a színpárra.",
+  "Your session is not saved yet. Retry saving before continuing to the match.": "Az ülés mentése még nem sikerült. A meccs előtt próbáld újra a mentést.",
+  "Continue to your 10-round match": "Tovább a 10 körös keverési meccshez",
+  "Retry saving session": "Az ülés mentésének újrapróbálása",
+  "You'll see <strong>pairs of colours</strong> drawn from the game's palette, one after another. For each pair you answer up to two quick questions: first <strong>“Are they identical?”</strong> — and if not, <strong>“If this were your mix, would you accept it as a match?”</strong> Some pairs are identical, some are obvious; most are subtle. There are no right answers and no feedback — just judge what you see.": "<strong>Színpárokat</strong> fogsz látni a játék palettájáról, egymás után. Minden párnál legfeljebb két gyors kérdésre válaszolsz: először <strong>„Egyformák?”</strong> — és ha nem, <strong>„Ha ez a te keverésed lenne, elfogadnád találatnak?”</strong> Néhány pár egyforma, néhány nyilvánvalóan eltér; a legtöbb alig észrevehető. Nincs helyes válasz és nincs visszajelzés — csak ítéld meg, amit látsz.",
+  "First compare 10 colour pairs. Then play your full 10-round mixing match.": "Először ítélj meg 10 színpárt. Utána játssz végig egy teljes, 10 körös keverési meccset.",
+  "Today's calibration complete": "A mai kalibráció kész",
+  "10 of 10 colour pairs saved.": "10-ből 10 színpár mentve.",
+  "Your calibration is saved. Continue to the full 10-round mixing match.": "A kalibrációt elmentettük. Folytasd a teljes, 10 körös keverési meccsel.",
+  "Today's calibration is already saved.": "A mai kalibráció már mentve van.",
+  "Today: 10 calibration pairs → 10 mixing rounds.": "Ma: 10 kalibrációs színpár → 10 keverési kör."
+}

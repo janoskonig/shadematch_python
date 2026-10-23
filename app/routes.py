@@ -50,6 +50,7 @@ from .gamification import (
     _xp_level,
 )
 from . import matches as match_service
+from . import cohort_calibration
 from .next_action import build_next_action
 from .i18n import t, t_for, get_locale
 # NOTE: `stat_eda` and `mixed_models_stat` pull in matplotlib + statsmodels (+ scipy),
@@ -1018,15 +1019,18 @@ def _calibration_status(user_id):
     """Light per-user standing for the boot payload (/api/user-progress): drives the daily
     warm-up prompt and header badge without the pooled threshold fit.
 
-    Daily cadence: nothing on the registration day (the onboarding funnel is long enough);
-    from the next day on, one prompted session per day until — and beyond — the 5-session
-    protocol. Extra same-day runs from the /calibration page itself stay allowed; this only
-    governs the prompt."""
+    Cohort members must complete today's 10-pair block before a match, including
+    their registration day and after five sessions. Other players keep the optional
+    daily offer from the day after registration. Extra manual runs remain available.
+    """
     user = User.query.get(user_id) if user_id else None
     if not user:
         return {'available_today': False, 'done_today': False,
                 'completed': 0, 'target': calibration.TARGET_SESSIONS}
-    today_start = datetime.combine(date.today(), datetime.min.time())
+    from .hetfo import cohort_window_utc, utc_to_local
+    today = utc_to_local(datetime.utcnow()).date()
+    today_start, today_end = cohort_window_utc(today)
+    cohort_member = cohort_calibration.is_study_cohort_member(user)
     completed = (CalibrationSession.query
                  .filter(CalibrationSession.user_id == user_id,
                          CalibrationSession.ended_at.isnot(None))
@@ -1034,14 +1038,21 @@ def _calibration_status(user_id):
     done_today = db.session.query(
         CalibrationSession.query
         .filter(CalibrationSession.user_id == user_id,
-                CalibrationSession.ended_at >= today_start)
+                CalibrationSession.ended_at >= today_start,
+                CalibrationSession.ended_at < today_end)
         .exists()).scalar()
-    registered_today = bool(user.created_at and user.created_at.date() >= date.today())
+    if cohort_member:
+        done_today = cohort_calibration.has_full_calibration_today(user_id)
+    registered_today = bool(user.created_at and utc_to_local(user.created_at).date() >= today)
     return {
-        'available_today': (not registered_today) and (not done_today),
+        'available_today': (cohort_member or not registered_today) and not done_today,
         'done_today': bool(done_today),
         'completed': completed,
         'target': calibration.TARGET_SESSIONS,
+        'required_before_match': cohort_member,
+        'required_today': cohort_member and not done_today,
+        'session_pairs': (cohort_calibration.SESSION_TRIALS if cohort_member
+                          else cohort_calibration.LEGACY_SESSION_TRIALS),
     }
 
 
@@ -1072,7 +1083,7 @@ def _calibration_progress(user_id):
     return {'target': calibration.TARGET_SESSIONS, 'completed': len(sessions),
             'history': history, 'pooled': pooled,
             **{k: v for k, v in _calibration_status(user_id).items()
-               if k in ('available_today', 'done_today')}}
+               if k in ('available_today', 'done_today', 'required_before_match', 'required_today', 'session_pairs')}}
 
 
 @main.route('/calibration/progress')
@@ -1093,12 +1104,14 @@ def calibration_start():
     per user across sessions), so anonymous play is rejected."""
     data = request.get_json(silent=True) or {}
     user_id = _normalize_user_id_value(data.get('user_id') or data.get('userId'))
-    if not user_id or not User.query.get(user_id):
+    user = User.query.get(user_id) if user_id else None
+    if not user:
         return jsonify({'error': 'registration_required'}), 403
     try:
         seed = int(_uuid.uuid4().int % (2 ** 63))
         pool = _calibration_center_pool()
-        block = calibration.build_block(seed, center_pool=pool)
+        block = calibration.build_block(seed, center_pool=pool,
+                                        short=cohort_calibration.is_study_cohort_member(user))
         session_uuid = str(_uuid.uuid4())
         # Protocol version lives in `mode`: 'constant_stimuli_gamut' = full-palette
         # families + the match-referent acceptability question; the skin-only pilot's
@@ -1169,12 +1182,18 @@ def calibration_finish():
         if not sess:
             return jsonify({'error': 'unknown session'}), 404
         rows = CalibrationTrial.query.filter_by(session_uuid=session_uuid).all()
+        answered = sum(r.judgment in cohort_calibration.JUDGMENTS for r in rows)
+        if not sess.n_trials or len(rows) != sess.n_trials or answered != sess.n_trials:
+            return jsonify({'status': 'error', 'error': 'session_incomplete',
+                            'answered': answered, 'total': sess.n_trials}), 409
         responded = [{
             'actual_de': r.actual_de, 'is_catch': r.is_catch,
             'catch_kind': r.catch_kind, 'judgment': r.judgment,
         } for r in rows]
         summary = calibration.summarize(responded)
-        sess.ended_at = datetime.utcnow()
+        # Retrying a finish must not turn an older session into today's run.
+        if sess.ended_at is None:
+            sess.ended_at = datetime.utcnow()
         sess.perceptibility_de = summary.get('perceptibility_de')
         sess.acceptability_de = summary.get('acceptability_de')
         sess.catch_pass_rate = summary.get('catch_pass_rate')
@@ -1834,6 +1853,17 @@ def get_lab_target_colors():
 
 # ── Matches (10 rounds, one colour per macro-cluster) ─────────────────────
 
+def _match_calibration_gate(user_id):
+    if cohort_calibration.required_before_match(user_id):
+        return jsonify({
+            'status': 'error', 'code': 'CALIBRATION_REQUIRED',
+            'message': t('Complete all 10 calibration pairs before today\'s 10-round match.'),
+            'calibration_url': cohort_calibration.CALIBRATION_URL,
+            'calibration': _calibration_status(user_id),
+        }), 409
+    return None
+
+
 @main.route('/api/match/current', methods=['POST'])
 def api_match_current():
     """The user's active match (creating one if needed): all 10 rounds with
@@ -1842,12 +1872,16 @@ def api_match_current():
     _, user_id, err = _resolve_authenticated_user(data)
     if err:
         return err
+    gate = _match_calibration_gate(user_id)
+    if gate is not None:
+        return gate
     try:
         match = match_service.get_or_create_active_match(user_id)
         db.session.commit()
         return jsonify({
             'status': 'success',
             'match': match_service.match_payload(match, _target_color_public_dict),
+            'calibration': _calibration_status(user_id),
             **build_next_action(user_id),
         })
     except Exception as e:
@@ -1862,6 +1896,9 @@ def api_match_skip_round():
     _, user_id, err = _resolve_authenticated_user(data)
     if err:
         return err
+    gate = _match_calibration_gate(user_id)
+    if gate is not None:
+        return gate
     try:
         state = match_service.skip_round_unmixed(
             user_id, data.get('match_id'), data.get('round_index'),
@@ -2843,6 +2880,10 @@ def save_session():
     _, user_id, err = _resolve_authenticated_user(data)
     if err:
         return err
+    if data.get('match_id') is not None:
+        gate = _match_calibration_gate(user_id)
+        if gate is not None:
+            return gate
 
     if not refresh_db_connection():
         return jsonify({'status': 'error', 'error': 'Database connection failed'}), 500
@@ -2945,6 +2986,10 @@ def save_skip():
     _, user_id, err = _resolve_authenticated_user(data)
     if err:
         return err
+    if data.get('match_id') is not None:
+        gate = _match_calibration_gate(user_id)
+        if gate is not None:
+            return gate
 
     if not refresh_db_connection():
         return jsonify({'status': 'error', 'error': 'Database connection failed'}), 500

@@ -35,6 +35,17 @@
   let stage = 'identical'; // 'identical' (Q1 perceptibility) → 'acceptable' (Q2 acceptability)
   let shownAt = 0;        // performance.now() when the current pair was rendered
   let locked = false;     // guard against double-answering while advancing
+  let cohortVisit = false;
+
+  function showSaveError(message, retryFinish) {
+    el('calSaveError').textContent = message;
+    el('calSaveError').classList.remove('cal-hidden');
+    el('calRetryFinish').classList.toggle('cal-hidden', !retryFinish);
+  }
+  function clearSaveError() {
+    el('calSaveError').classList.add('cal-hidden');
+    el('calRetryFinish').classList.add('cal-hidden');
+  }
 
   function userId() {
     try { return (window.currentUserId || localStorage.getItem('userId') || '').trim().toUpperCase() || null; }
@@ -101,30 +112,46 @@
     }
   }
 
-  function commit(judgment) {
+  async function commit(judgment) {
     locked = true;
-    const t = session.trials[idx];
+    const trial = session.trials[idx];
     const reaction_ms = Math.round(performance.now() - shownAt);
-    // Fire-and-forget: each response carries its own trial_id, so order doesn't matter.
-    fetch('/calibration/respond', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: session.session_id, trial_id: t.trial_id, judgment, reaction_ms }),
-    }).catch(() => { /* transient — the trial row just stays unjudged */ });
-
-    idx += 1;
-    if (idx >= session.trials.length) finish();
-    else renderTrial();
+    clearSaveError();
+    try {
+      // Save before advancing, including the last pair before /finish. The
+      // current pair stays on screen after an error so it can be retried.
+      const response = await fetch('/calibration/respond', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: session.session_id, trial_id: trial.trial_id, judgment, reaction_ms }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'ok') throw new Error('answer not saved');
+      idx += 1;
+      if (idx >= session.trials.length) await finish();
+      else renderTrial();
+    } catch (_) {
+      locked = false;
+      showSaveError(t('Your answer was not saved. Please try answering this pair again.'), false);
+    }
   }
 
-  function finish() {
+  async function finish() {
+    el('calRetryFinish').disabled = true;
     progressFill.style.width = '100%';
-    fetch('/calibration/finish', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: session.session_id }),
-    })
-      .then((r) => r.json())
-      .then((data) => showResult(data && data.summary, data && data.progress))
-      .catch(() => showResult(null, null));
+    clearSaveError();
+    try {
+      const response = await fetch('/calibration/finish', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ session_id: session.session_id }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'ok') throw new Error('session not saved');
+      showResult(data.summary, data.progress);
+    } catch (_) {
+      showSaveError(t('Your session is not saved yet. Retry saving before continuing to the match.'), true);
+    } finally {
+      el('calRetryFinish').disabled = false;
+    }
   }
 
   const fmtDe = (v) => (v != null ? Number(v).toFixed(2) : '—');
@@ -165,6 +192,7 @@
   function showResult(summary, progress) {
     runner.classList.add('cal-hidden');
     result.classList.remove('cal-hidden');
+    cohortVisit = cohortVisit || !!(progress && progress.required_before_match);
 
     const completed = (progress && progress.completed) || 0;
     const target = (progress && progress.target) || 5;
@@ -207,9 +235,17 @@
           .replace('{done}', String(completed)).replace('{target}', String(target)).replace('{left}', String(left));
       el('calAgainBtn').textContent = t('Next session');
     }
+    if (cohortVisit) {
+      el('calResultTitle').textContent = t('Today\'s calibration complete');
+      el('calResultProgress').textContent = t('10 of 10 colour pairs saved.');
+      if (!isFinal) el('calInterimMsg').textContent = t('Your calibration is saved. Continue to the full 10-round mixing match.');
+      el('calBackGame').textContent = t('Continue to your 10-round match');
+      el('calAgainBtn').textContent = t('Run another');
+    }
   }
 
   function start() {
+    clearSaveError();
     el('calStartBtn').disabled = true;
     fetch('/calibration/start', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -252,12 +288,21 @@
     // Load standing so the player sees how far along they are before starting.
     fetch('/calibration/progress?user_id=' + encodeURIComponent(uid))
       .then((r) => (r.ok ? r.json() : null))
-      .then((p) => { if (p && !p.error) renderDots(el('calIntroProgress'), p.completed, p.target); })
+      .then((p) => {
+        if (!p || p.error) return;
+        renderDots(el('calIntroProgress'), p.completed, p.target);
+        cohortVisit = !!p.required_before_match;
+        el('calCohortPlan').classList.toggle('cal-hidden', !cohortVisit);
+        if (cohortVisit) el('calIntroProgress').textContent = p.done_today
+          ? t('Today\'s calibration is already saved.')
+          : t('Today: 10 calibration pairs → 10 mixing rounds.');
+      })
       .catch(() => { /* progress is best-effort */ });
   }
 
   // Wire controls.
   el('calStartBtn').addEventListener('click', start);
+  el('calRetryFinish').addEventListener('click', finish);
   el('calAgainBtn').addEventListener('click', () => { el('calStartBtn').disabled = false; start(); });
   runner.querySelectorAll('[data-ans]').forEach((b) =>
     b.addEventListener('click', () => respond(b.dataset.ans)));

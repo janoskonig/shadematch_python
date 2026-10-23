@@ -81,8 +81,9 @@
   <!-- Intro -->
   <section class="cal-card cal-hidden" id="calIntro">
     <h2>{{ t('How sharp are your eyes today?') }}</h2>
+    <p id="calCohortPlan" class="cal-note cal-hidden">{{ t('First compare 10 colour pairs. Then play your full 10-round mixing match.') }}</p>
     <p>
-      {{ t("You'll see <strong>pairs of colours</strong> from every family of the game's palette, one after another. For each pair you answer up to two quick questions: first <strong>“Are they identical?”</strong> — and if not, <strong>“If this were your mix, would you accept it as a match?”</strong> Some pairs are identical, some are obvious; most are subtle. There are no right answers and no feedback — just judge what you see.")|safe }}
+      {{ t("You'll see <strong>pairs of colours</strong> drawn from the game's palette, one after another. For each pair you answer up to two quick questions: first <strong>“Are they identical?”</strong> — and if not, <strong>“If this were your mix, would you accept it as a match?”</strong> Some pairs are identical, some are obvious; most are subtle. There are no right answers and no feedback — just judge what you see.")|safe }}
     </p>
     <p>
       {{ t("It takes under <strong>2 minutes</strong>. Best on a non-dimmed screen in even lighting. Do it across a few short sessions on different days — that's by design, and the picture of your eyes gets sharper each time.")|safe }} <span id="calUserLine" style="opacity:.7;"></span>
@@ -107,6 +108,8 @@
       <button type="button" class="btn btn-primary" data-ans="yes" id="calBtnYes"><span class="cal-kbd">1</span>{{ t('Yes') }}</button>
       <button type="button" class="btn btn-secondary" data-ans="no" id="calBtnNo"><span class="cal-kbd">2</span>{{ t('No') }}</button>
     </div>
+    <p id="calSaveError" class="cal-note cal-hidden" role="alert"></p>
+    <button type="button" id="calRetryFinish" class="btn btn-primary cal-hidden">{{ t('Retry saving session') }}</button>
   </section>
 
   <!-- Results -->
@@ -137,12 +140,12 @@
 
     <!-- Daily cadence: one session per day is the protocol's rhythm, so the primary path
          after finishing is back to the match; an immediate extra run stays possible. -->
-    <a href="/" class="btn btn-primary btn-lg" style="margin-top:8px;display:block;text-align:center;">{{ t('Back to the game') }}</a>
+    <a href="/" id="calBackGame" class="btn btn-primary btn-lg" style="margin-top:8px;display:block;text-align:center;">{{ t('Back to the game') }}</a>
     <button type="button" id="calAgainBtn" class="btn btn-secondary btn-lg" style="margin-top:8px;">{{ t('Next session') }}</button>
   </section>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='calibration.js') }}?v=20260830-render-fix"></script>
+<script src="{{ url_for('static', filename='calibration.js') }}?v=20261023-cohort-10x10"></script>
 {% endblock %}

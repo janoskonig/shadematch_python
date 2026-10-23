@@ -828,7 +828,7 @@ window.renderCtaSlot = renderCtaSlot;
 // challenge is auto-served as the first round of the day (with the target
 // swatch chip) and tracked by the header badge, so it no longer needs a
 // persistent banner; routine practice suggestions stay ambient.
-const BANNER_ACTION_IDS = new Set(['streak_at_risk']);
+const BANNER_ACTION_IDS = new Set(['streak_at_risk', 'calibration_required']);
 
 function renderNextAction(na) {
   const p = na && na.primary;
@@ -842,6 +842,8 @@ function renderNextAction(na) {
     icon: typeIcon,
     labelHtml: p.label,
     reasonHtml: p.reason,
+    actionLabel: p.id === 'calibration_required' ? t('Start calibration') : null,
+    onAction: p.id === 'calibration_required' ? () => { window.location.href = '/calibration?return_to=match'; } : null,
     variant: 'streak',
   });
 }
@@ -911,13 +913,22 @@ function _calTodayKey() {
 }
 
 function renderCalibrationEntry(cal) {
+  window.__cohortCalibration = cal || null;
   const badge = document.getElementById('calStatusBadge');
   if (!cal || !cal.available_today) {
     if (badge) badge.style.display = 'none';
     return;
   }
   renderCalibrationBadge();
-  maybeShowCalibrationPrompt(cal);
+  // Required cohort runs use the match gate; "Skip today" is for other users.
+  if (!cal.required_before_match) maybeShowCalibrationPrompt(cal);
+}
+
+function handleCalibrationRequired(data) {
+  if (!data || data.code !== 'CALIBRATION_REQUIRED') return false;
+  disableColorMixing();
+  window.location.href = '/calibration?return_to=match';
+  return true;
 }
 
 function renderCalibrationBadge() {
@@ -1317,8 +1328,9 @@ async function saveSessionToServer(session) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sessionData),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
+    if (handleCalibrationRequired(data)) return;
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     if (data.status !== 'success') {
       console.error('Failed to save session:', data.error);
     } else {
@@ -1361,6 +1373,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         body: JSON.stringify({ user_id: uid }),
       });
       const d = await res.json().catch(() => ({}));
+      if (d.calibration) renderCalibrationEntry(d.calibration);
+      if (handleCalibrationRequired(d)) { matchState = null; return null; }
       if (d.status === 'success' && d.match && Array.isArray(d.match.rounds)) {
         matchState = d.match;
         if (d.next_action) renderNextAction(d.next_action);
@@ -1586,6 +1600,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   let dailyAutoAttempted = false; // auto-serve at most once per session
 
   async function maybeServeDaily() {
+    // Cohort visits lead directly into a full match, without an extra daily round.
+    if (window.__cohortCalibration && window.__cohortCalibration.required_before_match) return null;
     // The colour of the day is served automatically as the player's next
     // round, once per session, until today's run is submitted. The header
     // badge remains a manual entry point after that.
@@ -2140,6 +2156,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           body: JSON.stringify(skipData),
         });
         const data = await res.json();
+        if (handleCalibrationRequired(data)) return;
         if (!res.ok || data.status !== 'success') {
           alert(t('Failed to save skip data. Please try again.'));
           return;
@@ -2189,6 +2206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           }),
         });
         const d = await res.json().catch(() => ({}));
+        if (handleCalibrationRequired(d)) return;
         if (d.status === 'success' && d.match) {
           applyMatchUpdate(d.match);
           maybeMatchChainToast(d.match);

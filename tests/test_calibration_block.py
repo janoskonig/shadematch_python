@@ -54,6 +54,15 @@ def test_real_trials_hit_their_target_delta_e():
             assert abs(t['actual_de'] - t['target_de']) < 0.01
 
 
+def test_short_cohort_block_has_exactly_ten_pairs_and_the_complete_ladder():
+    block = calibration.build_block(42, center_pool=_pool(), short=True)
+    assert len(block) == 10
+    real = [t for t in block if not t['is_catch']]
+    assert sorted(t['target_de'] for t in real) == list(calibration.DELTA_LEVELS)
+    assert sorted(t['catch_kind'] for t in block if t['is_catch']) == ['identical', 'obvious']
+    assert block == calibration.build_block(42, center_pool=_pool(), short=True)
+
+
 # --------------------------------------------------------------------------- #
 # families
 # --------------------------------------------------------------------------- #

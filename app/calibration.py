@@ -51,7 +51,7 @@ from . import spectral_km
 # five sessions ≈ 100 trials, spread across days/conditions.
 DELTA_LEVELS = (0.3, 0.6, 0.9, 1.2, 1.6, 2.2, 3.0, 4.0)
 REPS_PER_LEVEL = 2            # 8 levels × 2 = 16 real trials per session
-TARGET_SESSIONS = 5          # chunked protocol: ~5 sessions × 20 ≈ 100 trials per user
+TARGET_SESSIONS = 5          # initial results unlock; cohort daily runs continue after this
 
 # Catch trials (quality control, excluded from the threshold fit):
 #   - 'identical': a true zero-ΔE pair → the only correct answer is "no difference".
@@ -136,17 +136,19 @@ def pair_at_delta_e(center, target_de, rng, max_dir_tries=16):
     return last   # all directions clipped — accept the nearest (rare for skin centres)
 
 
-def build_block(seed, center_pool=None):
+def build_block(seed, center_pool=None, *, short=False):
     """Assemble a randomised trial block: REPS_PER_LEVEL real pairs per ΔE level plus
     identical/obvious catch trials. Each trial is a dict with the *true* ΔE and catch
     flag — the caller stores these server-side and never sends them to the client.
+    short=True is the cohort's 10-pair block: each of the eight ΔE levels once,
+    one identical catch and one obvious catch. The default block stays at 20.
 
     center_pool: optional {family: [(name, (L, a, b)), ...]} of centre candidates — the
     frozen match clusters 'c0'..'c9' plus 'skin' (routes._calibration_center_pool). A
     seeded permutation of the families is cycled over the trial slots (real trials in
-    level-major order, then catches), so every family gets at least one real trial per
-    session, while which families double up — and which ΔE levels each family meets —
-    re-randomises every session. A 20-trial session cannot cross 11 families with the
+    level-major order, then catches). Every family gets a real trial in a standard
+    block; short blocks sample fewer families. Family/level assignments
+    re-randomise every session. A 20-trial session cannot cross 11 families with the
     8-level ladder, so family×level balances only ACROSS sessions; the per-session
     permutation is what keeps a frozen pairing from confounding the pooled per-family
     fits. The concrete centre is re-drawn per trial from the family's candidates, and a
@@ -205,11 +207,11 @@ def build_block(seed, center_pool=None):
 
     slot = 0
     for de in DELTA_LEVELS:
-        for _ in range(REPS_PER_LEVEL):
+        for _ in range(1 if short else REPS_PER_LEVEL):
             add(slot, de, False, None); slot += 1
-    for _ in range(CATCH_IDENTICAL):
+    for _ in range(1 if short else CATCH_IDENTICAL):
         add(slot, 0.0, True, 'identical'); slot += 1
-    for _ in range(CATCH_OBVIOUS):
+    for _ in range(1 if short else CATCH_OBVIOUS):
         add(slot, CATCH_OBVIOUS_DE, True, 'obvious'); slot += 1
 
     order = rng.permutation(len(trials))
