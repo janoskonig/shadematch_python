@@ -156,6 +156,34 @@
   .hf-players td.num, .hf-players th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .hf-players tr.is-online { background: rgba(12,163,12,0.06); }
   .hf-players tr.hf-changed td { animation: hfFlash 1.6s ease-out; }
+  .hf-thresholds { margin-top: 14px; }
+  .hf-threshold-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+  .hf-threshold-grid h3 { margin: 4px 0; font-size: 0.95rem; }
+  .hf-threshold-table th { cursor: default; }
+  .hf-threshold-table td { vertical-align: top; }
+  .hf-threshold-table .hf-sub { white-space: normal; max-width: 180px; }
+  .hf-threshold-value { color: #1c5cab; font-weight: 800; font-variant-numeric: tabular-nums; }
+  .hf-threshold-qc { color: #8a5c00; }
+  .hf-history { margin-top: 14px; }
+  .hf-history-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .hf-history-card { border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px; min-width: 0; background: var(--hf-surface); }
+  .hf-history-card h3 { margin: 0 0 4px; font-size: 1rem; }
+  .hf-history-card h3 .hf-id { margin-left: 8px; font-weight: 400; }
+  .hf-history-stats { display: flex; flex-wrap: wrap; gap: 12px 20px; margin: 10px 0; }
+  .hf-history-stat small { display: block; color: var(--text-secondary); font-size: 0.72rem; }
+  .hf-history-stat b { display: block; font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+  .hf-history-comparison { font-size: 0.8rem; margin: 8px 0; }
+  .hf-history-chart { margin-top: 12px; }
+  .hf-history-chart svg { display: block; width: 100%; height: auto; }
+  .hf-history-chart .grid { stroke: var(--hf-grid); stroke-width: 1; }
+  .hf-history-chart .line { fill: none; stroke: var(--hf-series); stroke-width: 2; }
+  .hf-history-chart .point { fill: var(--hf-series); stroke: var(--hf-surface); stroke-width: 2; }
+  .hf-history-chart text { fill: var(--text-secondary); font-family: var(--font-family); font-size: 11px; }
+  .hf-history-chart .point:focus { stroke: var(--text-primary); outline: none; }
+  .hf-history-controls { margin: 8px 0 12px; }
+  .hf-history-controls label { color: var(--text-secondary); font-size: 0.85rem; }
+  @media (max-width: 1000px) { .hf-threshold-grid { grid-template-columns: 1fr; } }
+  @media (max-width: 800px) { .hf-history-grid { grid-template-columns: 1fr; } }
   @keyframes hfFlash { from { background: rgba(74,144,217,0.28); } to { background: transparent; } }
   .hf-name { font-weight: 800; }
   .hf-id { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.76rem; color: var(--text-secondary); }
@@ -264,6 +292,42 @@
     <div class="hf-empty" id="hfEmpty" hidden>{{ t('Nobody registered on this day.') }}</div>
   </section>
 
+  <section class="hf-panel hf-history" aria-labelledby="hfHistoryHeading">
+    <h2 id="hfHistoryHeading">{{ t('Each player over time') }}</h2>
+    <p class="sub">{{ t('Full recorded history for every player in this view, including earlier visits. Daily points show active days in Europe/Budapest time. Lower ΔE₀₀ means a closer final match; saved and skipped rounds are both included.') }}</p>
+    <div class="hf-controls hf-history-controls">
+      <label for="hfHistoryMetric">{{ t('Daily trend') }}</label>
+      <select id="hfHistoryMetric">
+        <option value="median_delta_e">{{ t('Median final ΔE₀₀') }}</option>
+        <option value="completion_rate">{{ t('Completion rate') }}</option>
+        <option value="rounds">{{ t('Logged rounds') }}</option>
+        <option value="median_time_sec">{{ t('Median round time') }}</option>
+      </select>
+    </div>
+    <div class="hf-history-grid" id="hfHistory"></div>
+    <div class="hf-empty" id="hfHistoryEmpty" hidden>{{ t('No players in this view.') }}</div>
+    <p class="sub">{{ t('Early/recent comparisons use equally sized, non-overlapping windows of up to 10 dated rounds each. Completed = perfect, visually identical, or acceptable. Accuracy and time use valid recorded values; time is capped at 30 minutes per round. Changes are descriptive and can reflect different targets or playing conditions.') }}</p>
+  </section>
+
+  <section class="hf-panel hf-thresholds" aria-labelledby="hfThresholdsHeading">
+    <h2 id="hfThresholdsHeading">{{ t('Per-user perceptibility and acceptability thresholds') }}</h2>
+    <p class="sub">{{ t('PT: 50% probability of seeing a difference. AT: 50% probability of judging a difference unacceptable. Values are in ΔE₀₀; each source is fitted separately using all available judgments for that user.') }}</p>
+    <div class="hf-threshold-grid">
+      <div>
+        <h3 id="hfCalibrationThresholdsHeading">{{ t('From calibration sessions') }}</h3>
+        <p class="sub">{{ t('Judgments pooled across completed sessions; catch trials excluded. The palette protocol and the skin-only pilot are kept separate because their acceptability questions differ. Flagged sessions are included and counted below.') }}</p>
+        <div class="hf-table-wrap"><table class="hf-players hf-threshold-table" id="hfCalibrationThresholds" aria-labelledby="hfCalibrationThresholdsHeading"></table></div>
+      </div>
+      <div>
+        <h3 id="hfIngameThresholdsHeading">{{ t('From in-game decisions') }}</h3>
+        <p class="sub">{{ t('Explicit identical / acceptable / unacceptable judgments when skipping a round. These exploratory estimates describe self-selected decisions during play; perfect saves and unrated stops are excluded.') }}</p>
+        <div class="hf-table-wrap"><table class="hf-players hf-threshold-table" id="hfIngameThresholds" aria-labelledby="hfIngameThresholdsHeading"></table></div>
+      </div>
+    </div>
+    <p class="sub">{{ t('Estimates are provisional, especially with few judgments. At least 6 valid judgments and both responses for each threshold are required. A threshold outside the observed ΔE₀₀ range or without an increasing fit is not reported.') }}</p>
+    <div class="hf-empty" id="hfThresholdsEmpty" hidden>{{ t('No players in this view.') }}</div>
+  </section>
+
   <details class="hf-totals" id="hfTotals">
     <summary>{% if cohort.kind == 'live' %}{{ t('Totals for the active players, profile and history') }}{% else %}{{ t('Cohort totals, profile and history') }}{% endif %}</summary>
     <section class="hf-cards" id="hfCards" aria-label="{{ t('Cohort summary') }}"></section>
@@ -343,11 +407,17 @@ window.HETFO = {{ cohort|tojson }};
     players: document.getElementById('hfPlayers'),
     empty: document.getElementById('hfEmpty'),
     totals: document.getElementById('hfTotals'),
+    calibrationThresholds: document.getElementById('hfCalibrationThresholds'),
+    ingameThresholds: document.getElementById('hfIngameThresholds'),
+    thresholdsEmpty: document.getElementById('hfThresholdsEmpty'),
+    history: document.getElementById('hfHistory'),
+    historyMetric: document.getElementById('hfHistoryMetric'),
+    historyEmpty: document.getElementById('hfHistoryEmpty'),
   };
   var state = {
     data: null, fetchedAt: 0, inflight: false, paused: false, timer: null,
     error: null, sortKey: null, sortDir: 1, signatures: {}, cardSignatures: {},
-    feedKeys: {}, hasRendered: false,
+    feedKeys: {}, hasRendered: false, historySignature: null,
   };
 
   // ── tiny DOM + formatting helpers (user data always goes through textContent) ──
@@ -950,6 +1020,7 @@ window.HETFO = {{ cohort|tojson }};
   function calibrationCell(r) {
     var s = r.calibration_completed + '/5';
     if (r.calibration_pt != null) s += ' · PT ' + fmtDe(r.calibration_pt);
+    if (r.calibration_at != null) s += ' · AT ' + fmtDe(r.calibration_at);
     return s;
   }
   function activityCell(r) {
@@ -1068,6 +1139,184 @@ window.HETFO = {{ cohort|tojson }};
     state.signatures = nextSignatures;
   }
 
+  // ── each player's full history ──────────────────────────────────────────
+  var HISTORY_METRICS = {
+    median_delta_e: t('Median final ΔE₀₀'), completion_rate: t('Completion rate'),
+    rounds: t('Logged rounds'), median_time_sec: t('Median round time'),
+  };
+  function historyValue(value, metric) {
+    if (typeof value !== 'number' || !isFinite(value)) return '—';
+    if (metric === 'median_time_sec') return Math.round(value) === 0 ? '0 s' : fmtDuration(Math.round(value));
+    if (metric === 'completion_rate') return value.toFixed(1) + '%';
+    return metric === 'rounds' ? fmtInt(value) : fmtDe(value);
+  }
+  function historyChart(daily, metric) {
+    var host = el('div', { class: 'hf-history-chart' });
+    var points = daily.filter(function (p) { return p[metric] != null; });
+    if (!points.length) return el('p', { class: 'sub', text: t('No valid values for this metric.') });
+    var W = 560, H = 160, L = 60, R = 16, T = 12, B = 28;
+    var top = metric === 'completion_rate' ? 100 : Math.max(1, Math.max.apply(null, points.map(function (p) { return p[metric]; })));
+    var svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, role: 'img', 'aria-label': HISTORY_METRICS[metric] });
+    var first = Date.parse(daily[0].day), last = Date.parse(daily[daily.length - 1].day);
+    function x(day) { return first === last ? (L + W - R) / 2 : L + (Date.parse(day) - first) / (last - first) * (W - L - R); }
+    function y(value) { return T + (1 - value / top) * (H - T - B); }
+    [0, top / 2, top].forEach(function (value) {
+      svg.appendChild(svgEl('line', { x1: L, x2: W - R, y1: y(value), y2: y(value), class: 'grid' }));
+      var label = svgEl('text', { x: L - 8, y: y(value) + 4, 'text-anchor': 'end' });
+      label.textContent = historyValue(value, metric);
+      svg.appendChild(label);
+    });
+    var path = '', connected = false;
+    daily.forEach(function (p) {
+      if (p[metric] == null) { connected = false; return; }
+      path += (connected ? ' L' : ' M') + x(p.day) + ',' + y(p[metric]);
+      connected = true;
+    });
+    svg.appendChild(svgEl('path', { d: path, class: 'line' }));
+    points.forEach(function (p) {
+      var description = fmtDayLong(p.day) + ' · ' + historyValue(p[metric], metric) + ' · ' + fill(t('{n} rounds'), { n: fmtInt(p.rounds) });
+      var point = svgEl('circle', { cx: x(p.day), cy: y(p[metric]), r: 4, class: 'point', tabindex: 0, 'aria-label': description });
+      var title = svgEl('title'); title.textContent = description;
+      point.appendChild(title); svg.appendChild(point);
+    });
+    [daily[0], daily[daily.length - 1]].forEach(function (p, i) {
+      if (daily.length === 1 && i) return;
+      var label = svgEl('text', { x: x(p.day), y: H - 6, 'text-anchor': daily.length === 1 ? 'middle' : i ? 'end' : 'start' });
+      label.textContent = fmtDayShort(p.day); svg.appendChild(label);
+    });
+    host.appendChild(svg);
+    return host;
+  }
+  function historyTable(daily) {
+    var table = el('table');
+    var labels = [t('Day'), t('Rounds'), t('Completed'), t('Perfect'), t('Valid ΔE values'), t('Median final ΔE₀₀'), t('Mean ΔE'), t('Timed rounds'), t('Median round time')];
+    table.appendChild(el('thead', null, [el('tr', null, labels.map(function (label, i) {
+      return el('th', { scope: 'col', class: i ? 'num' : '', text: label });
+    }))]));
+    var body = el('tbody');
+    daily.forEach(function (p) {
+      var values = [fmtDayLong(p.day), fmtInt(p.rounds), fmtInt(p.completed), fmtInt(p.perfect), fmtInt(p.delta_e_n), fmtDe(p.median_delta_e), fmtDe(p.mean_delta_e), fmtInt(p.time_n), historyValue(p.median_time_sec, 'median_time_sec')];
+      body.appendChild(el('tr', null, values.map(function (value, i) { return el('td', { class: i ? 'num' : '', text: value }); })));
+    });
+    table.appendChild(body);
+    return el('div', { class: 'hf-table-wrap' }, [table]);
+  }
+  function renderHistory(rows) {
+    var metric = els.historyMetric.value;
+    var ordered = rows.slice().sort(function (a, b) { return a.user_id.localeCompare(b.user_id); });
+    var signature = JSON.stringify([metric, ordered.map(function (r) { return [r.user_id, r.nickname, r.performance]; })]);
+    if (state.historySignature === signature) return;
+    var expanded = {};
+    els.history.querySelectorAll('details[open]').forEach(function (details) { expanded[details.getAttribute('data-history-user')] = true; });
+    els.history.textContent = '';
+    ordered.forEach(function (r) {
+      var p = r.performance;
+      if (!p) return;
+      var heading = el('h3', { text: r.nickname || r.user_id });
+      if (r.nickname) { heading.appendChild(document.createTextNode(' ')); heading.appendChild(el('span', { class: 'hf-id', text: r.user_id })); }
+      var article = el('article', { class: 'hf-history-card', 'data-history-user': r.user_id }, [heading]);
+      if (!p.overall.rounds) {
+        article.appendChild(el('p', { class: 'sub', text: t('No logged rounds yet.') }));
+        els.history.appendChild(article); return;
+      }
+      if (p.first_day) article.appendChild(el('p', { class: 'sub', text: fmtDayShort(p.first_day) + ' → ' + fmtDayShort(p.last_day) + ' · ' + fill(t('{n} active days'), { n: fmtInt(p.active_days) }) }));
+      var stats = el('div', { class: 'hf-history-stats' });
+      ['rounds', 'median_delta_e', 'completion_rate', 'median_time_sec'].forEach(function (key) {
+        stats.appendChild(el('div', { class: 'hf-history-stat' }, [el('small', { text: HISTORY_METRICS[key] }), el('b', { text: historyValue(p.overall[key], key) })]));
+      });
+      article.appendChild(stats);
+      article.appendChild(el('p', { class: 'sub', text: fill(t('Total recorded play time: {time}'), { time: p.overall.time_n ? historyValue(p.overall.play_time_sec, 'median_time_sec') : '—' }) }));
+      if (p.comparison) {
+        var c = p.comparison;
+        article.appendChild(el('p', { class: 'hf-history-comparison' }, [
+          el('b', { text: fill(t('First {n} → latest {n} rounds'), { n: fmtInt(c.window_rounds) }) }),
+          el('span', { class: 'hf-sub', text: t('Median final ΔE₀₀') + ': ' + fmtDe(c.first.median_delta_e) + ' → ' + fmtDe(c.latest.median_delta_e) + ' · ' + t('Completion rate') + ': ' + historyValue(c.first.completion_rate, 'completion_rate') + ' → ' + historyValue(c.latest.completion_rate, 'completion_rate') }),
+        ]));
+      } else article.appendChild(el('p', { class: 'sub', text: t('At least two dated rounds are needed for an early/recent comparison.') }));
+      if (p.undated_rounds) article.appendChild(el('p', { class: 'sub', text: fill(t('{n} undated rounds are included in totals but omitted from the trend and early/recent comparison.'), { n: fmtInt(p.undated_rounds) }) }));
+      if (p.daily.length) {
+        article.appendChild(historyChart(p.daily, metric));
+        var details = el('details', { class: 'hf-table', 'data-history-user': r.user_id }, [el('summary', { text: t('Daily performance table') }), historyTable(p.daily)]);
+        if (expanded[r.user_id]) details.open = true;
+        article.appendChild(details);
+      }
+      els.history.appendChild(article);
+    });
+    els.historyEmpty.hidden = rows.length > 0;
+    state.historySignature = signature;
+  }
+  els.historyMetric.addEventListener('change', function () { if (state.data) renderHistory(state.data.users); });
+
+  // ── source-separated, lifetime per-user thresholds ───────────────────────
+  function thresholdCell(fit) {
+    var td = el('td', { class: 'num' });
+    td.appendChild(el('span', { class: 'hf-threshold-value', text: fmtDe(fit && fit.value) }));
+    var reasons = {
+      no_data: t('No valid judgments'),
+      insufficient_data: t('Fewer than 6 judgments'),
+      one_response: t('Only one response class'),
+      no_delta_variation: t('No variation in ΔE₀₀'),
+      no_increasing_fit: t('No increasing fit'),
+      unstable_fit: t('Unstable fit'),
+      outside_range: t('Outside observed range'),
+    };
+    if (!fit || fit.status !== 'estimated') td.appendChild(el('span', {
+      class: 'hf-sub', text: reasons[fit ? fit.status : 'no_data'] || t('Unstable fit'),
+    }));
+    return td;
+  }
+  function protocolName(mode) {
+    if (mode === 'constant_stimuli_gamut') return t('Palette · match judgment');
+    if (mode === 'constant_stimuli') return t('Skin pilot · face judgment');
+    return mode;
+  }
+  function renderThresholdTable(table, rows, source) {
+    table.textContent = '';
+    table.appendChild(el('thead', null, [el('tr', null, [
+      el('th', { scope: 'col', text: t('Player') }),
+      el('th', { scope: 'col', class: 'num', text: t('Judgments') }),
+      el('th', { scope: 'col', class: 'num', text: 'PT · ΔE₀₀' }),
+      el('th', { scope: 'col', class: 'num', text: 'AT · ΔE₀₀' }),
+    ])]));
+    var tbody = el('tbody');
+    rows.forEach(function (r) {
+      var thresholds = r.thresholds || {};
+      var samples = source === 'calibration' ? (thresholds.calibration || []) : [thresholds.ingame || {}];
+      if (!samples.length) samples = [{}];
+      samples.forEach(function (sample) {
+        var player = el('td', null, [el('span', { class: 'hf-name', text: r.nickname || r.user_id })]);
+        if (r.nickname) player.appendChild(el('span', { class: 'hf-sub hf-id', text: r.user_id }));
+        if (sample.mode) player.appendChild(el('span', { class: 'hf-sub', text: protocolName(sample.mode) }));
+        var count = el('td', { class: 'num', text: fmtInt(sample.n) });
+        if (source === 'calibration') count.appendChild(el('span', {
+          class: 'hf-sub', text: sample.sessions === 1 ? t('1 session') : fill(t('{n} sessions'), { n: fmtInt(sample.sessions) }),
+        }));
+        if (sample.low_quality_sessions) count.appendChild(el('span', {
+          class: 'hf-sub hf-threshold-qc', text: fill(t('{n} flagged'), { n: fmtInt(sample.low_quality_sessions) }),
+        }));
+        if (sample.n) {
+          var c = sample.counts;
+          count.title = fill(t('{i} identical · {a} acceptable · {u} unacceptable'), {
+            i: fmtInt(c.identical), a: fmtInt(c.acceptable), u: fmtInt(c.unacceptable),
+          });
+          count.appendChild(el('span', { class: 'hf-sub', text: fill(t('ΔE₀₀ {lo}–{hi}'), {
+            lo: fmtDe(sample.delta_e_min), hi: fmtDe(sample.delta_e_max),
+          }) }));
+        }
+        tbody.appendChild(el('tr', { 'data-user': r.user_id }, [
+          player, count, thresholdCell(sample.pt), thresholdCell(sample.at),
+        ]));
+      });
+    });
+    table.appendChild(tbody);
+  }
+  function renderThresholds(rows) {
+    var ordered = rows.slice().sort(function (a, b) { return a.user_id.localeCompare(b.user_id); });
+    renderThresholdTable(els.calibrationThresholds, ordered, 'calibration');
+    renderThresholdTable(els.ingameThresholds, ordered, 'ingame');
+    els.thresholdsEmpty.hidden = rows.length > 0;
+  }
+
   function render() {
     var d = state.data;
     renderLiveStrip(d);
@@ -1076,6 +1325,8 @@ window.HETFO = {{ cohort|tojson }};
     renderCards(d.summary);
     renderCharts();
     renderPlayers(d.users);
+    renderHistory(d.users);
+    renderThresholds(d.users);
     state.hasRendered = true;
     var title = document.title.replace(/^\(\d+\) /, '');
     document.title = (d.summary.online_now ? '(' + d.summary.online_now + ') ' : '') + title;

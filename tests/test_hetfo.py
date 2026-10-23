@@ -688,3 +688,170 @@ def test_szerda_page_follows_the_wednesday_session(client):
     assert data['summary']['registered'] == 4
     # Unknown page slugs fall back to the Monday session instead of erroring.
     assert client.get('/api/hetfo/live?page=nope').get_json()['cohort']['date'] == '2026-08-31'
+
+
+@pytest.fixture()
+def threshold_data(app):
+    """Separate sources, two protocols and deliberately unusable rows."""
+    from app import db
+    from app.models import CalibrationSession, CalibrationTrial, MixingSession
+    from test_thresholds import judgments
+
+    with app.app_context():
+        for sid, mode, ended in [
+            ('pooled-a', 'constant_stimuli_gamut', NOW),
+            ('pooled-b', 'constant_stimuli_gamut', NOW),
+            ('pilot', 'constant_stimuli', NOW),
+            ('open', 'constant_stimuli_gamut', None),
+        ]:
+            db.session.add(CalibrationSession(
+                session_uuid=sid, user_id='CCCCC3', mode=mode,
+                started_at=NOW - timedelta(minutes=3), ended_at=ended,
+                low_quality=(sid == 'pooled-b'), perceptibility_de=99, acceptability_de=99,
+            ))
+        for seq, (de, judgment) in enumerate(judgments()):
+            for sid, shift in [('pooled-a' if seq % 2 == 0 else 'pooled-b', 0),
+                               ('pilot', 0.5), ('open', 10)]:
+                db.session.add(CalibrationTrial(
+                    session_uuid=sid, seq=seq, actual_de=de + shift,
+                    judgment=judgment, is_catch=False,
+                ))
+            for uid, scale in [('CCCCC3', 1.5), ('GGGGG7', 2)]:
+                db.session.add(MixingSession(
+                    user_id=uid, timestamp=NOW, delta_e=de * scale,
+                    skipped=True, skip_perception=judgment,
+                ))
+        for seq, (de, judgment, catch) in enumerate([
+            (1000, 'identical', True), (None, 'acceptable', False),
+            (-1, 'unacceptable', False), (1, None, False), (2, 'invalid', False),
+        ], start=100):
+            db.session.add(CalibrationTrial(
+                session_uuid='pooled-a', seq=seq, actual_de=de,
+                judgment=judgment, is_catch=catch,
+            ))
+        for de, skipped, judgment, category in [
+            (0, False, 'identical', 'perfect'), (0, False, None, 'perfect'),
+            (None, True, 'identical', None), (-1, True, 'acceptable', None),
+            (1, True, None, 'no_perceivable_difference'), (1, True, 'invalid', None),
+        ]:
+            db.session.add(MixingSession(
+                user_id='CCCCC3', timestamp=NOW, delta_e=de, skipped=skipped,
+                skip_perception=judgment, match_category=category,
+            ))
+        db.session.flush()
+        hetfo._cache.clear()
+        try:
+            yield
+        finally:
+            db.session.rollback()
+            hetfo._cache.clear()
+
+
+def test_pooled_thresholds_separate_sources_protocols_and_exclude_unrated_rows(app, threshold_data):
+    from app.thresholds import summarize_judgments
+    from test_thresholds import judgments
+
+    data = hetfo.build_live_payload(COHORT_DAY, now=NOW)
+    thresholds = _row(data, 'CCCCC3')['thresholds']
+    protocols = {s['mode']: s for s in thresholds['calibration']}
+    gamut = protocols['constant_stimuli_gamut']
+    pilot = protocols['constant_stimuli']
+    expected = summarize_judgments(judgments())
+    assert gamut['n'] == 40 and gamut['sessions'] == 2
+    assert gamut['pt'] == expected['pt'] and gamut['at'] == expected['at']
+    assert gamut['low_quality_sessions'] == 1
+    assert pilot['n'] == 40 and pilot['sessions'] == 1
+    assert pilot['pt'] == summarize_judgments(judgments(shift=0.5))['pt']
+    assert pilot['at'] == summarize_judgments(judgments(shift=0.5))['at']
+    assert thresholds['ingame'] == summarize_judgments(judgments(scale=1.5))
+    # The other cohort's judgments never leak into Monday's rows.
+    wednesday = hetfo.build_live_payload(date(2026, 9, 2), now=NOW)
+    wednesday_thresholds = _row(wednesday, 'GGGGG7')['thresholds']
+    assert wednesday_thresholds['calibration'] == []
+    assert wednesday_thresholds['ingame'] == summarize_judgments(judgments(scale=2))
+
+
+def test_users_without_judgments_still_have_explicit_empty_thresholds(payload):
+    empty = _row(payload, 'CCCCC3')['thresholds']
+    assert empty['calibration'] == []
+    assert empty['ingame']['n'] == 0
+    assert empty['ingame']['pt'] == {'value': None, 'status': 'no_data'}
+    # The ongoing calibration's five answers must not become an estimate.
+    assert _row(payload, 'FFFFF6')['thresholds']['calibration'] == []
+
+
+@pytest.mark.parametrize('page,uid,n', [('hetfo', 'CCCCC3', 40), ('szerda', 'GGGGG7', 40)])
+def test_both_cohort_apis_include_their_users_thresholds(app, threshold_data, page, uid, n):
+    with app.test_client() as client:
+        data = client.get('/api/hetfo/live?page=' + page).get_json()
+        assert _row(data, uid)['thresholds']['ingame']['n'] == n
+
+
+@pytest.mark.parametrize('page', ['hetfo', 'szerda'])
+def test_both_pages_render_the_threshold_module_in_both_languages(client, page):
+    for lang, heading in [('en', 'Per-user perceptibility and acceptability thresholds'),
+                          ('hu', 'Egyéni észlelhetőségi és elfogadhatósági küszöbök')]:
+        html = client.get('/' + page + '?lang=' + lang).get_data(as_text=True)
+        assert heading in html
+        assert 'id="hfCalibrationThresholds"' in html
+        assert 'id="hfIngameThresholds"' in html
+
+
+def test_thresholds_are_updated_after_another_decision(app, threshold_data):
+    from app import db
+    from app.models import MixingSession
+
+    first = hetfo.build_live_payload(COHORT_DAY, now=NOW)
+    db.session.add(MixingSession(user_id='CCCCC3', timestamp=NOW,
+                                 delta_e=1.5, skipped=True, skip_perception='identical'))
+    db.session.flush()
+    second = hetfo.build_live_payload(COHORT_DAY, now=NOW)
+    assert _row(first, 'CCCCC3')['thresholds']['ingame']['n'] == 40
+    assert _row(second, 'CCCCC3')['thresholds']['ingame']['n'] == 41
+
+
+def test_lifetime_performance_and_daily_changes(payload):
+    p = _row(payload, 'AAAAA1')['performance']
+    assert p['overall'] == {
+        'rounds': 6, 'completed': 5, 'perfect': 2, 'completion_rate': 83.3,
+        'delta_e_n': 6, 'mean_delta_e': 1.6, 'median_delta_e': 1.05,
+        'time_n': 6, 'median_time_sec': 100, 'play_time_sec': 2305,
+    }
+    assert p['active_days'] == 3
+    assert p['first_day'] == '2026-08-31' and p['last_day'] == '2026-09-07'
+    assert [d['rounds'] for d in p['daily']] == [3, 1, 2]
+    assert [d['median_delta_e'] for d in p['daily']] == [1.5, 0.9, 0.6]
+    assert p['comparison']['window_rounds'] == 3
+    assert p['comparison']['first']['median_delta_e'] == 1.5
+    assert p['comparison']['latest']['median_delta_e'] == 0.9
+    assert p['comparison']['first']['completion_rate'] == 66.7
+    assert p['comparison']['latest']['completion_rate'] == 100
+
+
+def test_history_survives_a_short_live_lookback(app):
+    with app.app_context():
+        p = _row(hetfo.build_global_payload(1, now=NOW), 'AAAAA1')['performance']
+        assert p['overall']['rounds'] == 6
+        assert p['first_day'] == '2026-08-31'
+
+
+def test_never_played_user_has_an_empty_history(payload):
+    p = _row(payload, 'CCCCC3')['performance']
+    assert p == hetfo._empty_performance()
+
+
+@pytest.mark.parametrize('page,uid,n', [('hetfo', 'AAAAA1', 6), ('szerda', 'GGGGG7', 1)])
+def test_both_cohort_apis_expose_lifetime_performance(client, page, uid, n):
+    data = client.get('/api/hetfo/live?page=' + page).get_json()
+    p = _row(data, uid)['performance']
+    assert p['overall']['rounds'] == n
+    assert sum(d['rounds'] for d in p['daily']) == n
+
+
+@pytest.mark.parametrize('page', ['hetfo', 'szerda'])
+def test_performance_module_is_available_in_both_languages(client, page):
+    for lang, heading in [('en', 'Each player over time'),
+                          ('hu', 'Az egyes játékosok teljesítménye időben')]:
+        html = client.get('/' + page + '?lang=' + lang).get_data(as_text=True)
+        assert heading in html
+        assert 'id="hfHistory"' in html and 'id="hfHistoryMetric"' in html

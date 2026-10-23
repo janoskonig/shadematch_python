@@ -20,6 +20,7 @@ restricted to the cohort's ids, assembled into the JSON the page polls.
 """
 from __future__ import annotations
 
+import math
 import os
 import statistics
 import threading
@@ -31,6 +32,7 @@ from sqlalchemy import case, func
 from . import db
 from .gamification import _xp_level
 from .matches import COMPLETED_MATCH_CATEGORIES
+from .thresholds import JUDGMENTS, summarize_judgments
 from .models import (
     AnalyticsEvent,
     CalibrationSession,
@@ -578,9 +580,67 @@ def _calibration_by_user(ids, now):
     return summary, last_trial, thresholds, open_by_user, open_progress
 
 
-def _timeline_rows(ids, start):
-    """Every saved round of the cohort since its registration day: feeds the
-    two history charts, the rolling live windows and each player's last round."""
+def _thresholds_by_user(ids):
+    """Pool each user's lifetime judgments, separately by source and protocol.
+
+    The skin-only pilot used a face acceptability referent; gamut sessions use
+    a match referent. Never combine those AT measurements. Open calibration
+    blocks and catch trials do not enter the fits. In-game fits use explicit
+    skip judgments only: an algorithmic perfect save is not a visual rating.
+    Three cohort-scoped queries, regardless of the number of users.
+    """
+    if not ids:
+        return {}
+    completed = (
+        db.session.query(CalibrationSession.user_id, CalibrationSession.session_uuid,
+                         CalibrationSession.mode, CalibrationSession.low_quality)
+        .filter(CalibrationSession.user_id.in_(ids), CalibrationSession.ended_at.isnot(None))
+        .all()
+    )
+    protocols = {}
+    for s in completed:
+        entry = protocols.setdefault((s.user_id, s.mode), {
+            'mode': s.mode, 'sessions': 0, 'low_quality_sessions': 0, 'judgments': [],
+        })
+        entry['sessions'] += 1
+        entry['low_quality_sessions'] += int(bool(s.low_quality))
+
+    trials = (
+        db.session.query(CalibrationSession.user_id, CalibrationSession.mode,
+                         CalibrationTrial.actual_de, CalibrationTrial.judgment)
+        .join(CalibrationTrial, CalibrationTrial.session_uuid == CalibrationSession.session_uuid)
+        # Freeze the completed-session set from the first query: a block that
+        # finishes during this poll belongs to the next poll, including its count.
+        .filter(CalibrationSession.session_uuid.in_([s.session_uuid for s in completed]),
+                CalibrationTrial.is_catch.is_(False), CalibrationTrial.judgment.in_(JUDGMENTS))
+        .all()
+    )
+    for t in trials:
+        protocols[(t.user_id, t.mode)]['judgments'].append((t.actual_de, t.judgment))
+
+    decisions = (
+        db.session.query(MixingSession.user_id, MixingSession.delta_e, MixingSession.skip_perception)
+        .filter(MixingSession.user_id.in_(ids), MixingSession.skipped.is_(True),
+                MixingSession.skip_perception.in_(JUDGMENTS))
+        .all()
+    )
+    game = {}
+    for d in decisions:
+        game.setdefault(d.user_id, []).append((d.delta_e, d.skip_perception))
+
+    out = {uid: {'calibration': [], 'ingame': summarize_judgments(game.get(uid, []))}
+           for uid in ids}
+    for (uid, _mode), protocol in sorted(protocols.items()):
+        judgments = protocol.pop('judgments')
+        out[uid]['calibration'].append(dict(protocol, **summarize_judgments(judgments)))
+    return out
+
+
+def _timeline_rows(ids):
+    """All logged rounds, including undated legacy rows, for lifetime summaries.
+
+    The caller restricts live and cohort timelines to their own date windows.
+    """
     return (
         db.session.query(
             MixingSession.user_id, MixingSession.timestamp, MixingSession.match_category,
@@ -588,8 +648,8 @@ def _timeline_rows(ids, start):
             MixingSession.target_color_id,
             MixingSession.target_r, MixingSession.target_g, MixingSession.target_b,
         )
-        .filter(MixingSession.user_id.in_(ids), MixingSession.timestamp >= start)
-        .order_by(MixingSession.timestamp.asc())
+        .filter(MixingSession.user_id.in_(ids))
+        .order_by(MixingSession.timestamp.asc(), MixingSession.id.asc())
         .all()
     )
 
@@ -602,6 +662,75 @@ def _target_names(ids):
 
 
 # ── Timelines ────────────────────────────────────────────────────────────────
+
+def _performance_summary(rows):
+    """Descriptive round statistics; missing/invalid metrics never become zero."""
+    def valid(value):
+        return value is not None and math.isfinite(value) and value >= 0
+
+    des = [float(r.delta_e) for r in rows if valid(r.delta_e)]
+    times = [min(float(r.time_sec), SESSION_TIME_CAP_SEC)
+             for r in rows if valid(r.time_sec)]
+    completed = sum(r.match_category in COMPLETED_MATCH_CATEGORIES for r in rows)
+    return {
+        'rounds': len(rows),
+        'completed': completed,
+        'perfect': sum(r.match_category == 'perfect' for r in rows),
+        'completion_rate': round(100 * completed / len(rows), 1) if rows else None,
+        'delta_e_n': len(des),
+        'mean_delta_e': _round(statistics.mean(des)) if des else None,
+        'median_delta_e': _round(statistics.median(des)) if des else None,
+        'time_n': len(times),
+        'median_time_sec': _round(statistics.median(times), 1) if times else None,
+        'play_time_sec': round(sum(times), 1),
+    }
+
+
+def _performance_by_user(rows, tz):
+    """Active-day trends and equal, disjoint early/recent round windows.
+
+    Input is ordered by timestamp, then round id. Daily points use Budapest
+    calendar dates; inactive days do not get artificial zero-accuracy points.
+    Undated rows count in lifetime totals only. Compare up to 10 dated rounds
+    at each end, or floor(n/2) per window for users with fewer than 20 rounds.
+    """
+    by_user = {}
+    for row in rows:
+        by_user.setdefault(row.user_id, []).append(row)
+    out = {}
+    for uid, mine in by_user.items():
+        dated = [r for r in mine if r.timestamp is not None]
+        by_day = {}
+        for row in dated:
+            day = utc_to_local(row.timestamp, tz).date().isoformat()
+            by_day.setdefault(day, []).append(row)
+        daily = []
+        cumulative = 0
+        for day, day_rows in sorted(by_day.items()):
+            cumulative += len(day_rows)
+            daily.append(dict(_performance_summary(day_rows), day=day,
+                              cumulative_rounds=cumulative))
+        n = min(10, len(dated) // 2)
+        out[uid] = {
+            'overall': _performance_summary(mine),
+            'first_day': daily[0]['day'] if daily else None,
+            'last_day': daily[-1]['day'] if daily else None,
+            'active_days': len(daily),
+            'undated_rounds': len(mine) - len(dated),
+            'daily': daily,
+            'comparison': {
+                'window_rounds': n,
+                'first': _performance_summary(dated[:n]),
+                'latest': _performance_summary(dated[-n:]),
+            } if n else None,
+        }
+    return out
+
+
+def _empty_performance():
+    return {'overall': _performance_summary([]), 'first_day': None, 'last_day': None,
+            'active_days': 0, 'undated_rounds': 0, 'daily': [], 'comparison': None}
+
 
 def _day_series(rows, start, end, tz):
     """Rounds and distinct players per DAY_BUCKET_MIN bucket over the cohort day."""
@@ -803,8 +932,8 @@ def _assemble(users, now, tz, rows_since):
     """The shared body of every dashboard payload: one row per player with
     their live status, the summary tallies and the live layer. Returns
     ``(payload, timeline_rows)``; the caller adds its scope and history
-    charts. ``rows_since`` bounds the individual rounds fetched — the cohort
-    day for a cohort page, the lookback window for /live."""
+    charts. ``rows_since`` bounds the feed and cohort timelines; per-user
+    performance always covers their full recorded history."""
     today_local = utc_to_local(now, tz).date()
     ids = [u.id for u in users]
     live_since = now - timedelta(seconds=LIVE_LOOKBACK_SEC)
@@ -822,7 +951,10 @@ def _assemble(users, now, tz, rows_since):
         analytics = _analytics_stamps(ids, start)
         (calib, calib_last_trial, calib_thresholds,
          calib_open, calib_open_progress) = _calibration_by_user(ids, now)
-        timeline_rows = _timeline_rows(ids, start)
+        thresholds = _thresholds_by_user(ids)
+        all_rounds = _timeline_rows(ids)
+        performance = _performance_by_user(all_rounds, tz)
+        timeline_rows = [r for r in all_rounds if r.timestamp is not None and r.timestamp >= start]
         recent_rounds = [r for r in timeline_rows
                          if r.timestamp is not None and r.timestamp >= live_since]
         app_opens = _recent_app_opens(ids, live_since)
@@ -836,6 +968,8 @@ def _assemble(users, now, tz, rows_since):
         progress = sessions = matches = awards = attempts = {}
         open_attempts = step_stamps = trajectories = analytics = {}
         calib = calib_last_trial = calib_thresholds = calib_open = calib_open_progress = {}
+        thresholds = {}
+        performance = {}
         timeline_rows = recent_rounds = app_opens = calib_recent = matches_recent = []
         target_names = {}
 
@@ -964,6 +1098,8 @@ def _assemble(users, now, tz, rows_since):
             'calibration_completed': int(c.completed or 0) if c else 0,
             'calibration_pt': _round(threshold.perceptibility_de) if threshold else None,
             'calibration_at': _round(threshold.acceptability_de) if threshold else None,
+            'thresholds': thresholds[u.id],
+            'performance': performance.get(u.id) or _empty_performance(),
             'came_back': u.id in came_back_ids,
             'last_round': _round_dict(mine[-1], now, target_names) if mine else None,
             'rounds_last_15m': sum(1 for r in mine if r.timestamp >= since_15),
