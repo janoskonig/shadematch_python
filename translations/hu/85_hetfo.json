@@ -22,7 +22,6 @@
   "Friday cohort — live": "Pénteki kohorsz — élőben",
   "Saturday cohort — live": "Szombati kohorsz — élőben",
   "Sunday cohort — live": "Vasárnapi kohorsz — élőben",
-  "Everyone who registered on the cohort day, and what they are doing right now. Times are shown in {tz}; the page refreshes itself every {n} seconds.": "Mindenki, aki a kohorsz napján regisztrált — és amit épp most csinál. Az időpontok {tz} szerint; az oldal {n} másodpercenként magától frissül.",
   "Loading…": "Betöltés…",
   "Pause": "Szünet",
   "Resume": "Folytatás",
@@ -186,5 +185,6 @@
   "First {n} → latest {n} rounds": "Első {n} → legutóbbi {n} kör",
   "At least two dated rounds are needed for an early/recent comparison.": "A korai és a legutóbbi teljesítmény összevetéséhez legalább két dátumozott kör szükséges.",
   "{n} undated rounds are included in totals but omitted from the trend and early/recent comparison.": "{n} dátum nélküli kör szerepel az összesítésben; a trendből és a korai–legutóbbi összevetésből kimarad.",
-  "Daily performance table": "Napi teljesítmény táblázata"
+  "Daily performance table": "Napi teljesítmény táblázata",
+  "Cohort members and what they are doing right now. Times are shown in {tz}; the page refreshes itself every {n} seconds.": "A kohorsz tagjai és amit épp most csinálnak. Az időpontok {tz} szerint; az oldal {n} másodpercenként magától frissül."
 }

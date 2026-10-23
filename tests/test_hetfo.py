@@ -855,3 +855,69 @@ def test_performance_module_is_available_in_both_languages(client, page):
         html = client.get('/' + page + '?lang=' + lang).get_data(as_text=True)
         assert heading in html
         assert 'id="hfHistory"' in html and 'id="hfHistoryMetric"' in html
+
+
+@pytest.fixture()
+def additional_monday_member(app):
+    from app import db
+    from app.models import CalibrationSession, CalibrationTrial, MixingSession, User
+    from test_thresholds import judgments
+
+    with app.app_context():
+        # Confirmed Monday member, registered on a different calendar day.
+        user = User(id='T0BS6V', created_at=datetime(2026, 9, 1, 10),
+                    birthdate=date(1990, 1, 1), gender='male')
+        db.session.add(user)
+        for stamp, de, judgment in [(datetime(2026, 9, 3, 10), 2, 'acceptable'),
+                                    (NOW, 0.5, 'identical')]:
+            db.session.add(MixingSession(user_id=user.id, timestamp=stamp, delta_e=de,
+                                         skipped=True, skip_perception=judgment,
+                                         match_category='acceptable_difference', time_sec=60))
+        db.session.add(CalibrationSession(session_uuid='cal-monday-extra', user_id=user.id,
+                                          mode='constant_stimuli_gamut',
+                                          started_at=NOW - timedelta(minutes=3), ended_at=NOW))
+        for seq, (de, judgment) in enumerate(judgments()):
+            db.session.add(CalibrationTrial(session_uuid='cal-monday-extra', seq=seq,
+                                            actual_de=de, judgment=judgment, is_catch=False))
+        db.session.flush()
+        hetfo._cache.clear()
+        try:
+            yield user
+        finally:
+            db.session.rollback()
+            hetfo._cache.clear()
+
+
+def test_confirmed_monday_member_includes_thresholds_and_full_history(app, additional_monday_member):
+    with app.test_client() as client:
+        data = client.get('/api/hetfo/live?page=hetfo').get_json()
+        member = _row(data, 'T0BS6V')
+        assert data['summary']['registered'] == 5
+        assert data['summary']['rounds'] == 8
+        assert member['registered_day'] == '2026-09-01'
+        assert member['thresholds']['calibration'][0]['n'] == 40
+        assert member['thresholds']['calibration'][0]['pt']['status'] == 'estimated'
+        assert member['thresholds']['ingame']['n'] == 2
+        assert member['performance']['overall']['rounds'] == 2
+        assert [d['day'] for d in member['performance']['daily']] == ['2026-09-03', '2026-09-07']
+        assert member['performance']['comparison']['window_rounds'] == 1
+
+
+def test_monday_addition_does_not_follow_other_cohort_dates(app, additional_monday_member):
+    with app.test_client() as client:
+        for url in ['/api/hetfo/live?page=szerda', '/api/hetfo/live?date=2026-09-07']:
+            data = client.get(url).get_json()
+            assert 'T0BS6V' not in {r['user_id'] for r in data['users']}
+        # An explicit original cohort date resolves the same membership.
+        data = client.get('/api/hetfo/live?date=2026-08-31').get_json()
+        assert 'T0BS6V' in {r['user_id'] for r in data['users']}
+
+
+def test_confirmed_member_is_not_duplicated_when_registration_also_matches(app, additional_monday_member):
+    from app import db
+
+    additional_monday_member.created_at = datetime(2026, 8, 31, 10)
+    db.session.flush()
+    data = hetfo.build_live_payload(COHORT_DAY, now=NOW)
+    assert sum(r['user_id'] == 'T0BS6V' for r in data['users']) == 1
+    assert data['summary']['registered'] == 5

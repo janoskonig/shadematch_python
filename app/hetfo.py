@@ -11,7 +11,8 @@ The cohort day is a Europe/Budapest calendar day. ``User.created_at`` is
 naive UTC, so the day is converted to a half-open UTC window before it is
 compared. Each page's day defaults to its session date, overridable per
 deployment (``HETFO_COHORT_DATE`` / ``SZERDA_COHORT_DATE``), and any day can
-be viewed with ``?date=YYYY-MM-DD``.
+be viewed with ``?date=YYYY-MM-DD``. Explicit cohort additions include people
+whose registration date differs from the recruitment session they attended.
 
 Everything here is read-only, portable SQL (no PostgreSQL-only functions), so
 it also runs against the SQLite fallback used by the tests. A cohort is tens
@@ -57,6 +58,13 @@ COHORT_PAGES = {
 }
 DEFAULT_PAGE = 'hetfo'
 DEFAULT_COHORT_DATE = COHORT_PAGES[DEFAULT_PAGE]['date']
+
+# Confirmed cohort membership takes precedence over registration-day inference.
+# Keep additions tied to the actual session date, so navigating to another week
+# or changing a deployment's default date does not carry those players along.
+COHORT_MEMBER_ADDITIONS = {
+    date(2026, 8, 31): ('T0BS6V',),
+}
 
 # Heading / week-step labels follow the weekday of the day on screen (the
 # Hungarian adjective forms differ per day, so these are whole t() keys).
@@ -280,10 +288,11 @@ class _LastSeen:
 
 # ── Queries (all restricted to the cohort's ids) ─────────────────────────────
 
-def _cohort_users(start, end):
+def _cohort_users(start, end, extra_ids=()):
     return (
         User.query
-        .filter(User.created_at.isnot(None), User.created_at >= start, User.created_at < end)
+        .filter(((User.created_at >= start) & (User.created_at < end))
+                | User.id.in_(extra_ids))
         .order_by(User.created_at.asc(), User.id.asc())
         .all()
     )
@@ -1179,12 +1188,12 @@ def _assemble(users, now, tz, rows_since):
 
 
 def build_live_payload(day: date, now: datetime | None = None) -> dict:
-    """A cohort page (/hetfo, /szerda): everyone registered on ``day``, with
-    the registration-day and day-by-day history charts."""
+    """A cohort page: registration-day members plus confirmed additions,
+    with the cohort-day and day-by-day history charts."""
     now = now or datetime.utcnow()
     tz = cohort_tz()
     start, end = cohort_window_utc(day, tz)
-    users = _cohort_users(start, end)
+    users = _cohort_users(start, end, COHORT_MEMBER_ADDITIONS.get(day, ()))
     payload, timeline_rows = _assemble(users, now, tz, rows_since=start)
     payload['scope'] = {'kind': 'cohort', 'date': day.isoformat()}
     payload['cohort'] = {

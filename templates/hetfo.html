@@ -219,7 +219,7 @@
       {% if cohort.kind == 'live' %}
       <p class="hf-lead">{{ t('Everyone the server heard from in the last {h} hours, whatever day they registered, and what they are doing right now. Times are shown in {tz}; the page refreshes itself every {n} seconds.', h=cohort.hours, tz=cohort.tz, n=cohort.refresh_seconds) }}</p>
       {% else %}
-      <p class="hf-lead">{{ t('Everyone who registered on the cohort day, and what they are doing right now. Times are shown in {tz}; the page refreshes itself every {n} seconds.', tz=cohort.tz, n=cohort.refresh_seconds) }}</p>
+      <p class="hf-lead">{{ t('Cohort members and what they are doing right now. Times are shown in {tz}; the page refreshes itself every {n} seconds.', tz=cohort.tz, n=cohort.refresh_seconds) }}</p>
       {% endif %}
     </div>
     <div class="hf-status" role="status" aria-live="polite">
