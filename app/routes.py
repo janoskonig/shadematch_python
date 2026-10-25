@@ -476,6 +476,20 @@ def lab_page():
     return render_template('lab.html')
 
 
+@main.route('/spacewalk', strict_slashes=False)
+def spacewalk_page():
+    """Replay the frozen research snapshot in linked pigment and colour spaces."""
+    response = send_from_directory(
+        os.path.join(current_app.root_path, 'data'),
+        'spacewalk.html',
+        max_age=0,
+        etag=True,
+    )
+    response.headers['X-Robots-Tag'] = 'noindex, nofollow'
+    response.headers['Content-Language'] = 'hu'
+    return response
+
+
 @main.route('/performance')
 def performance_page_redirect():
     return redirect(url_for('main.leaderboard_page'), code=302)

@@ -45,6 +45,22 @@ FLASK_ENV=development
 - Like `/stat`, the pages have no login: they show player IDs, nicknames and gameplay figures, never emails or birthdates.
 - Monday/Wednesday cohort members (including `T0BS6V`) complete **10 calibration colour pairs before their full 10-round mixing match** on each Budapest calendar day they play. The calibration has eight ladder pairs and two attention checks; all ten answers must be saved before the match unlocks. This applies on the registration day and continues after five completed sessions. Completed legacy 20-pair runs still count for their original completion day. Other players keep the optional 20-pair calibration. Cohort match play does not auto-insert the separate daily challenge.
 
+## Spacewalk (`/spacewalk`)
+
+`/spacewalk` replays observed pigment recipes and their corresponding CIELAB
+paths side by side. It includes player, target family, target colour and attempt
+selection, synchronized playback and zoom, current mix/target swatches, and the
+recorded trial outcome. The self-contained page is stored in
+`app/data/spacewalk.html`; replacing that export updates the viewer without a
+database migration or a new data-collection step.
+
+The bundled snapshot is the audited 2026-10-23 export, excluding each player's
+first ten validated trials: 63 pseudonymous players, 5720 trials and 241416
+actions. Empty states are retained for replay. Outcomes come from the audited
+final-recipe/target linkage. The page follows the existing research dashboards'
+public access, contains no participant names, emails, birthdates or gender, and
+is marked `noindex, nofollow`.
+
 ## Deployment on Render
 
 ### Prerequisites
@@ -127,4 +143,4 @@ shadematch_python/
 
 ## License
 
-[Add your license information here] 
+[Add your license information here]
