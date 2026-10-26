@@ -48,11 +48,17 @@ FLASK_ENV=development
 ## Spacewalk (`/spacewalk`)
 
 `/spacewalk` replays observed pigment recipes and their corresponding CIELAB
-paths side by side. It includes player, target family, target colour and attempt
-selection, synchronized playback and zoom, current mix/target swatches, and the
+paths side by side. It includes player, recorded outcome (`perfect`, `identical`,
+`acceptable` or all), target family, target colour and attempt selection,
+synchronized playback and zoom, current mix/target swatches, and the
 recorded trial outcome. The self-contained page is stored in
 `app/data/spacewalk.html`; replacing that export updates the viewer without a
 database migration or a new data-collection step.
+
+Outcome filtering narrows the available colours and attempts, preserves the
+original attempt numbers within the selected colour scope, and shows an explicit
+empty state when a player has no matching outcome. Selecting all outcomes restores
+the complete replay list.
 
 The bundled snapshot is the audited 2026-10-23 export, excluding each player's
 first ten validated trials: 63 pseudonymous players, 5720 trials and 241416

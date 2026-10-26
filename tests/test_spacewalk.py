@@ -52,7 +52,7 @@ def test_deployed_snapshot_keeps_the_routes_controls_and_outcomes(client):
     parser = ExportParser()
     parser.feed(client.get('/spacewalk').get_data(as_text=True))
     inner = parser.inner
-    for control in ['sr-player', 'sr-family', 'sr-target', 'sr-trial', 'sr-play',
+    for control in ['sr-player', 'sr-result', 'sr-family', 'sr-target', 'sr-trial', 'sr-play',
                     'sr-current-swatch', 'sr-target-swatch', 'sr-outcome-label']:
         assert f'id="{control}"' in inner
     prefix = '<script type="application/octet-stream" id="sr-packed-data">'
