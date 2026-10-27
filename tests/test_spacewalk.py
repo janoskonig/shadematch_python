@@ -53,12 +53,17 @@ def test_deployed_snapshot_keeps_the_routes_controls_and_outcomes(client):
     parser.feed(client.get('/spacewalk').get_data(as_text=True))
     inner = parser.inner
     for control in ['sr-player', 'sr-result', 'sr-family', 'sr-target', 'sr-trial', 'sr-play',
-                    'sr-current-swatch', 'sr-target-swatch', 'sr-outcome-label']:
+                    'sr-current-swatch', 'sr-target-swatch', 'sr-outcome-label',
+                    'sr-shortest-summary', 'sr-target-recipe']:
         assert f'id="{control}"' in inner
     prefix = '<script type="application/octet-stream" id="sr-packed-data">'
     packed = inner.split(prefix, 1)[1].split('</script>', 1)[0]
     bundle = json.loads(gzip.decompress(base64.b64decode(packed)))
     data = bundle['data']
+    for target in data['targets']:
+        assert len(target['recipe']) == 5
+        assert all(type(count) is int and count >= 0 for count in target['recipe'])
+        assert sum(target['recipe']) > 0
     assert data['people'] == 63
     assert len(data['trials']) == 5720
     assert sum(len(trial[6]) for trial in data['trials']) == data['actions'] == 241416
