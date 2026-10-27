@@ -55,11 +55,12 @@ recorded trial outcome. The self-contained page is stored in
 `app/data/spacewalk.html`; replacing that export updates the viewer without a
 database migration or a new data-collection step.
 
-The pigment plot also projects the shortest Euclidean segment from the first
-pigment addition to the target's stored five-component recipe, marked with a
-diamond and a star. The dashed reference stays fixed during playback, and its
-length is calculated in all five dimensions. Target recipes come from the same
-frozen catalog; this reference connects those specific recipes, since other
+The pigment plot also shows one shortest path through the nonnegative integer
+recipe nodes, from the first pigment addition (diamond) to the target's stored
+five-component recipe (star). Each edge adds or removes exactly one pigment drop.
+The minimum number of operations is the five-dimensional Manhattan distance.
+The dashed reference stays fixed during playback. Target recipes come from the
+same frozen catalog; the minimum applies to that specific recipe, since other
 recipes can produce the same colour.
 
 Outcome filtering narrows the available colours and attempts, preserves the

@@ -59,6 +59,8 @@ def test_deployed_snapshot_keeps_the_routes_controls_and_outcomes(client):
     prefix = '<script type="application/octet-stream" id="sr-packed-data">'
     packed = inner.split(prefix, 1)[1].split('</script>', 1)[0]
     bundle = json.loads(gzip.decompress(base64.b64decode(packed)))
+    path_source = (Path(__file__).resolve().parents[1] / 'static' / 'spacewalk-path.js').read_text()
+    assert path_source in bundle['scripts']
     data = bundle['data']
     for target in data['targets']:
         assert len(target['recipe']) == 5
